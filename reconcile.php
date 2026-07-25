@@ -110,9 +110,13 @@ foreach ($actual as $unit => $deal) {
 $stageCambios = 0;
 
 // --- A) COBRANZAS (48) READ-ONLY: PAGADO TOTALMENTE -> VENDIDO, DADO DE BAJA -> DISPONIBLE
-// Solo se LEEN los deals de cobranzas en esas 2 etapas (query filtrado). Nunca se
-// escribe en el deal 48. Se encuentra la unidad por código+contacto y se escribe
-// SOLO en la unidad.
+// ⚠️ DESACTIVADO temporalmente: el matcheo cobranza->unidad necesita el PROYECTO
+// (crm.deal.list NO devuelve TITLE/CONTACT_ID; los códigos colisionan entre proyectos).
+// Se completará con matcheo por código+proyecto(del título vía get) + verificación,
+// cuando haya datos reales de Barranca pagados para validar. Por ahora NO se toca
+// ninguna unidad desde cobranzas para evitar mover una equivocada.
+$COBRANZAS_ENABLED = false;
+if ($COBRANZAS_ENABLED)
 foreach (COBRANZAS_TRIGGERS as $stageId => $target) {
     $writeOff = ($stageId === 'C48:LOSE');
     $start = 0;
