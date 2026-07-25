@@ -52,7 +52,8 @@ function bx(string $method, array $params = []): array {
     if ($errno) return ['ok' => false, 'error' => "curl:$errno"];
     $j = json_decode((string)$raw, true);
     if (!is_array($j) || isset($j['error'])) return ['ok' => false, 'error' => $j['error'] ?? 'bad-json'];
-    return ['ok' => true, 'result' => $j['result'] ?? null];
+    // 'next' y 'total' vienen en el TOP-LEVEL de la respuesta (no dentro de result)
+    return ['ok' => true, 'result' => $j['result'] ?? null, 'next' => $j['next'] ?? null];
 }
 
 // ---- DESEADO: unidad => deal, según los campos Inv2/3/4 de deals P44 ----------
@@ -86,7 +87,7 @@ do {
     if (!$r['ok']) { logline("RECONCILE ERR item.list: {$r['error']}"); if ($isHttp) echo "err\n"; exit(1); }
     $items = $r['result']['items'] ?? [];
     foreach ($items as $it) $actual[(int)$it['id']] = (string)$it['parentId2'];
-    $start = $r['result']['next'] ?? null;
+    $start = $r['next'] ?? null;
 } while ($start !== null && $start !== '');
 
 // ---- DIFF y aplicar solo lo que difiere --------------------------------------
@@ -109,48 +110,30 @@ foreach ($actual as $unit => $deal) {
 // ==== STAGES (red de seguridad de etapas) =====================================
 $stageCambios = 0;
 
-// --- A) COBRANZAS (48) READ-ONLY: PAGADO TOTALMENTE -> VENDIDO, DADO DE BAJA -> DISPONIBLE
-// ⚠️ DESACTIVADO temporalmente: el matcheo cobranza->unidad necesita el PROYECTO
-// (crm.deal.list NO devuelve TITLE/CONTACT_ID; los códigos colisionan entre proyectos).
-// Se completará con matcheo por código+proyecto(del título vía get) + verificación,
-// cuando haya datos reales de Barranca pagados para validar. Por ahora NO se toca
-// ninguna unidad desde cobranzas para evitar mover una equivocada.
-$COBRANZAS_ENABLED = false;
-if ($COBRANZAS_ENABLED)
-foreach (COBRANZAS_TRIGGERS as $stageId => $target) {
-    $writeOff = ($stageId === 'C48:LOSE');
-    $start = 0;
-    do {
-        $r = bx('crm.deal.list', [
-            'filter' => ['CATEGORY_ID' => COBRANZAS_CAT, 'STAGE_ID' => $stageId],
-            'select' => ['ID', 'CONTACT_ID', COBRANZAS_CODE_FIELD],
-            'start'  => $start,
-        ]);
-        if (!$r['ok']) { logline("RECONCILE ERR cobranzas($stageId): {$r['error']}"); break; }
-        foreach (($r['result'] ?? []) as $d) {
-            $code = trim((string)($d[COBRANZAS_CODE_FIELD] ?? ''));
-            if ($code === '') continue;
-            $contact = (int)($d['CONTACT_ID'] ?? 0);
-            // buscar la unidad: título "CODE (proyecto)" + contactId = contacto del deal 48
-            // "%title"="CODE (" es prefijo preciso (evita que A-1-6 matchee A-1-16)
-            $f = ['%title' => $code . ' ('];
-            if ($contact > 0) $f['contactId'] = $contact;
-            $u = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => $f,
-                                      'select' => ['id', 'title', 'stageId', 'categoryId']]);
-            foreach (($u['result']['items'] ?? []) as $it) {
-                // confirmar que el código es exactamente el prefijo antes del " ("
-                $t = (string)($it['title'] ?? '');
-                $unitCode = trim(explode('(', $t)[0]);
-                if (strcasecmp($unitCode, $code) !== 0) continue;
-                if (apply_unit_stage((int)$it['id'], $it, $target, $writeOff)) $stageCambios++;
-            }
+// Lookup de unidades por (código normalizado | contacto) — clave BULLETPROOF.
+// crm.item.list SIN select devuelve todos los campos (con select se rompe: id/title/contact = null).
+// Verificado: por código hay varios cobranzas, pero solo el del MISMO contacto es la unidad correcta.
+function norm_code(string $c): string { return strtoupper(str_replace(' ', '', trim($c))); }
+$unitByKey = [];   // "CODE|CONTACT" => ['id'=>, 'cat'=>]
+$codeSet   = [];   // CODE => true  (pre-filtro barato)
+$start = 0;
+do {
+    $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'start' => $start]);   // SIN select
+    if (!$r['ok']) { logline("RECONCILE ERR item.list units: {$r['error']}"); break; }
+    $items = $r['result']['items'] ?? [];
+    foreach ($items as $it) {
+        $code = norm_code(explode('(', (string)($it['title'] ?? ''))[0]);
+        if ($code === '') continue;
+        $codeSet[$code] = true;
+        $contact = (string)($it['contactId'] ?? '');
+        if ($contact !== '' && $contact !== '0') {
+            $unitByKey[$code . '|' . $contact] = ['id' => (int)$it['id'], 'cat' => (string)($it['categoryId'] ?? '')];
         }
-        $start = $r['next'] ?? null;
-    } while ($start !== null && $start !== '');
-}
+    }
+    $start = $r['next'] ?? null;
+} while ($start !== null && $start !== '');
 
-// --- B) CLIENTES (44) re-afirmar: por si se perdió un evento del hook.
-// Recorre los deals 44 en una etapa disparadora y aplica el stage a sus unidades.
+// --- A) CLIENTES (44) re-afirmar PRIMERO (por si se perdió un evento del hook) ----
 foreach (CLIENTES_TRIGGERS as $stageId => $target) {
     $start = 0;
     do {
@@ -164,6 +147,37 @@ foreach (CLIENTES_TRIGGERS as $stageId => $target) {
             foreach (units_of_clientes_deal((string)$d['ID'], $d) as $uid) {
                 if (apply_unit_stage((int)$uid, null, $target, false)) $stageCambios++;
             }
+        }
+        $start = $r['next'] ?? null;
+    } while ($start !== null && $start !== '');
+}
+
+// --- B) COBRANZAS (48) READ-ONLY, DESPUÉS (más autoritativo para el estado final) -
+// PAGADO TOTALMENTE -> VENDIDO ; DADO DE BAJA -> DISPONIBLE.
+// NUNCA se escribe en el deal 48. Match SOLO por código+contacto (bulletproof):
+//   1. crm.deal.list da el código (no el contacto) -> pre-filtro por codeSet (0 llamadas extra).
+//   2. solo a los code-match se les hace crm.deal.get (para el CONTACT_ID).
+//   3. la unidad se resuelve por "CODE|CONTACT". Si no matchea exacto -> NO se toca (seguro).
+foreach (COBRANZAS_TRIGGERS as $stageId => $target) {
+    $writeOff = ($stageId === 'C48:LOSE');
+    $start = 0;
+    do {
+        $r = bx('crm.deal.list', [
+            'filter' => ['CATEGORY_ID' => COBRANZAS_CAT, 'STAGE_ID' => $stageId],
+            'select' => ['ID', COBRANZAS_CODE_FIELD],
+            'start'  => $start,
+        ]);
+        if (!$r['ok']) { logline("RECONCILE ERR cobranzas($stageId): {$r['error']}"); break; }
+        foreach (($r['result'] ?? []) as $d) {
+            $code = norm_code((string)($d[COBRANZAS_CODE_FIELD] ?? ''));
+            if ($code === '' || !isset($codeSet[$code])) continue;   // pre-filtro: sin get si no hay unidad con ese código
+            $g = bx('crm.deal.get', ['id' => $d['ID']]);             // solo aquí gastamos 1 get
+            if (!$g['ok']) continue;
+            $contact = (string)($g['result']['CONTACT_ID'] ?? '');
+            if ($contact === '' || $contact === '0') continue;
+            $key = $code . '|' . $contact;
+            if (!isset($unitByKey[$key])) continue;                  // no matchea código+contacto -> NO tocar
+            if (apply_unit_stage($unitByKey[$key]['id'], null, $target, $writeOff)) $stageCambios++;
         }
         $start = $r['next'] ?? null;
     } while ($start !== null && $start !== '');
