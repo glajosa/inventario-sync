@@ -43,17 +43,30 @@ function logline(string $msg): void {
 
 function bx(string $method, array $params = []): array {
     global $WEBHOOK_IN;
-    $ch = curl_init($WEBHOOK_IN . $method);
-    curl_setopt_array($ch, [
-        CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query($params),
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_CONNECTTIMEOUT => 10,
-    ]);
-    $raw = curl_exec($ch); $errno = curl_errno($ch); curl_close($ch);
-    if ($errno) return ['ok' => false, 'error' => "curl:$errno"];
-    $j = json_decode((string)$raw, true);
-    if (!is_array($j) || isset($j['error'])) return ['ok' => false, 'error' => $j['error'] ?? 'bad-json'];
-    // 'next' y 'total' vienen en el TOP-LEVEL de la respuesta (no dentro de result)
-    return ['ok' => true, 'result' => $j['result'] ?? null, 'next' => $j['next'] ?? null];
+    // throttle base: ~3-4 req/s para no vaciar el pool de Bitrix en los barridos
+    usleep(250000);
+    for ($try = 0; $try < 5; $try++) {
+        $ch = curl_init($WEBHOOK_IN . $method);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query($params),
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_CONNECTTIMEOUT => 10,
+        ]);
+        $raw = curl_exec($ch); $errno = curl_errno($ch); curl_close($ch);
+        if ($errno) { if ($try < 4) { sleep(1); continue; } return ['ok' => false, 'error' => "curl:$errno"]; }
+        $j = json_decode((string)$raw, true);
+        if (is_array($j) && isset($j['error'])) {
+            // rate limit -> backoff y reintento
+            if (in_array($j['error'], ['QUERY_LIMIT_EXCEEDED', 'OPERATION_TIME_LIMIT'], true) && $try < 4) {
+                sleep(2 + $try);   // 2,3,4,5s
+                continue;
+            }
+            return ['ok' => false, 'error' => $j['error']];
+        }
+        if (!is_array($j)) { if ($try < 4) { sleep(1); continue; } return ['ok' => false, 'error' => 'bad-json']; }
+        // 'next' y 'total' vienen en el TOP-LEVEL de la respuesta (no dentro de result)
+        return ['ok' => true, 'result' => $j['result'] ?? null, 'next' => $j['next'] ?? null];
+    }
+    return ['ok' => false, 'error' => 'retries-exhausted'];
 }
 
 // ---- DESEADO: unidad => deal, según los campos Inv2/3/4 de deals P44 ----------
