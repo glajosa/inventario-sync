@@ -16,6 +16,7 @@
 declare(strict_types=1);
 
 const CATEGORY_ID = 44;
+const SPA_ENTITY  = 1072;   // usado por stagelib (refresco de stages)
 
 $DATA_DIR   = getenv('DATA_DIR') ?: '/data';
 $ALLOWLIST  = $DATA_DIR . '/allowlist.json';
@@ -71,5 +72,9 @@ $tmp = $ALLOWLIST . '.tmp';
 file_put_contents($tmp, json_encode($ids));
 rename($tmp, $ALLOWLIST);
 
-logline('REBUILD ok -> ' . count($ids) . ' deals en P44');
+// refrescar cache de stages del SPA (nombres->STATUS_ID por pipeline)
+require_once __DIR__ . '/stagelib.php';
+stages_map(true);
+
+logline('REBUILD ok -> ' . count($ids) . ' deals en P44, stages refrescados');
 if ($isHttp) echo 'ok rebuild=' . count($ids);

@@ -34,6 +34,8 @@ if ($isHttp) {
     if ($expect === '' || !hash_equals($expect, $got)) { http_response_code(403); echo 'forbidden'; exit; }
 }
 
+require_once __DIR__ . '/stagelib.php';   // stages (Clientes re-afirmar + Cobranzas read-only)
+
 function logline(string $msg): void {
     global $LOG_FILE;
     @file_put_contents($LOG_FILE, gmdate('Y-m-d\TH:i:s\Z') . '  ' . $msg . "\n", FILE_APPEND | LOCK_EX);
@@ -104,6 +106,66 @@ foreach ($actual as $unit => $deal) {
     }
 }
 
-$msg = 'RECONCILE ok desired=' . count($desired) . ' actual=' . count($actual) . " cambios=$cambios";
+// ==== STAGES (red de seguridad de etapas) =====================================
+$stageCambios = 0;
+
+// --- A) COBRANZAS (48) READ-ONLY: PAGADO TOTALMENTE -> VENDIDO, DADO DE BAJA -> DISPONIBLE
+// Solo se LEEN los deals de cobranzas en esas 2 etapas (query filtrado). Nunca se
+// escribe en el deal 48. Se encuentra la unidad por código+contacto y se escribe
+// SOLO en la unidad.
+foreach (COBRANZAS_TRIGGERS as $stageId => $target) {
+    $writeOff = ($stageId === 'C48:LOSE');
+    $start = 0;
+    do {
+        $r = bx('crm.deal.list', [
+            'filter' => ['CATEGORY_ID' => COBRANZAS_CAT, 'STAGE_ID' => $stageId],
+            'select' => ['ID', 'CONTACT_ID', COBRANZAS_CODE_FIELD],
+            'start'  => $start,
+        ]);
+        if (!$r['ok']) { logline("RECONCILE ERR cobranzas($stageId): {$r['error']}"); break; }
+        foreach (($r['result'] ?? []) as $d) {
+            $code = trim((string)($d[COBRANZAS_CODE_FIELD] ?? ''));
+            if ($code === '') continue;
+            $contact = (int)($d['CONTACT_ID'] ?? 0);
+            // buscar la unidad: título "CODE (proyecto)" + contactId = contacto del deal 48
+            // "%title"="CODE (" es prefijo preciso (evita que A-1-6 matchee A-1-16)
+            $f = ['%title' => $code . ' ('];
+            if ($contact > 0) $f['contactId'] = $contact;
+            $u = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => $f,
+                                      'select' => ['id', 'title', 'stageId', 'categoryId']]);
+            foreach (($u['result']['items'] ?? []) as $it) {
+                // confirmar que el código es exactamente el prefijo antes del " ("
+                $t = (string)($it['title'] ?? '');
+                $unitCode = trim(explode('(', $t)[0]);
+                if (strcasecmp($unitCode, $code) !== 0) continue;
+                if (apply_unit_stage((int)$it['id'], $it, $target, $writeOff)) $stageCambios++;
+            }
+        }
+        $start = $r['next'] ?? null;
+    } while ($start !== null && $start !== '');
+}
+
+// --- B) CLIENTES (44) re-afirmar: por si se perdió un evento del hook.
+// Recorre los deals 44 en una etapa disparadora y aplica el stage a sus unidades.
+foreach (CLIENTES_TRIGGERS as $stageId => $target) {
+    $start = 0;
+    do {
+        $r = bx('crm.deal.list', [
+            'filter' => ['CATEGORY_ID' => CLIENTES_CAT, 'STAGE_ID' => $stageId],
+            'select' => ['ID', 'PARENT_ID_1072', 'STAGE_ID'],
+            'start'  => $start,
+        ]);
+        if (!$r['ok']) { logline("RECONCILE ERR clientes($stageId): {$r['error']}"); break; }
+        foreach (($r['result'] ?? []) as $d) {
+            foreach (units_of_clientes_deal((string)$d['ID'], $d) as $uid) {
+                if (apply_unit_stage((int)$uid, null, $target, false)) $stageCambios++;
+            }
+        }
+        $start = $r['next'] ?? null;
+    } while ($start !== null && $start !== '');
+}
+
+$msg = 'RECONCILE ok desired=' . count($desired) . ' actual=' . count($actual)
+     . " link_cambios=$cambios stage_cambios=$stageCambios";
 logline($msg);
 if ($isHttp) echo $msg;
