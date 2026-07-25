@@ -13,10 +13,15 @@ RUN mkdir -p /data && chmod 777 /data
 COPY . /var/www/html/
 RUN rm -f /var/www/html/Dockerfile /var/www/html/README.md
 
-# cron: rebuild cada 30 min (conserje). Carga env desde /data/env.sh (lo escribe entrypoint).
+# crons (cargan env desde /data/env.sh que escribe entrypoint):
+#  - reconcile cada 5 min: RED DE SEGURIDAD, re-sincroniza parentId2 (cubre eventos perdidos)
+#  - rebuild cada 30 min: CONSERJE, reconstruye/limpia la allowlist de deals P44
 RUN apt-get update && apt-get install -y --no-install-recommends cron && rm -rf /var/lib/apt/lists/* \
- && echo '*/30 * * * * root . /data/env.sh; php /var/www/html/rebuild.php >> /data/cron.log 2>&1' > /etc/cron.d/inv-rebuild \
- && chmod 0644 /etc/cron.d/inv-rebuild
+ && printf '%s\n%s\n' \
+    '*/5 * * * * root . /data/env.sh; php /var/www/html/reconcile.php >> /data/cron.log 2>&1' \
+    '*/30 * * * * root . /data/env.sh; php /var/www/html/rebuild.php >> /data/cron.log 2>&1' \
+    > /etc/cron.d/inv-cron \
+ && chmod 0644 /etc/cron.d/inv-cron
 
 # arrancar cron + apache
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
