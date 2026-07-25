@@ -14,12 +14,17 @@ COPY . /var/www/html/
 RUN rm -f /var/www/html/Dockerfile /var/www/html/README.md
 
 # crons (cargan env desde /data/env.sh que escribe entrypoint):
-#  - reconcile cada 5 min: RED DE SEGURIDAD, re-sincroniza parentId2 (cubre eventos perdidos)
-#  - rebuild cada 30 min: CONSERJE, reconstruye/limpia la allowlist de deals P44
+#  - reconcile cada 15 min (~5 llamadas): red de seguridad, re-sincroniza parentId2.
+#    El caso real (deploy) ya lo cubre el reconcile-al-arrancar del entrypoint;
+#    esto es solo para caídas raras no controladas. NO usa la allowlist -> correcto
+#    aunque el rebuild sea espaciado.
+#  - rebuild cada 6 h (~27 llamadas): conserje de la allowlist. Poco frecuente a
+#    propósito: el evento ONCRMDEALADD la mantiene fresca en vivo; esto solo limpia
+#    deals borrados. Espaciado para NO saturar el API de Bitrix.
 RUN apt-get update && apt-get install -y --no-install-recommends cron && rm -rf /var/lib/apt/lists/* \
  && printf '%s\n%s\n' \
-    '*/5 * * * * root . /data/env.sh; php /var/www/html/reconcile.php >> /data/cron.log 2>&1' \
-    '*/30 * * * * root . /data/env.sh; php /var/www/html/rebuild.php >> /data/cron.log 2>&1' \
+    '*/15 * * * * root . /data/env.sh; php /var/www/html/reconcile.php >> /data/cron.log 2>&1' \
+    '0 */6 * * * root . /data/env.sh; php /var/www/html/rebuild.php >> /data/cron.log 2>&1' \
     > /etc/cron.d/inv-cron \
  && chmod 0644 /etc/cron.d/inv-cron
 
