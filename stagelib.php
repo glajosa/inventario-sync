@@ -112,6 +112,26 @@ function apply_unit_stage(int $unitId, ?array $item, string $targetName, bool $w
     return false;
 }
 
+/**
+ * Copia el RESPONSABLE (ASSIGNED_BY_ID = asesor) y el CLIENTE (CONTACT_ID) del deal
+ * a la unidad, solo si difieren (evita reescrituras). El deal manda. Devuelve true si cambió.
+ */
+function sync_unit_owner(int $unitId, array $deal): bool {
+    $assigned = $deal['ASSIGNED_BY_ID'] ?? null;
+    $contact  = $deal['CONTACT_ID'] ?? null;
+    if (!$assigned && !($contact && (int)$contact > 0)) return false;
+    $r = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $unitId]);
+    if (!$r['ok']) return false;
+    $it = $r['result']['item'] ?? $r['result'];
+    $need = [];
+    if ($assigned && (string)($it['assignedById'] ?? '') !== (string)$assigned) $need['assignedById'] = $assigned;
+    if ($contact && (int)$contact > 0 && (string)($it['contactId'] ?? '') !== (string)$contact) $need['contactId'] = $contact;
+    if (!$need) return false;
+    $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $unitId, 'fields' => $need]);
+    if ($u['ok']) { logline("OWNER unit=$unitId set " . implode(',', array_keys($need))); return true; }
+    return false;
+}
+
 /** Unidades (ids) atadas a un deal de Clientes: parentId2=deal + PARENT_ID_1072 del deal. */
 function units_of_clientes_deal(string $dealId, ?array $deal = null): array {
     $ids = [];

@@ -147,17 +147,19 @@ do {
 } while ($start !== null && $start !== '');
 
 // --- A) CLIENTES (44) re-afirmar PRIMERO (por si se perdió un evento del hook) ----
+// Aplica stage + copia responsable(asesor)+contacto(cliente) del deal a sus unidades.
 foreach (CLIENTES_TRIGGERS as $stageId => $target) {
     $start = 0;
     do {
         $r = bx('crm.deal.list', [
             'filter' => ['CATEGORY_ID' => CLIENTES_CAT, 'STAGE_ID' => $stageId],
-            'select' => ['ID', 'PARENT_ID_1072', 'STAGE_ID'],
+            'select' => ['ID', 'PARENT_ID_1072', 'STAGE_ID', 'ASSIGNED_BY_ID', 'CONTACT_ID'],
             'start'  => $start,
         ]);
         if (!$r['ok']) { logline("RECONCILE ERR clientes($stageId): {$r['error']}"); break; }
         foreach (($r['result'] ?? []) as $d) {
             foreach (units_of_clientes_deal((string)$d['ID'], $d) as $uid) {
+                sync_unit_owner((int)$uid, $d);
                 if (apply_unit_stage((int)$uid, null, $target, false)) $stageCambios++;
             }
         }

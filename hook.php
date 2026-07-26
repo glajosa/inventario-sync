@@ -225,14 +225,19 @@ if ($cambios > 0) {
         implode(',', $agregar), implode(',', $soltar)));
 }
 
-// ---- 6) STAGE: mover las unidades según la etapa del deal de Clientes --------
-// (quitar unidad -> DISPONIBLE lo cubre esto: si el deal ya no la lista, tras el
-//  sync la unidad quedó sin parentId2; pero si era la unidad-1 del PARENT_ID_1072
-//  y el deal la soltó, también entra aquí. Las unidades soltadas van a DISPONIBLE.)
-$stageCambios = clientes_stage_apply($dealId, $deal);
+// ---- 6) STAGE + RESPONSABLE/CLIENTE de las unidades del deal de Clientes -----
+// Para cada unidad atada a este deal: copia el asesor (responsable) y el contacto
+// (cliente) del deal a la unidad, y mueve el stage según la etapa del deal.
+$deal_units  = units_of_clientes_deal($dealId, $deal);
+$stage       = (string)($deal['STAGE_ID'] ?? '');
+$stageTarget = CLIENTES_TRIGGERS[$stage] ?? null;
+$stageCambios = 0;
+foreach ($deal_units as $uid) {
+    sync_unit_owner((int)$uid, $deal);                                    // asesor + contacto
+    if ($stageTarget && apply_unit_stage((int)$uid, null, $stageTarget, false)) $stageCambios++;
+}
 // unidades que se acaban de SOLTAR de este deal -> DISPONIBLE (perdieron su deal)
 foreach ($soltar as $uid) {
-    // ¿la unidad quedó sin ningún deal? si su parentId2 es 0 y ningún deal la referencia => DISPONIBLE
     apply_unit_stage((int)$uid, null, 'DISPONIBLE', false);
 }
 
