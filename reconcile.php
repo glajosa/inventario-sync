@@ -147,8 +147,11 @@ do {
 } while ($start !== null && $start !== '');
 
 // --- A) CLIENTES (44) re-afirmar PRIMERO (por si se perdió un evento del hook) ----
-// Aplica stage + copia responsable(asesor)+contacto(cliente) del deal a sus unidades.
+// Solo PROMESA FIRMADA y FIRMADOS-CAIDOS (pocos deals). RESERVA se OMITE: es no-op
+// casi siempre (migración ya puso RESERVADO, el hook lo mantiene) y barrer todos los
+// deals en RESERVA con un get por unidad es carísimo. El hook cubre RESERVA en vivo.
 foreach (CLIENTES_TRIGGERS as $stageId => $target) {
+    if ($stageId === 'C44:NEW') continue;   // RESERVA: omitir en el barrido
     $start = 0;
     do {
         $r = bx('crm.deal.list', [
@@ -159,7 +162,7 @@ foreach (CLIENTES_TRIGGERS as $stageId => $target) {
         if (!$r['ok']) { logline("RECONCILE ERR clientes($stageId): {$r['error']}"); break; }
         foreach (($r['result'] ?? []) as $d) {
             foreach (units_of_clientes_deal((string)$d['ID'], $d) as $uid) {
-                sync_unit_owner((int)$uid, $d);
+                // owner-sync NO aquí (get por unidad = muy pesado en barrido); lo hace el hook en vivo.
                 if (apply_unit_stage((int)$uid, null, $target, false)) $stageCambios++;
             }
         }
