@@ -40,6 +40,28 @@ const U_PIS = 'ufCrm25_1784313244';
 // plano el vendedor nunca espera, y el estado real lo garantiza hook.php en vivo.
 const CACHE_TTL = 900;
 
+/**
+ * Respaldo de las etiquetas de torre y piso.
+ * `crm.item.fields` devuelve estas opciones de forma inestable (desde el contenedor
+ * llegan vacías casi siempre; desde fuera llegan completas), así que se deja el
+ * mapeo fijo verificado contra la API: 20 torres y 15 pisos, mismos conteos.
+ * Si algún día la API responde bien, ese valor manda y esto ni se usa.
+ */
+const ENUM_FALLBACK = [
+    'torre' => [
+        1881 => 'A', 1883 => 'B', 1885 => 'C', 1887 => 'D', 1889 => 'E',
+        1891 => 'F', 1893 => 'G', 1895 => 'H', 1897 => 'I', 1899 => 'J',
+        1901 => '1RO', 1903 => '2DO', 1905 => '3RO', 1907 => '4TO', 1909 => '5TO',
+        1911 => '6TO', 1913 => '7MO', 1915 => '8VO', 1917 => '9NO', 1919 => '10MO',
+    ],
+    'piso' => [
+        1853 => '1', 1855 => '2', 1857 => '3', 1859 => '4',
+        1861 => '1RO', 1863 => '2DO', 1865 => '3RO', 1867 => '4TO', 1869 => '5TO',
+        1871 => '6TO', 1873 => '7MO', 1875 => '8VO', 1877 => '9NO', 1879 => '10MO',
+        1921 => 'PB',
+    ],
+];
+
 $DATA_DIR   = getenv('DATA_DIR') ?: '/data';
 $WEBHOOK_IN = rtrim((string)getenv('BITRIX_WEBHOOK'), '/') . '/';
 $TOKEN      = (string)getenv('OUTBOUND_TOKEN');
