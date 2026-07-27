@@ -80,7 +80,10 @@ if (isset($_GET['warm'])) {
     ignore_user_abort(true);   // el que dispara corta a los 300ms; hay que terminar igual
     $c = catalogo(true);
     header('Content-Type: text/plain; charset=utf-8');
-    echo 'warm units=' . count($c['units']) . ' parcial=' . (isset($c['parcial']) ? 'si' : 'no');
+    // 'stale' = el rebuild falló y se devolvió el caché anterior (no confundir con éxito)
+    $estado = !empty($c['parcial']) ? 'PARCIAL' : (!empty($c['stale']) ? 'FALLO-sirvio-cache-viejo' : 'OK');
+    echo "warm $estado units=" . count($c['units']);
+    sellog("warm $estado units=" . count($c['units']));
     exit;
 }
 
@@ -107,6 +110,12 @@ if (isset($_GET['debug'])) {
     echo 'REBUILD units=' . count($fresh['units']) . ' proyectos=' . count($fresh['proyectos'])
        . ' secs=' . round(microtime(true) - $t0, 1) . "\n";
     exit;
+}
+
+function sellog(string $msg): void {
+    global $DATA_DIR;
+    @file_put_contents($DATA_DIR . '/sync.log',
+        gmdate('Y-m-d\TH:i:s\Z') . '  SELECTOR ' . $msg . "\n", FILE_APPEND | LOCK_EX);
 }
 
 /** Dispara un refresco del catálogo sin esperarlo (fire-and-forget contra sí mismo). */
@@ -186,7 +195,10 @@ function catalogo(bool $force = false): array {
     $completo = true;
     do {
         $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'start' => $start]);
-        if (!$r['ok']) { $completo = false; break; }
+        if (!$r['ok']) {
+            sellog("item.list FALLO start=$start traidas=" . count($units) . " err=" . ($r['error'] ?? '?'));
+            $completo = false; break;
+        }
         if ($total === null) $total = $r['total'];
         foreach (($r['result']['items'] ?? []) as $it) {
             $cid   = (string)($it['categoryId'] ?? '');
@@ -206,7 +218,10 @@ function catalogo(bool $force = false): array {
         $start = $r['next'] ?? null;
     } while ($start !== null && $start !== '');
 
-    if ($total !== null && count($units) < $total) $completo = false;
+    if ($total !== null && count($units) < $total) {
+        sellog('incompleto: traidas=' . count($units) . ' esperadas=' . $total);
+        $completo = false;
+    }
 
     // si la paginación quedó a medias, NO se pisa el caché bueno con datos parciales
     if (!$completo) {
