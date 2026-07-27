@@ -36,7 +36,9 @@ const U_PVP = 'ufCrm25_1784563253861';
 const U_TOR = 'ufCrm25_1784314119';
 const U_PIS = 'ufCrm25_1784313244';
 
-const CACHE_TTL = 300;   // 5 min: el catálogo cambia poco, evita 30 llamadas por click
+// 15 min: recorrer el catálogo son ~30 páginas de API; con el refresco en segundo
+// plano el vendedor nunca espera, y el estado real lo garantiza hook.php en vivo.
+const CACHE_TTL = 900;
 
 $DATA_DIR   = getenv('DATA_DIR') ?: '/data';
 $WEBHOOK_IN = rtrim((string)getenv('BITRIX_WEBHOOK'), '/') . '/';
@@ -48,25 +50,38 @@ if ($TOKEN === '' || !hash_equals($TOKEN, $got)) { http_response_code(403); exit
 
 function bx(string $method, array $params = []): array {
     global $WEBHOOK_IN;
-    for ($try = 0; $try < 4; $try++) {
+    // throttle: sin esto la paginación de 30+ páginas dispara QUERY_LIMIT_EXCEEDED
+    // y el catálogo salía parcial (200/300 de 1500, distinto en cada corrida).
+    usleep(250000);
+    for ($try = 0; $try < 5; $try++) {
         $ch = curl_init($WEBHOOK_IN . $method);
         curl_setopt_array($ch, [
             CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query($params),
             CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_CONNECTTIMEOUT => 10,
         ]);
         $raw = curl_exec($ch); $errno = curl_errno($ch); curl_close($ch);
-        if ($errno) { if ($try < 3) { sleep(1); continue; } return ['ok' => false, 'error' => "curl:$errno"]; }
+        if ($errno) { if ($try < 4) { sleep(1); continue; } return ['ok' => false, 'error' => "curl:$errno"]; }
         $j = json_decode((string)$raw, true);
         if (is_array($j) && isset($j['error'])) {
-            if (in_array($j['error'], ['QUERY_LIMIT_EXCEEDED', 'OPERATION_TIME_LIMIT'], true) && $try < 3) {
+            if (in_array($j['error'], ['QUERY_LIMIT_EXCEEDED', 'OPERATION_TIME_LIMIT'], true) && $try < 4) {
                 sleep(2 + $try); continue;
             }
             return ['ok' => false, 'error' => (string)$j['error']];
         }
-        if (!is_array($j)) { if ($try < 3) { sleep(1); continue; } return ['ok' => false, 'error' => 'bad-json'] ; }
-        return ['ok' => true, 'result' => $j['result'] ?? null, 'next' => $j['next'] ?? null];
+        if (!is_array($j)) { if ($try < 4) { sleep(1); continue; } return ['ok' => false, 'error' => 'bad-json'] ; }
+        return ['ok' => true, 'result' => $j['result'] ?? null, 'next' => $j['next'] ?? null,
+                'total' => isset($j['total']) ? (int)$j['total'] : null];
     }
     return ['ok' => false, 'error' => 'retries-exhausted'];
+}
+
+// refresco en segundo plano (lo llama warm_en_segundo_plano y también el cron)
+if (isset($_GET['warm'])) {
+    ignore_user_abort(true);   // el que dispara corta a los 300ms; hay que terminar igual
+    $c = catalogo(true);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'warm units=' . count($c['units']) . ' parcial=' . (isset($c['parcial']) ? 'si' : 'no');
+    exit;
 }
 
 // diagnóstico: ?debug=1 — muestra qué responde Bitrix, sin tocar el caché
@@ -94,13 +109,62 @@ if (isset($_GET['debug'])) {
     exit;
 }
 
-/** Catálogo completo (unidades + proyectos + stages), cacheado en /data. */
+/** Dispara un refresco del catálogo sin esperarlo (fire-and-forget contra sí mismo). */
+function warm_en_segundo_plano(): void {
+    global $TOKEN;
+    $url = 'http://127.0.0.1/selector.php?warm=1&token=' . urlencode($TOKEN);
+    $ch  = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT_MS     => 300,   // se corta enseguida; el rebuild sigue del otro lado
+        CURLOPT_NOSIGNAL       => true,
+    ]);
+    curl_exec($ch);
+    curl_close($ch);
+}
+
+/** Lee el caché en disco, sin importar su edad. null si no hay o está corrupto. */
+function cache_leer(): ?array {
+    global $DATA_DIR;
+    $j = json_decode((string)@file_get_contents($DATA_DIR . '/selector_cache.json'), true);
+    return (is_array($j) && !empty($j['units'])) ? $j : null;
+}
+
+/**
+ * Catálogo completo (unidades + proyectos + stages), cacheado en /data.
+ *
+ * Dos protecciones aprendidas a golpes:
+ *  - CANDADO: dos rebuilds simultáneos se pelean el límite de API de Bitrix y
+ *    ambos terminan incompletos. Si ya hay uno corriendo, se sirve el caché viejo.
+ *  - COMPLETITUD: solo se guarda el caché si la paginación trajo TODAS las
+ *    unidades (se compara contra `total` de Bitrix). Antes se guardaban parciales
+ *    (200 de 1500) y la página quedaba mostrando de menos.
+ */
 function catalogo(bool $force = false): array {
     global $DATA_DIR;
     $path = $DATA_DIR . '/selector_cache.json';
-    if (!$force && is_file($path) && (time() - (int)@filemtime($path)) < CACHE_TTL) {
-        $j = json_decode((string)@file_get_contents($path), true);
-        if (is_array($j) && isset($j['units'])) return $j;
+    $lock = $DATA_DIR . '/selector_rebuild.lock';
+
+    if (!$force) {
+        $c = cache_leer();
+        if ($c) {
+            $edad = time() - (int)@filemtime($path);
+            if ($edad < CACHE_TTL) return $c;
+            // vencido: se entrega igual (instantáneo) y se refresca por detrás.
+            // Reconstruir en primer plano toma ~40s y el vendedor no va a esperar.
+            warm_en_segundo_plano();
+            $c['stale'] = true;
+            return $c;
+        }
+    }
+
+    // candado: si otro proceso ya está reconstruyendo, servir lo que haya
+    $fh = @fopen($lock, 'c');
+    if ($fh === false || !flock($fh, LOCK_EX | LOCK_NB)) {
+        if ($fh) fclose($fh);
+        $c = cache_leer();
+        if ($c) { $c['stale'] = true; return $c; }
+        return ['units' => [], 'proyectos' => [], 'built' => time(), 'building' => true];
     }
 
     // proyectos
@@ -118,9 +182,12 @@ function catalogo(bool $force = false): array {
     // unidades — sin `select`: con select Bitrix devuelve title/id en null (bug verificado)
     $units = [];
     $start = 0;
+    $total = null;
+    $completo = true;
     do {
         $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'start' => $start]);
-        if (!$r['ok']) break;
+        if (!$r['ok']) { $completo = false; break; }
+        if ($total === null) $total = $r['total'];
         foreach (($r['result']['items'] ?? []) as $it) {
             $cid   = (string)($it['categoryId'] ?? '');
             $title = (string)($it['title'] ?? '');
@@ -138,6 +205,17 @@ function catalogo(bool $force = false): array {
         }
         $start = $r['next'] ?? null;
     } while ($start !== null && $start !== '');
+
+    if ($total !== null && count($units) < $total) $completo = false;
+
+    // si la paginación quedó a medias, NO se pisa el caché bueno con datos parciales
+    if (!$completo) {
+        flock($fh, LOCK_UN); fclose($fh);
+        $c = cache_leer();
+        if ($c) { $c['stale'] = true; return $c; }
+        return ['units' => $units, 'proyectos' => $proyectos, 'built' => time(), 'parcial' => true,
+                'esperadas' => $total, 'traidas' => count($units)];
+    }
 
     // quién está ocupada por el campo nativo (PARENT_ID_1072 de deals de Clientes)
     $ocupadas = [];
@@ -164,6 +242,7 @@ function catalogo(bool $force = false): array {
     // el orden natural por código se aplica al agrupar por proyecto en la vista
     $out = ['units' => $units, 'proyectos' => $proyectos, 'built' => time()];
     @file_put_contents($path, json_encode($out));
+    flock($fh, LOCK_UN); fclose($fh);
     return $out;
 }
 
@@ -318,6 +397,14 @@ function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8')
       Modo consulta — abre con <code>?deal=&lt;ID&gt;</code> para poder asignar.
     <?php endif; ?>
   </div>
+
+  <?php if (!empty($cat['building'])): ?>
+    <div class="warn">El catálogo se está armando por primera vez (~1 min). Recarga en un momento.</div>
+  <?php elseif (!empty($cat['parcial'])): ?>
+    <div class="warn">Bitrix cortó la lectura por límite de consultas: se trajeron
+      <?= (int)($cat['traidas'] ?? 0) ?> de <?= (int)($cat['esperadas'] ?? 0) ?> unidades.
+      <a href="?<?= http_build_query(array_merge($_GET, ['refresh' => 1])) ?>">reintentar</a></div>
+  <?php endif; ?>
 
   <?php if ($dealInfo && !$dealInfo['catOk']): ?>
     <div class="warn">Este deal no está en el pipeline <b>CLIENTES</b>. Por seguridad solo se puede atar ahí
