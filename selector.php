@@ -114,10 +114,29 @@ if (isset($_GET['debug'])) {
        . ' whoami=' . (function_exists('posix_geteuid') ? (string)posix_geteuid() : 'n/d') . "\n";
     if ($th !== false) { flock($th, LOCK_UN); fclose($th); }
 
-    $t0 = microtime(true);
-    $fresh = catalogo(true);
-    echo 'REBUILD units=' . count($fresh['units']) . ' proyectos=' . count($fresh['proyectos'])
-       . ' secs=' . round(microtime(true) - $t0, 1) . "\n";
+    // ¿llegan las opciones de los enum torre/piso? (las tarjetas mostraban "—")
+    $ff = bx('crm.item.fields', ['entityTypeId' => SPA_ENTITY]);
+    echo 'item.fields ok=' . var_export($ff['ok'], true) . ' err=' . ($ff['error'] ?? '-')
+       . ' campos=' . count($ff['result']['fields'] ?? []) . "\n";
+    foreach ([U_TOR => 'torre', U_PIS => 'piso'] as $campo => $etq) {
+        $fld = $ff['result']['fields'][$campo] ?? null;
+        echo "  $etq ($campo): " . ($fld === null ? 'CAMPO NO ENCONTRADO' :
+              'type=' . ($fld['type'] ?? '?') . ' claves=[' . implode(',', array_keys($fld)) . ']'
+              . ' opciones=' . count($fld['items'] ?? $fld['ITEMS'] ?? [])) . "\n";
+    }
+    // muestra 3 unidades del caché para ver qué guardó en torre/piso
+    $cc = cache_leer();
+    foreach (array_slice($cc['units'] ?? [], 0, 3) as $u) {
+        echo '  cache: ' . $u['codigo'] . ' torre=' . var_export($u['torre'], true)
+           . ' piso=' . var_export($u['piso'], true) . "\n";
+    }
+
+    if (($_GET['debug'] ?? '') === 'full') {
+        $t0 = microtime(true);
+        $fresh = catalogo(true);
+        echo 'REBUILD units=' . count($fresh['units']) . ' proyectos=' . count($fresh['proyectos'])
+           . ' secs=' . round(microtime(true) - $t0, 1) . "\n";
+    }
     exit;
 }
 
