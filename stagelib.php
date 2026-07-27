@@ -6,6 +6,7 @@
  * Reglas (deal -> stage de la unidad), definidas por el usuario:
  *   CLIENTES(44) RESERVA                -> RESERVADO
  *   CLIENTES(44) PROMESA FIRMADA CLIENTE-> FIRMADO
+ *   CLIENTES(44) CIERRE DE PROMESA      -> FIRMADO
  *   CLIENTES(44) FIRMADOS - CAIDOS      -> DISPONIBLE
  *   COBRANZAS(48) PAGADO TOTALMENTE     -> VENDIDO
  *   COBRANZAS(48) DADO DE BAJA          -> DISPONIBLE
@@ -23,7 +24,8 @@
 const CLIENTES_CAT = 44;
 const CLIENTES_TRIGGERS = [
     'C44:NEW'       => 'RESERVADO',   // RESERVA
-    'C44:UC_2CE2UE' => 'FIRMADO',     // PROMESA FIRMADA POR CLIENTE
+    'C44:UC_2CE2UE' => 'FIRMADO',     // PROMESA FIRMADA POR CLIENTE (firmó, faltan documentos)
+    'C44:WON'       => 'FIRMADO',     // CIERRE DE PROMESA (ya pagó notaría, documentos entregados)
     'C44:APOLOGY'   => 'DISPONIBLE',  // FIRMADOS - CAIDOS
 ];
 // disparadores Cobranzas 48
