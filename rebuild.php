@@ -39,16 +39,29 @@ function logline(string $msg): void {
 
 function bx(string $method, array $params = []): array {
     global $WEBHOOK_IN;
-    $ch = curl_init($WEBHOOK_IN . $method);
-    curl_setopt_array($ch, [
-        CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query($params),
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_CONNECTTIMEOUT => 10,
-    ]);
-    $raw = curl_exec($ch); $errno = curl_errno($ch); curl_close($ch);
-    if ($errno) return ['ok' => false, 'error' => "curl:$errno"];
-    $j = json_decode((string)$raw, true);
-    if (!is_array($j) || isset($j['error'])) return ['ok' => false, 'error' => $j['error'] ?? 'bad-json'];
-    return ['ok' => true, 'result' => $j['result'] ?? null, 'next' => $j['next'] ?? null, 'total' => $j['total'] ?? null];
+    // throttle + backoff (igual que reconcile.php): sin esto este script pegaba sin
+    // pausa, moría al primer QUERY_LIMIT_EXCEEDED y encima dejaba sin presupuesto de
+    // API a los demás (se veía en el log en cada reinicio del contenedor).
+    usleep(250000);
+    for ($try = 0; $try < 5; $try++) {
+        $ch = curl_init($WEBHOOK_IN . $method);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query($params),
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_CONNECTTIMEOUT => 10,
+        ]);
+        $raw = curl_exec($ch); $errno = curl_errno($ch); curl_close($ch);
+        if ($errno) { if ($try < 4) { sleep(1); continue; } return ['ok' => false, 'error' => "curl:$errno"]; }
+        $j = json_decode((string)$raw, true);
+        if (is_array($j) && isset($j['error'])) {
+            if (in_array($j['error'], ['QUERY_LIMIT_EXCEEDED', 'OPERATION_TIME_LIMIT'], true) && $try < 4) {
+                sleep(2 + $try); continue;
+            }
+            return ['ok' => false, 'error' => (string)$j['error']];
+        }
+        if (!is_array($j)) { if ($try < 4) { sleep(1); continue; } return ['ok' => false, 'error' => 'bad-json']; }
+        return ['ok' => true, 'result' => $j['result'] ?? null, 'next' => $j['next'] ?? null, 'total' => $j['total'] ?? null];
+    }
+    return ['ok' => false, 'error' => 'retries-exhausted'];
 }
 
 // Paginar crm.deal.list de CATEGORY_ID=44, solo IDs
