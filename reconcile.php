@@ -26,6 +26,7 @@ $DATA_DIR   = getenv('DATA_DIR') ?: '/data';
 $LOG_FILE   = $DATA_DIR . '/sync.log';
 $WEBHOOK_IN = rtrim((string)getenv('BITRIX_WEBHOOK'), '/') . '/';
 
+set_time_limit(0);
 $isHttp = PHP_SAPI !== 'cli';
 if ($isHttp) {
     header('Content-Type: text/plain; charset=utf-8');
