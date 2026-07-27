@@ -220,14 +220,25 @@ function catalogo(bool $force = false): array {
         foreach (($st['result'] ?? []) as $s) $stageName[(string)$s['STATUS_ID']] = strtoupper((string)$s['NAME']);
     }
 
-    // etiquetas de los enum (torre/piso): la unidad guarda el ID interno (1881),
-    // no el texto ("A"), así que hay que traducirlo o la tarjeta muestra números.
+    // Etiquetas de los enum (torre/piso): la unidad guarda el ID interno (1881),
+    // no el texto ("A"). OJO: crm.item.fields devuelve las opciones de forma
+    // INTERMITENTE — a veces trae 20, a veces 0 (verificado). Si viniera vacío se
+    // perdían las etiquetas y quedaba cacheado 15 min, así que se reintenta y, si
+    // aun así falla, se reutiliza el mapeo bueno del caché anterior.
     $enum = [];
-    $f = bx('crm.item.fields', ['entityTypeId' => SPA_ENTITY]);
-    foreach ([U_TOR, U_PIS] as $campo) {
-        foreach ((($f['result']['fields'][$campo]['items']) ?? []) as $op) {
-            $enum[$campo][(string)$op['ID']] = (string)$op['VALUE'];
+    for ($intento = 0; $intento < 3 && !$enum; $intento++) {
+        if ($intento) sleep(1);
+        $f = bx('crm.item.fields', ['entityTypeId' => SPA_ENTITY]);
+        foreach ([U_TOR, U_PIS] as $campo) {
+            foreach ((($f['result']['fields'][$campo]['items']) ?? []) as $op) {
+                $enum[$campo][(string)$op['ID']] = (string)$op['VALUE'];
+            }
         }
+    }
+    if (!$enum) {
+        $viejo = cache_leer();
+        if (!empty($viejo['enum'])) { $enum = $viejo['enum']; sellog('enum vacio -> reusando el del cache'); }
+        else sellog('enum vacio y sin cache previo: torre/piso saldran en blanco');
     }
 
     // unidades — sin `select`: con select Bitrix devuelve title/id en null (bug verificado)
@@ -297,7 +308,8 @@ function catalogo(bool $force = false): array {
     unset($u);
 
     // el orden natural por código se aplica al agrupar por proyecto en la vista
-    $out = ['units' => $units, 'proyectos' => $proyectos, 'built' => time()];
+    // se guarda `enum` para poder reutilizarlo si Bitrix devuelve las opciones vacías
+    $out = ['units' => $units, 'proyectos' => $proyectos, 'enum' => $enum, 'built' => time()];
     @file_put_contents($path, json_encode($out));
     flock($fh, LOCK_UN); fclose($fh);
     return $out;
