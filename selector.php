@@ -69,6 +69,21 @@ function bx(string $method, array $params = []): array {
     return ['ok' => false, 'error' => 'retries-exhausted'];
 }
 
+// diagnóstico: ?debug=1 — muestra qué responde Bitrix, sin tocar el caché
+if (isset($_GET['debug'])) {
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'webhook_set=' . ($WEBHOOK_IN !== '/' ? 'si' : 'NO') . "\n";
+    $c = bx('crm.category.list', ['entityTypeId' => SPA_ENTITY]);
+    echo "category.list ok=" . var_export($c['ok'], true) . ' err=' . ($c['error'] ?? '-')
+       . ' n=' . count($c['result']['categories'] ?? []) . "\n";
+    $i = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY]);
+    echo "item.list ok=" . var_export($i['ok'], true) . ' err=' . ($i['error'] ?? '-')
+       . ' n=' . count($i['result']['items'] ?? []) . ' next=' . var_export($i['next'], true) . "\n";
+    $cachePath = $DATA_DIR . '/selector_cache.json';
+    echo 'cache_exists=' . (is_file($cachePath) ? 'si age=' . (time() - (int)filemtime($cachePath)) . 's size=' . filesize($cachePath) : 'no') . "\n";
+    exit;
+}
+
 /** Catálogo completo (unidades + proyectos + stages), cacheado en /data. */
 function catalogo(bool $force = false): array {
     global $DATA_DIR;
