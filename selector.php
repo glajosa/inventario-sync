@@ -120,9 +120,11 @@ if (isset($_GET['debug'])) {
        . ' campos=' . count($ff['result']['fields'] ?? []) . "\n";
     foreach ([U_TOR => 'torre', U_PIS => 'piso'] as $campo => $etq) {
         $fld = $ff['result']['fields'][$campo] ?? null;
-        echo "  $etq ($campo): " . ($fld === null ? 'CAMPO NO ENCONTRADO' :
-              'type=' . ($fld['type'] ?? '?') . ' claves=[' . implode(',', array_keys($fld)) . ']'
-              . ' opciones=' . count($fld['items'] ?? $fld['ITEMS'] ?? [])) . "\n";
+        $ops = $fld['items'] ?? [];
+        $primera = $ops[0] ?? null;
+        echo "  $etq ($campo): opciones=" . count($ops)
+           . ' primera_claves=[' . ($primera ? implode(',', array_keys($primera)) : '-') . ']'
+           . ' primera=' . json_encode($primera) . "\n";
     }
     // muestra 3 unidades del caché para ver qué guardó en torre/piso
     $cc = cache_leer();
