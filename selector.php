@@ -188,6 +188,16 @@ function catalogo(bool $force = false): array {
         foreach (($st['result'] ?? []) as $s) $stageName[(string)$s['STATUS_ID']] = strtoupper((string)$s['NAME']);
     }
 
+    // etiquetas de los enum (torre/piso): la unidad guarda el ID interno (1881),
+    // no el texto ("A"), así que hay que traducirlo o la tarjeta muestra números.
+    $enum = [];
+    $f = bx('crm.item.fields', ['entityTypeId' => SPA_ENTITY]);
+    foreach ([U_TOR, U_PIS] as $campo) {
+        foreach ((($f['result']['fields'][$campo]['items']) ?? []) as $op) {
+            $enum[$campo][(string)$op['ID']] = (string)$op['VALUE'];
+        }
+    }
+
     // unidades — sin `select`: con select Bitrix devuelve title/id en null (bug verificado)
     $units = [];
     $start = 0;
@@ -210,8 +220,8 @@ function catalogo(bool $force = false): array {
                 'stage'  => $stageName[(string)($it['stageId'] ?? '')] ?? '',
                 'm2'     => (string)($it[U_M2] ?? ''),
                 'pvp'    => (string)($it[U_PVP] ?? ''),
-                'torre'  => (string)($it[U_TOR] ?? ''),
-                'piso'   => (string)($it[U_PIS] ?? ''),
+                'torre'  => $enum[U_TOR][(string)($it[U_TOR] ?? '')] ?? '',
+                'piso'   => $enum[U_PIS][(string)($it[U_PIS] ?? '')] ?? '',
                 'dealId' => (int)($it['parentId2'] ?? 0),
             ];
         }
