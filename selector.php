@@ -105,6 +105,15 @@ if (isset($_GET['debug'])) {
            . ' units=' . (is_array($cj) ? count($cj['units'] ?? []) : 0)
            . ' proyectos=' . (is_array($cj) ? count($cj['proyectos'] ?? []) : 0) . "\n";
     }
+    // ¿el candado es usable por el usuario de Apache? (causa candidata del FALLO)
+    $lk = $DATA_DIR . '/selector_rebuild.lock';
+    $th = @fopen($lk, 'c');
+    echo 'lock_fopen=' . ($th === false ? 'FALLO' : 'ok')
+       . ' lock_flock=' . ($th !== false && flock($th, LOCK_EX | LOCK_NB) ? 'libre' : 'ocupado/no')
+       . ' data_writable=' . (is_writable($DATA_DIR) ? 'si' : 'NO')
+       . ' whoami=' . (function_exists('posix_geteuid') ? (string)posix_geteuid() : 'n/d') . "\n";
+    if ($th !== false) { flock($th, LOCK_UN); fclose($th); }
+
     $t0 = microtime(true);
     $fresh = catalogo(true);
     echo 'REBUILD units=' . count($fresh['units']) . ' proyectos=' . count($fresh['proyectos'])
@@ -170,6 +179,8 @@ function catalogo(bool $force = false): array {
     // candado: si otro proceso ya está reconstruyendo, servir lo que haya
     $fh = @fopen($lock, 'c');
     if ($fh === false || !flock($fh, LOCK_EX | LOCK_NB)) {
+        sellog('candado NO obtenido -> se sirve cache viejo. fopen='
+             . ($fh === false ? 'FALLO (permisos en ' . $DATA_DIR . '?)' : 'ok, flock ocupado'));
         if ($fh) fclose($fh);
         $c = cache_leer();
         if ($c) { $c['stale'] = true; return $c; }
