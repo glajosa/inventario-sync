@@ -81,6 +81,16 @@ if (isset($_GET['debug'])) {
        . ' n=' . count($i['result']['items'] ?? []) . ' next=' . var_export($i['next'], true) . "\n";
     $cachePath = $DATA_DIR . '/selector_cache.json';
     echo 'cache_exists=' . (is_file($cachePath) ? 'si age=' . (time() - (int)filemtime($cachePath)) . 's size=' . filesize($cachePath) : 'no') . "\n";
+    if (is_file($cachePath)) {
+        $cj = json_decode((string)@file_get_contents($cachePath), true);
+        echo 'cache_json_ok=' . var_export(is_array($cj), true)
+           . ' units=' . (is_array($cj) ? count($cj['units'] ?? []) : 0)
+           . ' proyectos=' . (is_array($cj) ? count($cj['proyectos'] ?? []) : 0) . "\n";
+    }
+    $t0 = microtime(true);
+    $fresh = catalogo(true);
+    echo 'REBUILD units=' . count($fresh['units']) . ' proyectos=' . count($fresh['proyectos'])
+       . ' secs=' . round(microtime(true) - $t0, 1) . "\n";
     exit;
 }
 
