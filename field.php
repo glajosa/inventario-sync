@@ -99,8 +99,13 @@ $elegidos = ids_de($value);
 // ---- settings: el campo no necesita configuración ---------------------------
 if ($mode === 'settings') { echo ''; exit; }
 
-// ---- view: mostrar las unidades guardadas -----------------------------------
-if ($mode === 'view') {
+// ---- view -------------------------------------------------------------------
+// A propósito NO se usa una vista aparte de solo lectura: obligaba a pulsar
+// "editar" para cambiar la unidad, que es incómodo. Como el guardado va por API
+// (no por el formulario), se puede mostrar siempre el selector y listo.
+// Se conserva el render de solo lectura para cuando Bitrix lo pide fuera del
+// formulario (por ejemplo en listados), donde no hay dónde editar.
+if ($mode === 'view' && !empty($_REQUEST['solo_lectura'])) {
     $partes = [];
     foreach ($elegidos as $id) {
         $u = $porId[(string)$id] ?? null;
@@ -163,13 +168,12 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
 <script src="//api.bitrix24.com/api/v1/"></script>
 <div class="gu" id="<?= $uid ?>">
 <style>
-  /* El iframe casi nunca mide exacto lo que mide el contenido, así que el
-     contenido se centra solo dentro del alto que haya. Antes se calculaba a ojo
-     y quedaba "un poco arriba". */
-  html,body{margin:0;padding:0;background:transparent;overflow:hidden;height:100%}
+  /* Bitrix dimensiona este iframe según el ALTO DEL DOCUMENTO que devolvemos.
+     Por eso el alto debe ser natural: con height:100% + overflow:hidden el
+     documento nunca crecía y el panel abierto quedaba recortado. */
+  html,body{margin:0;padding:0;background:transparent;height:auto;overflow:visible}
   #<?= $uid ?>{font:13.5px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-      color:#1f2328;min-height:100%;display:flex;flex-direction:column;justify-content:center}
-  #<?= $uid ?>.abierto{justify-content:flex-start}
+      color:#1f2328}
   #<?= $uid ?> *{box-sizing:border-box}
 
   /* línea cerrada: chips de lo elegido + "agregar".
