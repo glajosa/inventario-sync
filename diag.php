@@ -44,6 +44,22 @@ if (!empty($_GET['liberar_unidad'])) {
     echo "liberar_unidad=$u: " . json_encode($a) . " stage_movido=" . var_export($b, true) . "\n"; exit;
 }
 
+// Crea el deal de prueba en CLIENTES(44) que pidió el usuario, sobre el contacto
+// de prueba ya existente. Solo para validar el campo; no es un cliente real.
+if (!empty($_GET['crear_prueba'])) {
+    $r = bx('crm.deal.add', ['fields' => [
+        'TITLE'       => 'PRUEBA INVENTARIO - no usar',
+        'CATEGORY_ID' => 44,
+        'STAGE_ID'    => 'C44:NEW',
+        'CONTACT_ID'  => 204857,
+        'OPPORTUNITY' => 0,
+    ]]);
+    logline('AUDITORIA crear deal de prueba -> ' . json_encode($r));
+    echo json_encode($r), "\n"; exit;
+}
+
+if (!empty($_GET['version'])) { echo "diag v3\n"; exit; }
+
 // Modo "select": compara crm.item.list con y sin `select` para un deal.
 $deal = (int)($_GET['deal'] ?? 0);
 if ($deal <= 0) exit("uso: ?token=...&deal=ID   |   ?token=...&m=<metodo>&p=<json>\n");
