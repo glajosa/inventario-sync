@@ -168,6 +168,17 @@ function unidades_asignables(array $ids, int $dealId, int $contacto = 0): array 
     return $ok;
 }
 
+/** Candado de adopción: deals de CLIENTES que ya pasaron por la adopción una vez. */
+function adopciones(): array {
+    global $DATA_DIR;
+    $j = json_decode((string)@file_get_contents($DATA_DIR . '/adopciones.json'), true);
+    return is_array($j) ? $j : [];
+}
+function adopciones_guardar(array $m): void {
+    global $DATA_DIR;
+    @file_put_contents($DATA_DIR . '/adopciones.json', json_encode($m), LOCK_EX);
+}
+
 /**
  * APARTA las unidades elegidas en un deal de Prospectos(28).
  *
@@ -231,9 +242,20 @@ function sincronizar_deal(int $dealId): array {
     // 44 arrastre este campo (es de tipo propio). Si llega vacío y el MISMO
     // contacto tiene una unidad apartada en Prospectos, se rellena aquí y sigue
     // el camino normal. Mismo patrón que referidor.php con CLIENTE REFERIDOR.
-    $adoptadas = [];
-    if (!$quiere && (string)($deal['STAGE_ID'] ?? '') === 'C44:NEW') {
-        $contacto = (int)($deal['CONTACT_ID'] ?? 0);
+    // Se adopta UNA SOLA VEZ, con candado en disco. Sin el candado la adopción
+    // rebota: cuando el usuario quita la unidad, el campo queda vacío, se vuelve
+    // a adoptar del apartado del 28 y la unidad se re-ata sola — quitarla era
+    // imposible. Mismo candado que usa referidor.php ("done") para no repetir.
+    $marcas = adopciones();
+    if ($quiere) {
+        // ya tiene valor: se marca para que un vaciado futuro NO se re-adopte
+        if (!isset($marcas[(string)$dealId])) {
+            $marcas[(string)$dealId] = 1;
+            adopciones_guardar($marcas);
+        }
+    } elseif (!isset($marcas[(string)$dealId]) && (string)($deal['STAGE_ID'] ?? '') === 'C44:NEW') {
+        $adoptadas = [];
+        $contacto  = (int)($deal['CONTACT_ID'] ?? 0);
         if ($contacto > 0) {
             foreach (apartados_28() as $uid => $a) {
                 if ((int)$a['contacto'] === $contacto) $adoptadas[] = (int)$uid;
@@ -246,6 +268,8 @@ function sincronizar_deal(int $dealId): array {
             logline("deal=$dealId ADOPTA del apartado 28: " . implode(',', $adoptadas));
             $deal[CAMPO_NUEVO] = implode(',', $adoptadas);
         }
+        $marcas[(string)$dealId] = 1;      // se marca aunque no haya adoptado nada
+        adopciones_guardar($marcas);
     }
 
     // Si el deal se cayó (RESERVAS CAIDAS / FIRMADOS-CAIDOS) no quiere ninguna:
