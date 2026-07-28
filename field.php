@@ -101,7 +101,6 @@ if ($mode === 'settings') { echo ''; exit; }
 
 // ---- view: mostrar las unidades guardadas -----------------------------------
 if ($mode === 'view') {
-    if (!$elegidos) { echo '<span style="color:#8b949e">—</span>'; exit; }
     $partes = [];
     foreach ($elegidos as $id) {
         $u = $porId[(string)$id] ?? null;
@@ -113,7 +112,38 @@ if ($mode === 'view') {
             $partes[] = '<span>#' . h((string)$id) . '</span>';
         }
     }
-    echo implode('<span style="color:#d0d7de">&nbsp;·&nbsp;</span>', $partes);
+    $texto = $partes
+        ? implode('<span style="color:#d0d7de">&nbsp;·&nbsp;</span>', $partes)
+        : '<span style="color:#8b949e">—</span>';
+
+    // El modo lectura TAMBIÉN va dentro del iframe de 200px. Si no se le pide a
+    // Bitrix encogerlo, el campo deja un bloque enorme vacío en todos los deals.
+    ?>
+    <script src="//api.bitrix24.com/api/v1/"></script>
+    <style>
+      html,body{margin:0;padding:0;background:transparent;overflow:hidden;height:100%}
+      #guv{font:13.5px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+           color:#1f2328;min-height:100%;display:flex;align-items:center;padding:0 7px;
+           flex-wrap:wrap;gap:4px}
+    </style>
+    <div id="guv"><?= $texto ?></div>
+    <script>
+      (function(){
+        function ajustar(){
+          var el = document.getElementById('guv');
+          var alto = Math.max(24, el ? el.scrollHeight : 24);
+          try {
+            if (typeof BX24 !== 'undefined' && BX24.resizeWindow) {
+              BX24.resizeWindow(document.documentElement.scrollWidth, alto);
+            }
+          } catch(e) {}
+        }
+        if (typeof BX24 !== 'undefined') { try { BX24.init(ajustar); } catch(e) { ajustar(); } }
+        else { window.addEventListener('load', ajustar); }
+        setTimeout(ajustar, 400);
+      })();
+    </script>
+    <?php
     exit;
 }
 
