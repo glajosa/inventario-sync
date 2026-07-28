@@ -64,6 +64,45 @@ function bx(string $method, array $params = []): array {
 
 require_once __DIR__ . '/stagelib.php';   // stage_id(), apply_unit_stage(), CLIENTES_TRIGGERS...
 
+/**
+ * Refresca en el caché del selector las unidades que acabamos de tocar.
+ * Sin esto la lista seguía mostrando "DISPONIBLE" hasta el próximo refresco
+ * (cada 15 min), aunque la unidad ya estuviera reservada.
+ */
+function refrescar_cache(array $unitIds): void {
+    global $DATA_DIR;
+    if (!$unitIds) return;
+    $path = $DATA_DIR . '/selector_cache.json';
+    $j = json_decode((string)@file_get_contents($path), true);
+    if (!is_array($j) || empty($j['units'])) return;
+
+    // nombre de stage por STATUS_ID, para guardar en el caché lo mismo que guarda rebuild
+    $rev = [];
+    foreach (stages_map() as $cat => $m) foreach ($m as $nombre => $sid) $rev[$sid] = $nombre;
+
+    $nuevos = [];
+    foreach ($unitIds as $uid) {
+        $r = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => (int)$uid]);
+        if (!$r['ok']) continue;
+        $it = $r['result']['item'] ?? $r['result'];
+        $nuevos[(string)$uid] = [
+            'stage'  => $rev[(string)($it['stageId'] ?? '')] ?? '',
+            'dealId' => (int)($it['parentId2'] ?? 0),
+        ];
+    }
+    if (!$nuevos) return;
+
+    foreach ($j['units'] as &$u) {
+        $k = (string)$u['id'];
+        if (isset($nuevos[$k])) {
+            $u['stage']  = $nuevos[$k]['stage'];
+            $u['dealId'] = $nuevos[$k]['dealId'];
+        }
+    }
+    unset($u);
+    @file_put_contents($path, json_encode($j));
+}
+
 /** IDs del valor del campo ("581,623"). */
 function ids_de(string $v): array {
     $out = [];
@@ -134,6 +173,9 @@ function sincronizar_deal(int $dealId): array {
     if ((int)($deal['PARENT_ID_1072'] ?? 0) !== (int)$primera) {
         bx('crm.deal.update', ['id' => $dealId, 'fields' => ['PARENT_ID_1072' => $primera ?: '']]);
     }
+
+    // que la lista del selector muestre el estado nuevo de inmediato
+    refrescar_cache(array_values(array_unique(array_merge($quiere, $soltar))));
 
     return ['ok' => true, 'quiere' => count($quiere), 'agregadas' => count($agregar),
             'soltadas' => count($soltar), 'stage' => $target ?: '-', 'movidas' => $movidas];

@@ -20,6 +20,7 @@ declare(strict_types=1);
 
 const CATEGORY_ID  = 44;
 const SPA_ENTITY   = 1072;
+const CAMPO_NUEVO  = 'UF_CRM_1785205972989';   // campo "Inventario" (tipo propio, multi)
 const FIELDS_EXTRA = ['UF_CRM_DEAL_1784994996','UF_CRM_DEAL_1784995021','UF_CRM_DEAL_1784995044'];
 
 $DATA_DIR   = getenv('DATA_DIR') ?: '/data';
@@ -70,7 +71,11 @@ function bx(string $method, array $params = []): array {
     return ['ok' => false, 'error' => 'retries-exhausted'];
 }
 
-// ---- DESEADO: unidad => deal, según los campos Inv2/3/4 de deals P44 ----------
+// ---- DESEADO: unidad => deal ---------------------------------------------------
+// UNIÓN de las dos fuentes: el campo nuevo "Inventario" y los viejos Inv 2/3/4.
+// Si solo se miraran los viejos, este barrido DESATABA cada 15 min lo que había
+// guardado el campo nuevo; si solo se mirara el nuevo, desataría los 778 deals
+// que todavía viven en los campos viejos.
 $desired = [];   // unitId => dealId
 foreach (FIELDS_EXTRA as $f) {
     $r = bx('crm.deal.list', [
@@ -86,6 +91,25 @@ foreach (FIELDS_EXTRA as $f) {
         }
     }
 }
+
+// campo nuevo (varias unidades separadas por coma en un solo campo)
+$start = 0;
+do {
+    $r = bx('crm.deal.list', [
+        'filter' => ['CATEGORY_ID' => CATEGORY_ID, '!' . CAMPO_NUEVO => ''],
+        'select' => ['ID', CAMPO_NUEVO],
+        'start'  => $start,
+    ]);
+    if (!$r['ok']) { logline('RECONCILE ERR list(campo nuevo): ' . $r['error']); break; }
+    foreach (($r['result'] ?? []) as $d) {
+        $dealId = (string)$d['ID'];
+        foreach (preg_split('/[,;\s]+/', (string)($d[CAMPO_NUEVO] ?? '')) as $x) {
+            $x = trim($x);
+            if ($x !== '' && ctype_digit($x) && (int)$x > 0) $desired[(int)$x] = $dealId;
+        }
+    }
+    $start = $r['next'] ?? null;
+} while ($start !== null && $start !== '');
 
 // ---- ACTUAL: unidad => deal, según parentId2 de las unidades ------------------
 // paginamos unidades con parentId2 != 0 (son pocas: las atadas por este sistema)

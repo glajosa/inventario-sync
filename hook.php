@@ -29,6 +29,7 @@ header('Content-Type: text/plain; charset=utf-8');
 // ---- Rutas y constantes -----------------------------------------------------
 const CATEGORY_ID   = 44;                       // pipeline CLIENTES
 const SPA_ENTITY    = 1072;                      // SPA Inventario
+const CAMPO_NUEVO   = 'UF_CRM_1785205972989';    // campo "Inventario" (tipo propio, multi)
 const FIELDS_EXTRA  = [                          // "Inventario 2/3/4" en el deal
     'UF_CRM_DEAL_1784994996',
     'UF_CRM_DEAL_1784995021',
@@ -186,11 +187,20 @@ $r = bx('crm.deal.get', ['id' => $dealId]);           // 1 llamada
 if (!$r['ok']) { logline("ERR get deal=$dealId: {$r['error']}"); echo 'err-get'; exit; }
 $deal = $r['result'];
 
-// unidades que el deal DICE tener (Inventario 2/3/4), sin vacíos ni duplicados
+// Unidades que el deal DICE tener.
+// UNIÓN de las dos fuentes: el campo nuevo "Inventario" (varias unidades en uno)
+// y los viejos Inventario 2/3/4. Mientras existan las dos, hay que respetar ambas:
+// si solo se mirara la nueva, los 778 deals que aún viven en los campos viejos
+// verían sus unidades DESATADAS; y si solo se miraran las viejas, este hook
+// borraba lo que acababa de guardar el campo nuevo (era el caso real).
 $quieren = [];
 foreach (FIELDS_EXTRA as $f) {
     $v = $deal[$f] ?? '';
     if ($v !== '' && $v !== null && (int)$v > 0) $quieren[(int)$v] = true;
+}
+foreach (preg_split('/[,;\s]+/', (string)($deal[CAMPO_NUEVO] ?? '')) as $x) {
+    $x = trim($x);
+    if ($x !== '' && ctype_digit($x) && (int)$x > 0) $quieren[(int)$x] = true;
 }
 $quieren = array_keys($quieren);   // ids de unidades objetivo
 
