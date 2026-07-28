@@ -30,6 +30,16 @@ declare(strict_types=1);
 
 $DATA_DIR = getenv('DATA_DIR') ?: '/data';
 
+// Diagnóstico: qué nos manda Bitrix. Necesitamos el ID del deal para poder
+// guardar por API, porque el <input> vive dentro del iframe y el formulario del
+// deal NO lo envía al guardar (por eso la selección no se asentaba).
+@file_put_contents($DATA_DIR . '/sync.log',
+    gmdate('Y-m-d\TH:i:s\Z') . '  FIELD claves=[' . implode(',', array_keys($_REQUEST)) . ']'
+    . ' mode=' . (string)($_REQUEST['mode'] ?? '-')
+    . ' value=' . substr((string)($_REQUEST['value'] ?? ''), 0, 40)
+    . ' field_keys=[' . (is_array($_REQUEST['field'] ?? null) ? implode(',', array_keys($_REQUEST['field'])) : '-') . ']'
+    . "\n", FILE_APPEND | LOCK_EX);
+
 $mode  = (string)($_REQUEST['mode'] ?? 'edit');
 $value = (string)($_REQUEST['value'] ?? '');
 $campo = $_REQUEST['field'] ?? [];
