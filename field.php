@@ -46,11 +46,27 @@ $DATA_DIR = getenv('DATA_DIR') ?: '/data';
     . ' OPTIONS=' . substr((string)($_REQUEST['PLACEMENT_OPTIONS'] ?? '-'), 0, 400)
     . "\n", FILE_APPEND | LOCK_EX);
 
-$mode  = (string)($_REQUEST['mode'] ?? 'edit');
-$value = (string)($_REQUEST['value'] ?? '');
-$campo = $_REQUEST['field'] ?? [];
-// nombre del input que Bitrix espera recibir de vuelta al guardar
-$name  = (string)($campo['NAME'] ?? $_REQUEST['name'] ?? 'UF_UNIDAD');
+// Bitrix manda todo en PLACEMENT_OPTIONS (verificado en el log):
+//   MODE, ENTITY_ID, FIELD_NAME, ENTITY_VALUE_ID (= id del deal), VALUE, ...
+// El `mode`/`value` sueltos solo existen cuando se llama a mano para pruebas.
+$opciones = [];
+if (!empty($_REQUEST['PLACEMENT_OPTIONS'])) {
+    $tmp = json_decode((string)$_REQUEST['PLACEMENT_OPTIONS'], true);
+    if (is_array($tmp)) $opciones = $tmp;
+}
+
+$mode   = (string)($opciones['MODE'] ?? $_REQUEST['mode'] ?? 'edit');
+$dealId = (int)($opciones['ENTITY_VALUE_ID'] ?? 0);
+$name   = (string)($opciones['FIELD_NAME'] ?? ($_REQUEST['field']['NAME'] ?? $_REQUEST['name'] ?? 'UF_UNIDAD'));
+
+$value = (string)($opciones['VALUE'] ?? $_REQUEST['value'] ?? '');
+if ($value === 'null') $value = '';
+
+// Guardar NO puede depender del formulario del deal: el campo vive en un iframe
+// y su <input> nunca viaja en el submit. Se guarda por API desde el navegador,
+// con el token que Bitrix entrega en cada render (AUTH_ID).
+$authId  = (string)($_REQUEST['AUTH_ID'] ?? '');
+$dominio = (string)($_REQUEST['DOMAIN'] ?? '');
 
 /** IDs seleccionados a partir del valor guardado ("581,623"). */
 function ids_de(string $v): array {
@@ -199,7 +215,16 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
       font-size:11.5px;font-weight:600;padding:4px 12px;border-radius:5px;cursor:pointer}
 </style>
 
+<!-- se deja el input por compatibilidad, pero el guardado real lo hace el JS por API -->
 <input type="hidden" name="<?= h($name) ?>" id="<?= $uid ?>_val" value="<?= h(implode(',', $elegidos)) ?>">
+<script>
+  window.GU_CFG_<?= $uid ?> = {
+    deal:    <?= (int)$dealId ?>,
+    campo:   <?= json_encode($name) ?>,
+    auth:    <?= json_encode($authId) ?>,
+    dominio: <?= json_encode($dominio) ?>
+  };
+</script>
 
 <div class="gu-campo" id="<?= $uid ?>_campo"></div>
 
@@ -270,6 +295,7 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   if (!R || R.dataset.listo) return;
   R.dataset.listo = '1';
 
+  var CFG = window['GU_CFG_<?= $uid ?>'] || {};
   var val     = document.getElementById('<?= $uid ?>_val');
   var campo   = document.getElementById('<?= $uid ?>_campo');
   var q       = document.getElementById('<?= $uid ?>_q');
@@ -290,6 +316,42 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   var ALTO_CERRADO = 28;   // = min-height de .gu-campo, para que no sobre ni falte
   // selección viva (varias unidades por deal = fusión)
   var sel = val.value.split(',').filter(function(x){ return x; });
+
+  /**
+   * Guarda por API. Imprescindible: el <input> vive dentro del iframe del campo,
+   * así que el submit del deal NUNCA lo incluye. Se escribe el campo con el token
+   * que Bitrix entrega en cada render y después se avisa a nuestro servicio para
+   * que arme la dependencia en la unidad y aplique el stage.
+   */
+  var guardando = false;
+  function guardar(){
+    if (!CFG.deal || !CFG.auth || !CFG.dominio) { avisar('sin datos para guardar', true); return; }
+    guardando = true; avisar('guardando…');
+    var cuerpo = new URLSearchParams();
+    cuerpo.set('id', CFG.deal);
+    cuerpo.set('fields[' + CFG.campo + ']', val.value);
+    cuerpo.set('auth', CFG.auth);
+
+    fetch('https://' + CFG.dominio + '/rest/crm.deal.update', {method:'POST', body:cuerpo})
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        guardando = false;
+        if (j && j.error) { avisar('no se pudo guardar: ' + j.error, true); return; }
+        avisar('guardado');
+        // que el servicio cree la dependencia y mueva el stage
+        fetch('sync-campo.php?deal=' + CFG.deal, {method:'POST'}).catch(function(){});
+      })
+      .catch(function(e){ guardando = false; avisar('error de red', true); });
+  }
+
+  function avisar(txt, err){
+    var p = document.getElementById('<?= $uid ?>_pie');
+    if (!p) return;
+    p.dataset.msg = txt;
+    p.style.color = err ? '#cf222e' : '#57606a';
+    p.textContent = txt;
+    if (!err) setTimeout(function(){ if (p.dataset.msg === txt) filtrar(); }, 1400);
+  }
 
   function datos(id){
     var f = filas.filter(function(x){ return x.dataset.id === id; })[0];
@@ -315,7 +377,7 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
           e.stopPropagation();
           sel = sel.filter(function(x){ return x !== id; });
           val.value = sel.join(',');
-          pintarChips(); marcar(); ajustarIframe();
+          pintarChips(); marcar(); ajustarIframe(); guardar();
         });
         campo.appendChild(c);
       });
@@ -426,7 +488,7 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     if (yo) sel = sel.filter(function(x){ return x !== id; });
     else    sel.push(id);
     val.value = sel.join(',');
-    pintarChips(); marcar(); filtrar(); ajustarIframe();
+    pintarChips(); marcar(); filtrar(); ajustarIframe(); guardar();
   });
 
   document.addEventListener('click', function(){ abrirMenu(false); });
