@@ -209,8 +209,11 @@ function sincronizar_deal(int $dealId): array {
         }
     }
     foreach ($soltar as $uid) {
+        // También se borra el contacto: al atar se le copia el cliente del deal,
+        // y si al soltar no se limpia, la unidad queda libre pero con el cliente
+        // del deal anterior pegado (dato sucio que confunde en la ficha).
         bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid,
-                               'fields' => ['parentId2' => 0]]);
+                               'fields' => ['parentId2' => 0, 'contactId' => 0]]);
         apply_unit_stage($uid, null, 'DISPONIBLE', false);  // se quitó del deal -> libre
     }
 

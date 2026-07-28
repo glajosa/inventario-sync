@@ -81,7 +81,18 @@ if (!empty($_GET['campos'])) {
     exit;
 }
 
-if (!empty($_GET['version'])) { echo "diag v4\n"; exit; }
+// Quita el contacto que las pruebas dejaron pegado en unidades ya libres.
+if (!empty($_GET['limpiar_contacto'])) {
+    foreach (explode(',', (string)$_GET['limpiar_contacto']) as $u) {
+        $u = (int)trim($u); if ($u <= 0) continue;
+        $r = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $u, 'fields' => ['contactId' => 0]]);
+        logline("AUDITORIA limpiar contacto unidad=$u -> ok=" . var_export($r['ok'], true));
+        echo "unidad $u: ok=" . var_export($r['ok'], true) . ' ' . ($r['error'] ?? '') . "\n";
+    }
+    exit;
+}
+
+if (!empty($_GET['version'])) { echo "diag v5\n"; exit; }
 
 // Modo "select": compara crm.item.list con y sin `select` para un deal.
 $deal = (int)($_GET['deal'] ?? 0);
