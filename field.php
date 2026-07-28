@@ -68,13 +68,10 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
 <script src="//api.bitrix24.com/api/v1/"></script>
 <div class="gu" id="<?= $uid ?>">
 <style>
-  /* IMPORTANTE: el editor nuevo de CRM dibuja los campos propios dentro de un
-     iframe (app-frame) con alto FIJO de 200px. Por eso:
-       - nada que se posicione "flotando" puede salir del iframe;
-       - si no se hace nada, el campo reserva 200px de alto en el formulario.
-     Solución: el panel va en el flujo y se le pide a Bitrix redimensionar el
-     iframe — chico cuando está cerrado (una línea, como los demás campos) y
-     alto solo mientras está abierto. */
+  /* El editor nuevo de CRM dibuja los campos propios dentro de un iframe
+     (app-frame) de 200px fijos. Nada puede "flotar" fuera del iframe, así que el
+     panel va en el flujo y se le pide a Bitrix redimensionarlo: una línea cuando
+     está cerrado, alto solo mientras está abierto. */
   html,body{margin:0;padding:0;background:transparent;overflow:hidden}
   #<?= $uid ?>{font:13.5px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1f2328}
   #<?= $uid ?> *{box-sizing:border-box}
@@ -89,18 +86,42 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?> .gu-caret{margin-left:auto;color:#a8adb4;font-size:9px}
 
   #<?= $uid ?> .gu-panel{display:none;margin-top:5px;border:1px solid #d0d7de;border-radius:8px;
-      background:#fff;box-shadow:0 6px 18px rgba(27,31,36,.12);overflow:hidden}
+      background:#fff;box-shadow:0 6px 18px rgba(27,31,36,.12);position:relative}
   #<?= $uid ?>.abierto .gu-panel{display:block}
   #<?= $uid ?>.abierto .gu-campo{border-bottom-color:#0969da}
 
-  #<?= $uid ?> .gu-top{display:flex;gap:6px;padding:7px;border-bottom:1px solid #eaeef2}
-  #<?= $uid ?> .gu-buscar{flex:1 1 auto;min-width:0;padding:6px 9px;border:1px solid #d0d7de;
-      border-radius:6px;font:inherit}
-  #<?= $uid ?> .gu-buscar:focus{outline:2px solid #0969da;outline-offset:-1px}
-  #<?= $uid ?> .gu-proy{flex:0 0 auto;max-width:46%;padding:6px 7px;border:1px solid #d0d7de;
-      border-radius:6px;font:inherit;background:#fff;cursor:pointer}
+  /* barra: [Disponibles|Todos]  [Proyecto ▾]  [buscar] */
+  #<?= $uid ?> .gu-top{display:flex;gap:6px;align-items:center;padding:7px;border-bottom:1px solid #eaeef2}
 
-  #<?= $uid ?> .gu-lista{max-height:212px;overflow-y:auto;overscroll-behavior:contain}
+  #<?= $uid ?> .gu-seg{display:flex;flex:0 0 auto;border:1px solid #d0d7de;border-radius:6px;overflow:hidden}
+  #<?= $uid ?> .gu-seg button{border:0;background:#fff;color:#57606a;font:inherit;font-size:12px;
+      padding:5px 9px;cursor:pointer;white-space:nowrap}
+  #<?= $uid ?> .gu-seg button + button{border-left:1px solid #d0d7de}
+  #<?= $uid ?> .gu-seg button[aria-pressed=true]{background:#0969da;color:#fff;font-weight:600}
+
+  #<?= $uid ?> .gu-drop{position:relative;flex:0 0 auto}
+  #<?= $uid ?> .gu-dropbtn{display:flex;align-items:center;gap:6px;max-width:150px;
+      border:1px solid #d0d7de;border-radius:6px;background:#fff;color:#1f2328;font:inherit;font-size:12px;
+      padding:5px 8px;cursor:pointer}
+  #<?= $uid ?> .gu-dropbtn:hover{border-color:#0969da}
+  #<?= $uid ?> .gu-dropbtn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #<?= $uid ?> .gu-dropbtn i{font-style:normal;color:#8b949e;font-size:8px;margin-left:auto}
+  /* menú propio, blanco (el <select> nativo salía con el gris del sistema) */
+  #<?= $uid ?> .gu-menu{display:none;position:absolute;z-index:5;top:calc(100% + 4px);left:0;min-width:186px;
+      background:#fff;border:1px solid #d0d7de;border-radius:8px;box-shadow:0 8px 22px rgba(27,31,36,.18);
+      padding:4px;max-height:190px;overflow-y:auto}
+  #<?= $uid ?> .gu-menu.on{display:block}
+  #<?= $uid ?> .gu-menu button{display:flex;align-items:center;gap:7px;width:100%;border:0;background:transparent;
+      font:inherit;font-size:12.5px;color:#1f2328;text-align:left;padding:6px 8px;border-radius:5px;cursor:pointer}
+  #<?= $uid ?> .gu-menu button:hover{background:#f0f6ff}
+  #<?= $uid ?> .gu-menu button[aria-pressed=true]{background:#ddf4ff;font-weight:600}
+  #<?= $uid ?> .gu-menu .n{margin-left:auto;color:#8b949e;font-size:11px;font-weight:400}
+
+  #<?= $uid ?> .gu-buscar{flex:1 1 auto;min-width:80px;padding:5px 8px;border:1px solid #d0d7de;
+      border-radius:6px;font:inherit;font-size:12.5px}
+  #<?= $uid ?> .gu-buscar:focus{outline:2px solid #0969da;outline-offset:-1px}
+
+  #<?= $uid ?> .gu-lista{max-height:206px;overflow-y:auto;overscroll-behavior:contain}
   /* encabezado NO sticky: el sticky se montaba encima de las filas */
   #<?= $uid ?> .gu-grupo{padding:7px 10px 3px;font-size:10.5px;font-weight:700;color:#8b949e;
       letter-spacing:.05em;text-transform:uppercase;background:#f6f8fa;border-top:1px solid #eaeef2}
@@ -137,15 +158,30 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
 
 <div class="gu-panel" id="<?= $uid ?>_panel">
   <div class="gu-top">
-    <input type="text" class="gu-buscar" id="<?= $uid ?>_q" placeholder="Buscar código…" autocomplete="off">
-    <select class="gu-proy" id="<?= $uid ?>_proy">
-      <option value="LIBRES">Disponibles</option>
-      <option value="">Todos</option>
-      <?php foreach ($proys as $cid => $nom): ?>
-        <option value="<?= h((string)$cid) ?>"><?= h($nom) ?></option>
-      <?php endforeach; ?>
-    </select>
+    <div class="gu-seg" id="<?= $uid ?>_seg">
+      <button type="button" data-libres="1" aria-pressed="true">Disponibles</button>
+      <button type="button" data-libres="0" aria-pressed="false">Todos</button>
+    </div>
+
+    <div class="gu-drop" id="<?= $uid ?>_drop">
+      <button type="button" class="gu-dropbtn" id="<?= $uid ?>_dropbtn">
+        <span id="<?= $uid ?>_dropTxt">Proyecto</span><i>&#9660;</i>
+      </button>
+      <div class="gu-menu" id="<?= $uid ?>_menu">
+        <button type="button" data-cat="" aria-pressed="true">Todos los proyectos</button>
+        <?php foreach ($proys as $cid => $nom):
+              $n = count(array_filter($porProyecto[(string)$cid] ?? [],
+                        fn($u) => $u['stage'] === 'DISPONIBLE' && empty($u['dealId']))); ?>
+          <button type="button" data-cat="<?= h((string)$cid) ?>" aria-pressed="false">
+            <?= h($nom) ?><span class="n"><?= $n ?></span>
+          </button>
+        <?php endforeach; ?>
+      </div>
+    </div>
+
+    <input type="text" class="gu-buscar" id="<?= $uid ?>_q" placeholder="Código…" autocomplete="off">
   </div>
+
   <div class="gu-lista" id="<?= $uid ?>_lista">
     <?php foreach ($proys as $cid => $nom):
           $lista = $porProyecto[(string)$cid] ?? [];
@@ -170,6 +206,7 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     <?php endforeach; ?>
     <div class="gu-vacio" id="<?= $uid ?>_vacio" style="display:none">Sin resultados</div>
   </div>
+
   <div class="gu-pie" id="<?= $uid ?>_pie"></div>
 </div>
 
@@ -179,23 +216,26 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   if (!R || R.dataset.listo) return;
   R.dataset.listo = '1';
 
-  var val   = document.getElementById('<?= $uid ?>_val');
-  var btn   = document.getElementById('<?= $uid ?>_btn');
-  var lbl   = document.getElementById('<?= $uid ?>_lbl');
-  var clr   = document.getElementById('<?= $uid ?>_clr');
-  var q     = document.getElementById('<?= $uid ?>_q');
-  var proy  = document.getElementById('<?= $uid ?>_proy');
-  var lista = document.getElementById('<?= $uid ?>_lista');
-  var vacio = document.getElementById('<?= $uid ?>_vacio');
-  var pie   = document.getElementById('<?= $uid ?>_pie');
-  var panel = document.getElementById('<?= $uid ?>_panel');
+  var val     = document.getElementById('<?= $uid ?>_val');
+  var btn     = document.getElementById('<?= $uid ?>_btn');
+  var lbl     = document.getElementById('<?= $uid ?>_lbl');
+  var clr     = document.getElementById('<?= $uid ?>_clr');
+  var q       = document.getElementById('<?= $uid ?>_q');
+  var seg     = document.getElementById('<?= $uid ?>_seg');
+  var dropbtn = document.getElementById('<?= $uid ?>_dropbtn');
+  var dropTxt = document.getElementById('<?= $uid ?>_dropTxt');
+  var menu    = document.getElementById('<?= $uid ?>_menu');
+  var lista   = document.getElementById('<?= $uid ?>_lista');
+  var vacio   = document.getElementById('<?= $uid ?>_vacio');
+  var pie     = document.getElementById('<?= $uid ?>_pie');
 
   var filas  = Array.prototype.slice.call(R.querySelectorAll('.gu-fila'));
   var grupos = Array.prototype.slice.call(R.querySelectorAll('.gu-grupo'));
 
+  var soloLibres = true;   // el toggle arranca en "Disponibles"
+  var cat = '';            // '' = todos los proyectos
   var ALTO_CERRADO = 30;
 
-  // Ajusta el iframe que Bitrix reserva para este campo (200px fijos por defecto)
   function ajustarIframe(){
     var alto = R.classList.contains('abierto')
       ? Math.min(document.documentElement.scrollHeight + 4, 330)
@@ -209,11 +249,7 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
 
   function filtrar(){
     var t = q.value.trim().toUpperCase();
-    var p = proy.value;
-    var soloLibres = (p === 'LIBRES');
-    var cat = (p === 'LIBRES' || p === '') ? '' : p;
     var n = 0;
-
     filas.forEach(function(f){
       var ok = (!cat || f.dataset.cat === cat)
             && (!t || f.dataset.cod.indexOf(t) !== -1)
@@ -221,7 +257,6 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
       f.style.display = ok ? '' : 'none';
       if (ok) n++;
     });
-
     // el nombre del proyecto sobra cuando ya se filtró a uno solo
     grupos.forEach(function(g){
       var hay = false, node = g.nextElementSibling;
@@ -231,15 +266,18 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
       }
       g.style.display = (hay && !cat) ? '' : 'none';
     });
-
     vacio.style.display = n ? 'none' : '';
-    pie.textContent = n + (n === 1 ? ' unidad' : ' unidades');
+    pie.textContent = n + (n === 1 ? ' unidad' : ' unidades')
+                    + (soloLibres ? ' disponibles' : '');
     lista.scrollTop = 0;
   }
 
+  function abrirMenu(si){ menu.classList.toggle('on', !!si); }
+
   function abrir(si){
     R.classList.toggle('abierto', si);
-    if (si) { filtrar(); }
+    if (!si) abrirMenu(false);
+    if (si) filtrar();
     ajustarIframe();
     if (si) { try { q.focus(); } catch(e){} }
   }
@@ -249,11 +287,35 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     abrir(!R.classList.contains('abierto'));
   });
 
+  seg.addEventListener('click', function(e){
+    var b = e.target.closest('button'); if (!b) return;
+    soloLibres = (b.dataset.libres === '1');
+    Array.prototype.forEach.call(seg.children, function(x){
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+    filtrar();
+  });
+
+  dropbtn.addEventListener('click', function(e){
+    e.stopPropagation();
+    abrirMenu(!menu.classList.contains('on'));
+  });
+
+  menu.addEventListener('click', function(e){
+    var b = e.target.closest('button'); if (!b) return;
+    cat = b.dataset.cat;
+    Array.prototype.forEach.call(menu.children, function(x){
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+    dropTxt.textContent = cat ? b.textContent.replace(/\d+$/, '').trim() : 'Proyecto';
+    abrirMenu(false);
+    filtrar();
+  });
+
   q.addEventListener('input', filtrar);
-  proy.addEventListener('change', filtrar);
   q.addEventListener('keydown', function(e){
     if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); }
-    if (e.key === 'Escape') { abrir(false); }
+    if (e.key === 'Escape') { menu.classList.contains('on') ? abrirMenu(false) : abrir(false); }
   });
 
   lista.addEventListener('click', function(e){
@@ -274,7 +336,8 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     clr.style.display = 'none';
   });
 
-  // arrancar compacto (una línea) en cuanto BX24 esté listo
+  document.addEventListener('click', function(){ abrirMenu(false); });
+
   function iniciar(){ ajustarIframe(); }
   if (typeof BX24 !== 'undefined') { try { BX24.init(iniciar); } catch(e) { iniciar(); } }
   else { window.addEventListener('load', iniciar); setTimeout(iniciar, 600); }
