@@ -264,10 +264,12 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
 <input type="hidden" name="<?= h($name) ?>" id="<?= $uid ?>_val" value="<?= h(implode(',', $elegidos)) ?>">
 <script>
   window.GU_CFG_<?= $uid ?> = {
-    deal:    <?= (int)$dealId ?>,
-    campo:   <?= json_encode($name) ?>,
-    auth:    <?= json_encode($authId) ?>,
-    dominio: <?= json_encode($dominio) ?>
+    deal:  <?= (int)$dealId ?>,
+    campo: <?= json_encode($name) ?>,
+    // firma del id del deal: guardar.php no escribe nada sin ella
+    firma: <?= json_encode($dealId > 0
+        ? hash_hmac('sha256', (string)$dealId, (string)getenv('OUTBOUND_TOKEN'))
+        : '') ?>
   };
 </script>
 
@@ -370,21 +372,23 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
    */
   var guardando = false;
   function guardar(){
-    if (!CFG.deal || !CFG.auth || !CFG.dominio) { avisar('sin datos para guardar', true); return; }
+    if (!CFG.deal || !CFG.firma) { avisar('este campo solo guarda dentro de un deal', true); return; }
     guardando = true; avisar('guardando…');
-    var cuerpo = new URLSearchParams();
-    cuerpo.set('id', CFG.deal);
-    cuerpo.set('fields[' + CFG.campo + ']', val.value);
-    cuerpo.set('auth', CFG.auth);
 
-    fetch('https://' + CFG.dominio + '/rest/crm.deal.update', {method:'POST', body:cuerpo})
+    // Se llama a NUESTRO servidor (mismo dominio que este iframe). Llamar al API
+    // de Bitrix directo desde aquí lo bloquea el navegador por ser otro dominio
+    // (CORS): era la razón por la que la selección no se guardaba.
+    var cuerpo = new URLSearchParams();
+    cuerpo.set('deal',  CFG.deal);
+    cuerpo.set('valor', val.value);
+    cuerpo.set('firma', CFG.firma);
+
+    fetch('guardar.php', {method:'POST', body:cuerpo})
       .then(function(r){ return r.json(); })
       .then(function(j){
         guardando = false;
-        if (j && j.error) { avisar('no se pudo guardar: ' + j.error, true); return; }
+        if (!j || !j.ok) { avisar('no se pudo guardar: ' + ((j && j.error) || '?'), true); return; }
         avisar('guardado');
-        // que el servicio cree la dependencia y mueva el stage
-        fetch('sync-campo.php?deal=' + CFG.deal, {method:'POST'}).catch(function(){});
       })
       .catch(function(e){ guardando = false; avisar('error de red', true); });
   }
