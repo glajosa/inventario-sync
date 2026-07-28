@@ -58,7 +58,30 @@ if (!empty($_GET['crear_prueba'])) {
     echo json_encode($r), "\n"; exit;
 }
 
-if (!empty($_GET['version'])) { echo "diag v3\n"; exit; }
+// Renombrar la etiqueta del campo nuevo a "Inventario" (los viejos salen de uso).
+if (!empty($_GET['renombrar'])) {
+    $id  = (int)$_GET['renombrar'];                 // ID del userfield (2177)
+    $et  = (string)($_GET['etiqueta'] ?? 'Inventario');
+    $r = bx('crm.deal.userfield.update', ['id' => $id, 'fields' => [
+        'EDIT_FORM_LABEL'  => ['es' => $et, 'en' => $et],
+        'LIST_COLUMN_LABEL'=> ['es' => $et, 'en' => $et],
+        'LIST_FILTER_LABEL'=> ['es' => $et, 'en' => $et],
+    ]]);
+    logline("AUDITORIA renombrar userfield=$id a '$et' -> " . json_encode($r));
+    echo json_encode($r), "\n"; exit;
+}
+if (!empty($_GET['campos'])) {
+    $r = bx('crm.deal.userfield.list', ['filter' => []]);
+    foreach (($r['result'] ?? []) as $f) {
+        if (stripos((string)($f['EDIT_FORM_LABEL'] ?? ''), 'inventario') === false
+            && stripos((string)($f['FIELD_NAME'] ?? ''), '1785205972989') === false) continue;
+        echo $f['ID'] . '  ' . $f['FIELD_NAME'] . '  [' . $f['USER_TYPE_ID'] . ']  '
+           . json_encode($f['EDIT_FORM_LABEL'] ?? '') . "\n";
+    }
+    exit;
+}
+
+if (!empty($_GET['version'])) { echo "diag v4\n"; exit; }
 
 // Modo "select": compara crm.item.list con y sin `select` para un deal.
 $deal = (int)($_GET['deal'] ?? 0);

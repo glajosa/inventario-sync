@@ -46,10 +46,15 @@ require_once __DIR__ . '/stagelib.php';   // lógica de STAGE (Clientes tiempo r
 
 // ---- Utilidades -------------------------------------------------------------
 function logline(string $msg): void {
-    global $LOG_FILE;
+    global $LOG_FILE, $DATA_DIR;
     // timestamp sin depender de tz del server: se guarda epoch + ISO UTC
     $line = gmdate('Y-m-d\TH:i:s\Z') . '  ' . $msg . "\n";
-    @file_put_contents($LOG_FILE, $line, FILE_APPEND | LOCK_EX);
+    // sync.log lo crea el cron como root, así que Apache (www-data) NO puede
+    // escribir ahí: TODA la traza del hook se perdía en silencio (el @ la tapaba).
+    // Si falla, se cae a web.log, que sí es de Apache. El visor muestra los dos.
+    if (@file_put_contents($LOG_FILE, $line, FILE_APPEND | LOCK_EX) === false) {
+        @file_put_contents($DATA_DIR . '/web.log', $line, FILE_APPEND | LOCK_EX);
+    }
 }
 
 /** Llama al webhook ENTRANTE de Bitrix. Devuelve ['ok'=>bool,'result'=>mixed,'error'=>str]. */
