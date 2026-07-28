@@ -201,6 +201,9 @@ foreach (CLIENTES_TRIGGERS as $stageId => $target) {
         foreach (($r['result'] ?? []) as $d) {
             foreach (units_of_clientes_deal((string)$d['ID'], $d) as $uid) {
                 // owner-sync NO aquí (get por unidad = muy pesado en barrido); lo hace el hook en vivo.
+                // Soltar solo si la unidad sigue siendo de este deal: un deal caído
+                // que nombra una unidad ya revendida no debe liberarla.
+                if ($target === 'DISPONIBLE' && !puede_liberar((int)$uid, (string)$d['ID'])) continue;
                 if (apply_unit_stage((int)$uid, null, $target, false)) $stageCambios++;
             }
         }

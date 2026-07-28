@@ -27,6 +27,7 @@ const CLIENTES_TRIGGERS = [
     'C44:UC_2CE2UE' => 'FIRMADO',     // PROMESA FIRMADA POR CLIENTE (firmó, faltan documentos)
     'C44:WON'       => 'FIRMADO',     // CIERRE DE PROMESA (ya pagó notaría, documentos entregados)
     'C44:APOLOGY'   => 'DISPONIBLE',  // FIRMADOS - CAIDOS
+    'C44:LOSE'      => 'DISPONIBLE',  // RESERVAS CAIDAS (se cayó la reserva -> la unidad vuelve a estar libre)
 ];
 // disparadores Cobranzas 48
 const COBRANZAS_CAT = 48;
@@ -160,6 +161,22 @@ function units_of_clientes_deal(string $dealId, ?array $deal = null): array {
     return array_keys($ids);
 }
 
+/**
+ * ¿Puede este deal soltar esta unidad?
+ *
+ * Solo si la unidad no es de nadie o ya es de este deal. Sin esto, un deal en
+ * RESERVAS CAIDAS / FIRMADOS-CAIDOS que todavía nombra una unidad que ya se
+ * revendió a OTRO deal la pondría en DISPONIBLE, robándosela al dueño nuevo — y
+ * el barrido la volvería a pelear cada 15 minutos.
+ */
+function puede_liberar(int $unitId, string $dealId): bool {
+    $r = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $unitId]);
+    if (!$r['ok']) return false;                        // si no se sabe, no se toca
+    $it = $r['result']['item'] ?? $r['result'];
+    $dueno = (int)($it['parentId2'] ?? 0);
+    return $dueno === 0 || $dueno === (int)$dealId;
+}
+
 /** Aplica la transición de un deal de CLIENTES (44) a sus unidades. */
 function clientes_stage_apply(string $dealId, array $deal): int {
     $stage = (string)($deal['STAGE_ID'] ?? '');
@@ -167,6 +184,7 @@ function clientes_stage_apply(string $dealId, array $deal): int {
     $target = CLIENTES_TRIGGERS[$stage];
     $n = 0;
     foreach (units_of_clientes_deal($dealId, $deal) as $uid) {
+        if ($target === 'DISPONIBLE' && !puede_liberar((int)$uid, $dealId)) continue;
         if (apply_unit_stage($uid, null, $target, false)) $n++;
     }
     return $n;

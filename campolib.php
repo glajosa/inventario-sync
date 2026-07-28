@@ -205,6 +205,9 @@ function sincronizar_deal(int $dealId): array {
     $movidas = 0;
     if ($target) {
         foreach ($quiere as $uid) {
+            // si el stage del deal manda a DISPONIBLE (reserva/firma caída), solo se
+            // suelta lo que sigue siendo de este deal, no lo ya revendido a otro
+            if ($target === 'DISPONIBLE' && !puede_liberar((int)$uid, (string)$dealId)) continue;
             if (apply_unit_stage((int)$uid, null, $target, false)) $movidas++;
         }
     }

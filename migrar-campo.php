@@ -42,6 +42,7 @@ $revisados = 0; $porMigrar = 0; $yaIguales = 0; $escritos = 0; $errores = 0;
 $ejemplos = [];
 $respaldo = [];                       // dealId => valores viejos, antes de tocar nada
 $rutaResp = ($DATA_DIR ?: '/data') . '/migracion_campos_viejos.json';
+$reclamos = [];                       // unitId => [dealIds] para detectar unidades peleadas
 
 $start = 0;
 do {
@@ -67,6 +68,9 @@ do {
             if ($v > 0) $ids[$v] = true;
         }
         if (!$ids) continue;                       // este deal no tiene nada atado
+
+        // quién reclama cada unidad: si dos deals nombran la misma, hay que verlo
+        foreach (array_keys($ids) as $uid) $reclamos[$uid][] = (string)$d['ID'];
 
         $destino = implode(',', array_keys($ids));
         $actual  = trim((string)($d[CAMPO_NUEVO] ?? ''));
@@ -112,6 +116,18 @@ if ($respaldo) {
     if (is_array($previo)) $respaldo += $previo;      // no pisar respaldos de tandas anteriores
     @file_put_contents($rutaResp, json_encode($respaldo, JSON_PRETTY_PRINT));
     echo "respaldo             : $rutaResp (" . count($respaldo) . " deals)\n";
+}
+
+// Unidades que más de un deal reclama. No las arregla: las reporta, porque
+// decidir de quién es cada una es criterio del negocio, no del script.
+$peleadas = array_filter($reclamos, fn($ds) => count(array_unique($ds)) > 1);
+if ($peleadas) {
+    echo "\n*** UNIDADES RECLAMADAS POR VARIOS DEALS: " . count($peleadas) . " ***\n";
+    $i = 0;
+    foreach ($peleadas as $uid => $ds) {
+        echo "  unidad $uid <- deals " . implode(', ', array_unique($ds)) . "\n";
+        if (++$i >= 30) { echo "  ... (solo las primeras 30)\n"; break; }
+    }
 }
 
 echo "deals revisados      : $revisados\n";
