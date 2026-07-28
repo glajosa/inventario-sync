@@ -210,6 +210,9 @@ if (!$quieren) {
         if ($v !== '' && $v !== null && (int)$v > 0) $quieren[(int)$v] = true;
     }
 }
+// Deal caído (RESERVAS CAIDAS / FIRMADOS-CAIDOS): no quiere ninguna, se sueltan.
+// El campo se deja como estaba, de registro de lo que se había reservado.
+if (etapa_libera((string)($deal['STAGE_ID'] ?? ''))) $quieren = [];
 $quieren = array_keys($quieren);   // ids de unidades objetivo
 
 // unidades que HOY apuntan a este deal via parentId2

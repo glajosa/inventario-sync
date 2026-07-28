@@ -29,6 +29,26 @@ const CLIENTES_TRIGGERS = [
     'C44:APOLOGY'   => 'DISPONIBLE',  // FIRMADOS - CAIDOS
     'C44:LOSE'      => 'DISPONIBLE',  // RESERVAS CAIDAS (se cayó la reserva -> la unidad vuelve a estar libre)
 ];
+
+/**
+ * Etapas en las que el deal SUELTA sus unidades.
+ *
+ * No basta con poner la unidad en DISPONIBLE: si el deal caído sigue siendo su
+ * dueño (parentId2), el portero la rechaza y NADIE puede escogerla — quedaría
+ * "disponible" de nombre pero apartada de hecho. En estas etapas la unidad se
+ * desata además de liberarse.
+ *
+ * El campo del deal NO se vacía: queda como registro de lo que se había
+ * reservado. Por eso todo lo que calcula "qué unidades quiere este deal" tiene
+ * que devolver ninguna cuando el deal está en una de estas etapas; si no, el
+ * barrido la volvería a atar cada 15 minutos.
+ */
+const CLIENTES_STAGES_LIBERAN = ['C44:APOLOGY', 'C44:LOSE'];
+
+/** ¿El deal está en una etapa que suelta las unidades? */
+function etapa_libera(string $stageId): bool {
+    return in_array($stageId, CLIENTES_STAGES_LIBERAN, true);
+}
 // disparadores Cobranzas 48
 const COBRANZAS_CAT = 48;
 const COBRANZAS_TRIGGERS = [

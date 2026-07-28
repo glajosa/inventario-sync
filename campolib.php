@@ -176,6 +176,11 @@ function sincronizar_deal(int $dealId): array {
 
     $quiere = ids_de((string)($deal[CAMPO_NUEVO] ?? ''));
 
+    // Si el deal se cayó (RESERVAS CAIDAS / FIRMADOS-CAIDOS) no quiere ninguna:
+    // las unidades se sueltan. El campo se deja como estaba, de registro.
+    $etapaDeal = (string)($deal['STAGE_ID'] ?? '');
+    if (etapa_libera($etapaDeal)) $quiere = [];
+
     // Lo que hoy apunta a este deal.
     // SIN `select`: con select explícito Bitrix devuelve id/title en null (bug
     // verificado). Por eso antes esta lista salía vacía, "agregadas" contaba de

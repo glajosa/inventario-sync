@@ -96,12 +96,15 @@ $start = 0;
 do {
     $r = bx('crm.deal.list', [
         'filter' => ['CATEGORY_ID' => CATEGORY_ID, '!' . CAMPO_NUEVO => ''],
-        'select' => ['ID', CAMPO_NUEVO],
+        'select' => ['ID', 'STAGE_ID', CAMPO_NUEVO],
         'start'  => $start,
     ]);
     if (!$r['ok']) { logline('RECONCILE ERR list(campo nuevo): ' . $r['error']); break; }
     foreach (($r['result'] ?? []) as $d) {
         $dealId = (string)$d['ID'];
+        // Deal caído: no desea ninguna unidad. Sin esto el barrido volvía a atar
+        // cada 15 min lo que la caída acababa de soltar.
+        if (etapa_libera((string)($d['STAGE_ID'] ?? ''))) continue;
         foreach (preg_split('/[,;\s]+/', (string)($d[CAMPO_NUEVO] ?? '')) as $x) {
             $x = trim($x);
             if ($x !== '' && ctype_digit($x) && (int)$x > 0) {
