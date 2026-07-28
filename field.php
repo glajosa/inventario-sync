@@ -412,8 +412,9 @@ foreach ($elegidos as $id) {
       .then(function(j){
         guardando = false;
         // solo se avisa si FALLA: en el camino bueno la interfaz queda limpia
+        // solo se avisa si FALLA: en el camino bueno la interfaz queda limpia
         if (!j || !j.ok) { avisar('no se pudo guardar: ' + ((j && j.error) || '?'), true); return; }
-        filtrar();
+        refrescado = 0; refrescarEstado();
       })
       .catch(function(e){ guardando = false; avisar('error de red', true); });
   }
@@ -542,10 +543,36 @@ foreach ($elegidos as $id) {
 
   function abrirMenu(si){ menu.classList.toggle('on', !!si); }
 
+  /**
+   * Trae del servidor la disponibilidad al día y corrige las filas.
+   * El catálogo viene impreso al cargar la página; sin esto la lista quedaba
+   * vieja hasta recargar (una unidad liberada seguía sin aparecer).
+   */
+  var refrescado = 0;
+  function refrescarEstado(){
+    if (Date.now() - refrescado < 3000) return;   // no spamear al abrir/cerrar
+    refrescado = Date.now();
+    fetch('estado.php', {cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(mapa){
+        filas.forEach(function(f){
+          var e = mapa[f.dataset.id];
+          if (!e) return;
+          var libre = e[0] === 1 && sel.indexOf(f.dataset.id) === -1;
+          f.dataset.libre = libre ? '1' : '0';
+          f.classList.toggle('gu-no', !libre);
+          var tag = f.querySelector('.gu-tag');
+          if (tag && e[1]) { tag.className = 'gu-tag ' + e[1]; tag.textContent = e[1]; }
+        });
+        filtrar(); ajustarIframe();
+      })
+      .catch(function(){});
+  }
+
   function abrir(si){
     R.classList.toggle('abierto', si);
     if (!si) abrirMenu(false);
-    if (si) filtrar();
+    if (si) { filtrar(); refrescarEstado(); }
     ajustarIframe();
     if (si) { try { q.focus(); } catch(e){} }
   }
