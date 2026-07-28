@@ -58,6 +58,60 @@ if (!empty($_GET['viejos'])) {
     exit;
 }
 
+// ?poretapa=1 -> deals de CLIENTES con unidad en el campo, agrupados por etapa,
+// y en qué stage está cada unidad. Sirve para medir el alcance de una regla antes
+// de que el barrido la aplique (ej: cuántas reservas caídas van a liberar unidad).
+if (!empty($_GET['poretapa'])) {
+    $porEtapa = [];      // stage del deal => [deals, unidades, unidades por stage]
+    $start = 0;
+    do {
+        $r = bx('crm.deal.list', [
+            'filter' => ['CATEGORY_ID' => CLIENTES_CAT, '!' . CAMPO_NUEVO => ''],
+            'select' => ['ID', 'STAGE_ID', CAMPO_NUEVO],
+            'order'  => ['ID' => 'ASC'],
+            'start'  => $start,
+        ]);
+        if (!$r['ok']) { echo "ERROR: {$r['error']}\n"; break; }
+        foreach (($r['result'] ?? []) as $d) {
+            $ids = ids_de((string)($d[CAMPO_NUEVO] ?? ''));
+            if (!$ids) continue;
+            $e = (string)($d['STAGE_ID'] ?? '?');
+            $porEtapa[$e]['deals'] = ($porEtapa[$e]['deals'] ?? 0) + 1;
+            foreach ($ids as $u) $porEtapa[$e]['units'][] = $u;
+        }
+        $start = $r['next'] ?? null;
+    } while ($start !== null && $start !== '');
+
+    // stage real de cada unidad, para saber cuántas siguen ocupadas
+    $rev = [];
+    foreach (stages_map() as $c => $m) foreach ($m as $n => $sid) $rev[$sid] = $n;
+    $stageDe = [];
+    $start = 0;
+    do {
+        $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'order' => ['id' => 'ASC'], 'start' => $start]);
+        if (!$r['ok']) break;
+        foreach (($r['result']['items'] ?? []) as $it) {
+            $stageDe[(int)($it['id'] ?? 0)] = $rev[(string)($it['stageId'] ?? '')] ?? '?';
+        }
+        $start = $r['next'] ?? null;
+    } while ($start !== null && $start !== '');
+
+    $nombres = array_flip(CLIENTES_TRIGGERS);   // solo para anotar el efecto
+    foreach ($porEtapa as $e => $x) {
+        $us = $x['units'] ?? [];
+        $cnt = [];
+        foreach ($us as $u) { $s = $stageDe[$u] ?? '?'; $cnt[$s] = ($cnt[$s] ?? 0) + 1; }
+        ksort($cnt);
+        $efecto = CLIENTES_TRIGGERS[$e] ?? '(sin regla)';
+        echo str_pad($e, 16) . ' deals=' . str_pad((string)$x['deals'], 4)
+           . ' unidades=' . str_pad((string)count($us), 4)
+           . ' -> regla: ' . str_pad($efecto, 11) . '  ';
+        foreach ($cnt as $s => $n) echo "$s:$n ";
+        echo "\n";
+    }
+    exit;
+}
+
 // ?unidad=1287[,1289] -> rastrea una unidad: su estado y qué deals la nombran,
 // en CUALQUIER pipeline. Para saber si una unidad ocupada tiene dueño real.
 if (!empty($_GET['unidad'])) {
