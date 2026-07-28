@@ -88,10 +88,15 @@ function sincronizar_deal(int $dealId): array {
 
     $quiere = ids_de((string)($deal[CAMPO_NUEVO] ?? ''));
 
-    // lo que hoy apunta a este deal
+    // Lo que hoy apunta a este deal.
+    // SIN `select`: con select explícito Bitrix devuelve id/title en null (bug
+    // verificado). Por eso antes esta lista salía vacía, "agregadas" contaba de
+    // más y —lo grave— quitar una unidad del campo NO la liberaba.
     $tiene = [];
-    $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => ['parentId2' => $dealId], 'select' => ['id']]);
-    if ($r['ok']) foreach (($r['result']['items'] ?? []) as $it) $tiene[] = (int)$it['id'];
+    $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => ['parentId2' => $dealId]]);
+    if ($r['ok']) foreach (($r['result']['items'] ?? []) as $it) {
+        if (!empty($it['id'])) $tiene[] = (int)$it['id'];
+    }
 
     $agregar = array_values(array_diff($quiere, $tiene));
     $soltar  = array_values(array_diff($tiene, $quiere));
