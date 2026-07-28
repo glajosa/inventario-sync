@@ -30,6 +30,30 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
 const VIEJOS_V = ['PARENT_ID_1072', 'UF_CRM_1782666709', 'UF_CRM_DEAL_1784994996',
                   'UF_CRM_DEAL_1784995021', 'UF_CRM_DEAL_1784995044'];
 
+// ?viejos=1 -> ¿queda algún deal, de CUALQUIER pipeline, con los campos viejos
+// llenos? Es el chequeo obligatorio antes de borrarlos: borrar un campo en Bitrix
+// borra sus datos y no se deshace.
+if (!empty($_GET['viejos'])) {
+    foreach (VIEJOS_V as $f) {
+        $total = 0; $ejem = [];
+        $start = 0;
+        do {
+            $r = bx('crm.deal.list', ['filter' => ['!' . $f => ''],
+                                      'select' => ['ID', 'CATEGORY_ID', $f], 'start' => $start]);
+            if (!$r['ok']) { echo "$f: ERROR {$r['error']}\n"; break; }
+            foreach (($r['result'] ?? []) as $d) {
+                $v = $d[$f] ?? '';
+                if ($v === '' || $v === null || (int)$v <= 0) continue;
+                $total++;
+                if (count($ejem) < 8) $ejem[] = "deal {$d['ID']}(cat {$d['CATEGORY_ID']})=$v";
+            }
+            $start = $r['next'] ?? null;
+        } while ($start !== null && $start !== '');
+        echo str_pad($f, 26) . ": $total" . ($ejem ? '  -> ' . implode('  ', $ejem) : '') . "\n";
+    }
+    exit;
+}
+
 // ?unidad=1287[,1289] -> rastrea una unidad: su estado y qué deals la nombran,
 // en CUALQUIER pipeline. Para saber si una unidad ocupada tiene dueño real.
 if (!empty($_GET['unidad'])) {
