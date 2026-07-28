@@ -8,6 +8,13 @@
 declare(strict_types=1);
 require_once __DIR__ . '/appauth.php';
 
+// diagnóstico: qué nos manda Bitrix realmente al abrir la app
+@file_put_contents((getenv('DATA_DIR') ?: '/data') . '/sync.log',
+    gmdate('Y-m-d\TH:i:s\Z') . '  APP method=' . ($_SERVER['REQUEST_METHOD'] ?? '?')
+    . ' claves=[' . implode(',', array_keys($_REQUEST)) . ']'
+    . ' tieneAUTH=' . (empty($_REQUEST['AUTH_ID']) ? 'NO' : 'si') . "\n",
+    FILE_APPEND | LOCK_EX);
+
 // Bitrix manda los tokens en cada llamada al handler: se aprovechan para
 // mantenerlos frescos aunque no se haya reinstalado la app.
 if (!empty($_REQUEST['AUTH_ID'])) {
