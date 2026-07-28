@@ -394,6 +394,25 @@ foreach ($elegidos as $id) {
    * que Bitrix entrega en cada render y después se avisa a nuestro servicio para
    * que arme la dependencia en la unidad y aplique el stage.
    */
+  /**
+   * Le dice a Bitrix el valor del campo.
+   *
+   * Hace falta porque este campo guarda por su cuenta contra nuestro servidor y
+   * el FORMULARIO de Bitrix nunca se enteraba. Con el campo marcado obligatorio
+   * para cambiar de etapa, su validación miraba el estado del formulario, lo veía
+   * vacío y bloqueaba el cambio aunque la unidad ya estuviera elegida y guardada.
+   *
+   * El placement USERFIELD_TYPE expone los comandos setValue/getValue
+   * (comprobado en vivo con BX24.placement.getInterface, no por documentación).
+   */
+  function avisarBitrix(v){
+    try {
+      if (typeof BX24 !== 'undefined' && BX24.placement && BX24.placement.call) {
+        BX24.placement.call('setValue', v);
+      }
+    } catch(e) {}
+  }
+
   var guardando = false;
   function guardar(){
     if (!CFG.deal || !CFG.firma) { avisar('este campo solo guarda dentro de un deal', true); return; }
@@ -414,6 +433,8 @@ foreach ($elegidos as $id) {
         // solo se avisa si FALLA: en el camino bueno la interfaz queda limpia
         // solo se avisa si FALLA: en el camino bueno la interfaz queda limpia
         if (!j || !j.ok) { avisar('no se pudo guardar: ' + ((j && j.error) || '?'), true); return; }
+        // El servidor ya validó y guardó: ahora sí se le reporta al formulario.
+        avisarBitrix(typeof j.guardado === 'string' ? j.guardado : val.value);
         refrescado = 0; refrescarEstado();
       })
       .catch(function(e){ guardando = false; avisar('error de red', true); });
@@ -625,23 +646,12 @@ foreach ($elegidos as $id) {
 
   else { window.addEventListener('load', iniciar); setTimeout(iniciar, 600); }
 
-  // TEMPORAL (diagnóstico): informar SIEMPRE, con el error si lo hay.
-  (function(){
-    function rep(t){ try{ fetch('dbg.php?i='+encodeURIComponent(t)); }catch(e){} }
-    var est = 'BX24='+(typeof BX24)
-            + ' placement='+(typeof BX24!=='undefined' && BX24.placement ? 'si':'no')
-            + ' base='+document.baseURI;
-    if (typeof BX24!=='undefined' && BX24.placement) {
-      est += ' claves=['+Object.keys(BX24.placement).join(',')+']';
-      est += ' info='+(BX24.placement.info? JSON.stringify(BX24.placement.info()) : '-');
-    }
-    rep(est);
-    try {
-      if (typeof BX24!=='undefined' && BX24.placement && BX24.placement.getInterface) {
-        BX24.placement.getInterface(function(res){ rep('INTERFACE '+JSON.stringify(res)); });
-      }
-    } catch(e){ rep('getInterface lanzo: '+e); }
-  })();
+  // Al cargar se le reporta a Bitrix el valor que YA tiene el deal. Sin esto, si
+  // la unidad se eligió en otro momento, el modal de "campos obligatorios para
+  // cambiar de etapa" seguía viéndolo vacío y no dejaba avanzar.
+  if (typeof BX24 !== 'undefined') { try { BX24.init(function(){ avisarBitrix(val.value); }); } catch(e) {} }
+
+
 })();
 </script>
 </div>
