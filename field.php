@@ -157,22 +157,19 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
 </div>
 
 <div class="gu-panel" id="<?= $uid ?>_panel">
+  <!-- orden: 1) proyecto  2) buscar unidad  3) disponibles/todos -->
   <div class="gu-top">
-    <div class="gu-seg" id="<?= $uid ?>_seg">
-      <button type="button" data-libres="1" aria-pressed="true">Disponibles</button>
-      <button type="button" data-libres="0" aria-pressed="false">Todos</button>
-    </div>
-
     <div class="gu-drop" id="<?= $uid ?>_drop">
       <button type="button" class="gu-dropbtn" id="<?= $uid ?>_dropbtn">
         <span id="<?= $uid ?>_dropTxt">Proyecto</span><i>&#9660;</i>
       </button>
       <div class="gu-menu" id="<?= $uid ?>_menu">
-        <button type="button" data-cat="" aria-pressed="true">Todos los proyectos</button>
+        <button type="button" data-cat="" data-nom="Proyecto" aria-pressed="true">Todos los proyectos</button>
         <?php foreach ($proys as $cid => $nom):
+              // el conteo se muestra solo aquí, en el desplegable; nunca en el botón
               $n = count(array_filter($porProyecto[(string)$cid] ?? [],
                         fn($u) => $u['stage'] === 'DISPONIBLE' && empty($u['dealId']))); ?>
-          <button type="button" data-cat="<?= h((string)$cid) ?>" aria-pressed="false">
+          <button type="button" data-cat="<?= h((string)$cid) ?>" data-nom="<?= h($nom) ?>" aria-pressed="false">
             <?= h($nom) ?><span class="n"><?= $n ?></span>
           </button>
         <?php endforeach; ?>
@@ -180,6 +177,11 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     </div>
 
     <input type="text" class="gu-buscar" id="<?= $uid ?>_q" placeholder="Código…" autocomplete="off">
+
+    <div class="gu-seg" id="<?= $uid ?>_seg">
+      <button type="button" data-libres="1" aria-pressed="true">Disponibles</button>
+      <button type="button" data-libres="0" aria-pressed="false">Todos</button>
+    </div>
   </div>
 
   <div class="gu-lista" id="<?= $uid ?>_lista">
@@ -307,7 +309,8 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     Array.prototype.forEach.call(menu.children, function(x){
       x.setAttribute('aria-pressed', String(x === b));
     });
-    dropTxt.textContent = cat ? b.textContent.replace(/\d+$/, '').trim() : 'Proyecto';
+    // se usa data-nom: leer textContent traía pegado el conteo ("Noral Plaza251")
+    dropTxt.textContent = b.dataset.nom || 'Proyecto';
     abrirMenu(false);
     filtrar();
   });
