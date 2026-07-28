@@ -167,6 +167,33 @@ foreach ($actual as $unit => $deal) {
     }
 }
 
+// ==== APARTADOS de Prospectos(28) =============================================
+// El 28 NO va por el webhook en tiempo real a propósito: es el embudo de leads y
+// tiene muchísimas ediciones (Wazzup, formularios); procesarlas todas satura el
+// API, igual que pasaría con Cobranzas. El apartado se pone al instante desde el
+// campo (guardar.php) y esto es la red de seguridad que lo suelta.
+//
+// Solo se liberan unidades que ESTE sistema apartó (registro en disco). Las que
+// ya venían ocupadas sin dueño de antes NO se tocan: liberarlas sería decidir
+// sobre datos reales del negocio por cuenta propia.
+$apartCambios = 0;
+$puestos = apartados_puestos();
+if ($puestos) {
+    $vigentes = apartados_28();
+    $quedan   = [];
+    foreach ($puestos as $uid => $dealDe) {
+        if (isset($vigentes[(int)$uid])) { $quedan[$uid] = $dealDe; continue; }
+        if (isset($desired[(int)$uid]))  continue;   // CLIENTES ya la tomó de verdad
+        if (liberar_apartado((int)$uid)) {
+            $apartCambios++;
+            logline("RECONCILE apartado liberado u=$uid (era deal28=$dealDe)");
+        } else {
+            $quedan[$uid] = $dealDe;                 // no se pudo, se reintenta luego
+        }
+    }
+    if ($quedan !== $puestos) apartados_puestos_guardar($quedan);
+}
+
 // ==== STAGES (red de seguridad de etapas) =====================================
 $stageCambios = 0;
 

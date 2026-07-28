@@ -209,3 +209,115 @@ function clientes_stage_apply(string $dealId, array $deal): int {
     }
     return $n;
 }
+
+// ---------------------------------------------------------------------------
+// APARTADOS de Prospectos(28)
+// Viven aquí y no en campolib.php porque reconcile.php necesita usarlas y NO
+// puede cargar campolib (ambos declaran bx()/logline() y chocarían). stagelib sí
+// lo cargan los tres puntos de entrada, cada uno con su propio bx().
+// Las constantes van con guarda: cada entrada define las suyas.
+// ---------------------------------------------------------------------------
+if (!defined('PROSPECTOS_CAT')) define('PROSPECTOS_CAT', 28);
+if (!defined('APARTADOS_FILE')) define('APARTADOS_FILE', 'apartados_puestos.json');
+if (!defined('CAMPO_INV'))      define('CAMPO_INV', 'UF_CRM_1785205972989');
+
+if (!function_exists('ids_de')) {
+    /** IDs del valor del campo ("581,623"). */
+    function ids_de(string $v): array {
+        $out = [];
+        foreach (preg_split('/[,;\s]+/', $v) as $x) {
+            $x = trim($x);
+            if ($x !== '' && ctype_digit($x) && (int)$x > 0) $out[] = (int)$x;
+        }
+        return array_values(array_unique($out));
+    }
+}
+
+/**
+ * Etapas del pipeline 28 que TODAVÍA apartan (las cerradas-perdidas ya no).
+ * Se cachea porque son 27 etapas y no cambian.
+ */
+function etapas_28_activas(): array {
+    global $DATA_DIR;
+    $path = $DATA_DIR . '/stages28.json';
+    $j = json_decode((string)@file_get_contents($path), true);
+    if (is_array($j) && $j) return $j;
+
+    $r = bx('crm.status.list', ['filter' => ['ENTITY_ID' => 'DEAL_STAGE_' . PROSPECTOS_CAT]]);
+    $out = [];
+    // SEMANTICS: 'F' = perdida, 'S' = ganada, vacío = en proceso. Solo las
+    // perdidas dejan de apartar: una ganada (RESERVA) sigue apartando hasta que
+    // la copia de CLIENTES tome la unidad de verdad.
+    if ($r['ok']) foreach (($r['result'] ?? []) as $s) {
+        if ((string)($s['SEMANTICS'] ?? '') !== 'F') $out[] = (string)$s['STATUS_ID'];
+    }
+    if ($out) @file_put_contents($path, json_encode($out));
+    return $out;
+}
+
+/**
+ * Unidades APARTADAS desde Prospectos(28): unitId => [deal, contacto, creado].
+ *
+ * Un apartado no es una reserva: no escribe parentId2 ni crea dependencia. Solo
+ * evita que otro vendedor escoja la misma unidad mientras se cierra el acuerdo,
+ * y deja pasar a la copia del deal en CLIENTES.
+ *
+ * Si dos deals del 28 nombran la misma unidad gana el MÁS RECIENTE — la misma
+ * regla que usa referidor.php para emparejar copias entre pipelines.
+ */
+function apartados_28(): array {
+    $activas = etapas_28_activas();
+    $out = [];
+    $start = 0;
+    do {
+        $r = bx('crm.deal.list', [
+            'filter' => ['CATEGORY_ID' => PROSPECTOS_CAT, '!' . CAMPO_INV => ''],
+            'select' => ['ID', 'STAGE_ID', 'CONTACT_ID', 'DATE_CREATE', CAMPO_INV],
+            'order'  => ['ID' => 'ASC'],
+            'start'  => $start,
+        ]);
+        if (!$r['ok']) return $out;
+        foreach (($r['result'] ?? []) as $d) {
+            if ($activas && !in_array((string)($d['STAGE_ID'] ?? ''), $activas, true)) continue;
+            $cand = ['deal'     => (int)$d['ID'],
+                     'contacto' => (int)($d['CONTACT_ID'] ?? 0),
+                     'creado'   => (string)($d['DATE_CREATE'] ?? '')];
+            foreach (ids_de((string)($d[CAMPO_INV] ?? '')) as $u) {
+                $prev = $out[$u] ?? null;
+                if (!$prev
+                    || strcmp($cand['creado'], $prev['creado']) > 0
+                    || ($cand['creado'] === $prev['creado'] && $cand['deal'] > $prev['deal'])) {
+                    $out[$u] = $cand;
+                }
+            }
+        }
+        $start = $r['next'] ?? null;
+    } while ($start !== null && $start !== '');
+    return $out;
+}
+
+/** Registro de las unidades que ESTE sistema puso en RESERVADO por un apartado del 28. */
+function apartados_puestos(): array {
+    global $DATA_DIR;
+    $j = json_decode((string)@file_get_contents($DATA_DIR . '/' . APARTADOS_FILE), true);
+    return is_array($j) ? $j : [];
+}
+function apartados_puestos_guardar(array $m): void {
+    global $DATA_DIR;
+    @file_put_contents($DATA_DIR . '/' . APARTADOS_FILE, json_encode($m), LOCK_EX);
+}
+
+/**
+ * Devuelve una unidad apartada a DISPONIBLE. No la toca si CLIENTES ya la ató
+ * de verdad (tiene parentId2): en ese caso el apartado quedó superado, no roto.
+ */
+function liberar_apartado(int $unitId): bool {
+    $r = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $unitId]);
+    if (!$r['ok']) return false;
+    $it = $r['result']['item'] ?? $r['result'];
+    if ((int)($it['parentId2'] ?? 0) !== 0) return false;      // ya es reserva real
+    bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $unitId,
+                           'fields' => ['contactId' => 0]]);
+    return apply_unit_stage($unitId, null, 'DISPONIBLE', false);
+}
+

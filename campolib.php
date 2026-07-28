@@ -25,8 +25,8 @@ set_time_limit(120);
 
 // SPA_ENTITY debe existir ANTES de requerir stagelib.php (lo usa por dentro).
 // CLIENTES_CAT no se define aquí: ya la trae stagelib.php y chocaría.
-const SPA_ENTITY  = 1072;
-const CAMPO_NUEVO = 'UF_CRM_1785205972989';   // campo "Inventario" (tipo propio)
+const SPA_ENTITY     = 1072;
+const CAMPO_NUEVO    = 'UF_CRM_1785205972989';   // campo "Inventario" (tipo propio)
 
 $DATA_DIR   = getenv('DATA_DIR') ?: '/data';
 $WEBHOOK_IN = rtrim((string)getenv('BITRIX_WEBHOOK'), '/') . '/';
@@ -109,15 +109,8 @@ function refrescar_cache(array $unitIds): void {
     @file_put_contents($path, json_encode($j));
 }
 
-/** IDs del valor del campo ("581,623"). */
-function ids_de(string $v): array {
-    $out = [];
-    foreach (preg_split('/[,;\s]+/', $v) as $x) {
-        $x = trim($x);
-        if ($x !== '' && ctype_digit($x) && (int)$x > 0) $out[] = (int)$x;
-    }
-    return array_values(array_unique($out));
-}
+// ids_de() vive en stagelib.php (la necesita reconcile.php, que no puede
+// cargar campolib). Definirla aquí también daba un fatal por redeclaración.
 
 /**
  * De una lista de IDs, devuelve las que SÍ se pueden atar a este deal.
@@ -137,7 +130,7 @@ function ids_de(string $v): array {
  * TODAS como libres. El stage sí las delata: una unidad tomada está en
  * RESERVADO / FIRMADO / VENDIDO, nunca en DISPONIBLE.
  */
-function unidades_asignables(array $ids, int $dealId): array {
+function unidades_asignables(array $ids, int $dealId, int $contacto = 0): array {
     if (!$ids) return [];
     // sin `select`: con select explícito Bitrix devuelve id en null (bug verificado)
     $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => ['@id' => $ids]]);
@@ -147,17 +140,69 @@ function unidades_asignables(array $ids, int $dealId): array {
     $rev = [];
     foreach (stages_map() as $cat => $m) foreach ($m as $nombre => $sid) $rev[$sid] = $nombre;
 
+    $apart = apartados_28();
+
     $ok = [];
     foreach (($r['result']['items'] ?? []) as $it) {
         $id = (int)($it['id'] ?? 0);
         if (!$id) continue;
         $dueno = (int)($it['parentId2'] ?? 0);
         if ($dueno === $dealId) { $ok[] = $id; continue; }   // ya es mía
-        if ($dueno !== 0) continue;                          // de otro deal
+        if ($dueno !== 0) continue;                          // atada de verdad a otro deal
         $stage = $rev[(string)($it['stageId'] ?? '')] ?? '';
+
+        $a = $apart[$id] ?? null;
+        if ($a) {
+            // Apartada desde Prospectos(28). Pasa si es MI propio apartado, o si
+            // soy la copia de esa misma venta: mismo CONTACTO. Esa es la regla que
+            // ya usa referidor.php para arrastrar copias entre pipelines, y el
+            // motivo de anclar al contacto es que el MISMO código de unidad
+            // reaparece en reventas a personas distintas con los años.
+            if ($a['deal'] === $dealId) { $ok[] = $id; continue; }
+            if ($contacto > 0 && (int)$a['contacto'] === $contacto) { $ok[] = $id; continue; }
+            continue;                                        // apartada por otra venta
+        }
+
         if ($stage === 'DISPONIBLE') $ok[] = $id;
     }
     return $ok;
+}
+
+/**
+ * APARTA las unidades elegidas en un deal de Prospectos(28).
+ *
+ * Diferencia con CLIENTES: aquí NO se escribe parentId2, así que la unidad no
+ * queda con dependencia. Si se escribiera, al copiarse el deal a CLIENTES la
+ * misma unidad tendría dependencia de DOS deals de pipelines distintos — que es
+ * exactamente lo que hay que evitar. El apartado solo pone RESERVADO (para que
+ * nadie más la escoja) y anota quién la aparta.
+ */
+function apartar_prospecto(int $dealId, array $deal): array {
+    $quiere = ids_de((string)($deal[CAMPO_NUEVO] ?? ''));
+    $puestos = apartados_puestos();
+    $movidas = 0;
+
+    foreach ($quiere as $uid) {
+        if (apply_unit_stage((int)$uid, null, 'RESERVADO', false)) $movidas++;
+        sync_unit_owner((int)$uid, $deal);          // se ve quién la está apartando
+        $puestos[(string)$uid] = $dealId;           // para poder liberarla después
+    }
+
+    // Unidades que este deal apartaba y ya sacó del campo -> liberar,
+    // salvo que CLIENTES ya se las haya llevado de verdad (parentId2 puesto).
+    $soltadas = 0;
+    foreach ($puestos as $uid => $dueno) {
+        if ((int)$dueno !== $dealId) continue;
+        if (in_array((int)$uid, $quiere, true)) continue;
+        if (liberar_apartado((int)$uid)) $soltadas++;
+        unset($puestos[$uid]);
+    }
+
+    apartados_puestos_guardar($puestos);
+    refrescar_cache(array_values(array_unique(array_merge($quiere, array_map('intval', array_keys($puestos))))));
+
+    return ['ok' => true, 'modo' => 'apartado-28', 'aparta' => count($quiere),
+            'movidas' => $movidas, 'soltadas' => $soltadas];
 }
 
 /**
@@ -168,13 +213,40 @@ function sincronizar_deal(int $dealId): array {
     $g = bx('crm.deal.get', ['id' => $dealId]);
     if (!$g['ok']) return ['ok' => false, 'error' => 'deal-no-existe'];
     $deal = $g['result'];
+    $cat  = (int)($deal['CATEGORY_ID'] ?? -1);
+
+    // Prospectos(28): solo APARTA. No escribe parentId2 ni crea dependencia —
+    // el atado de verdad nace únicamente en RESERVA de CLIENTES(44).
+    if ($cat === PROSPECTOS_CAT) return apartar_prospecto($dealId, $deal);
 
     // guarda dura: Cobranzas(48) es read-only por regla del negocio
-    if ((int)($deal['CATEGORY_ID'] ?? -1) !== CLIENTES_CAT) {
+    if ($cat !== CLIENTES_CAT) {
         return ['ok' => false, 'error' => 'solo-clientes-44'];
     }
 
     $quiere = ids_de((string)($deal[CAMPO_NUEVO] ?? ''));
+
+    // ADOPCIÓN: la copia llegó a RESERVA con el campo vacío.
+    // No se puede dar por hecho que la automatización que copia el deal del 28 al
+    // 44 arrastre este campo (es de tipo propio). Si llega vacío y el MISMO
+    // contacto tiene una unidad apartada en Prospectos, se rellena aquí y sigue
+    // el camino normal. Mismo patrón que referidor.php con CLIENTE REFERIDOR.
+    $adoptadas = [];
+    if (!$quiere && (string)($deal['STAGE_ID'] ?? '') === 'C44:NEW') {
+        $contacto = (int)($deal['CONTACT_ID'] ?? 0);
+        if ($contacto > 0) {
+            foreach (apartados_28() as $uid => $a) {
+                if ((int)$a['contacto'] === $contacto) $adoptadas[] = (int)$uid;
+            }
+        }
+        if ($adoptadas) {
+            $quiere = $adoptadas;
+            bx('crm.deal.update', ['id' => $dealId,
+                                   'fields' => [CAMPO_NUEVO => implode(',', $adoptadas)]]);
+            logline("deal=$dealId ADOPTA del apartado 28: " . implode(',', $adoptadas));
+            $deal[CAMPO_NUEVO] = implode(',', $adoptadas);
+        }
+    }
 
     // Si el deal se cayó (RESERVAS CAIDAS / FIRMADOS-CAIDOS) no quiere ninguna:
     // las unidades se sueltan. El campo se deja como estaba, de registro.
@@ -229,6 +301,17 @@ function sincronizar_deal(int $dealId): array {
     // campos anteriores salen de circulación y ese reflejo solo confundía (una
     // unidad elegida aquí aparecía además en el campo viejo de arriba). La
     // dependencia real que ve el usuario en la unidad la da parentId2, no esto.
+
+    // Lo que CLIENTES ató de verdad deja de ser un apartado del 28: se saca del
+    // registro para que el barrido no intente liberarlo más adelante.
+    if ($agregar) {
+        $puestos = apartados_puestos();
+        $tocado  = false;
+        foreach ($agregar as $uid) {
+            if (isset($puestos[(string)$uid])) { unset($puestos[(string)$uid]); $tocado = true; }
+        }
+        if ($tocado) apartados_puestos_guardar($puestos);
+    }
 
     // que la lista del selector muestre el estado nuevo de inmediato
     refrescar_cache(array_values(array_unique(array_merge($quiere, $soltar))));

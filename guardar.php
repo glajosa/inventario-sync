@@ -52,19 +52,28 @@ if (!$g['ok']) {
     logline("deal=$dealId no existe: {$g['error']}");
     echo json_encode(['ok' => false, 'error' => 'el deal no existe']); exit;
 }
-if ((int)($g['result']['CATEGORY_ID'] ?? -1) !== CLIENTES_CAT) {
-    logline("deal=$dealId RECHAZADO: no es CLIENTES(44)");
-    echo json_encode(['ok' => false, 'error' => 'Las unidades solo se atan en el pipeline CLIENTES']); exit;
+// Pipelines donde el campo tiene sentido:
+//   PROSPECTOS(28) -> el vendedor elige la unidad al cerrar el acuerdo (APARTA).
+//   CLIENTES(44)   -> la reserva oficial (ATA de verdad).
+// Cobranzas(48) y el resto no: 48 es read-only por regla del negocio.
+$cat      = (int)($g['result']['CATEGORY_ID'] ?? -1);
+$contacto = (int)($g['result']['CONTACT_ID'] ?? 0);
+if ($cat !== CLIENTES_CAT && $cat !== PROSPECTOS_CAT) {
+    logline("deal=$dealId RECHAZADO: pipeline $cat no soportado");
+    echo json_encode(['ok' => false,
+        'error' => 'Las unidades solo se eligen en Prospectos Ventas o Clientes']); exit;
 }
 
-// Las unidades deben existir y no estar tomadas por OTRO deal (anti doble-venta).
+// Las unidades deben existir y no estar tomadas por OTRA venta (anti doble-venta).
+// Se pasa el contacto para que la copia en CLIENTES pueda tomar la unidad que su
+// propio deal de Prospectos apartó.
 if ($ids) {
-    $libres = unidades_asignables($ids, $dealId);
+    $libres = unidades_asignables($ids, $dealId, $contacto);
     $malas  = array_values(array_diff($ids, $libres));
     if ($malas) {
         logline("deal=$dealId RECHAZADO unidades no asignables: " . implode(',', $malas));
         echo json_encode(['ok' => false,
-            'error' => 'Unidad no disponible o inexistente: ' . implode(', ', $malas)]);
+            'error' => 'Unidad ya apartada o no disponible: ' . implode(', ', $malas)]);
         exit;
     }
 }
