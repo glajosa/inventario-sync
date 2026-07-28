@@ -622,6 +622,9 @@ foreach ($elegidos as $id) {
   function iniciar(){ ajustarIframe(); }
   if (typeof BX24 !== 'undefined') { try { BX24.init(iniciar); } catch(e) { iniciar(); } }
 
+
+  else { window.addEventListener('load', iniciar); setTimeout(iniciar, 600); }
+
   // TEMPORAL (diagnóstico): informar SIEMPRE, con el error si lo hay.
   (function(){
     function rep(t){ try{ fetch('dbg.php?i='+encodeURIComponent(t)); }catch(e){} }
@@ -639,7 +642,6 @@ foreach ($elegidos as $id) {
       }
     } catch(e){ rep('getInterface lanzo: '+e); }
   })();
-  else { window.addEventListener('load', iniciar); setTimeout(iniciar, 600); }
 })();
 </script>
 </div>
