@@ -128,17 +128,23 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
 <script src="//api.bitrix24.com/api/v1/"></script>
 <div class="gu" id="<?= $uid ?>">
 <style>
-  html,body{margin:0;padding:0;background:transparent;overflow:hidden}
-  #<?= $uid ?>{font:13.5px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1f2328}
+  /* El iframe casi nunca mide exacto lo que mide el contenido, así que el
+     contenido se centra solo dentro del alto que haya. Antes se calculaba a ojo
+     y quedaba "un poco arriba". */
+  html,body{margin:0;padding:0;background:transparent;overflow:hidden;height:100%}
+  #<?= $uid ?>{font:13.5px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+      color:#1f2328;min-height:100%;display:flex;flex-direction:column;justify-content:center}
+  #<?= $uid ?>.abierto{justify-content:flex-start}
   #<?= $uid ?> *{box-sizing:border-box}
 
   /* línea cerrada: chips de lo elegido + "agregar".
      El padding y el min-height igualan la altura/sangría de los campos nativos
      del deal, para que el texto quede centrado y no pegado al borde. */
   /* padding simétrico arriba/abajo: así el texto queda centrado y no "un poco arriba" */
-  #<?= $uid ?> .gu-campo{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:28px;
-      cursor:pointer;padding:5px 7px;border-bottom:1px solid transparent}
-  #<?= $uid ?> .gu-campo:hover{border-bottom-color:#c9ccd0}
+  /* sin border-bottom: la caja redondeada ya la dibuja Bitrix y esa línea
+     cruzaba por encima de las esquinas curvas */
+  #<?= $uid ?> .gu-campo{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:26px;
+      cursor:pointer;padding:2px 7px}
   #<?= $uid ?> .gu-ph{color:#a8adb4;display:inline-flex;align-items:center;height:20px}
   #<?= $uid ?> .gu-chip{display:inline-flex;align-items:center;gap:6px;background:#eef4ff;
       border:1px solid #c8dcff;border-radius:99px;padding:0 4px 0 9px;height:22px;
