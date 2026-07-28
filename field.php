@@ -103,19 +103,25 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   /* línea cerrada: chips de lo elegido + "agregar".
      El padding y el min-height igualan la altura/sangría de los campos nativos
      del deal, para que el texto quede centrado y no pegado al borde. */
-  #<?= $uid ?> .gu-campo{display:flex;align-items:center;flex-wrap:wrap;gap:5px;min-height:30px;
-      cursor:pointer;padding:3px 6px 3px 7px;border-bottom:1px solid transparent}
+  /* padding simétrico arriba/abajo: así el texto queda centrado y no "un poco arriba" */
+  #<?= $uid ?> .gu-campo{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:28px;
+      cursor:pointer;padding:5px 7px;border-bottom:1px solid transparent}
   #<?= $uid ?> .gu-campo:hover{border-bottom-color:#c9ccd0}
-  #<?= $uid ?> .gu-ph{color:#a8adb4;line-height:22px}
-  #<?= $uid ?> .gu-chip{display:inline-flex;align-items:center;gap:5px;background:#eef4ff;
-      border:1px solid #c8dcff;border-radius:99px;padding:2px 7px;font-size:12px;font-weight:600}
-  #<?= $uid ?> .gu-chip small{font-weight:400;color:#57606a}
-  #<?= $uid ?> .gu-chip b{cursor:pointer;color:#8b949e;font-weight:700;font-size:13px;line-height:1}
-  #<?= $uid ?> .gu-chip b:hover{color:#cf222e}
-  #<?= $uid ?> .gu-mas{color:#0969da;font-size:12px;font-weight:600;line-height:22px}
-  /* flecha: pegada a la derecha y centrada verticalmente */
-  #<?= $uid ?> .gu-caret{margin-left:auto;align-self:center;display:flex;align-items:center;
-      color:#a8adb4;font-size:9px;padding-left:6px}
+  #<?= $uid ?> .gu-ph{color:#a8adb4;display:inline-flex;align-items:center;height:20px}
+  #<?= $uid ?> .gu-chip{display:inline-flex;align-items:center;gap:6px;background:#eef4ff;
+      border:1px solid #c8dcff;border-radius:99px;padding:0 4px 0 9px;height:22px;
+      font-size:12px;font-weight:600;line-height:1}
+  #<?= $uid ?> .gu-chip small{font-weight:400;color:#57606a;line-height:1}
+  /* la ✕ como cuadro centrado: antes bailaba respecto al texto del chip */
+  #<?= $uid ?> .gu-chip b{display:inline-flex;align-items:center;justify-content:center;
+      width:16px;height:16px;border-radius:50%;cursor:pointer;color:#8b949e;
+      font-weight:700;font-size:12px;line-height:1}
+  #<?= $uid ?> .gu-chip b:hover{color:#cf222e;background:#ffe3e3}
+  #<?= $uid ?> .gu-mas{color:#0969da;font-size:12px;font-weight:600;display:inline-flex;
+      align-items:center;height:20px}
+  /* flecha: pegada a la derecha y a la misma altura que el texto */
+  #<?= $uid ?> .gu-caret{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;
+      height:20px;color:#a8adb4;font-size:9px;padding-left:6px}
 
   #<?= $uid ?> .gu-panel{display:none;margin-top:5px;border:1px solid #d0d7de;border-radius:8px;
       background:#fff;box-shadow:0 6px 18px rgba(27,31,36,.12);position:relative}
@@ -265,7 +271,7 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
 
   var soloLibres = true;
   var cat = '';
-  var ALTO_CERRADO = 30;
+  var ALTO_CERRADO = 28;   // = min-height de .gu-campo, para que no sobre ni falte
   // selección viva (varias unidades por deal = fusión)
   var sel = val.value.split(',').filter(function(x){ return x; });
 
@@ -321,9 +327,11 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   }
 
   function ajustarIframe(){
+    // cerrado: exactamente el alto del contenido. Si el iframe queda más alto que
+    // el contenido, Bitrix lo alinea arriba y el texto se ve "un poco arriba".
     var alto = R.classList.contains('abierto')
       ? Math.min(document.documentElement.scrollHeight + 4, 340)
-      : Math.max(ALTO_CERRADO, campo.offsetHeight + 6);
+      : Math.max(ALTO_CERRADO, campo.offsetHeight);
     try {
       if (typeof BX24 !== 'undefined' && BX24.resizeWindow) {
         BX24.resizeWindow(document.documentElement.scrollWidth, alto);
