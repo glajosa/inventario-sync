@@ -30,12 +30,11 @@ header('Content-Type: text/plain; charset=utf-8');
 const CATEGORY_ID   = 44;                       // pipeline CLIENTES
 const SPA_ENTITY    = 1072;                      // SPA Inventario
 const CAMPO_NUEVO   = 'UF_CRM_1785205972989';    // campo "Inventario" (tipo propio, multi)
-const FIELDS_EXTRA  = [                          // "Inventario 2/3/4" en el deal
-    'UF_CRM_1782666709',
-    'UF_CRM_DEAL_1784994996',
-    'UF_CRM_DEAL_1784995021',
-    'UF_CRM_DEAL_1784995044',
-];
+// Los userfields viejos de Inventario ya se borraron: el campo nuevo es la unica
+// fuente. La lista queda vacia a proposito (no se borra la constante para no
+// tocar el resto del flujo). OJO: nunca volver a filtrar por un campo borrado,
+// Bitrix ignora el filtro y devuelve TODO.
+const FIELDS_EXTRA  = [];
 
 $DATA_DIR      = getenv('DATA_DIR')      ?: '/data';        // volumen persistente
 $ALLOWLIST     = $DATA_DIR . '/allowlist.json';            // IDs de deals P44

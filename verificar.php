@@ -27,8 +27,12 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
     http_response_code(403); exit('forbidden');
 }
 
-const VIEJOS_V = ['PARENT_ID_1072', 'UF_CRM_1782666709', 'UF_CRM_DEAL_1784994996',
-                  'UF_CRM_DEAL_1784995021', 'UF_CRM_DEAL_1784995044'];
+// Los 4 userfields de Inventario (UF_CRM_1782666709 y UF_CRM_DEAL_17849950*)
+// se BORRARON al terminar la migración, así que salen de esta lista.
+// Por qué importa: si se filtra por un campo que no existe, Bitrix IGNORA el
+// filtro y devuelve TODOS los deals. Dejarlos aquí no daba "0 resultados": daba
+// falsos positivos masivos, que es peor que no chequear.
+const VIEJOS_V = ['PARENT_ID_1072'];
 
 // ?viejos=1 -> ¿queda algún deal, de CUALQUIER pipeline, con los campos viejos
 // llenos? Es el chequeo obligatorio antes de borrarlos: borrar un campo en Bitrix

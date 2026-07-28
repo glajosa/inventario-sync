@@ -21,7 +21,10 @@ declare(strict_types=1);
 const CATEGORY_ID  = 44;
 const SPA_ENTITY   = 1072;
 const CAMPO_NUEVO  = 'UF_CRM_1785205972989';   // campo "Inventario" (tipo propio, multi)
-const FIELDS_EXTRA = ['UF_CRM_1782666709','UF_CRM_DEAL_1784994996','UF_CRM_DEAL_1784995021','UF_CRM_DEAL_1784995044'];
+// Vacia a proposito: los userfields viejos ya se borraron y el campo nuevo es la
+// unica fuente. Si se filtrara por un campo inexistente, Bitrix ignora el filtro
+// y devuelve TODOS los deals (falsos positivos, no cero).
+const FIELDS_EXTRA = [];
 
 $DATA_DIR   = getenv('DATA_DIR') ?: '/data';
 $LOG_FILE   = $DATA_DIR . '/sync.log';
