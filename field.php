@@ -216,6 +216,28 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
       background:#fff;box-shadow:0 6px 18px rgba(27,31,36,.12);position:relative}
   #<?= $uid ?>.abierto .gu-panel{display:block}
 
+  /* ---------------------------------------------------------------------------
+     Con el panel ABIERTO, lo único que se desplaza es la lista de unidades.
+     Antes el panel medía más que el iframe (Bitrix no da más de ~340px) y el que
+     scrolleaba era el documento entero: la barra de Proyecto/Código y el pie con
+     "Listo" se salían de la vista y había que arrastrar toda la pestaña.
+     Ahora el documento se fija al alto del iframe y el panel es una columna
+     flex: barra y pie quedan clavados, la lista se queda con el resto.
+     El `min-height:0` NO es de adorno: sin él un hijo flex no encoge y la lista
+     volvería a empujar el panel hacia abajo.
+     Solo aplica con `.gu-open`; cerrado el documento conserva su alto natural
+     (si no, el campo cerrado deja un cuadro vacío enorme).
+     --------------------------------------------------------------------------- */
+  html.gu-open, body.gu-open{height:100%;overflow:hidden}
+  #<?= $uid ?>.abierto{display:flex;flex-direction:column;height:100%;min-height:0}
+  #<?= $uid ?>.abierto .gu-campo{flex:0 0 auto}
+  #<?= $uid ?>.abierto .gu-panel{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;
+      overflow:hidden}
+  #<?= $uid ?>.abierto .gu-top,
+  #<?= $uid ?>.abierto .gu-elegidas,
+  #<?= $uid ?>.abierto .gu-pie{flex:0 0 auto}
+  #<?= $uid ?>.abierto .gu-lista{flex:1 1 auto;min-height:64px;max-height:none}
+
   /* orden: 1) proyecto  2) buscar unidad  3) disponibles/todos */
   #<?= $uid ?> .gu-top{display:flex;gap:6px;align-items:center;padding:7px;border-bottom:1px solid #eaeef2}
   #<?= $uid ?> .gu-drop{position:relative;flex:0 0 auto}
@@ -533,8 +555,10 @@ foreach ($elegidos as $id) {
   function ajustarIframe(){
     // cerrado: exactamente el alto del contenido. Si el iframe queda más alto que
     // el contenido, Bitrix lo alinea arriba y el texto se ve "un poco arriba".
+    // Abierto se pide un alto FIJO: el panel se adapta a lo que Bitrix conceda,
+    // así que ya no hace falta medir scrollHeight (que además ahora está clavado).
     var alto = R.classList.contains('abierto')
-      ? Math.min(document.documentElement.scrollHeight + 4, 340)
+      ? 360
       : Math.max(ALTO_CERRADO, campo.offsetHeight);
     try {
       if (typeof BX24 !== 'undefined' && BX24.resizeWindow) {
@@ -601,6 +625,9 @@ foreach ($elegidos as $id) {
 
   function abrir(si){
     R.classList.toggle('abierto', si);
+    // fija el documento al alto del iframe mientras está abierto
+    document.documentElement.classList.toggle('gu-open', !!si);
+    document.body.classList.toggle('gu-open', !!si);
     if (!si) abrirMenu(false);
     if (si) { filtrar(); refrescarEstado(); }
     ajustarIframe();
