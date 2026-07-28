@@ -1,18 +1,28 @@
 <?php
 /**
- * field.php — handler del tipo de campo propio "Unidad de Inventario".
+ * field.php — handler del tipo de campo propio "Inventario" (galjosa_unidad).
  * ---------------------------------------------------------------------------
- * Bitrix llama aquí DESDE SU SERVIDOR (no es iframe) y pega el HTML devuelto
- * dentro del formulario del deal. Por eso el valor puede viajar en un <input>
- * normal con el nombre que Bitrix indica, sin problemas de dominios cruzados.
+ * Reemplaza a los 4 campos anteriores (Inventario nativo + Inventario 2/3/4):
+ * un solo campo que admite VARIAS unidades (fusión), con filtro por proyecto y
+ * las unidades ocupadas bloqueadas.
+ *
+ * Cómo lo dibuja Bitrix: el editor nuevo de CRM mete este HTML en un iframe
+ * (app-frame) de 200px fijos. Por eso el JS pide BX24.resizeWindow para dejarlo
+ * en una línea cuando está cerrado y expandirlo al abrir.
+ *
+ * Valor guardado: los IDs de las unidades separados por coma ("581,623").
+ * El campo es MULTIPLE=N a propósito: manejar la multiselección por dentro da
+ * una interfaz mucho mejor que la que arma Bitrix repitiendo el handler.
+ * Quien convierte ese valor en dependencia real (parentId2 en la unidad +
+ * relación nativa) y aplica RESERVADO/FIRMADO/VENDIDO es hook.php.
  *
  * Modos que envía Bitrix en `mode`:
  *   view      -> cómo se ve el valor guardado
- *   edit      -> el selector (lo interesante)
- *   settings  -> ajustes del campo al crearlo (no usamos ninguno)
+ *   edit      -> el selector
+ *   settings  -> ajustes del campo (no se usa ninguno)
  *
- * El catálogo se lee del caché que ya arma selector.php (1.274 unidades,
- * agrupadas por proyecto, con estado y quién las ocupa).
+ * El catálogo se lee del caché que arma selector.php (1.274 unidades, con
+ * estado y quién las ocupa), sin pegarle al API en cada render.
  * ---------------------------------------------------------------------------
  */
 
@@ -26,6 +36,16 @@ $campo = $_REQUEST['field'] ?? [];
 // nombre del input que Bitrix espera recibir de vuelta al guardar
 $name  = (string)($campo['NAME'] ?? $_REQUEST['name'] ?? 'UF_UNIDAD');
 
+/** IDs seleccionados a partir del valor guardado ("581,623"). */
+function ids_de(string $v): array {
+    $out = [];
+    foreach (preg_split('/[,;\s]+/', $v) as $x) {
+        $x = trim($x);
+        if ($x !== '' && ctype_digit($x) && (int)$x > 0) $out[] = (int)$x;
+    }
+    return array_values(array_unique($out));
+}
+
 /** Unidades desde el caché de selector.php (no vuelve a pegarle al API). */
 function catalogo_cache(): array {
     $j = json_decode((string)@file_get_contents((getenv('DATA_DIR') ?: '/data') . '/selector_cache.json'), true);
@@ -38,20 +58,30 @@ $cat   = catalogo_cache();
 $units = $cat['units'] ?? [];
 $proys = $cat['proyectos'] ?? [];
 
+// índice por id para resolver rápido lo ya seleccionado
+$porId = [];
+foreach ($units as $u) $porId[(string)$u['id']] = $u;
+
+$elegidos = ids_de($value);
+
 // ---- settings: el campo no necesita configuración ---------------------------
 if ($mode === 'settings') { echo ''; exit; }
 
-// ---- view: mostrar la unidad guardada ---------------------------------------
+// ---- view: mostrar las unidades guardadas -----------------------------------
 if ($mode === 'view') {
-    if ($value === '' || $value === '0') { echo '<span style="color:#8b949e">—</span>'; exit; }
-    foreach ($units as $u) {
-        if ((string)$u['id'] === $value) {
+    if (!$elegidos) { echo '<span style="color:#8b949e">—</span>'; exit; }
+    $partes = [];
+    foreach ($elegidos as $id) {
+        $u = $porId[(string)$id] ?? null;
+        if ($u) {
             $proy = $proys[(string)$u['cat']] ?? '';
-            echo '<span>' . h($u['codigo']) . ' <span style="color:#8b949e">(' . h($proy) . ')</span></span>';
-            exit;
+            $partes[] = '<span style="white-space:nowrap">' . h($u['codigo'])
+                      . ' <span style="color:#8b949e">(' . h($proy) . ')</span></span>';
+        } else {
+            $partes[] = '<span>#' . h((string)$id) . '</span>';
         }
     }
-    echo '<span>#' . h($value) . '</span>';
+    echo implode('<span style="color:#d0d7de">&nbsp;·&nbsp;</span>', $partes);
     exit;
 }
 
@@ -61,44 +91,38 @@ foreach ($units as $u) $porProyecto[(string)$u['cat']][] = $u;
 foreach ($porProyecto as &$l) usort($l, fn($a, $b) => strnatcasecmp($a['codigo'], $b['codigo']));
 unset($l);
 
-$sel = null;
-foreach ($units as $u) if ((string)$u['id'] === $value) { $sel = $u; break; }
 $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios campos en el form
 ?>
 <script src="//api.bitrix24.com/api/v1/"></script>
 <div class="gu" id="<?= $uid ?>">
 <style>
-  /* El editor nuevo de CRM dibuja los campos propios dentro de un iframe
-     (app-frame) de 200px fijos. Nada puede "flotar" fuera del iframe, así que el
-     panel va en el flujo y se le pide a Bitrix redimensionarlo: una línea cuando
-     está cerrado, alto solo mientras está abierto. */
   html,body{margin:0;padding:0;background:transparent;overflow:hidden}
   #<?= $uid ?>{font:13.5px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1f2328}
   #<?= $uid ?> *{box-sizing:border-box}
 
-  #<?= $uid ?> .gu-campo{display:flex;align-items:center;gap:8px;min-height:24px;cursor:pointer;
-      padding-right:4px;border-bottom:1px solid transparent}
+  /* línea cerrada: chips de lo elegido + "agregar".
+     El padding y el min-height igualan la altura/sangría de los campos nativos
+     del deal, para que el texto quede centrado y no pegado al borde. */
+  #<?= $uid ?> .gu-campo{display:flex;align-items:center;flex-wrap:wrap;gap:5px;min-height:30px;
+      cursor:pointer;padding:3px 6px 3px 7px;border-bottom:1px solid transparent}
   #<?= $uid ?> .gu-campo:hover{border-bottom-color:#c9ccd0}
-  #<?= $uid ?> .gu-val{font-weight:600}
-  #<?= $uid ?> .gu-ph{color:#a8adb4}
-  #<?= $uid ?> .gu-quitar{color:#a8adb4;font-size:15px;line-height:1;padding:0 2px}
-  #<?= $uid ?> .gu-quitar:hover{color:#cf222e}
-  #<?= $uid ?> .gu-caret{margin-left:auto;color:#a8adb4;font-size:9px}
+  #<?= $uid ?> .gu-ph{color:#a8adb4;line-height:22px}
+  #<?= $uid ?> .gu-chip{display:inline-flex;align-items:center;gap:5px;background:#eef4ff;
+      border:1px solid #c8dcff;border-radius:99px;padding:2px 7px;font-size:12px;font-weight:600}
+  #<?= $uid ?> .gu-chip small{font-weight:400;color:#57606a}
+  #<?= $uid ?> .gu-chip b{cursor:pointer;color:#8b949e;font-weight:700;font-size:13px;line-height:1}
+  #<?= $uid ?> .gu-chip b:hover{color:#cf222e}
+  #<?= $uid ?> .gu-mas{color:#0969da;font-size:12px;font-weight:600;line-height:22px}
+  /* flecha: pegada a la derecha y centrada verticalmente */
+  #<?= $uid ?> .gu-caret{margin-left:auto;align-self:center;display:flex;align-items:center;
+      color:#a8adb4;font-size:9px;padding-left:6px}
 
   #<?= $uid ?> .gu-panel{display:none;margin-top:5px;border:1px solid #d0d7de;border-radius:8px;
       background:#fff;box-shadow:0 6px 18px rgba(27,31,36,.12);position:relative}
   #<?= $uid ?>.abierto .gu-panel{display:block}
-  #<?= $uid ?>.abierto .gu-campo{border-bottom-color:#0969da}
 
-  /* barra: [Disponibles|Todos]  [Proyecto ▾]  [buscar] */
+  /* orden: 1) proyecto  2) buscar unidad  3) disponibles/todos */
   #<?= $uid ?> .gu-top{display:flex;gap:6px;align-items:center;padding:7px;border-bottom:1px solid #eaeef2}
-
-  #<?= $uid ?> .gu-seg{display:flex;flex:0 0 auto;border:1px solid #d0d7de;border-radius:6px;overflow:hidden}
-  #<?= $uid ?> .gu-seg button{border:0;background:#fff;color:#57606a;font:inherit;font-size:12px;
-      padding:5px 9px;cursor:pointer;white-space:nowrap}
-  #<?= $uid ?> .gu-seg button + button{border-left:1px solid #d0d7de}
-  #<?= $uid ?> .gu-seg button[aria-pressed=true]{background:#0969da;color:#fff;font-weight:600}
-
   #<?= $uid ?> .gu-drop{position:relative;flex:0 0 auto}
   #<?= $uid ?> .gu-dropbtn{display:flex;align-items:center;gap:6px;max-width:150px;
       border:1px solid #d0d7de;border-radius:6px;background:#fff;color:#1f2328;font:inherit;font-size:12px;
@@ -106,7 +130,6 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?> .gu-dropbtn:hover{border-color:#0969da}
   #<?= $uid ?> .gu-dropbtn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #<?= $uid ?> .gu-dropbtn i{font-style:normal;color:#8b949e;font-size:8px;margin-left:auto}
-  /* menú propio, blanco (el <select> nativo salía con el gris del sistema) */
   #<?= $uid ?> .gu-menu{display:none;position:absolute;z-index:5;top:calc(100% + 4px);left:0;min-width:186px;
       background:#fff;border:1px solid #d0d7de;border-radius:8px;box-shadow:0 8px 22px rgba(27,31,36,.18);
       padding:4px;max-height:190px;overflow-y:auto}
@@ -116,13 +139,16 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?> .gu-menu button:hover{background:#f0f6ff}
   #<?= $uid ?> .gu-menu button[aria-pressed=true]{background:#ddf4ff;font-weight:600}
   #<?= $uid ?> .gu-menu .n{margin-left:auto;color:#8b949e;font-size:11px;font-weight:400}
-
   #<?= $uid ?> .gu-buscar{flex:1 1 auto;min-width:80px;padding:5px 8px;border:1px solid #d0d7de;
       border-radius:6px;font:inherit;font-size:12.5px}
   #<?= $uid ?> .gu-buscar:focus{outline:2px solid #0969da;outline-offset:-1px}
+  #<?= $uid ?> .gu-seg{display:flex;flex:0 0 auto;border:1px solid #d0d7de;border-radius:6px;overflow:hidden}
+  #<?= $uid ?> .gu-seg button{border:0;background:#fff;color:#57606a;font:inherit;font-size:12px;
+      padding:5px 9px;cursor:pointer;white-space:nowrap}
+  #<?= $uid ?> .gu-seg button + button{border-left:1px solid #d0d7de}
+  #<?= $uid ?> .gu-seg button[aria-pressed=true]{background:#0969da;color:#fff;font-weight:600}
 
-  #<?= $uid ?> .gu-lista{max-height:206px;overflow-y:auto;overscroll-behavior:contain}
-  /* encabezado NO sticky: el sticky se montaba encima de las filas */
+  #<?= $uid ?> .gu-lista{max-height:200px;overflow-y:auto;overscroll-behavior:contain}
   #<?= $uid ?> .gu-grupo{padding:7px 10px 3px;font-size:10.5px;font-weight:700;color:#8b949e;
       letter-spacing:.05em;text-transform:uppercase;background:#f6f8fa;border-top:1px solid #eaeef2}
   #<?= $uid ?> .gu-grupo:first-child{border-top:0}
@@ -131,6 +157,8 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?> .gu-fila:hover{background:#f0f6ff}
   #<?= $uid ?> .gu-fila.gu-no{cursor:not-allowed;background:#fcfcfd}
   #<?= $uid ?> .gu-fila.gu-no .gu-cod,#<?= $uid ?> .gu-fila.gu-no .gu-precio{color:#a8adb4}
+  #<?= $uid ?> .gu-fila.gu-yo{background:#eef4ff}
+  #<?= $uid ?> .gu-tick{flex:0 0 auto;width:13px;color:#0969da;font-weight:700}
   #<?= $uid ?> .gu-cod{font-weight:600;min-width:58px;flex:0 0 auto}
   #<?= $uid ?> .gu-tag{flex:0 0 auto;font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:99px}
   #<?= $uid ?> .gu-tag.DISPONIBLE{background:#dafbe1;color:#116329}
@@ -143,21 +171,17 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?> .gu-precio{margin-left:auto;flex:0 0 auto;font-variant-numeric:tabular-nums;
       font-size:12px;color:#57606a}
   #<?= $uid ?> .gu-vacio{padding:16px 10px;text-align:center;color:#8b949e}
-  #<?= $uid ?> .gu-pie{padding:6px 10px;border-top:1px solid #eaeef2;color:#8b949e;font-size:11px}
+  #<?= $uid ?> .gu-pie{display:flex;align-items:center;gap:8px;padding:6px 10px;
+      border-top:1px solid #eaeef2;color:#8b949e;font-size:11px}
+  #<?= $uid ?> .gu-listo{margin-left:auto;border:0;background:#0969da;color:#fff;font:inherit;
+      font-size:11.5px;font-weight:600;padding:4px 12px;border-radius:5px;cursor:pointer}
 </style>
 
-<input type="hidden" name="<?= h($name) ?>" id="<?= $uid ?>_val" value="<?= h($value) ?>">
+<input type="hidden" name="<?= h($name) ?>" id="<?= $uid ?>_val" value="<?= h(implode(',', $elegidos)) ?>">
 
-<div class="gu-campo" id="<?= $uid ?>_btn">
-  <span id="<?= $uid ?>_lbl" class="<?= $sel ? 'gu-val' : 'gu-ph' ?>">
-    <?= $sel ? h($sel['codigo'] . ' — ' . ($proys[(string)$sel['cat']] ?? '')) : 'Elegir unidad…' ?>
-  </span>
-  <span class="gu-quitar" id="<?= $uid ?>_clr" style="<?= $sel ? '' : 'display:none' ?>" title="Quitar">&times;</span>
-  <span class="gu-caret">&#9660;</span>
-</div>
+<div class="gu-campo" id="<?= $uid ?>_campo"></div>
 
 <div class="gu-panel" id="<?= $uid ?>_panel">
-  <!-- orden: 1) proyecto  2) buscar unidad  3) disponibles/todos -->
   <div class="gu-top">
     <div class="gu-drop" id="<?= $uid ?>_drop">
       <button type="button" class="gu-dropbtn" id="<?= $uid ?>_dropbtn">
@@ -191,14 +215,17 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
       <div class="gu-grupo" data-cat="<?= h((string)$cid) ?>"><?= h($nom) ?></div>
       <?php foreach ($lista as $u):
             $libre = ($u['stage'] === 'DISPONIBLE' && empty($u['dealId']));
+            $yo    = in_array((int)$u['id'], $elegidos, true);
             $meta  = trim(($u['torre'] !== '' ? 'T' . $u['torre'] : '')
                         . ($u['piso']  !== '' ? ' · P' . $u['piso'] : ''));
             $pvp   = $u['pvp'] !== '' ? '$' . number_format((float)str_replace(['|USD', ','], '', $u['pvp']), 0) : '';
             $est   = $u['stage'] ?: 'BLOQUEADO';
       ?>
-        <div class="gu-fila <?= $libre ? '' : 'gu-no' ?>" data-cat="<?= h((string)$cid) ?>"
-             data-cod="<?= h(strtoupper($u['codigo'])) ?>" data-libre="<?= $libre ? 1 : 0 ?>"
-             data-id="<?= (int)$u['id'] ?>" data-lbl="<?= h($u['codigo'] . ' — ' . $nom) ?>">
+        <div class="gu-fila <?= (!$libre && !$yo) ? 'gu-no' : '' ?> <?= $yo ? 'gu-yo' : '' ?>"
+             data-cat="<?= h((string)$cid) ?>" data-cod="<?= h(strtoupper($u['codigo'])) ?>"
+             data-libre="<?= ($libre || $yo) ? 1 : 0 ?>" data-id="<?= (int)$u['id'] ?>"
+             data-cod-txt="<?= h($u['codigo']) ?>" data-proy="<?= h($nom) ?>">
+          <span class="gu-tick"><?= $yo ? '&#10003;' : '' ?></span>
           <span class="gu-cod"><?= h($u['codigo']) ?></span>
           <span class="gu-tag <?= h($est) ?>"><?= h($est) ?></span>
           <?php if ($meta !== ''): ?><span class="gu-meta"><?= h($meta) ?></span><?php endif; ?>
@@ -209,7 +236,10 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     <div class="gu-vacio" id="<?= $uid ?>_vacio" style="display:none">Sin resultados</div>
   </div>
 
-  <div class="gu-pie" id="<?= $uid ?>_pie"></div>
+  <div class="gu-pie">
+    <span id="<?= $uid ?>_pie"></span>
+    <button type="button" class="gu-listo" id="<?= $uid ?>_listo">Listo</button>
+  </div>
 </div>
 
 <script>
@@ -219,9 +249,7 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   R.dataset.listo = '1';
 
   var val     = document.getElementById('<?= $uid ?>_val');
-  var btn     = document.getElementById('<?= $uid ?>_btn');
-  var lbl     = document.getElementById('<?= $uid ?>_lbl');
-  var clr     = document.getElementById('<?= $uid ?>_clr');
+  var campo   = document.getElementById('<?= $uid ?>_campo');
   var q       = document.getElementById('<?= $uid ?>_q');
   var seg     = document.getElementById('<?= $uid ?>_seg');
   var dropbtn = document.getElementById('<?= $uid ?>_dropbtn');
@@ -230,18 +258,72 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   var lista   = document.getElementById('<?= $uid ?>_lista');
   var vacio   = document.getElementById('<?= $uid ?>_vacio');
   var pie     = document.getElementById('<?= $uid ?>_pie');
+  var listoBt = document.getElementById('<?= $uid ?>_listo');
 
   var filas  = Array.prototype.slice.call(R.querySelectorAll('.gu-fila'));
   var grupos = Array.prototype.slice.call(R.querySelectorAll('.gu-grupo'));
 
-  var soloLibres = true;   // el toggle arranca en "Disponibles"
-  var cat = '';            // '' = todos los proyectos
+  var soloLibres = true;
+  var cat = '';
   var ALTO_CERRADO = 30;
+  // selección viva (varias unidades por deal = fusión)
+  var sel = val.value.split(',').filter(function(x){ return x; });
+
+  function datos(id){
+    var f = filas.filter(function(x){ return x.dataset.id === id; })[0];
+    return f ? {cod: f.dataset.codTxt, proy: f.dataset.proy} : {cod: '#' + id, proy: ''};
+  }
+
+  function pintarChips(){
+    campo.innerHTML = '';
+    if (!sel.length) {
+      var ph = document.createElement('span');
+      ph.className = 'gu-ph';
+      ph.textContent = 'Elegir unidad…';
+      campo.appendChild(ph);
+    } else {
+      sel.forEach(function(id){
+        var d = datos(id);
+        var c = document.createElement('span');
+        c.className = 'gu-chip';
+        c.innerHTML = '<span></span><small></small><b title="Quitar">&times;</b>';
+        c.children[0].textContent = d.cod;
+        c.children[1].textContent = d.proy;
+        c.children[2].addEventListener('click', function(e){
+          e.stopPropagation();
+          sel = sel.filter(function(x){ return x !== id; });
+          val.value = sel.join(',');
+          pintarChips(); marcar(); ajustarIframe();
+        });
+        campo.appendChild(c);
+      });
+    }
+    if (sel.length) {
+      var mas = document.createElement('span');
+      mas.className = 'gu-mas';
+      mas.textContent = '+ agregar';
+      campo.appendChild(mas);
+    }
+    var caret = document.createElement('span');
+    caret.className = 'gu-caret';
+    caret.innerHTML = '&#9660;';
+    campo.appendChild(caret);
+  }
+
+  function marcar(){
+    filas.forEach(function(f){
+      var yo = sel.indexOf(f.dataset.id) !== -1;
+      f.classList.toggle('gu-yo', yo);
+      f.querySelector('.gu-tick').innerHTML = yo ? '&#10003;' : '';
+      // una unidad ya elegida por ESTE deal siempre se puede des-seleccionar
+      if (yo) f.classList.remove('gu-no');
+    });
+  }
 
   function ajustarIframe(){
     var alto = R.classList.contains('abierto')
-      ? Math.min(document.documentElement.scrollHeight + 4, 330)
-      : ALTO_CERRADO;
+      ? Math.min(document.documentElement.scrollHeight + 4, 340)
+      : Math.max(ALTO_CERRADO, campo.offsetHeight + 6);
     try {
       if (typeof BX24 !== 'undefined' && BX24.resizeWindow) {
         BX24.resizeWindow(document.documentElement.scrollWidth, alto);
@@ -253,13 +335,13 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     var t = q.value.trim().toUpperCase();
     var n = 0;
     filas.forEach(function(f){
+      var yo = sel.indexOf(f.dataset.id) !== -1;
       var ok = (!cat || f.dataset.cat === cat)
             && (!t || f.dataset.cod.indexOf(t) !== -1)
-            && (!soloLibres || f.dataset.libre === '1');
+            && (!soloLibres || f.dataset.libre === '1' || yo);
       f.style.display = ok ? '' : 'none';
       if (ok) n++;
     });
-    // el nombre del proyecto sobra cuando ya se filtró a uno solo
     grupos.forEach(function(g){
       var hay = false, node = g.nextElementSibling;
       while (node && node.classList.contains('gu-fila')) {
@@ -270,7 +352,7 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     });
     vacio.style.display = n ? 'none' : '';
     pie.textContent = n + (n === 1 ? ' unidad' : ' unidades')
-                    + (soloLibres ? ' disponibles' : '');
+                    + (sel.length ? ' · ' + sel.length + ' elegida' + (sel.length > 1 ? 's' : '') : '');
     lista.scrollTop = 0;
   }
 
@@ -284,32 +366,23 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     if (si) { try { q.focus(); } catch(e){} }
   }
 
-  btn.addEventListener('click', function(e){
-    if (e.target === clr) return;
-    abrir(!R.classList.contains('abierto'));
-  });
+  campo.addEventListener('click', function(){ abrir(!R.classList.contains('abierto')); });
+  listoBt.addEventListener('click', function(){ abrir(false); });
 
   seg.addEventListener('click', function(e){
     var b = e.target.closest('button'); if (!b) return;
     soloLibres = (b.dataset.libres === '1');
-    Array.prototype.forEach.call(seg.children, function(x){
-      x.setAttribute('aria-pressed', String(x === b));
-    });
+    Array.prototype.forEach.call(seg.children, function(x){ x.setAttribute('aria-pressed', String(x === b)); });
     filtrar();
   });
 
-  dropbtn.addEventListener('click', function(e){
-    e.stopPropagation();
-    abrirMenu(!menu.classList.contains('on'));
-  });
+  dropbtn.addEventListener('click', function(e){ e.stopPropagation(); abrirMenu(!menu.classList.contains('on')); });
 
   menu.addEventListener('click', function(e){
     var b = e.target.closest('button'); if (!b) return;
     cat = b.dataset.cat;
-    Array.prototype.forEach.call(menu.children, function(x){
-      x.setAttribute('aria-pressed', String(x === b));
-    });
-    // se usa data-nom: leer textContent traía pegado el conteo ("Noral Plaza251")
+    Array.prototype.forEach.call(menu.children, function(x){ x.setAttribute('aria-pressed', String(x === b)); });
+    // se usa data-nom: el textContent traía pegado el conteo ("Noral Plaza251")
     dropTxt.textContent = b.dataset.nom || 'Proyecto';
     abrirMenu(false);
     filtrar();
@@ -322,25 +395,19 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   });
 
   lista.addEventListener('click', function(e){
-    var f = e.target.closest('.gu-fila');
-    if (!f || f.dataset.libre !== '1') return;   // ocupada: no seleccionable
-    val.value = f.dataset.id;
-    lbl.textContent = f.dataset.lbl;
-    lbl.className = 'gu-val';
-    clr.style.display = '';
-    abrir(false);
-  });
-
-  clr.addEventListener('click', function(e){
-    e.stopPropagation();
-    val.value = '';
-    lbl.textContent = 'Elegir unidad…';
-    lbl.className = 'gu-ph';
-    clr.style.display = 'none';
+    var f = e.target.closest('.gu-fila'); if (!f) return;
+    var id = f.dataset.id;
+    var yo = sel.indexOf(id) !== -1;
+    if (!yo && f.dataset.libre !== '1') return;   // ocupada por otro deal: no seleccionable
+    if (yo) sel = sel.filter(function(x){ return x !== id; });
+    else    sel.push(id);
+    val.value = sel.join(',');
+    pintarChips(); marcar(); filtrar(); ajustarIframe();
   });
 
   document.addEventListener('click', function(){ abrirMenu(false); });
 
+  pintarChips(); marcar();
   function iniciar(){ ajustarIframe(); }
   if (typeof BX24 !== 'undefined') { try { BX24.init(iniciar); } catch(e) { iniciar(); } }
   else { window.addEventListener('load', iniciar); setTimeout(iniciar, 600); }
