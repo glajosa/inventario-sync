@@ -26,6 +26,24 @@ if ($m !== '') {
     exit;
 }
 
+// Modo limpieza: deshace lo que dejaron las pruebas de la auditoría. Solo dos
+// operaciones, ambas restauran el estado anterior:
+//   ?limpiar_deal=ID  -> vacía SOLO el campo nuevo de ese deal
+//   ?liberar_unidad=ID -> pone esa unidad en DISPONIBLE y parentId2=0
+if (!empty($_GET['limpiar_deal'])) {
+    $d = (int)$_GET['limpiar_deal'];
+    $r = bx('crm.deal.update', ['id' => $d, 'fields' => [CAMPO_NUEVO => '']]);
+    logline("AUDITORIA limpiar campo nuevo en deal=$d -> " . json_encode($r));
+    echo "limpiar_deal=$d: " . json_encode($r) . "\n"; exit;
+}
+if (!empty($_GET['liberar_unidad'])) {
+    $u = (int)$_GET['liberar_unidad'];
+    $a = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $u, 'fields' => ['parentId2' => 0]]);
+    $b = apply_unit_stage($u, null, 'DISPONIBLE', false);
+    logline("AUDITORIA liberar unidad=$u -> " . json_encode($a) . " stage=" . var_export($b, true));
+    echo "liberar_unidad=$u: " . json_encode($a) . " stage_movido=" . var_export($b, true) . "\n"; exit;
+}
+
 // Modo "select": compara crm.item.list con y sin `select` para un deal.
 $deal = (int)($_GET['deal'] ?? 0);
 if ($deal <= 0) exit("uso: ?token=...&deal=ID   |   ?token=...&m=<metodo>&p=<json>\n");

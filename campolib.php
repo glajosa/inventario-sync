@@ -120,24 +120,42 @@ function ids_de(string $v): array {
 }
 
 /**
- * De una lista de IDs, devuelve las que SÍ se pueden atar a este deal:
- * existen y están libres (parentId2 = 0) o ya son de este mismo deal.
+ * De una lista de IDs, devuelve las que SÍ se pueden atar a este deal.
+ * Portero del servidor: la lista del campo pinta en gris lo ocupado, pero eso es
+ * solo la pantalla. Sin esto se podía guardar un ID inventado, o una unidad que
+ * otro vendedor ya tenía (doble venta).
  *
- * Sirve de portero: sin esto se podía guardar un ID inventado, o una unidad
- * que otro vendedor ya tenía atada (doble venta). La lista del campo las
- * bloquea visualmente, pero eso es solo la pantalla; el servidor debe validar.
+ * Se piden DOS condiciones, y las dos hacen falta:
+ *
+ *   a) parentId2 libre (0/null) o ya de este mismo deal.
+ *   b) stage DISPONIBLE (o ya es de este deal).
+ *
+ * La (b) no es de adorno. Hay dos formas de que una unidad esté tomada: por
+ * parentId2 (lo que escribe este sistema) y por el campo NATIVO del deal
+ * PARENT_ID_1072, que deja parentId2 en null. Hoy la mayoría de las 778 unidades
+ * ocupadas lo están por la vía nativa, así que mirando solo parentId2 salían
+ * TODAS como libres. El stage sí las delata: una unidad tomada está en
+ * RESERVADO / FIRMADO / VENDIDO, nunca en DISPONIBLE.
  */
 function unidades_asignables(array $ids, int $dealId): array {
     if (!$ids) return [];
     // sin `select`: con select explícito Bitrix devuelve id en null (bug verificado)
     $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => ['@id' => $ids]]);
     if (!$r['ok']) return [];
+
+    // stageId -> nombre ("DT1072_33:NEW" -> "DISPONIBLE")
+    $rev = [];
+    foreach (stages_map() as $cat => $m) foreach ($m as $nombre => $sid) $rev[$sid] = $nombre;
+
     $ok = [];
     foreach (($r['result']['items'] ?? []) as $it) {
         $id = (int)($it['id'] ?? 0);
         if (!$id) continue;
         $dueno = (int)($it['parentId2'] ?? 0);
-        if ($dueno === 0 || $dueno === $dealId) $ok[] = $id;
+        if ($dueno === $dealId) { $ok[] = $id; continue; }   // ya es mía
+        if ($dueno !== 0) continue;                          // de otro deal
+        $stage = $rev[(string)($it['stageId'] ?? '')] ?? '';
+        if ($stage === 'DISPONIBLE') $ok[] = $id;
     }
     return $ok;
 }
