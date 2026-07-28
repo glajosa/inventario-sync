@@ -622,18 +622,23 @@ foreach ($elegidos as $id) {
   function iniciar(){ ajustarIframe(); }
   if (typeof BX24 !== 'undefined') { try { BX24.init(iniciar); } catch(e) { iniciar(); } }
 
-  // TEMPORAL (diagnóstico): qué comandos expone el placement de este campo.
-  // Se necesita para saber cómo reportarle el valor al formulario de Bitrix, que
-  // hoy no lo ve y por eso el campo obligatorio bloquea el cambio de etapa.
-  try {
-    if (typeof BX24 !== 'undefined' && BX24.placement && BX24.placement.getInterface) {
-      BX24.placement.getInterface(function(res){
-        try { fetch('dbg.php?i=' + encodeURIComponent(JSON.stringify(res))); } catch(e) {}
-      });
-    } else {
-      fetch('dbg.php?i=' + encodeURIComponent('sin BX24.placement.getInterface'));
+  // TEMPORAL (diagnóstico): informar SIEMPRE, con el error si lo hay.
+  (function(){
+    function rep(t){ try{ fetch('dbg.php?i='+encodeURIComponent(t)); }catch(e){} }
+    var est = 'BX24='+(typeof BX24)
+            + ' placement='+(typeof BX24!=='undefined' && BX24.placement ? 'si':'no')
+            + ' base='+document.baseURI;
+    if (typeof BX24!=='undefined' && BX24.placement) {
+      est += ' claves=['+Object.keys(BX24.placement).join(',')+']';
+      est += ' info='+(BX24.placement.info? JSON.stringify(BX24.placement.info()) : '-');
     }
-  } catch(e) {}
+    rep(est);
+    try {
+      if (typeof BX24!=='undefined' && BX24.placement && BX24.placement.getInterface) {
+        BX24.placement.getInterface(function(res){ rep('INTERFACE '+JSON.stringify(res)); });
+      }
+    } catch(e){ rep('getInterface lanzo: '+e); }
+  })();
   else { window.addEventListener('load', iniciar); setTimeout(iniciar, 600); }
 })();
 </script>
