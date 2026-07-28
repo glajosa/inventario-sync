@@ -33,7 +33,11 @@ $DATA_DIR = getenv('DATA_DIR') ?: '/data';
 // Diagnóstico: qué nos manda Bitrix. Necesitamos el ID del deal para poder
 // guardar por API, porque el <input> vive dentro del iframe y el formulario del
 // deal NO lo envía al guardar (por eso la selección no se asentaba).
-@file_put_contents($DATA_DIR . '/sync.log',
+//
+// OJO: se escribe en web.log, NO en sync.log. sync.log lo crea el cron como root
+// y Apache (www-data) no puede añadirle líneas: por eso los logs del lado web
+// se perdían en silencio.
+@file_put_contents($DATA_DIR . '/web.log',
     gmdate('Y-m-d\TH:i:s\Z') . '  FIELD claves=[' . implode(',', array_keys($_REQUEST)) . ']'
     . ' mode=' . (string)($_REQUEST['mode'] ?? '-')
     . ' value=' . substr((string)($_REQUEST['value'] ?? ''), 0, 40)

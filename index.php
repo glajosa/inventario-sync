@@ -8,8 +8,14 @@ if (isset($_GET['log'])) {
     $expect = (string)getenv('OUTBOUND_TOKEN');
     if ($expect === '' || !hash_equals($expect, (string)($_GET['token'] ?? ''))) { http_response_code(403); exit('forbidden'); }
     header('Content-Type: text/plain; charset=utf-8');
-    $lines = @file($DATA_DIR . '/sync.log') ?: [];
-    echo implode('', array_slice($lines, -80));
+    // dos archivos: sync.log lo escribe el cron (root) y web.log Apache (www-data),
+    // porque Apache no puede añadir líneas al que creó root.
+    foreach (['sync.log' => 'CRON', 'web.log' => 'WEB'] as $archivo => $etq) {
+        $lines = @file($DATA_DIR . '/' . $archivo) ?: [];
+        echo "===== $etq ($archivo) =====\n";
+        echo $lines ? implode('', array_slice($lines, -60)) : "(vacío)\n";
+        echo "\n";
+    }
     exit;
 }
 
