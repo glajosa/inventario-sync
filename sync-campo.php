@@ -104,7 +104,16 @@ function sincronizar_deal(int $dealId): array {
         bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid,
                                'fields' => ['parentId2' => $dealId]]);
         sync_unit_owner($uid, $deal);                       // responsable + cliente
-        if ($target) apply_unit_stage($uid, null, $target, false);
+    }
+
+    // El stage se aplica a TODAS las unidades del campo, no solo a las recién
+    // agregadas: si no, al mover el deal de etapa (Promesa firmada, Cierre de
+    // promesa, Firmados-caídos) las que ya estaban atadas se quedaban igual.
+    $movidas = 0;
+    if ($target) {
+        foreach ($quiere as $uid) {
+            if (apply_unit_stage((int)$uid, null, $target, false)) $movidas++;
+        }
     }
     foreach ($soltar as $uid) {
         bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid,
@@ -120,7 +129,7 @@ function sincronizar_deal(int $dealId): array {
     }
 
     return ['ok' => true, 'quiere' => count($quiere), 'agregadas' => count($agregar),
-            'soltadas' => count($soltar), 'stage' => $target ?: '-'];
+            'soltadas' => count($soltar), 'stage' => $target ?: '-', 'movidas' => $movidas];
 }
 
 // ---- entrada ----------------------------------------------------------------
