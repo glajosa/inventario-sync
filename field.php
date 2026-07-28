@@ -185,17 +185,24 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?> .gu-campo{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:26px;
       cursor:pointer;padding:2px 7px}
   #<?= $uid ?> .gu-ph{color:#a8adb4;display:inline-flex;align-items:center;height:20px}
-  #<?= $uid ?> .gu-chip{display:inline-flex;align-items:center;gap:6px;background:#eef4ff;
-      border:1px solid #c8dcff;border-radius:99px;padding:0 4px 0 9px;height:22px;
-      font-size:12px;font-weight:600;line-height:1}
-  #<?= $uid ?> .gu-chip small{font-weight:400;color:#57606a;line-height:1}
-  /* la ✕ como cuadro centrado: antes bailaba respecto al texto del chip */
-  #<?= $uid ?> .gu-chip b{display:inline-flex;align-items:center;justify-content:center;
-      width:16px;height:16px;border-radius:50%;cursor:pointer;color:#8b949e;
-      font-weight:700;font-size:12px;line-height:1}
-  #<?= $uid ?> .gu-chip b:hover{color:#cf222e;background:#ffe3e3}
-  #<?= $uid ?> .gu-mas{color:#0969da;font-size:12px;font-weight:600;display:inline-flex;
-      align-items:center;height:20px}
+  /* cerrado: texto plano, igual que los campos nativos del deal (sin chips ni ✕) */
+  #<?= $uid ?> .gu-txt{display:inline-flex;align-items:center;height:20px;overflow:hidden;
+      white-space:nowrap;text-overflow:ellipsis}
+  #<?= $uid ?> .gu-sep{color:#d0d7de;padding:0 5px}
+  #<?= $uid ?> .gu-proyname{color:#8b949e}
+
+  /* dentro del desplegable: lo elegido, en azul y con la ✕ */
+  #<?= $uid ?> .gu-elegidas{border-bottom:1px solid #eaeef2;background:#f6faff}
+  #<?= $uid ?> .gu-eltit{padding:6px 10px 2px;font-size:10.5px;font-weight:700;color:#0969da;
+      letter-spacing:.05em;text-transform:uppercase}
+  #<?= $uid ?> .gu-el{display:flex;align-items:center;gap:8px;padding:6px 10px;color:#0a3069}
+  #<?= $uid ?> .gu-el .gu-elcod{font-weight:600;min-width:58px}
+  #<?= $uid ?> .gu-el .gu-elproy{color:#57606a;font-size:11.5px;flex:1 1 auto;overflow:hidden;
+      white-space:nowrap;text-overflow:ellipsis}
+  #<?= $uid ?> .gu-el b{display:inline-flex;align-items:center;justify-content:center;
+      width:18px;height:18px;border-radius:50%;cursor:pointer;color:#57606a;
+      font-weight:700;font-size:13px;line-height:1;flex:0 0 auto}
+  #<?= $uid ?> .gu-el b:hover{color:#cf222e;background:#ffe3e3}
   /* flecha: pegada a la derecha y a la misma altura que el texto */
   #<?= $uid ?> .gu-caret{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;
       height:20px;color:#a8adb4;font-size:9px;padding-left:6px}
@@ -240,8 +247,6 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?> .gu-fila:hover{background:#f0f6ff}
   #<?= $uid ?> .gu-fila.gu-no{cursor:not-allowed;background:#fcfcfd}
   #<?= $uid ?> .gu-fila.gu-no .gu-cod,#<?= $uid ?> .gu-fila.gu-no .gu-precio{color:#a8adb4}
-  #<?= $uid ?> .gu-fila.gu-yo{background:#eef4ff}
-  #<?= $uid ?> .gu-tick{flex:0 0 auto;width:13px;color:#0969da;font-weight:700}
   #<?= $uid ?> .gu-cod{font-weight:600;min-width:58px;flex:0 0 auto}
   #<?= $uid ?> .gu-tag{flex:0 0 auto;font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:99px}
   #<?= $uid ?> .gu-tag.DISPONIBLE{background:#dafbe1;color:#116329}
@@ -273,7 +278,10 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   };
 </script>
 
-<div class="gu-campo" id="<?= $uid ?>_campo"></div>
+<div class="gu-campo" id="<?= $uid ?>_campo">
+  <span class="gu-txt" id="<?= $uid ?>_txt"></span>
+  <span class="gu-caret">&#9660;</span>
+</div>
 
 <div class="gu-panel" id="<?= $uid ?>_panel">
   <div class="gu-top">
@@ -302,6 +310,8 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     </div>
   </div>
 
+  <div class="gu-elegidas" id="<?= $uid ?>_elegidas" style="display:none"></div>
+
   <div class="gu-lista" id="<?= $uid ?>_lista">
     <?php foreach ($proys as $cid => $nom):
           $lista = $porProyecto[(string)$cid] ?? [];
@@ -315,11 +325,10 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
             $pvp   = $u['pvp'] !== '' ? '$' . number_format((float)str_replace(['|USD', ','], '', $u['pvp']), 0) : '';
             $est   = $u['stage'] ?: 'BLOQUEADO';
       ?>
-        <div class="gu-fila <?= (!$libre && !$yo) ? 'gu-no' : '' ?> <?= $yo ? 'gu-yo' : '' ?>"
+        <div class="gu-fila <?= $libre ? '' : 'gu-no' ?>"
              data-cat="<?= h((string)$cid) ?>" data-cod="<?= h(strtoupper($u['codigo'])) ?>"
-             data-libre="<?= ($libre || $yo) ? 1 : 0 ?>" data-id="<?= (int)$u['id'] ?>"
+             data-libre="<?= $libre ? 1 : 0 ?>" data-id="<?= (int)$u['id'] ?>"
              data-cod-txt="<?= h($u['codigo']) ?>" data-proy="<?= h($nom) ?>">
-          <span class="gu-tick"><?= $yo ? '&#10003;' : '' ?></span>
           <span class="gu-cod"><?= h($u['codigo']) ?></span>
           <span class="gu-tag <?= h($est) ?>"><?= h($est) ?></span>
           <?php if ($meta !== ''): ?><span class="gu-meta"><?= h($meta) ?></span><?php endif; ?>
@@ -344,7 +353,9 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
 
   var CFG = window['GU_CFG_<?= $uid ?>'] || {};
   var val     = document.getElementById('<?= $uid ?>_val');
-  var campo   = document.getElementById('<?= $uid ?>_campo');
+  var campo    = document.getElementById('<?= $uid ?>_campo');
+  var txt      = document.getElementById('<?= $uid ?>_txt');
+  var elegidas = document.getElementById('<?= $uid ?>_elegidas');
   var q       = document.getElementById('<?= $uid ?>_q');
   var seg     = document.getElementById('<?= $uid ?>_seg');
   var dropbtn = document.getElementById('<?= $uid ?>_dropbtn');
@@ -407,51 +418,58 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     return f ? {cod: f.dataset.codTxt, proy: f.dataset.proy} : {cod: '#' + id, proy: ''};
   }
 
-  function pintarChips(){
-    campo.innerHTML = '';
+  /** Cerrado: texto plano, igual que los campos nativos del deal. */
+  function pintar(){
+    txt.innerHTML = '';
     if (!sel.length) {
       var ph = document.createElement('span');
       ph.className = 'gu-ph';
-      ph.textContent = 'Elegir unidad…';
-      campo.appendChild(ph);
-    } else {
-      sel.forEach(function(id){
-        var d = datos(id);
-        var c = document.createElement('span');
-        c.className = 'gu-chip';
-        c.innerHTML = '<span></span><small></small><b title="Quitar">&times;</b>';
-        c.children[0].textContent = d.cod;
-        c.children[1].textContent = d.proy;
-        c.children[2].addEventListener('click', function(e){
-          e.stopPropagation();
-          sel = sel.filter(function(x){ return x !== id; });
-          val.value = sel.join(',');
-          pintarChips(); marcar(); ajustarIframe(); guardar();
-        });
-        campo.appendChild(c);
-      });
+      ph.textContent = 'Elegir unidad\u2026';
+      txt.appendChild(ph);
+      return;
     }
-    if (sel.length) {
-      var mas = document.createElement('span');
-      mas.className = 'gu-mas';
-      mas.textContent = '+ agregar';
-      campo.appendChild(mas);
-    }
-    var caret = document.createElement('span');
-    caret.className = 'gu-caret';
-    caret.innerHTML = '&#9660;';
-    campo.appendChild(caret);
-  }
-
-  function marcar(){
-    filas.forEach(function(f){
-      var yo = sel.indexOf(f.dataset.id) !== -1;
-      f.classList.toggle('gu-yo', yo);
-      f.querySelector('.gu-tick').innerHTML = yo ? '&#10003;' : '';
-      // una unidad ya elegida por ESTE deal siempre se puede des-seleccionar
-      if (yo) f.classList.remove('gu-no');
+    sel.forEach(function(id, i){
+      var d = datos(id);
+      if (i) {
+        var s = document.createElement('span');
+        s.className = 'gu-sep'; s.textContent = '\u00b7';
+        txt.appendChild(s);
+      }
+      var w = document.createElement('span');
+      w.appendChild(document.createTextNode(d.cod + ' '));
+      var p = document.createElement('span');
+      p.className = 'gu-proyname'; p.textContent = '(' + d.proy + ')';
+      w.appendChild(p);
+      txt.appendChild(w);
     });
   }
+
+  /** Dentro del desplegable: lo elegido arriba, en azul y con la X. */
+  function pintarElegidas(){
+    elegidas.innerHTML = '';
+    if (!sel.length) { elegidas.style.display = 'none'; return; }
+    elegidas.style.display = '';
+    var t = document.createElement('div');
+    t.className = 'gu-eltit';
+    t.textContent = 'Elegidas';
+    elegidas.appendChild(t);
+    sel.forEach(function(id){
+      var d = datos(id);
+      var row = document.createElement('div');
+      row.className = 'gu-el';
+      row.innerHTML = '<span class="gu-elcod"></span><span class="gu-elproy"></span><b title="Quitar">&times;</b>';
+      row.children[0].textContent = d.cod;
+      row.children[1].textContent = d.proy;
+      row.children[2].addEventListener('click', function(e){
+        e.stopPropagation();
+        sel = sel.filter(function(x){ return x !== id; });
+        val.value = sel.join(',');
+        pintar(); pintarElegidas(); filtrar(); ajustarIframe(); guardar();
+      });
+      elegidas.appendChild(row);
+    });
+  }
+
 
   function ajustarIframe(){
     // cerrado: exactamente el alto del contenido. Si el iframe queda más alto que
@@ -470,10 +488,13 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     var t = q.value.trim().toUpperCase();
     var n = 0;
     filas.forEach(function(f){
+      // las ya elegidas no se repiten en el listado: salen arriba, en "Elegidas".
+      // Y con el filtro "Disponibles" tampoco aparecen las ocupadas.
       var yo = sel.indexOf(f.dataset.id) !== -1;
-      var ok = (!cat || f.dataset.cat === cat)
+      var ok = !yo
+            && (!cat || f.dataset.cat === cat)
             && (!t || f.dataset.cod.indexOf(t) !== -1)
-            && (!soloLibres || f.dataset.libre === '1' || yo);
+            && (!soloLibres || f.dataset.libre === '1');
       f.style.display = ok ? '' : 'none';
       if (ok) n++;
     });
@@ -532,17 +553,16 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   lista.addEventListener('click', function(e){
     var f = e.target.closest('.gu-fila'); if (!f) return;
     var id = f.dataset.id;
-    var yo = sel.indexOf(id) !== -1;
-    if (!yo && f.dataset.libre !== '1') return;   // ocupada por otro deal: no seleccionable
-    if (yo) sel = sel.filter(function(x){ return x !== id; });
-    else    sel.push(id);
+    if (f.dataset.libre !== '1') return;          // ocupada: no seleccionable
+    if (sel.indexOf(id) !== -1) return;           // ya elegida (se quita desde "Elegidas")
+    sel.push(id);
     val.value = sel.join(',');
-    pintarChips(); marcar(); filtrar(); ajustarIframe(); guardar();
+    pintar(); pintarElegidas(); filtrar(); ajustarIframe(); guardar();
   });
 
   document.addEventListener('click', function(){ abrirMenu(false); });
 
-  pintarChips(); marcar();
+  pintar(); pintarElegidas();
   function iniciar(){ ajustarIframe(); }
   if (typeof BX24 !== 'undefined') { try { BX24.init(iniciar); } catch(e) { iniciar(); } }
   else { window.addEventListener('load', iniciar); setTimeout(iniciar, 600); }
