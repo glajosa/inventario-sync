@@ -113,7 +113,12 @@ do {
 $rev = [];
 foreach (stages_map() as $cat => $m) foreach ($m as $nombre => $sid) $rev[$sid] = $nombre;
 
-$porStage = []; $conDueno = 0; $ocupadaSinDueno = []; $libreConDueno = [];
+// Las apartadas desde Prospectos(28) están RESERVADO a propósito y SIN parentId2
+// (la dependencia nace solo en CLIENTES). Sin separarlas, saldrían todas como
+// "ocupadas sin dueño" y el chequeo daría falsa alarma cada vez.
+$apartadas = apartados_28();
+
+$porStage = []; $conDueno = 0; $ocupadaSinDueno = []; $libreConDueno = []; $apart = [];
 $start = 0;
 do {
     $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'order' => ['id' => 'ASC'], 'start' => $start]);
@@ -126,7 +131,9 @@ do {
         if ($dueno) $conDueno++;
 
         $ocupado = in_array($stage, ['RESERVADO', 'FIRMADO', 'VENDIDO'], true);
-        if ($ocupado && !$dueno)            $ocupadaSinDueno[] = "$id($stage)";
+        if ($ocupado && !$dueno && isset($apartadas[$id])) {
+            $apart[] = "$id(deal28 {$apartadas[$id]['deal']})";
+        } elseif ($ocupado && !$dueno)      $ocupadaSinDueno[] = "$id($stage)";
         if (!$ocupado && $dueno && $stage === 'DISPONIBLE') $libreConDueno[] = "$id(deal $dueno)";
     }
     $start = $r['next'] ?? null;
@@ -153,7 +160,9 @@ ksort($porStage);
 foreach ($porStage as $s => $n) echo str_pad($s, 16) . ": $n\n";
 echo "con dependencia (parentId2): $conDueno\n";
 
-echo "\nocupadas SIN dueño (" . count($ocupadaSinDueno) . "): "
+echo "\napartadas desde Prospectos 28 (" . count($apart) . "): "
+   . implode(' ', array_slice($apart, 0, 40)) . (count($apart) > 40 ? ' ...' : '') . "\n";
+echo "ocupadas SIN dueño ni apartado (" . count($ocupadaSinDueno) . "): "
    . implode(' ', array_slice($ocupadaSinDueno, 0, 40)) . (count($ocupadaSinDueno) > 40 ? ' ...' : '') . "\n";
 echo "DISPONIBLE con dueño (" . count($libreConDueno) . "): "
    . implode(' ', array_slice($libreConDueno, 0, 40)) . (count($libreConDueno) > 40 ? ' ...' : '') . "\n";
