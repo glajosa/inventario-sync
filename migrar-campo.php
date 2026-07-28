@@ -34,7 +34,9 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
 $aplicar = !empty($_GET['aplicar']);
 $limite  = (int)($_GET['limite'] ?? 0);
 
-const VIEJOS = ['UF_CRM_DEAL_1784994996', 'UF_CRM_DEAL_1784995021', 'UF_CRM_DEAL_1784995044'];
+// UF_CRM_1782666709 ("Unidad (Inventario)") tambien apunta al SPA 1072 y estaba
+// fuera de todas las listas: la migracion no lo leia y la auditoria no lo revisaba.
+const VIEJOS = ['UF_CRM_1782666709', 'UF_CRM_DEAL_1784994996', 'UF_CRM_DEAL_1784995021', 'UF_CRM_DEAL_1784995044'];
 
 echo $aplicar ? "MODO: APLICAR (escribe)\n\n" : "MODO: SIMULACRO (no escribe nada)\n\n";
 
@@ -82,6 +84,7 @@ do {
         // respaldo del estado anterior ANTES de escribir, por si hay que volver
         $respaldo[(string)$d['ID']] = [
             'PARENT_ID_1072' => $d['PARENT_ID_1072'] ?? null,
+            'UF_CRM_1782666709' => $d['UF_CRM_1782666709'] ?? null,
             'UF_CRM_DEAL_1784994996' => $d['UF_CRM_DEAL_1784994996'] ?? null,
             'UF_CRM_DEAL_1784995021' => $d['UF_CRM_DEAL_1784995021'] ?? null,
             'UF_CRM_DEAL_1784995044' => $d['UF_CRM_DEAL_1784995044'] ?? null,
@@ -95,6 +98,7 @@ do {
             $u = bx('crm.deal.update', ['id' => $d['ID'], 'fields' => [
                 CAMPO_NUEVO              => $destino,
                 'PARENT_ID_1072'         => '',
+                'UF_CRM_1782666709'      => '',
                 'UF_CRM_DEAL_1784994996' => '',
                 'UF_CRM_DEAL_1784995021' => '',
                 'UF_CRM_DEAL_1784995044' => '',

@@ -31,6 +31,7 @@ const CATEGORY_ID   = 44;                       // pipeline CLIENTES
 const SPA_ENTITY    = 1072;                      // SPA Inventario
 const CAMPO_NUEVO   = 'UF_CRM_1785205972989';    // campo "Inventario" (tipo propio, multi)
 const FIELDS_EXTRA  = [                          // "Inventario 2/3/4" en el deal
+    'UF_CRM_1782666709',
     'UF_CRM_DEAL_1784994996',
     'UF_CRM_DEAL_1784995021',
     'UF_CRM_DEAL_1784995044',

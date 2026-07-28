@@ -21,7 +21,7 @@ declare(strict_types=1);
 const CATEGORY_ID  = 44;
 const SPA_ENTITY   = 1072;
 const CAMPO_NUEVO  = 'UF_CRM_1785205972989';   // campo "Inventario" (tipo propio, multi)
-const FIELDS_EXTRA = ['UF_CRM_DEAL_1784994996','UF_CRM_DEAL_1784995021','UF_CRM_DEAL_1784995044'];
+const FIELDS_EXTRA = ['UF_CRM_1782666709','UF_CRM_DEAL_1784994996','UF_CRM_DEAL_1784995021','UF_CRM_DEAL_1784995044'];
 
 $DATA_DIR   = getenv('DATA_DIR') ?: '/data';
 $LOG_FILE   = $DATA_DIR . '/sync.log';
@@ -114,7 +114,7 @@ do {
 foreach (FIELDS_EXTRA as $f) {
     $r = bx('crm.deal.list', [
         'filter' => ['CATEGORY_ID' => CATEGORY_ID, '!' . $f => ''],
-        'select' => ['ID', 'UF_CRM_DEAL_1784994996', 'UF_CRM_DEAL_1784995021', 'UF_CRM_DEAL_1784995044'],
+        'select' => array_merge(['ID'], FIELDS_EXTRA),
     ]);
     if (!$r['ok']) { logline("RECONCILE ERR list($f): {$r['error']}"); if ($isHttp) echo "err\n"; exit(1); }
     foreach (($r['result'] ?? []) as $d) {

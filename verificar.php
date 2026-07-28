@@ -27,7 +27,7 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
     http_response_code(403); exit('forbidden');
 }
 
-const VIEJOS_V = ['PARENT_ID_1072', 'UF_CRM_DEAL_1784994996',
+const VIEJOS_V = ['PARENT_ID_1072', 'UF_CRM_1782666709', 'UF_CRM_DEAL_1784994996',
                   'UF_CRM_DEAL_1784995021', 'UF_CRM_DEAL_1784995044'];
 
 // ?unidad=1287[,1289] -> rastrea una unidad: su estado y qué deals la nombran,
