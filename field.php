@@ -621,6 +621,19 @@ foreach ($elegidos as $id) {
   pintar(); pintarElegidas();
   function iniciar(){ ajustarIframe(); }
   if (typeof BX24 !== 'undefined') { try { BX24.init(iniciar); } catch(e) { iniciar(); } }
+
+  // TEMPORAL (diagnóstico): qué comandos expone el placement de este campo.
+  // Se necesita para saber cómo reportarle el valor al formulario de Bitrix, que
+  // hoy no lo ve y por eso el campo obligatorio bloquea el cambio de etapa.
+  try {
+    if (typeof BX24 !== 'undefined' && BX24.placement && BX24.placement.getInterface) {
+      BX24.placement.getInterface(function(res){
+        try { fetch('dbg.php?i=' + encodeURIComponent(JSON.stringify(res))); } catch(e) {}
+      });
+    } else {
+      fetch('dbg.php?i=' + encodeURIComponent('sin BX24.placement.getInterface'));
+    }
+  } catch(e) {}
   else { window.addEventListener('load', iniciar); setTimeout(iniciar, 600); }
 })();
 </script>
