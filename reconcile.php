@@ -39,8 +39,13 @@ if ($isHttp) {
 require_once __DIR__ . '/stagelib.php';   // stages (Clientes re-afirmar + Cobranzas read-only)
 
 function logline(string $msg): void {
-    global $LOG_FILE;
-    @file_put_contents($LOG_FILE, gmdate('Y-m-d\TH:i:s\Z') . '  ' . $msg . "\n", FILE_APPEND | LOCK_EX);
+    global $LOG_FILE, $DATA_DIR;
+    $line = gmdate('Y-m-d\TH:i:s\Z') . '  ' . $msg . "\n";
+    // Por cron corre como root y escribe en sync.log; por HTTP corre como Apache,
+    // que NO puede escribir ese archivo y perdía toda la traza en silencio.
+    if (@file_put_contents($LOG_FILE, $line, FILE_APPEND | LOCK_EX) === false) {
+        @file_put_contents($DATA_DIR . '/web.log', $line, FILE_APPEND | LOCK_EX);
+    }
 }
 
 function bx(string $method, array $params = []): array {

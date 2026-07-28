@@ -30,6 +30,32 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
 const VIEJOS_V = ['PARENT_ID_1072', 'UF_CRM_DEAL_1784994996',
                   'UF_CRM_DEAL_1784995021', 'UF_CRM_DEAL_1784995044'];
 
+// ?unidad=1287[,1289] -> rastrea una unidad: su estado y qué deals la nombran,
+// en CUALQUIER pipeline. Para saber si una unidad ocupada tiene dueño real.
+if (!empty($_GET['unidad'])) {
+    $rev0 = [];
+    foreach (stages_map() as $c => $m) foreach ($m as $n => $sid) $rev0[$sid] = $n;
+    foreach (explode(',', (string)$_GET['unidad']) as $uu) {
+        $uu = (int)trim($uu); if ($uu <= 0) continue;
+        $g = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $uu]);
+        $it = $g['result']['item'] ?? $g['result'] ?? [];
+        echo "unidad $uu  " . ($it['title'] ?? '?')
+           . "\n  stage    : " . ($rev0[(string)($it['stageId'] ?? '')] ?? ('?' . ($it['stageId'] ?? '')))
+           . "\n  parentId2: " . var_export($it['parentId2'] ?? null, true)
+           . "\n  contactId: " . var_export($it['contactId'] ?? null, true) . "\n";
+        foreach (array_merge([CAMPO_NUEVO], VIEJOS_V) as $f) {
+            $op = ($f === CAMPO_NUEVO) ? '%' . $f : $f;   // el nuevo guarda "581,623"
+            $r = bx('crm.deal.list', ['filter' => [$op => $uu],
+                                      'select' => ['ID', 'TITLE', 'CATEGORY_ID', 'STAGE_ID']]);
+            foreach (($r['result'] ?? []) as $d) {
+                echo "  la nombra: deal {$d['ID']} (cat {$d['CATEGORY_ID']}, {$d['STAGE_ID']}) por $f — {$d['TITLE']}\n";
+            }
+        }
+        echo "\n";
+    }
+    exit;
+}
+
 // ---- lado DEALS ------------------------------------------------------------
 $conNuevo = 0; $conViejo = []; $reclamos = [];
 $start = 0;
