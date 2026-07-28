@@ -193,6 +193,8 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   /* el código abre la ficha de la unidad, como hacían los campos nativos */
   #<?= $uid ?> .gu-ir{color:#0969da;cursor:pointer}
   #<?= $uid ?> .gu-ir:hover{text-decoration:underline}
+  /* el nombre completo de la unidad es el enlace: código Y proyecto en azul */
+  #<?= $uid ?> .gu-ir .gu-proyname{color:inherit}
 
   /* dentro del desplegable: lo elegido, en azul y con la ✕ */
   #<?= $uid ?> .gu-elegidas{border-bottom:1px solid #eaeef2;background:#f6faff}
@@ -288,8 +290,8 @@ $piezas = [];
 foreach ($elegidos as $id) {
     $u = $porId[(string)$id] ?? null;
     $piezas[] = $u
-        ? '<span class="gu-ir" data-ir="' . (int)$id . '">' . h($u['codigo']) . '</span>'
-          . ' <span class="gu-proyname">(' . h($proys[(string)$u['cat']] ?? '') . ')</span>'
+        ? '<span class="gu-ir" data-ir="' . (int)$id . '">' . h($u['codigo'])
+          . ' <span class="gu-proyname">(' . h($proys[(string)$u['cat']] ?? '') . ')</span></span>'
         : '<span class="gu-ir" data-ir="' . (int)$id . '">#' . h((string)$id) . '</span>';
 }
 ?>
@@ -488,16 +490,15 @@ foreach ($elegidos as $id) {
         s.className = 'gu-sep'; s.textContent = '\u00b7';
         txt.appendChild(s);
       }
-      var w = document.createElement('span');
+      // todo el nombre (código + proyecto) es un solo enlace
       var a = document.createElement('span');
-      a.className = 'gu-ir'; a.dataset.ir = id; a.textContent = d.cod;
+      a.className = 'gu-ir'; a.dataset.ir = id;
       a.title = 'Abrir la ficha de la unidad';
-      w.appendChild(a);
-      w.appendChild(document.createTextNode(' '));
+      a.appendChild(document.createTextNode(d.cod + ' '));
       var p = document.createElement('span');
       p.className = 'gu-proyname'; p.textContent = '(' + d.proy + ')';
-      w.appendChild(p);
-      txt.appendChild(w);
+      a.appendChild(p);
+      txt.appendChild(a);
     });
   }
 
