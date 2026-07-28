@@ -54,7 +54,13 @@ function bx(string $method, array $params = []): array {
             if (in_array($j['error'], ['QUERY_LIMIT_EXCEEDED', 'OPERATION_TIME_LIMIT'], true) && $try < 3) {
                 sleep(2 + $try); continue;
             }
-            return ['ok' => false, 'error' => (string)$j['error']];
+            // Bitrix a veces manda error:"" con el motivo real en
+            // error_description. Devolver solo $j['error'] dejaba errores
+            // vacíos ("error":"") imposibles de diagnosticar.
+            $e = trim((string)$j['error']);
+            $d = trim((string)($j['error_description'] ?? ''));
+            if ($e === '' && $d === '') $e = 'error-sin-detalle';
+            return ['ok' => false, 'error' => $d !== '' ? ($e !== '' ? "$e: $d" : $d) : $e];
         }
         if (!is_array($j)) { if ($try < 3) { sleep(1); continue; } return ['ok' => false, 'error' => 'bad-json']; }
         return ['ok' => true, 'result' => $j['result'] ?? null, 'next' => $j['next'] ?? null];
@@ -114,6 +120,29 @@ function ids_de(string $v): array {
 }
 
 /**
+ * De una lista de IDs, devuelve las que SÍ se pueden atar a este deal:
+ * existen y están libres (parentId2 = 0) o ya son de este mismo deal.
+ *
+ * Sirve de portero: sin esto se podía guardar un ID inventado, o una unidad
+ * que otro vendedor ya tenía atada (doble venta). La lista del campo las
+ * bloquea visualmente, pero eso es solo la pantalla; el servidor debe validar.
+ */
+function unidades_asignables(array $ids, int $dealId): array {
+    if (!$ids) return [];
+    // sin `select`: con select explícito Bitrix devuelve id en null (bug verificado)
+    $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => ['@id' => $ids]]);
+    if (!$r['ok']) return [];
+    $ok = [];
+    foreach (($r['result']['items'] ?? []) as $it) {
+        $id = (int)($it['id'] ?? 0);
+        if (!$id) continue;
+        $dueno = (int)($it['parentId2'] ?? 0);
+        if ($dueno === 0 || $dueno === $dealId) $ok[] = $id;
+    }
+    return $ok;
+}
+
+/**
  * Sincroniza un deal: deja atadas exactamente las unidades del campo.
  * Devuelve un resumen para el log.
  */
@@ -167,12 +196,10 @@ function sincronizar_deal(int $dealId): array {
         apply_unit_stage($uid, null, 'DISPONIBLE', false);  // se quitó del deal -> libre
     }
 
-    // la relación nativa se mantiene con la PRIMERA unidad, para no perder la
-    // dependencia que Bitrix ya mostraba con los campos anteriores
-    $primera = $quiere[0] ?? 0;
-    if ((int)($deal['PARENT_ID_1072'] ?? 0) !== (int)$primera) {
-        bx('crm.deal.update', ['id' => $dealId, 'fields' => ['PARENT_ID_1072' => $primera ?: '']]);
-    }
+    // Ya NO se copia la primera unidad al campo nativo PARENT_ID_1072: los 4
+    // campos anteriores salen de circulación y ese reflejo solo confundía (una
+    // unidad elegida aquí aparecía además en el campo viejo de arriba). La
+    // dependencia real que ve el usuario en la unidad la da parentId2, no esto.
 
     // que la lista del selector muestre el estado nuevo de inmediato
     refrescar_cache(array_values(array_unique(array_merge($quiere, $soltar))));

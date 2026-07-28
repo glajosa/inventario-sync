@@ -134,12 +134,27 @@ function sync_unit_owner(int $unitId, array $deal): bool {
     return false;
 }
 
-/** Unidades (ids) atadas a un deal de Clientes: parentId2=deal + PARENT_ID_1072 del deal. */
+/**
+ * Unidades (ids) atadas a un deal de Clientes.
+ * Fuentes: parentId2=deal, el campo "Inventario" nuevo, y PARENT_ID_1072.
+ *
+ * Aquí NO se hace `select` a propósito: con select explícito Bitrix devuelve los
+ * ids en null (bug verificado), y esta lista se quedaba vacía. Se sostenía sola
+ * por PARENT_ID_1072 — que ya no se llena — así que sin el campo nuevo el
+ * re-afirmado de stages del barrido se quedaba sin ninguna fuente.
+ */
 function units_of_clientes_deal(string $dealId, ?array $deal = null): array {
     $ids = [];
-    $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => ['parentId2' => $dealId], 'select' => ['id']]);
-    if ($r['ok']) foreach (($r['result']['items'] ?? []) as $it) $ids[(int)$it['id']] = true;
+    $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => ['parentId2' => $dealId]]);
+    if ($r['ok']) foreach (($r['result']['items'] ?? []) as $it) {
+        if (!empty($it['id'])) $ids[(int)$it['id']] = true;
+    }
     if ($deal === null) { $g = bx('crm.deal.get', ['id' => $dealId]); if ($g['ok']) $deal = $g['result']; }
+
+    foreach (preg_split('/[,;\s]+/', (string)($deal['UF_CRM_1785205972989'] ?? '')) as $x) {
+        $x = trim($x);
+        if ($x !== '' && ctype_digit($x) && (int)$x > 0) $ids[(int)$x] = true;
+    }
     $p = (int)($deal['PARENT_ID_1072'] ?? 0);
     if ($p > 0) $ids[$p] = true;
     return array_keys($ids);

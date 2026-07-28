@@ -41,7 +41,33 @@ foreach (preg_split('/[,;\s]+/', $valor) as $x) {
     $x = trim($x);
     if ($x !== '' && ctype_digit($x) && (int)$x > 0) $ids[] = (int)$x;
 }
-$limpio = implode(',', array_values(array_unique($ids)));
+$ids    = array_values(array_unique($ids));
+$limpio = implode(',', $ids);
+
+// El pipeline se valida ANTES de escribir. Antes se escribía primero y el
+// sincronizador rechazaba después: el campo quedaba con un valor que nunca se
+// convertía en enlace, y la respuesta decía ok:true (falso éxito).
+$g = bx('crm.deal.get', ['id' => $dealId]);
+if (!$g['ok']) {
+    logline("deal=$dealId no existe: {$g['error']}");
+    echo json_encode(['ok' => false, 'error' => 'el deal no existe']); exit;
+}
+if ((int)($g['result']['CATEGORY_ID'] ?? -1) !== CLIENTES_CAT) {
+    logline("deal=$dealId RECHAZADO: no es CLIENTES(44)");
+    echo json_encode(['ok' => false, 'error' => 'Las unidades solo se atan en el pipeline CLIENTES']); exit;
+}
+
+// Las unidades deben existir y no estar tomadas por OTRO deal (anti doble-venta).
+if ($ids) {
+    $libres = unidades_asignables($ids, $dealId);
+    $malas  = array_values(array_diff($ids, $libres));
+    if ($malas) {
+        logline("deal=$dealId RECHAZADO unidades no asignables: " . implode(',', $malas));
+        echo json_encode(['ok' => false,
+            'error' => 'Unidad no disponible o inexistente: ' . implode(', ', $malas)]);
+        exit;
+    }
+}
 
 $up = bx('crm.deal.update', ['id' => $dealId, 'fields' => [CAMPO_NUEVO => $limpio]]);
 if (!$up['ok']) {

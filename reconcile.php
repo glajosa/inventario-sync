@@ -72,27 +72,18 @@ function bx(string $method, array $params = []): array {
 }
 
 // ---- DESEADO: unidad => deal ---------------------------------------------------
-// UNIÓN de las dos fuentes: el campo nuevo "Inventario" y los viejos Inv 2/3/4.
-// Si solo se miraran los viejos, este barrido DESATABA cada 15 min lo que había
-// guardado el campo nuevo; si solo se mirara el nuevo, desataría los 778 deals
-// que todavía viven en los campos viejos.
-$desired = [];   // unitId => dealId
-foreach (FIELDS_EXTRA as $f) {
-    $r = bx('crm.deal.list', [
-        'filter' => ['CATEGORY_ID' => CATEGORY_ID, '!' . $f => ''],
-        'select' => ['ID', 'UF_CRM_DEAL_1784994996', 'UF_CRM_DEAL_1784995021', 'UF_CRM_DEAL_1784995044'],
-    ]);
-    if (!$r['ok']) { logline("RECONCILE ERR list($f): {$r['error']}"); if ($isHttp) echo "err\n"; exit(1); }
-    foreach (($r['result'] ?? []) as $d) {
-        $dealId = (string)$d['ID'];
-        foreach (FIELDS_EXTRA as $ff) {
-            $v = $d[$ff] ?? '';
-            if ($v !== '' && $v !== null && (int)$v > 0) $desired[(int)$v] = $dealId;
-        }
-    }
-}
+// PRECEDENCIA, no unión: para cada deal, si el campo nuevo "Inventario" tiene
+// algo, ese manda y los viejos Inv 2/3/4 se ignoran. Si está vacío, se usan los
+// viejos (deals sin migrar).
+//
+// Antes se hacía la UNIÓN de las dos fuentes, y eso era un error de fondo: en un
+// deal ya migrado los dos campos están llenos, así que al quitar una unidad del
+// campo nuevo este barrido la veía todavía en el viejo y la volvía a atar cada
+// 15 minutos. Quitar una unidad era imposible.
+$desired  = [];   // unitId => dealId
+$migrados = [];   // dealId => true  (tiene campo nuevo con valor: manda ese)
 
-// campo nuevo (varias unidades separadas por coma en un solo campo)
+// 1) campo nuevo primero (varias unidades separadas por coma en un solo campo)
 $start = 0;
 do {
     $r = bx('crm.deal.list', [
@@ -105,11 +96,31 @@ do {
         $dealId = (string)$d['ID'];
         foreach (preg_split('/[,;\s]+/', (string)($d[CAMPO_NUEVO] ?? '')) as $x) {
             $x = trim($x);
-            if ($x !== '' && ctype_digit($x) && (int)$x > 0) $desired[(int)$x] = $dealId;
+            if ($x !== '' && ctype_digit($x) && (int)$x > 0) {
+                $desired[(int)$x]    = $dealId;
+                $migrados[$dealId]   = true;
+            }
         }
     }
     $start = $r['next'] ?? null;
 } while ($start !== null && $start !== '');
+
+// 2) campos viejos, SOLO para los deals que no tienen campo nuevo
+foreach (FIELDS_EXTRA as $f) {
+    $r = bx('crm.deal.list', [
+        'filter' => ['CATEGORY_ID' => CATEGORY_ID, '!' . $f => ''],
+        'select' => ['ID', 'UF_CRM_DEAL_1784994996', 'UF_CRM_DEAL_1784995021', 'UF_CRM_DEAL_1784995044'],
+    ]);
+    if (!$r['ok']) { logline("RECONCILE ERR list($f): {$r['error']}"); if ($isHttp) echo "err\n"; exit(1); }
+    foreach (($r['result'] ?? []) as $d) {
+        $dealId = (string)$d['ID'];
+        if (isset($migrados[$dealId])) continue;      // el campo nuevo ya decidió
+        foreach (FIELDS_EXTRA as $ff) {
+            $v = $d[$ff] ?? '';
+            if ($v !== '' && $v !== null && (int)$v > 0) $desired[(int)$v] = $dealId;
+        }
+    }
+}
 
 // ---- ACTUAL: unidad => deal, según parentId2 de las unidades ------------------
 // paginamos unidades con parentId2 != 0 (son pocas: las atadas por este sistema)
@@ -181,7 +192,9 @@ foreach (CLIENTES_TRIGGERS as $stageId => $target) {
     do {
         $r = bx('crm.deal.list', [
             'filter' => ['CATEGORY_ID' => CLIENTES_CAT, 'STAGE_ID' => $stageId],
-            'select' => ['ID', 'PARENT_ID_1072', 'STAGE_ID', 'ASSIGNED_BY_ID', 'CONTACT_ID'],
+            // CAMPO_NUEVO va en el select: units_of_clientes_deal() lo lee de aquí.
+            // Sin él, los deals que viven en el campo nuevo no re-afirmaban stage.
+            'select' => ['ID', 'PARENT_ID_1072', CAMPO_NUEVO, 'STAGE_ID', 'ASSIGNED_BY_ID', 'CONTACT_ID'],
             'start'  => $start,
         ]);
         if (!$r['ok']) { logline("RECONCILE ERR clientes($stageId): {$r['error']}"); break; }

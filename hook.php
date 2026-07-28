@@ -188,19 +188,22 @@ if (!$r['ok']) { logline("ERR get deal=$dealId: {$r['error']}"); echo 'err-get';
 $deal = $r['result'];
 
 // Unidades que el deal DICE tener.
-// UNIÓN de las dos fuentes: el campo nuevo "Inventario" (varias unidades en uno)
-// y los viejos Inventario 2/3/4. Mientras existan las dos, hay que respetar ambas:
-// si solo se mirara la nueva, los 778 deals que aún viven en los campos viejos
-// verían sus unidades DESATADAS; y si solo se miraran las viejas, este hook
-// borraba lo que acababa de guardar el campo nuevo (era el caso real).
+// PRECEDENCIA, no unión: si el campo nuevo "Inventario" tiene algo, ese manda y
+// los viejos se ignoran. Si está vacío, se cae a los viejos (deals sin migrar).
+//
+// Antes se hacía la UNIÓN y eso era un error de fondo: en un deal ya migrado los
+// dos campos están llenos, así que al quitar una unidad del campo nuevo la unión
+// la veía todavía en el viejo y la volvía a atar. El cambio rebotaba solo.
 $quieren = [];
-foreach (FIELDS_EXTRA as $f) {
-    $v = $deal[$f] ?? '';
-    if ($v !== '' && $v !== null && (int)$v > 0) $quieren[(int)$v] = true;
-}
 foreach (preg_split('/[,;\s]+/', (string)($deal[CAMPO_NUEVO] ?? '')) as $x) {
     $x = trim($x);
     if ($x !== '' && ctype_digit($x) && (int)$x > 0) $quieren[(int)$x] = true;
+}
+if (!$quieren) {
+    foreach (FIELDS_EXTRA as $f) {
+        $v = $deal[$f] ?? '';
+        if ($v !== '' && $v !== null && (int)$v > 0) $quieren[(int)$v] = true;
+    }
 }
 $quieren = array_keys($quieren);   // ids de unidades objetivo
 
