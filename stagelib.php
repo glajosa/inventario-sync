@@ -265,8 +265,13 @@ function etapas_28_activas(): array {
  * Si dos deals del 28 nombran la misma unidad gana el MÁS RECIENTE — la misma
  * regla que usa referidor.php para emparejar copias entre pipelines.
  */
-function apartados_28(): array {
+function apartados_28(?bool &$fiable = null): array {
+    // $fiable = false si alguna página falló: la lista quedó incompleta y NO se
+    // puede usar para decidir liberaciones. Sin esto, un hipo del API devolvía la
+    // lista a medias y el barrido soltaba TODOS los apartados vigentes.
+    $fiable = true;
     $activas = etapas_28_activas();
+    if (!$activas) $fiable = false;          // sin el mapa de etapas no se filtra bien
     $out = [];
     $start = 0;
     do {
@@ -276,7 +281,7 @@ function apartados_28(): array {
             'order'  => ['ID' => 'ASC'],
             'start'  => $start,
         ]);
-        if (!$r['ok']) return $out;
+        if (!$r['ok']) { $fiable = false; return $out; }
         foreach (($r['result'] ?? []) as $d) {
             if ($activas && !in_array((string)($d['STAGE_ID'] ?? ''), $activas, true)) continue;
             $cand = ['deal'     => (int)$d['ID'],

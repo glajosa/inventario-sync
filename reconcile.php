@@ -177,10 +177,20 @@ foreach ($actual as $unit => $deal) {
 // ya venían ocupadas sin dueño de antes NO se tocan: liberarlas sería decidir
 // sobre datos reales del negocio por cuenta propia.
 $apartCambios = 0;
-$puestos = apartados_puestos();
+$puestos  = apartados_puestos();
+$vigentes = null;
 if ($puestos) {
-    $vigentes = apartados_28();
-    $quedan   = [];
+    $fiable   = true;
+    $vigentes = apartados_28($fiable);
+    // Si la lista no es fiable NO se libera nada: soltar por un error de consulta
+    // dejaría libres unidades que un vendedor acaba de apartar.
+    if (!$fiable) {
+        logline('RECONCILE apartados: lista no fiable, no se libera nada');
+        $vigentes = null;
+    }
+}
+if ($puestos && $vigentes !== null) {
+    $quedan = [];
     foreach ($puestos as $uid => $dealDe) {
         if (isset($vigentes[(int)$uid])) { $quedan[$uid] = $dealDe; continue; }
         if (isset($desired[(int)$uid]))  continue;   // CLIENTES ya la tomó de verdad
