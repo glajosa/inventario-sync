@@ -121,10 +121,12 @@ if ($mode === 'view') {
     ?>
     <script src="//api.bitrix24.com/api/v1/"></script>
     <style>
-      html,body{margin:0;padding:0;background:transparent;overflow:hidden;height:100%}
+      /* alto del documento chico a propósito: si Bitrix mide el contenido para
+         dimensionar el iframe, así lo encoge; si no, al menos no queda hueco. */
+      html,body{margin:0;padding:0;background:transparent;overflow:hidden;height:auto;max-height:26px}
       #guv{font:13.5px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-           color:#1f2328;min-height:100%;display:flex;align-items:center;padding:0 7px;
-           flex-wrap:wrap;gap:4px}
+           color:#1f2328;height:26px;display:flex;align-items:center;padding:0 7px;gap:4px;
+           white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     </style>
     <div id="guv"><?= $texto ?></div>
     <script>
