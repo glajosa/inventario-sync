@@ -278,8 +278,21 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   };
 </script>
 
+<?php
+// El texto se imprime YA desde el servidor: si el JS tarda o falla, el campo
+// igual muestra su valor en vez de quedar como un cuadro vacío.
+$piezas = [];
+foreach ($elegidos as $id) {
+    $u = $porId[(string)$id] ?? null;
+    $piezas[] = $u
+        ? h($u['codigo']) . ' <span class="gu-proyname">(' . h($proys[(string)$u['cat']] ?? '') . ')</span>'
+        : '#' . h((string)$id);
+}
+?>
 <div class="gu-campo" id="<?= $uid ?>_campo">
-  <span class="gu-txt" id="<?= $uid ?>_txt"></span>
+  <span class="gu-txt" id="<?= $uid ?>_txt"><?= $piezas
+      ? implode('<span class="gu-sep">&middot;</span>', $piezas)
+      : '<span class="gu-ph">Elegir unidad&hellip;</span>' ?></span>
   <span class="gu-caret">&#9660;</span>
 </div>
 
@@ -384,7 +397,7 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   var guardando = false;
   function guardar(){
     if (!CFG.deal || !CFG.firma) { avisar('este campo solo guarda dentro de un deal', true); return; }
-    guardando = true; avisar('guardando…');
+    guardando = true;
 
     // Se llama a NUESTRO servidor (mismo dominio que este iframe). Llamar al API
     // de Bitrix directo desde aquí lo bloquea el navegador por ser otro dominio
@@ -398,8 +411,9 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
       .then(function(r){ return r.json(); })
       .then(function(j){
         guardando = false;
+        // solo se avisa si FALLA: en el camino bueno la interfaz queda limpia
         if (!j || !j.ok) { avisar('no se pudo guardar: ' + ((j && j.error) || '?'), true); return; }
-        avisar('guardado');
+        filtrar();
       })
       .catch(function(e){ guardando = false; avisar('error de red', true); });
   }
@@ -411,6 +425,19 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     p.style.color = err ? '#cf222e' : '#57606a';
     p.textContent = txt;
     if (!err) setTimeout(function(){ if (p.dataset.msg === txt) filtrar(); }, 1400);
+  }
+
+  /** Marca la fila como libre/ocupada en el momento, sin recargar. */
+  function marcarFila(id, libre){
+    var f = filas.filter(function(x){ return x.dataset.id === id; })[0];
+    if (!f) return;
+    f.dataset.libre = libre ? '1' : '0';
+    f.classList.toggle('gu-no', !libre);
+    var tag = f.querySelector('.gu-tag');
+    if (tag) {
+      tag.className = 'gu-tag ' + (libre ? 'DISPONIBLE' : 'RESERVADO');
+      tag.textContent = libre ? 'DISPONIBLE' : 'RESERVADO';
+    }
   }
 
   function datos(id){
@@ -464,6 +491,7 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
         e.stopPropagation();
         sel = sel.filter(function(x){ return x !== id; });
         val.value = sel.join(',');
+        marcarFila(id, true);        // se libera: vuelve a aparecer en Disponibles
         pintar(); pintarElegidas(); filtrar(); ajustarIframe(); guardar();
       });
       elegidas.appendChild(row);
@@ -557,6 +585,7 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     if (sel.indexOf(id) !== -1) return;           // ya elegida (se quita desde "Elegidas")
     sel.push(id);
     val.value = sel.join(',');
+    marcarFila(id, false);          // queda tomada por este deal
     pintar(); pintarElegidas(); filtrar(); ajustarIframe(); guardar();
   });
 
