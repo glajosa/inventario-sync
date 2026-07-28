@@ -131,16 +131,19 @@ if ($mode === 'view') {
       (function(){
         function ajustar(){
           var el = document.getElementById('guv');
-          var alto = Math.max(24, el ? el.scrollHeight : 24);
+          var alto  = Math.max(24, el ? el.scrollHeight : 24);
+          var ancho = Math.max(200, document.documentElement.scrollWidth || 0);
           try {
-            if (typeof BX24 !== 'undefined' && BX24.resizeWindow) {
-              BX24.resizeWindow(document.documentElement.scrollWidth, alto);
+            if (typeof BX24 !== 'undefined') {
+              if (BX24.resizeWindow) BX24.resizeWindow(ancho, alto);
+              if (BX24.fitWindow)    BX24.fitWindow();   // respaldo: ajusta al contenido
             }
           } catch(e) {}
         }
+        // El handshake de BX24 puede tardar; se reintenta unas cuantas veces.
         if (typeof BX24 !== 'undefined') { try { BX24.init(ajustar); } catch(e) { ajustar(); } }
-        else { window.addEventListener('load', ajustar); }
-        setTimeout(ajustar, 400);
+        window.addEventListener('load', ajustar);
+        [150, 400, 900, 1800].forEach(function(ms){ setTimeout(ajustar, ms); });
       })();
     </script>
     <?php
