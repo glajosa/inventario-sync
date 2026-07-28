@@ -190,6 +190,9 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
       white-space:nowrap;text-overflow:ellipsis}
   #<?= $uid ?> .gu-sep{color:#d0d7de;padding:0 5px}
   #<?= $uid ?> .gu-proyname{color:#8b949e}
+  /* el código abre la ficha de la unidad, como hacían los campos nativos */
+  #<?= $uid ?> .gu-ir{color:#0969da;cursor:pointer}
+  #<?= $uid ?> .gu-ir:hover{text-decoration:underline}
 
   /* dentro del desplegable: lo elegido, en azul y con la ✕ */
   #<?= $uid ?> .gu-elegidas{border-bottom:1px solid #eaeef2;background:#f6faff}
@@ -285,8 +288,9 @@ $piezas = [];
 foreach ($elegidos as $id) {
     $u = $porId[(string)$id] ?? null;
     $piezas[] = $u
-        ? h($u['codigo']) . ' <span class="gu-proyname">(' . h($proys[(string)$u['cat']] ?? '') . ')</span>'
-        : '#' . h((string)$id);
+        ? '<span class="gu-ir" data-ir="' . (int)$id . '">' . h($u['codigo']) . '</span>'
+          . ' <span class="gu-proyname">(' . h($proys[(string)$u['cat']] ?? '') . ')</span>'
+        : '<span class="gu-ir" data-ir="' . (int)$id . '">#' . h((string)$id) . '</span>';
 }
 ?>
 <div class="gu-campo" id="<?= $uid ?>_campo">
@@ -485,7 +489,11 @@ foreach ($elegidos as $id) {
         txt.appendChild(s);
       }
       var w = document.createElement('span');
-      w.appendChild(document.createTextNode(d.cod + ' '));
+      var a = document.createElement('span');
+      a.className = 'gu-ir'; a.dataset.ir = id; a.textContent = d.cod;
+      a.title = 'Abrir la ficha de la unidad';
+      w.appendChild(a);
+      w.appendChild(document.createTextNode(' '));
       var p = document.createElement('span');
       p.className = 'gu-proyname'; p.textContent = '(' + d.proy + ')';
       w.appendChild(p);
@@ -598,7 +606,33 @@ foreach ($elegidos as $id) {
     if (si) { try { q.focus(); } catch(e){} }
   }
 
-  campo.addEventListener('click', function(){ abrir(!R.classList.contains('abierto')); });
+  /**
+   * Abre la ficha de la unidad en el panel lateral de Bitrix.
+   *
+   * Es lo que hacían los campos nativos: pulsar la unidad y ver su ficha. Se usa
+   * BX24.openPath para que salga en el slider (sin sacar al usuario del deal); si
+   * no está disponible, se cae a navegar la ventana de arriba, porque un enlace
+   * normal dentro de este iframe abriría la ficha DENTRO del iframe del campo.
+   */
+  function abrirUnidad(id){
+    // 1072 = SPA Inventario. field.php es autónomo y no carga las constantes.
+    var ruta = '/crm/type/1072/details/' + encodeURIComponent(id) + '/';
+    try {
+      if (typeof BX24 !== 'undefined' && BX24.openPath) { BX24.openPath(ruta); return; }
+    } catch(e) {}
+    try { window.top.location.href = ruta; } catch(e) { window.open(ruta, '_blank'); }
+  }
+
+  campo.addEventListener('click', function(ev){
+    // pulsar el código abre la unidad; pulsar el resto de la barra despliega
+    var ir = ev.target.closest ? ev.target.closest('.gu-ir') : null;
+    if (ir && ir.dataset.ir) {
+      ev.stopPropagation(); ev.preventDefault();
+      abrirUnidad(ir.dataset.ir);
+      return;
+    }
+    abrir(!R.classList.contains('abierto'));
+  });
   listoBt.addEventListener('click', function(){ abrir(false); });
 
   seg.addEventListener('click', function(e){
