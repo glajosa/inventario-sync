@@ -42,6 +42,8 @@ $DATA_DIR = getenv('DATA_DIR') ?: '/data';
     . ' mode=' . (string)($_REQUEST['mode'] ?? '-')
     . ' value=' . substr((string)($_REQUEST['value'] ?? ''), 0, 40)
     . ' field_keys=[' . (is_array($_REQUEST['field'] ?? null) ? implode(',', array_keys($_REQUEST['field'])) : '-') . ']'
+    . ' PLACEMENT=' . (string)($_REQUEST['PLACEMENT'] ?? '-')
+    . ' OPTIONS=' . substr((string)($_REQUEST['PLACEMENT_OPTIONS'] ?? '-'), 0, 400)
     . "\n", FILE_APPEND | LOCK_EX);
 
 $mode  = (string)($_REQUEST['mode'] ?? 'edit');
