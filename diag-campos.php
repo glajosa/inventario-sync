@@ -37,3 +37,18 @@ if (!empty($_GET['deal'])) {
         }
     } else echo "ERROR: {$d['error']}\n";
 }
+
+// ?campo=UF_CRM_XXX -> detalle completo de un campo puntual (tipo, enum, etc)
+if (!empty($_GET['campo'])) {
+    $r2 = bx('crm.deal.fields', []);
+    $c  = (string)$_GET['campo'];
+    $f  = $r2['result'][$c] ?? null;
+    echo "\n--- campo $c ---\n";
+    if (!$f) { echo "no existe\n"; exit; }
+    echo "title: " . ($f['title'] ?? '?') . "\n";
+    echo "type:  " . ($f['type'] ?? '?') . "\n";
+    if (!empty($f['items'])) {
+        echo "opciones:\n";
+        foreach ($f['items'] as $op) echo "  {$op['ID']} = {$op['VALUE']}\n";
+    }
+}
