@@ -74,3 +74,12 @@ if (!empty($_GET['spaunidad'])) {
         }
     } else echo "ERROR: {$u['error']}\n";
 }
+
+// ?spacampodet=ufCrm25_XXX -> opciones enum de un campo puntual de la unidad
+if (!empty($_GET['spacampodet'])) {
+    $r4 = bx('crm.item.fields', ['entityTypeId' => 1072]);
+    $c  = (string)$_GET['spacampodet'];
+    $f  = $r4['result']['fields'][$c] ?? null;
+    echo "--- $c ---\ntitle: " . ($f['title'] ?? '?') . "\n";
+    if (!empty($f['items'])) foreach ($f['items'] as $op) echo "  {$op['ID']} = {$op['VALUE']}\n";
+}
