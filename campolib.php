@@ -38,10 +38,15 @@ function logline(string $msg): void {
         gmdate('Y-m-d\TH:i:s\Z') . '  SYNCCAMPO ' . $msg . "\n", FILE_APPEND | LOCK_EX);
 }
 
+// Freno entre llamadas. Existe para que un BARRIDO no vacíe el presupuesto de API
+// de Bitrix, pero en una acción interactiva es puro tiempo de espera para el
+// vendedor: medido, 10 llamadas × 200 ms = 2 s de los 6,8 s que tardaba guardar.
+// guardar.php lo pone en 0; reconcile y la migración lo dejan como está.
+$BX_FRENO_US = 200000;
+
 function bx(string $method, array $params = []): array {
-    global $WEBHOOK_IN;
-    $__t0 = microtime(true);   // TEMPORAL: medir de donde salen los segundos
-    usleep(200000);   // throttle: no vaciar el presupuesto de API de Bitrix
+    global $WEBHOOK_IN, $BX_FRENO_US;
+    if ($BX_FRENO_US > 0) usleep($BX_FRENO_US);
     for ($try = 0; $try < 4; $try++) {
         $ch = curl_init($WEBHOOK_IN . $method);
         curl_setopt_array($ch, [
@@ -64,7 +69,6 @@ function bx(string $method, array $params = []): array {
             return ['ok' => false, 'error' => $d !== '' ? ($e !== '' ? "$e: $d" : $d) : $e];
         }
         if (!is_array($j)) { if ($try < 3) { sleep(1); continue; } return ['ok' => false, 'error' => 'bad-json']; }
-        logline(sprintf('T %6.0fms %s', (microtime(true) - $__t0) * 1000, $method));
         return ['ok' => true, 'result' => $j['result'] ?? null, 'next' => $j['next'] ?? null];
     }
     return ['ok' => false, 'error' => 'retries-exhausted'];
@@ -114,6 +118,13 @@ function refrescar_cache(array $unitIds): void {
 // ids_de() vive en stagelib.php (la necesita reconcile.php, que no puede
 // cargar campolib). Definirla aquí también daba un fatal por redeclaración.
 
+/** Apartados del 28 leídos de disco: unitId => dealId. Cero llamadas al API. */
+function apartados_registro(): array {
+    global $DATA_DIR;
+    $j = json_decode((string)@file_get_contents($DATA_DIR . '/apartados_puestos.json'), true);
+    return is_array($j) ? $j : [];
+}
+
 /**
  * De una lista de IDs, devuelve las que SÍ se pueden atar a este deal.
  * Portero del servidor: la lista del campo pinta en gris lo ocupado, pero eso es
@@ -142,7 +153,13 @@ function unidades_asignables(array $ids, int $dealId, int $contacto = 0): array 
     $rev = [];
     foreach (stages_map() as $cat => $m) foreach ($m as $nombre => $sid) $rev[$sid] = $nombre;
 
-    $apart = apartados_28();
+    // Antes aquí se llamaba a apartados_28(), que pagina TODO el pipeline 28
+    // filtrando por un campo de tipo propio: 2,96 s medidos, el 45% de lo que
+    // tardaba guardar. No hace falta: quien de verdad frena una unidad apartada es
+    // la condición de stage DISPONIBLE de más abajo. El registro en disco solo se
+    // necesita para la EXCEPCIÓN de "soy la copia de la misma venta", así que se
+    // lee de disco (0 llamadas) y solo se pregunta el contacto cuando hay choque.
+    $apart = apartados_registro();
 
     $ok = [];
     foreach (($r['result']['items'] ?? []) as $it) {
@@ -160,8 +177,13 @@ function unidades_asignables(array $ids, int $dealId, int $contacto = 0): array 
             // ya usa referidor.php para arrastrar copias entre pipelines, y el
             // motivo de anclar al contacto es que el MISMO código de unidad
             // reaparece en reventas a personas distintas con los años.
-            if ($a['deal'] === $dealId) { $ok[] = $id; continue; }
-            if ($contacto > 0 && (int)$a['contacto'] === $contacto) { $ok[] = $id; continue; }
+            if ((int)$a === $dealId) { $ok[] = $id; continue; }
+            // Misma venta = mismo contacto. Se pregunta SOLO en este choque, que es
+            // raro, en vez de escanear el pipeline entero en cada guardado.
+            if ($contacto > 0) {
+                $g = bx('crm.deal.get', ['id' => (int)$a]);
+                if ($g['ok'] && (int)($g['result']['CONTACT_ID'] ?? 0) === $contacto) { $ok[] = $id; continue; }
+            }
             continue;                                        // apartada por otra venta
         }
 
@@ -296,10 +318,16 @@ function propagar_quitada(array $unitIds, int $dealOrigen, int $contacto): int {
  * Sincroniza un deal: deja atadas exactamente las unidades del campo.
  * Devuelve un resumen para el log.
  */
-function sincronizar_deal(int $dealId): array {
-    $g = bx('crm.deal.get', ['id' => $dealId]);
-    if (!$g['ok']) return ['ok' => false, 'error' => 'deal-no-existe'];
-    $deal = $g['result'];
+function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
+    // guardar.php ya hizo el crm.deal.get para validar: se reusa en vez de repetirlo
+    // (350 ms medidos de puro trámite).
+    if ($dealYaLeido !== null) {
+        $deal = $dealYaLeido;
+    } else {
+        $g = bx('crm.deal.get', ['id' => $dealId]);
+        if (!$g['ok']) return ['ok' => false, 'error' => 'deal-no-existe'];
+        $deal = $g['result'];
+    }
     $cat  = (int)($deal['CATEGORY_ID'] ?? -1);
 
     // Prospectos(28): solo APARTA. No escribe parentId2 ni crea dependencia —

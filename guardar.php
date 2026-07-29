@@ -19,6 +19,9 @@
 declare(strict_types=1);
 require_once __DIR__ . '/campolib.php';
 
+// Acción interactiva: sin freno entre llamadas. El freno es para los barridos.
+$BX_FRENO_US = 0;
+
 header('Content-Type: application/json; charset=utf-8');
 
 $dealId = (int)($_POST['deal'] ?? $_GET['deal'] ?? 0);
@@ -112,8 +115,14 @@ if (!$up['ok']) {
     exit;
 }
 
-// dejar dependencia, responsable/cliente y stage al día
-$r = sincronizar_deal($dealId);
+// dejar dependencia, responsable/cliente y stage al día.
+// Se reusa el deal ya leído para no repetir el crm.deal.get (350 ms), pero OJO:
+// ese objeto es de ANTES del update, así que hay que ponerle el valor nuevo del
+// campo a mano. Sin esto, sincronizar_deal leería el valor viejo y ataría lo que
+// ya no corresponde.
+$deal = $g['result'];
+$deal[CAMPO_NUEVO] = $limpio;
+$r = sincronizar_deal($dealId, $deal);
 logline("deal=$dealId guardado=[$limpio] sync=" . json_encode($r));
 
 echo json_encode(['ok' => true, 'guardado' => $limpio, 'sync' => $r]);
