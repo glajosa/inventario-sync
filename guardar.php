@@ -115,26 +115,6 @@ if (!$up['ok']) {
     exit;
 }
 
-// ---- RESPONDER YA, y terminar el trabajo después --------------------------
-// Lo que el vendedor necesita saber es "se guardó": eso ya está hecho (el campo
-// está escrito y las unidades validadas). Poner la dependencia, el stage y el
-// contacto son otras ~4 llamadas a Bitrix, y hacerlo antes de contestar dejaba al
-// vendedor mirando la pantalla ~1 s de más por cada clic.
-//
-// No hay fastcgi_finish_request: la imagen es php:8.2-apache (mod_php). Con
-// Content-Length exacto + flush el navegador da la respuesta por completa, y con
-// ignore_user_abort el script sigue vivo para terminar.
-//
-// El campo solo usa `ok` y `guardado`, así que el resumen del sync ya no viaja;
-// queda en el log. Si algo del sync falla, el barrido de 15 min lo repara.
-$salida = json_encode(['ok' => true, 'guardado' => $limpio]);
-ignore_user_abort(true);
-header('Content-Length: ' . strlen($salida));
-header('Connection: close');
-echo $salida;
-while (ob_get_level() > 0) @ob_end_flush();
-@flush();
-
 // Se reusa el deal ya leído para no repetir el crm.deal.get, pero OJO: ese objeto
 // es de ANTES del update, así que hay que ponerle el valor nuevo del campo a mano.
 // Sin esto, sincronizar_deal leería el valor viejo y ataría lo que ya no toca.
@@ -142,3 +122,5 @@ $deal = $g['result'];
 $deal[CAMPO_NUEVO] = $limpio;
 $r = sincronizar_deal($dealId, $deal);
 logline("deal=$dealId guardado=[$limpio] sync=" . json_encode($r));
+
+echo json_encode(['ok' => true, 'guardado' => $limpio, 'sync' => $r]);

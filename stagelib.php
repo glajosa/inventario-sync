@@ -111,23 +111,48 @@ function unit_stage_name(array $item): ?string {
  * Aplica un stage objetivo a una unidad, con guardas. Devuelve true si cambió.
  * $writeOff = true cuando el disparo es COBRANZAS DADO DE BAJA (único que saca de VENDIDO).
  */
+/**
+ * Decide el stageId que habría que escribir, aplicando las guardas, SIN escribir.
+ * Devuelve null si no hay que tocar nada.
+ *
+ * Existe para poder juntar el cambio de stage y el de responsable/cliente en UNA
+ * sola escritura: antes eran dos crm.item.update + tres crm.item.get de la MISMA
+ * unidad, ~1,1 s de puro trámite en cada guardado.
+ */
+function stage_objetivo(int $unitId, array $item, string $targetName, bool $writeOff = false): ?string {
+    $cat     = (string)($item['categoryId'] ?? '');
+    $curName = unit_stage_name($item);
+
+    // no tocar BLOQUEADO ni PERDIDO (son manuales/gerenciales)
+    if (in_array($curName, ['BLOQUEADO', 'PERDIDO'], true)) return null;
+    // proteger VENDIDO: solo un write-off (DADO DE BAJA) lo saca
+    if ($curName === 'VENDIDO' && !$writeOff) return null;
+    if ($curName === $targetName) return null;              // ya está
+
+    $target = stage_id($cat, $targetName);
+    if ($target === null) { logline("WARN stage '$targetName' no existe en cat $cat (unit $unitId)"); return null; }
+    return $target;
+}
+
+/** Campos de responsable/cliente que habría que escribir, o [] si ninguno. */
+function campos_owner(array $item, array $deal): array {
+    $assigned = $deal['ASSIGNED_BY_ID'] ?? null;
+    $contact  = $deal['CONTACT_ID'] ?? null;
+    $need = [];
+    if ($assigned && (string)($item['assignedById'] ?? '') !== (string)$assigned) $need['assignedById'] = $assigned;
+    if ($contact && (int)$contact > 0 && (string)($item['contactId'] ?? '') !== (string)$contact) $need['contactId'] = $contact;
+    return $need;
+}
+
 function apply_unit_stage(int $unitId, ?array $item, string $targetName, bool $writeOff = false): bool {
     if ($item === null) {
         $r = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $unitId]);
         if (!$r['ok']) return false;
         $item = $r['result']['item'] ?? $r['result'];
     }
-    $cat = (string)($item['categoryId'] ?? '');
     $curName = unit_stage_name($item);
-
-    // no tocar BLOQUEADO ni PERDIDO (son manuales/gerenciales)
-    if (in_array($curName, ['BLOQUEADO', 'PERDIDO'], true)) return false;
-    // proteger VENDIDO: solo un write-off (DADO DE BAJA) lo saca
-    if ($curName === 'VENDIDO' && !$writeOff) return false;
-    if ($curName === $targetName) return false;             // ya está
-
-    $target = stage_id($cat, $targetName);
-    if ($target === null) { logline("WARN stage '$targetName' no existe en cat $cat (unit $unitId)"); return false; }
+    $target  = stage_objetivo($unitId, $item, $targetName, $writeOff);
+    if ($target === null) return false;
 
     // Marca de ESCRITURA PROPIA, justo antes de escribir. El guardián del kanban la
     // lee para saber que este cambio de stage lo hizo el sistema y no una persona.
@@ -145,16 +170,14 @@ function apply_unit_stage(int $unitId, ?array $item, string $targetName, bool $w
  * Copia el RESPONSABLE (ASSIGNED_BY_ID = asesor) y el CLIENTE (CONTACT_ID) del deal
  * a la unidad, solo si difieren (evita reescrituras). El deal manda. Devuelve true si cambió.
  */
-function sync_unit_owner(int $unitId, array $deal): bool {
-    $assigned = $deal['ASSIGNED_BY_ID'] ?? null;
-    $contact  = $deal['CONTACT_ID'] ?? null;
-    if (!$assigned && !($contact && (int)$contact > 0)) return false;
-    $r = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $unitId]);
-    if (!$r['ok']) return false;
-    $it = $r['result']['item'] ?? $r['result'];
-    $need = [];
-    if ($assigned && (string)($it['assignedById'] ?? '') !== (string)$assigned) $need['assignedById'] = $assigned;
-    if ($contact && (int)$contact > 0 && (string)($it['contactId'] ?? '') !== (string)$contact) $need['contactId'] = $contact;
+function sync_unit_owner(int $unitId, array $deal, ?array $item = null): bool {
+    if (!($deal['ASSIGNED_BY_ID'] ?? null) && !(($deal['CONTACT_ID'] ?? 0) > 0)) return false;
+    if ($item === null) {
+        $r = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $unitId]);
+        if (!$r['ok']) return false;
+        $item = $r['result']['item'] ?? $r['result'];
+    }
+    $need = campos_owner($item, $deal);
     if (!$need) return false;
     $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $unitId, 'fields' => $need]);
     if ($u['ok']) { logline("OWNER unit=$unitId set " . implode(',', array_keys($need))); return true; }

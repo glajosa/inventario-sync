@@ -118,6 +118,26 @@ function refrescar_cache(array $unitIds): void {
 // ids_de() vive en stagelib.php (la necesita reconcile.php, que no puede
 // cargar campolib). Definirla aquí también daba un fatal por redeclaración.
 
+/**
+ * Actualiza UNA unidad en el caché del selector con lo que acabamos de escribir,
+ * sin volver a preguntárselo a Bitrix. Pasar null en un campo = dejarlo como está.
+ * Antes esto costaba un crm.item.get por unidad en cada guardado.
+ */
+function cache_unidad(int $unitId, ?string $stage, ?int $dealId): void {
+    global $DATA_DIR;
+    $path = $DATA_DIR . '/selector_cache.json';
+    $j = json_decode((string)@file_get_contents($path), true);
+    if (!is_array($j) || empty($j['units'])) return;
+    $toco = false;
+    foreach ($j['units'] as $i => $u) {
+        if ((int)($u['id'] ?? 0) !== $unitId) continue;
+        if ($stage  !== null) { $j['units'][$i]['stage']  = $stage;  $toco = true; }
+        if ($dealId !== null) { $j['units'][$i]['dealId'] = $dealId; $toco = true; }
+        break;
+    }
+    if ($toco) @file_put_contents($path, json_encode($j), LOCK_EX);
+}
+
 /** Apartados del 28 leídos de disco: unitId => dealId. Cero llamadas al API. */
 function apartados_registro(): array {
     global $DATA_DIR;
@@ -217,9 +237,33 @@ function apartar_prospecto(int $dealId, array $deal): array {
     $puestos = apartados_puestos();
     $movidas = 0;
 
+    // UNA lectura y UNA escritura por unidad. Antes eran tres crm.item.get y dos
+    // crm.item.update de la MISMA unidad (~1,1 s medidos de puro trámite): uno por
+    // el stage, otro por responsable/cliente, y un tercero para refrescar el caché.
     foreach ($quiere as $uid) {
-        if (apply_unit_stage((int)$uid, null, 'RESERVADO', false)) $movidas++;
-        sync_unit_owner((int)$uid, $deal);          // se ve quién la está apartando
+        $uid = (int)$uid;
+        $r = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $uid]);
+        if (!$r['ok']) { logline("ERR get u=$uid: {$r['error']}"); continue; }
+        $it = $r['result']['item'] ?? $r['result'];
+
+        $campos = campos_owner($it, $deal);         // se ve quién la está apartando
+        $st     = stage_objetivo($uid, $it, 'RESERVADO', false);
+        if ($st !== null) $campos['stageId'] = $st;
+
+        if ($campos) {
+            // marca de escritura propia: el guardián del kanban la usa para saber
+            // que este cambio lo hizo el sistema y no una persona
+            @touch($GLOBALS['DATA_DIR'] . '/self_u_' . $uid);
+            $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid, 'fields' => $campos]);
+            if ($u['ok']) {
+                if ($st !== null) { $movidas++; logline("STAGE unit=$uid -> RESERVADO"); }
+                if (isset($campos['contactId']) || isset($campos['assignedById'])) logline("OWNER unit=$uid");
+                // el caché se actualiza con lo que acabamos de escribir, sin releer
+                cache_unidad($uid, $st !== null ? 'RESERVADO' : null, null);
+            } else {
+                logline("ERR update u=$uid: {$u['error']}");
+            }
+        }
         $puestos[(string)$uid] = $dealId;           // para poder liberarla después
     }
 
@@ -249,8 +293,6 @@ function apartar_prospecto(int $dealId, array $deal): array {
     $propagadas = $quitadas
         ? propagar_quitada($quitadas, $dealId, (int)($deal['CONTACT_ID'] ?? 0))
         : 0;
-
-    refrescar_cache(array_values(array_unique(array_merge($quiere, array_map('intval', array_keys($puestos))))));
 
     return ['ok' => true, 'modo' => 'apartado-28', 'aparta' => count($quiere),
             'movidas' => $movidas, 'soltadas' => $soltadas, 'propagadas' => $propagadas];
