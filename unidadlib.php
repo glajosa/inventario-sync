@@ -72,6 +72,62 @@ function u_rebuild_fondo(): void {
 }
 
 /**
+ * GUARDIÁN DE ESTADO: deshace un movimiento manual del kanban del SPA que
+ * contradiga la realidad de la unidad.
+ *
+ * El problema: en el kanban del SPA se puede arrastrar una unidad de RESERVADO a
+ * DISPONIBLE y ahí se queda — como si se le olvidara que está reservada, aunque
+ * siga atada a un deal y con responsable. Después queda visible como libre y otro
+ * vendedor puede escogerla: doble venta.
+ *
+ * La regla: si la unidad tiene un motivo real para estar tomada, ese motivo manda
+ * sobre el arrastre. Motivos reales, en orden:
+ *   1. `parentId2` = un deal de CLIENTES la tiene atada (reserva/firma de verdad).
+ *   2. está en el registro de APARTADOS del 28 (un deal está cerrando el acuerdo).
+ * En ambos casos se vuelve a sincronizar el deal dueño, que es quien sabe qué
+ * stage corresponde a su etapa. Se DELEGA a propósito en vez de recalcularlo
+ * aquí: duplicar el mapa de etapas es la forma segura de que se desincronice.
+ *
+ * Solo se revierte cuando la movieron a DISPONIBLE, que es la que causa daño
+ * (queda escogible). BLOQUEADO y PERDIDO se respetan: son gerenciales por diseño
+ * y el resto del sistema tampoco los pisa (ver apply_unit_stage).
+ */
+function guardian_estado(int $unitId, array $u): void {
+    if (($u['stage'] ?? '') !== 'DISPONIBLE') return;
+
+    $dir = getenv('DATA_DIR') ?: '/data';
+
+    // Anti-eco: la corrección dispara otro ONCRMDYNAMICITEMUPDATE. Sin esto dos
+    // eventos casi simultáneos pueden pedir el mismo re-sync dos veces.
+    $marca = $dir . '/guard_u_' . $unitId;
+    if (is_file($marca) && (time() - (int)@filemtime($marca)) < 30) return;
+
+    $dueno = (int)($u['dealId'] ?? 0);          // parentId2, ya resuelto por quien llama
+
+    if ($dueno === 0) {
+        // ¿la tiene apartada un deal del 28? El registro está en disco: 0 llamadas.
+        $ap = json_decode((string)@file_get_contents($dir . '/apartados_puestos.json'), true);
+        if (is_array($ap) && isset($ap[(string)$unitId])) $dueno = (int)$ap[(string)$unitId];
+    }
+    if ($dueno <= 0) return;                    // libre de verdad: el arrastre es válido
+
+    @touch($marca);
+    ulog("GUARDIAN u=$unitId la movieron a DISPONIBLE pero sigue tomada por deal=$dueno -> re-sync");
+
+    // Se delega en sync-campo.php (usa campolib) por HTTP local: unidadlib no
+    // puede requerir campolib, sus bx()/logline() choparían por redeclaración.
+    $tok = (string)getenv('OUTBOUND_TOKEN');
+    if ($tok === '') return;
+    $ch = curl_init('http://127.0.0.1/sync-campo.php?deal=' . $dueno . '&token=' . urlencode($tok));
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 25,   // se espera: si no, la unidad queda mal hasta el barrido
+        CURLOPT_NOSIGNAL       => true,
+    ]);
+    curl_exec($ch);
+}
+
+/**
  * Atiende un evento de unidad del SPA. Devuelve un texto corto para el log.
  * La AUTENTICACIÓN la hace quien llama: hook.php ya validó el application_token
  * del webhook de salida contra OUTBOUND_TOKEN antes de llegar aquí.
@@ -144,6 +200,11 @@ function unidad_evento(string $event, int $unitId, int $etid): string {
         'piso'   => $enum[UH_PIS][(string)($it[UH_PIS] ?? '')] ?? '',
         'dealId' => (int)($it['parentId2'] ?? 0),
     ];
+
+    // ---- GUARDIÁN DE ESTADO --------------------------------------------------
+    // Se corre ANTES de tocar el caché para que, si la corrección se dispara, el
+    // caché lo refresque el evento de la corrección con el valor definitivo.
+    guardian_estado($unitId, $nueva);
 
     $reemplazada = false;
     foreach ($cache['units'] as $i => $u) {

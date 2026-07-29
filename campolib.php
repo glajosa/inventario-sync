@@ -201,19 +201,93 @@ function apartar_prospecto(int $dealId, array $deal): array {
 
     // Unidades que este deal apartaba y ya sacó del campo -> liberar,
     // salvo que CLIENTES ya se las haya llevado de verdad (parentId2 puesto).
-    $soltadas = 0;
+    $quitadas = [];
     foreach ($puestos as $uid => $dueno) {
         if ((int)$dueno !== $dealId) continue;
         if (in_array((int)$uid, $quiere, true)) continue;
-        if (liberar_apartado((int)$uid)) $soltadas++;
+        $quitadas[] = (int)$uid;
         unset($puestos[$uid]);
     }
 
+    // El registro se guarda ANTES de liberar, no después: liberar mueve la unidad
+    // a DISPONIBLE y eso dispara el evento del SPA, donde el guardián de estado
+    // lee este mismo archivo. Si todavía dijera que está apartada, el guardián
+    // creería que el movimiento es indebido y pediría un re-sync de balde.
     apartados_puestos_guardar($puestos);
+
+    $soltadas = 0;
+    foreach ($quitadas as $uid) {
+        if (liberar_apartado($uid)) $soltadas++;
+    }
+
+    // Igual que en CLIENTES: la copia del otro pipeline la sigue nombrando, así
+    // que se le quita también o volvería a atarla.
+    $propagadas = $quitadas
+        ? propagar_quitada($quitadas, $dealId, (int)($deal['CONTACT_ID'] ?? 0))
+        : 0;
+
     refrescar_cache(array_values(array_unique(array_merge($quiere, array_map('intval', array_keys($puestos))))));
 
     return ['ok' => true, 'modo' => 'apartado-28', 'aparta' => count($quiere),
-            'movidas' => $movidas, 'soltadas' => $soltadas];
+            'movidas' => $movidas, 'soltadas' => $soltadas, 'propagadas' => $propagadas];
+}
+
+/**
+ * Quita unas unidades del campo Inventario de los deals HERMANOS.
+ *
+ * Cuando el deal del 28 llega a RESERVA se copia a CLIENTES(44) arrastrando el
+ * campo, así que la MISMA unidad queda nombrada en DOS deals. Quitarla de uno no
+ * bastaba: el otro seguía nombrándola y, en su próximo evento, el sistema la
+ * volvía a poner RESERVADO (si era el del 28) o la re-ataba — o sea que la
+ * unidad no regresaba nunca a DISPONIBLE y nadie más podía escogerla.
+ *
+ * Se limita a los deals del MISMO CONTACTO en 28/44: es la regla de
+ * emparejamiento que ya usa el resto del sistema, y hace falta porque el mismo
+ * código de unidad reaparece en reventas a personas distintas con los años.
+ *
+ * NO toca deals del 44 ya firmados (PROMESA FIRMADA / CIERRE DE PROMESA): ahí el
+ * campo es el registro de una venta que ocurrió de verdad y vaciarlo borraría
+ * historial. Se reconoce por el stage que dispara FIRMADO/VENDIDO, en vez de con
+ * una lista aparte que habría que mantener en dos sitios.
+ *
+ * El update del hermano dispara su propio evento y por lo tanto su propio
+ * sincronizado: ahí es donde la unidad termina de soltarse. No hay bucle porque
+ * en la segunda pasada el origen ya no la nombra y no queda nada que quitar.
+ */
+function propagar_quitada(array $unitIds, int $dealOrigen, int $contacto): int {
+    $unitIds = array_values(array_unique(array_map('intval', $unitIds)));
+    if (!$unitIds || $contacto <= 0) return 0;
+
+    $r = bx('crm.deal.list', [
+        'filter' => ['CONTACT_ID'        => $contacto,
+                     '@CATEGORY_ID'      => [PROSPECTOS_CAT, CLIENTES_CAT],
+                     '!' . CAMPO_NUEVO   => ''],
+        'select' => ['ID', 'CATEGORY_ID', 'STAGE_ID', CAMPO_NUEVO],
+    ]);
+    if (!$r['ok']) { logline("propagar u=[" . implode(',', $unitIds) . "] ERR list: {$r['error']}"); return 0; }
+
+    $n = 0;
+    foreach (($r['result'] ?? []) as $d) {
+        $did = (int)($d['ID'] ?? 0);
+        if ($did <= 0 || $did === $dealOrigen) continue;
+
+        $st = (string)($d['STAGE_ID'] ?? '');
+        if (in_array(CLIENTES_TRIGGERS[$st] ?? '', ['FIRMADO', 'VENDIDO'], true)) {
+            logline("propagar: deal $did en $st (venta cerrada) -> no se toca su campo");
+            continue;
+        }
+
+        $tiene = ids_de((string)($d[CAMPO_NUEVO] ?? ''));
+        $queda = array_values(array_diff($tiene, $unitIds));
+        if (count($queda) === count($tiene)) continue;          // no la tenía
+
+        $up = bx('crm.deal.update', ['id' => $did, 'fields' => [CAMPO_NUEVO => implode(',', $queda)]]);
+        if (!$up['ok']) { logline("propagar: ERR update deal $did: {$up['error']}"); continue; }
+        logline("propagada quitada de u=[" . implode(',', array_intersect($tiene, $unitIds))
+              . "] al deal hermano $did (origen $dealOrigen)");
+        $n++;
+    }
+    return $n;
 }
 
 /**
@@ -337,10 +411,20 @@ function sincronizar_deal(int $dealId): array {
         if ($tocado) apartados_puestos_guardar($puestos);
     }
 
+    // Quitarla de ESTE deal no basta: su copia en el otro pipeline la sigue
+    // nombrando y la volvería a tomar. Se propaga el quitado al hermano.
+    // Solo cuando el usuario la sacó del campo, no cuando la etapa la liberó
+    // (deal caído): ahí el campo se deja de registro, es a propósito.
+    $propagadas = 0;
+    if ($soltar && !etapa_libera($etapaDeal)) {
+        $propagadas = propagar_quitada($soltar, $dealId, (int)($deal['CONTACT_ID'] ?? 0));
+    }
+
     // que la lista del selector muestre el estado nuevo de inmediato
     refrescar_cache(array_values(array_unique(array_merge($quiere, $soltar))));
 
     return ['ok' => true, 'quiere' => count($quiere), 'agregadas' => count($agregar),
-            'soltadas' => count($soltar), 'stage' => $target ?: '-', 'movidas' => $movidas];
+            'soltadas' => count($soltar), 'stage' => $target ?: '-', 'movidas' => $movidas,
+            'propagadas' => $propagadas];
 }
 
