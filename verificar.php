@@ -68,19 +68,23 @@ if (!empty($_GET['huerfanas'])) {
     echo $aplicar ? "MODO: APLICAR\n\n" : "MODO: SIMULACRO (no escribe)\n\n";
 
     // 1) todo lo que algun deal de 28/44 nombra en su campo (0 riesgo de falso positivo)
+    // Una categoria por consulta: filtrar por @CATEGORY_ID con las dos a la vez
+    // SOBRE un campo de tipo propio hace que Bitrix corte por OPERATION_TIME_LIMIT.
     $reclamadas = [];
-    $start = 0;
-    do {
-        $r = bx('crm.deal.list', [
-            'filter' => ['@CATEGORY_ID' => [PROSPECTOS_CAT, CLIENTES_CAT], '!' . CAMPO_NUEVO => ''],
-            'select' => ['ID', CAMPO_NUEVO], 'order' => ['ID' => 'ASC'], 'start' => $start,
-        ]);
-        if (!$r['ok']) { echo "ERROR listando deals: {$r['error']}\n"; exit; }
-        foreach (($r['result'] ?? []) as $d) {
-            foreach (ids_de((string)($d[CAMPO_NUEVO] ?? '')) as $u) $reclamadas[$u] = (string)$d['ID'];
-        }
-        $start = $r['next'] ?? null;
-    } while ($start !== null && $start !== '');
+    foreach ([CLIENTES_CAT, PROSPECTOS_CAT] as $cat) {
+        $start = 0;
+        do {
+            $r = bx('crm.deal.list', [
+                'filter' => ['CATEGORY_ID' => $cat, '!' . CAMPO_NUEVO => ''],
+                'select' => ['ID', CAMPO_NUEVO], 'order' => ['ID' => 'ASC'], 'start' => $start,
+            ]);
+            if (!$r['ok']) { echo "ERROR listando deals cat $cat: {$r['error']}\n"; exit; }
+            foreach (($r['result'] ?? []) as $d) {
+                foreach (ids_de((string)($d[CAMPO_NUEVO] ?? '')) as $u) $reclamadas[$u] = (string)$d['ID'];
+            }
+            $start = $r['next'] ?? null;
+        } while ($start !== null && $start !== '');
+    }
 
     $apart = apartados_28();
     $rev = [];
