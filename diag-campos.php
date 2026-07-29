@@ -52,3 +52,25 @@ if (!empty($_GET['campo'])) {
         foreach ($f['items'] as $op) echo "  {$op['ID']} = {$op['VALUE']}\n";
     }
 }
+
+// ?spacampo=ufCrm25_XXX -> detalle de un campo de la UNIDAD (SPA 1072)
+if (!empty($_GET['spafields'])) {
+    $r3 = bx('crm.item.fields', ['entityTypeId' => 1072]);
+    if (!$r3['ok']) { echo "ERROR: {$r3['error']}\n"; exit; }
+    foreach (($r3['result']['fields'] ?? []) as $code => $f) {
+        $t = strtolower((string)($f['title'] ?? ''));
+        if (strpos($t, 'tipo') !== false || strpos($t, 'bien') !== false || strpos($code, 'ufCrm25') === 0) {
+            echo "$code  [{$f['type']}]  " . ($f['title'] ?? '?') . "\n";
+        }
+    }
+}
+if (!empty($_GET['spaunidad'])) {
+    $u = bx('crm.item.get', ['entityTypeId' => 1072, 'id' => (int)$_GET['spaunidad']]);
+    echo "\n--- unidad " . (int)$_GET['spaunidad'] . " ---\n";
+    if ($u['ok']) {
+        $it = $u['result']['item'] ?? $u['result'];
+        foreach ($it as $k => $v) {
+            if (is_scalar($v) && $v !== '' && $v !== null) echo "$k = $v\n";
+        }
+    } else echo "ERROR: {$u['error']}\n";
+}
