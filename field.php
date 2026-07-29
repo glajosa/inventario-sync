@@ -44,15 +44,6 @@ $DATA_DIR = getenv('DATA_DIR') ?: '/data';
     . ' field_keys=[' . (is_array($_REQUEST['field'] ?? null) ? implode(',', array_keys($_REQUEST['field'])) : '-') . ']'
     . ' PLACEMENT=' . (string)($_REQUEST['PLACEMENT'] ?? '-')
     . ' OPTIONS=' . substr((string)($_REQUEST['PLACEMENT_OPTIONS'] ?? '-'), 0, 400)
-    // TEMPORAL: cabeceras HTTP, para ver si el modal de campos obligatorios se
-    // distingue de un render normal por algo que NO venga en PLACEMENT_OPTIONS
-    // (ahí los dos son idénticos: MODE=edit, URI de /details/, MANDATORY=N).
-    . ' HDR{ref=' . substr((string)($_SERVER['HTTP_REFERER'] ?? '-'), 0, 90)
-    . ' sfd=' . (string)($_SERVER['HTTP_SEC_FETCH_DEST'] ?? '-')
-    . ' sfm=' . (string)($_SERVER['HTTP_SEC_FETCH_MODE'] ?? '-')
-    . ' sfs=' . (string)($_SERVER['HTTP_SEC_FETCH_SITE'] ?? '-')
-    . ' met=' . (string)($_SERVER['REQUEST_METHOD'] ?? '-')
-    . ' qs='  . substr((string)($_SERVER['QUERY_STRING'] ?? '-'), 0, 60) . '}'
     . "\n", FILE_APPEND | LOCK_EX);
 
 // Bitrix manda todo en PLACEMENT_OPTIONS (verificado en el log):
@@ -84,7 +75,13 @@ $enKanban = (bool)preg_match('#/crm/deal/kanban/#', (string)($opciones['URI'] ??
 // SERVIDOR, al ver él mismo que el render viene del modal; el navegador no puede
 // fabricarlo (no tiene OUTBOUND_TOKEN), solo reenviarlo. Por eso guardar.php
 // puede confiar en él en vez de en un flag suelto tipo "?kanban=1".
-$permisoEtapa = ($enKanban && $dealId > 0)
+// Se firma en TODO render (antes solo en el del kanban). Motivo: el modal abierto
+// desde DENTRO del deal manda exactamente lo mismo que un render normal —
+// MODE=edit, URI de /details/, MANDATORY=N, y hasta las cabeceras HTTP idénticas
+// (comprobado generando los dos casos y comparándolos). Desde el servidor NO hay
+// forma de distinguirlo, así que el que lo detecta es el navegador (ver EN_MODAL)
+// y solo entonces reenvía este permiso. El token nunca sale de aquí.
+$permisoEtapa = ($dealId > 0)
     ? hash_hmac('sha256', $dealId . '|kanban', (string)getenv('OUTBOUND_TOKEN'))
     : '';
 
@@ -461,6 +458,19 @@ foreach ($elegidos as $id) {
   R.dataset.listo = '1';
 
   var CFG = window['GU_CFG_<?= $uid ?>'] || {};
+
+  // ¿Estamos dentro del modal "Complete los campos obligatorios para cambiar la
+  // etapa"? Bitrix no lo dice por ningún lado, pero SÍ le da al iframe un ancho
+  // distinto: ~470px en ese modal contra ~645px en la ficha (medido en vivo con
+  // los dos casos abiertos a la vez). Se mide ANTES de llamar a resizeWindow,
+  // que cambiaría el ancho.
+  //
+  // Es una heurística, y por eso solo decide lo VISUAL (si el candado se abre).
+  // Lo que garantiza la regla de negocio no depende de esto: el apartado de la
+  // unidad y el portero anti doble-venta siguen viviendo en el servidor.
+  var ANCHO0   = window.innerWidth || 0;
+  var EN_MODAL = !!CFG.kanban || (ANCHO0 > 0 && ANCHO0 < 560);
+
   var BLOQ = false;             // true = la etapa del deal no permite elegir unidad
   var val     = document.getElementById('<?= $uid ?>_val');
   var campo    = document.getElementById('<?= $uid ?>_campo');
@@ -522,7 +532,9 @@ foreach ($elegidos as $id) {
     cuerpo.set('deal',  CFG.deal);
     cuerpo.set('valor', val.value);
     cuerpo.set('firma', CFG.firma);
-    if (CFG.permiso) cuerpo.set('permiso', CFG.permiso);   // viene del modal de etapa
+    // Solo desde el modal. Si se mandara siempre, el candado de etapa no serviría
+    // de nada: cualquier render podría saltárselo.
+    if (CFG.permiso && EN_MODAL) cuerpo.set('permiso', CFG.permiso);
 
     fetch('guardar.php', {method:'POST', body:cuerpo})
       .then(function(r){ return r.json(); })
@@ -789,7 +801,7 @@ foreach ($elegidos as $id) {
     // En el modal de obligatorios el campo se pide PARA pasar a RESERVA: si se
     // bloquea ahí, el cambio de etapa queda imposible. El servidor ya firmó el
     // permiso, así que guardar.php también lo va a aceptar.
-    if (CFG.kanban) return;
+    if (EN_MODAL) return;   // el modal PIDE la unidad para poder pasar a RESERVA
     if (!CFG.deal || typeof BX24 === 'undefined' || !BX24.callMethod) return;
     try {
       BX24.callMethod('crm.deal.get', {id: CFG.deal}, function(res){
