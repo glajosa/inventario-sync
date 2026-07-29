@@ -71,6 +71,32 @@ function u_rebuild_fondo(): void {
     curl_exec($ch);
 }
 
+
+/**
+ * ¿Algún deal nombra esta unidad en su campo "Inventario"? Devuelve su id o 0.
+ *
+ * Cubre el caso de una unidad ocupada de verdad a la que se le perdió el enlace
+ * `parentId2`: el deal la sigue nombrando, así que es su dueño real. 1 llamada,
+ * y solo se paga en movimientos humanos de unidades sin enlace.
+ *
+ * El filtro `%campo` es por SUBCADENA: buscando 2241 también casarían "12241" o
+ * "2241,999". Por eso después se parsea el valor y se exige el id EXACTO.
+ */
+function u_dueno_por_campo(int $unitId): int {
+    $r = u_bx('crm.deal.list', [
+        'filter' => ['%UF_CRM_1785205972989' => (string)$unitId, '@CATEGORY_ID' => [28, 44]],
+        'select' => ['ID', 'UF_CRM_1785205972989'],
+        'order'  => ['ID' => 'DESC'],
+    ]);
+    if (!$r['ok']) return 0;
+    foreach (($r['result'] ?? []) as $d) {
+        foreach (preg_split('/[,;\s]+/', (string)($d['UF_CRM_1785205972989'] ?? '')) as $x) {
+            if ((int)trim($x) === $unitId) return (int)$d['ID'];
+        }
+    }
+    return 0;
+}
+
 /**
  * GUARDIÁN DE ESTADO: el stage de una unidad lo manda la ETAPA DE SU DEAL.
  *
@@ -96,7 +122,7 @@ function u_rebuild_fondo(): void {
  * apply_unit_stage() deja una marca de escritura propia. Solo se paga el re-sync
  * en los movimientos humanos, que son pocos.
  */
-function guardian_estado(int $unitId, array $u, string $stageAntes): void {
+function guardian_estado(int $unitId, array $u, string $stageAntes, array $status = []): void {
     $ahora = (string)($u['stage'] ?? '');
     if ($ahora === '' || $ahora === $stageAntes) return;   // no cambió el stage
 
@@ -126,8 +152,32 @@ function guardian_estado(int $unitId, array $u, string $stageAntes): void {
         $ap = json_decode((string)@file_get_contents($dir . '/apartados_puestos.json'), true);
         if (is_array($ap) && isset($ap[(string)$unitId])) $dueno = (int)$ap[(string)$unitId];
     }
+    // Sin enlace: puede que un deal la nombre igual y se haya perdido el parentId2.
+    if ($dueno <= 0) $dueno = u_dueno_por_campo($unitId);
+
     if ($dueno <= 0) {
-        ulog("GUARDIAN u=$unitId $stageAntes -> $ahora a mano, sin deal dueno: no hay etapa que la dicte");
+        // Nadie la reclama. Una unidad LIBRE no puede estar RESERVADO ni FIRMADO:
+        // esos estados los produce un deal, no un arrastre. Se devuelve a
+        // DISPONIBLE. BLOQUEADO/PERDIDO/VENDIDO ya salieron antes.
+        if ($ahora !== 'RESERVADO' && $ahora !== 'FIRMADO') return;
+
+        $destino = '';
+        foreach ($status as $s) {
+            if (strtoupper((string)$s['NAME']) === 'DISPONIBLE') { $destino = (string)$s['STATUS_ID']; break; }
+        }
+        if ($destino === '') {
+            ulog("GUARDIAN u=$unitId sin deal y en $ahora, pero no se resolvio DISPONIBLE en cat " . ($u['cat'] ?? '?'));
+            return;
+        }
+
+        @touch($marca);
+        // marca de escritura propia: si no, la corrección se vería como un
+        // movimiento humano más y el guardián se llamaría a sí mismo en bucle
+        @touch($dir . '/self_u_' . $unitId);
+        $w = u_bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $unitId,
+                                      'fields' => ['stageId' => $destino]]);
+        ulog("GUARDIAN u=$unitId sin deal, movida a mano a $ahora -> devuelta a DISPONIBLE"
+             . ($w['ok'] ? '' : " ERR {$w['error']}"));
         return;
     }
 
@@ -230,7 +280,7 @@ function unidad_evento(string $event, int $unitId, int $etid): string {
     foreach ($cache['units'] as $vu) {
         if ((int)($vu['id'] ?? 0) === $unitId) { $stageAntes = (string)($vu['stage'] ?? ''); break; }
     }
-    guardian_estado($unitId, $nueva, $stageAntes);
+    guardian_estado($unitId, $nueva, $stageAntes, $st['result'] ?? []);
 
     $reemplazada = false;
     foreach ($cache['units'] as $i => $u) {
