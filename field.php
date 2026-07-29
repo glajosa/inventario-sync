@@ -78,9 +78,32 @@ function ids_de(string $v): array {
     return array_values(array_unique($out));
 }
 
-/** Unidades desde el caché de selector.php (no vuelve a pegarle al API). */
+/**
+ * Unidades desde el caché de selector.php (no vuelve a pegarle al API).
+ *
+ * Si el caché está vencido se pide un refresco POR DETRÁS y se sigue dibujando
+ * con lo que hay: reconstruirlo en primer plano tarda ~40s y el vendedor no va a
+ * esperar. Hace falta porque el campo leía el archivo sin mirar su edad, y como
+ * nadie abre ya la página selector.php el catálogo se quedaba horas viejo — una
+ * unidad nueva del SPA no llegaba a aparecer nunca en la lista.
+ */
 function catalogo_cache(): array {
-    $j = json_decode((string)@file_get_contents((getenv('DATA_DIR') ?: '/data') . '/selector_cache.json'), true);
+    $path = (getenv('DATA_DIR') ?: '/data') . '/selector_cache.json';
+    $j = json_decode((string)@file_get_contents($path), true);
+
+    $edad = is_file($path) ? (time() - (int)@filemtime($path)) : PHP_INT_MAX;
+    if ($edad > 900) {                       // mismo TTL que usa selector.php
+        $tok = (string)getenv('OUTBOUND_TOKEN');
+        if ($tok !== '') {
+            $ch = curl_init('http://127.0.0.1/selector.php?warm=1&token=' . urlencode($tok));
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT_MS     => 300,   // se corta enseguida; el rebuild sigue del otro lado
+                CURLOPT_NOSIGNAL       => true,
+            ]);
+            curl_exec($ch);   // no se cierra: curl_close está deprecado desde PHP 8.5 y no hace nada
+        }
+    }
     return is_array($j) ? $j : ['units' => [], 'proyectos' => []];
 }
 
