@@ -58,6 +58,75 @@ if (!empty($_GET['viejos'])) {
     exit;
 }
 
+
+// ?huerfanas=1 -> unidades que dicen NO estar disponibles pero nadie las reclama.
+// Es el error que mas cuesta: esconden inventario vendible. Tres condiciones, y
+// las tres a la vez: stage ocupado, sin parentId2, y NINGUN deal las nombra en su
+// campo Inventario. Con &aplicar=1 se devuelven a DISPONIBLE.
+if (!empty($_GET['huerfanas'])) {
+    $aplicar = !empty($_GET['aplicar']);
+    echo $aplicar ? "MODO: APLICAR\n\n" : "MODO: SIMULACRO (no escribe)\n\n";
+
+    // 1) todo lo que algun deal de 28/44 nombra en su campo (0 riesgo de falso positivo)
+    $reclamadas = [];
+    $start = 0;
+    do {
+        $r = bx('crm.deal.list', [
+            'filter' => ['@CATEGORY_ID' => [PROSPECTOS_CAT, CLIENTES_CAT], '!' . CAMPO_NUEVO => ''],
+            'select' => ['ID', CAMPO_NUEVO], 'order' => ['ID' => 'ASC'], 'start' => $start,
+        ]);
+        if (!$r['ok']) { echo "ERROR listando deals: {$r['error']}\n"; exit; }
+        foreach (($r['result'] ?? []) as $d) {
+            foreach (ids_de((string)($d[CAMPO_NUEVO] ?? '')) as $u) $reclamadas[$u] = (string)$d['ID'];
+        }
+        $start = $r['next'] ?? null;
+    } while ($start !== null && $start !== '');
+
+    $apart = apartados_28();
+    $rev = [];
+    foreach (stages_map() as $c => $m) foreach ($m as $n => $sid) $rev[$sid] = $n;
+
+    // 2) recorrer unidades y quedarse con las huerfanas ocupadas
+    $malas = [];
+    $start = 0;
+    do {
+        $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'order' => ['id' => 'ASC'], 'start' => $start]);
+        if (!$r['ok']) break;
+        foreach (($r['result']['items'] ?? []) as $it) {
+            $id    = (int)($it['id'] ?? 0);
+            $stage = $rev[(string)($it['stageId'] ?? '')] ?? '?';
+            // VENDIDO lo manda Cobranzas (empareja por codigo+contacto, no por
+            // parentId2): aqui saldria huerfana sin serlo. BLOQUEADO/PERDIDO son
+            // gerenciales. Ninguno se toca.
+            if (!in_array($stage, ['RESERVADO', 'FIRMADO'], true)) continue;
+            if ((int)($it['parentId2'] ?? 0) > 0) continue;
+            if (isset($apart[$id]))      continue;
+            if (isset($reclamadas[$id])) continue;
+            $malas[$id] = ['codigo' => trim(explode('(', (string)($it['title'] ?? ''))[0]),
+                           'cat' => (string)($it['categoryId'] ?? ''), 'stage' => $stage,
+                           'contacto' => (int)($it['contactId'] ?? 0)];
+        }
+        $start = $r['next'] ?? null;
+    } while ($start !== null && $start !== '');
+
+    echo 'unidades reclamadas por algun deal : ' . count($reclamadas) . "\n";
+    echo 'HUERFANAS ocupadas sin reclamo     : ' . count($malas) . "\n\n";
+    $proys = json_decode((string)@file_get_contents(($DATA_DIR ?: '/data') . '/selector_cache.json'), true)['proyectos'] ?? [];
+    foreach ($malas as $id => $m) {
+        echo "  u=$id  {$m['codigo']}  " . ($proys[$m['cat']] ?? ('cat ' . $m['cat']))
+           . "  {$m['stage']}" . ($m['contacto'] ? "  contacto={$m['contacto']}" : '') . "\n";
+    }
+    if ($aplicar && $malas) {
+        echo "\n-- devolviendo a DISPONIBLE --\n";
+        foreach (array_keys($malas) as $id) {
+            $ok = apply_unit_stage((int)$id, null, 'DISPONIBLE', false);
+            echo "  u=$id " . ($ok ? 'DISPONIBLE' : 'sin cambio') . "\n";
+        }
+    }
+    if (!$aplicar && $malas) echo "\n(simulacro: agregar &aplicar=1 para devolverlas a DISPONIBLE)\n";
+    exit;
+}
+
 // ?poretapa=1 -> deals de CLIENTES con unidad en el campo, agrupados por etapa,
 // y en qué stage está cada unidad. Sirve para medir el alcance de una regla antes
 // de que el barrido la aplique (ej: cuántas reservas caídas van a liberar unidad).
