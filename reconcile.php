@@ -134,19 +134,31 @@ foreach (FIELDS_EXTRA as $f) {
 }
 
 // ---- ACTUAL: unidad => deal, según parentId2 de las unidades ------------------
-// paginamos unidades con parentId2 != 0 (son pocas: las atadas por este sistema)
-$actual = [];    // unitId => dealId
+// OJO: el filtro `!parentId2 => 0` Bitrix lo IGNORA (verificado), así que esta
+// paginación recorre TODAS las unidades. Ya que se pagan las llamadas igual, se
+// aprovecha para leer también el stage: es lo que necesita el barrido de huérfanas
+// de más abajo, y así no cuesta ni una llamada extra.
+// Sin `select` a propósito: con select explícito Bitrix devuelve id en null.
+$actual  = [];   // unitId => dealId  (solo las que SÍ tienen parentId2)
+$stageDe = [];   // unitId => nombre del stage
+$revStage = [];
+foreach (stages_map() as $c => $m) foreach ($m as $n => $sid) $revStage[$sid] = $n;
+
 $start = 0;
 do {
     $r = bx('crm.item.list', [
         'entityTypeId' => SPA_ENTITY,
-        'filter'       => ['!parentId2' => 0],
-        'select'       => ['id', 'parentId2'],
+        'order'        => ['id' => 'ASC'],
         'start'        => $start,
     ]);
     if (!$r['ok']) { logline("RECONCILE ERR item.list: {$r['error']}"); if ($isHttp) echo "err\n"; exit(1); }
-    $items = $r['result']['items'] ?? [];
-    foreach ($items as $it) $actual[(int)$it['id']] = (string)$it['parentId2'];
+    foreach (($r['result']['items'] ?? []) as $it) {
+        $uid = (int)($it['id'] ?? 0);
+        if (!$uid) continue;
+        $p = (int)($it['parentId2'] ?? 0);
+        if ($p > 0) $actual[$uid] = (string)$p;
+        $stageDe[$uid] = $revStage[(string)($it['stageId'] ?? '')] ?? '';
+    }
     $start = $r['next'] ?? null;
 } while ($start !== null && $start !== '');
 
@@ -202,6 +214,42 @@ if ($puestos && $vigentes !== null) {
         }
     }
     if ($quedan !== $puestos) apartados_puestos_guardar($quedan);
+}
+
+// ==== HUÉRFANAS: ocupadas que NADIE reclama ===================================
+// El error que más cuesta no es una unidad tomada que se ve libre, es una unidad
+// LIBRE que se ve tomada: esconde inventario vendible y nadie se entera. Pasa
+// cuando se borra un deal sin vaciar su campo, o cuando alguien la arrastra en el
+// kanban del SPA.
+//
+// Tres condiciones a la vez, para no liberar nada por error:
+//   1. stage RESERVADO o FIRMADO   (VENDIDO lo manda Cobranzas, que empareja por
+//      código+contacto y no por parentId2: aquí saldría huérfana sin serlo.
+//      BLOQUEADO y PERDIDO son gerenciales.)
+//   2. sin parentId2
+//   3. ningún deal la nombra: ni en $desired (CLIENTES) ni apartada desde el 28.
+//
+// Coste: 0 llamadas extra para detectarlas (reusa la paginación de arriba y el
+// apartados_28() que ya se consultó). Solo se paga al corregir.
+$huerfanas = 0;
+// La lista de apartados TIENE que ser fiable: si viene a medias, unidades
+// apartadas de verdad parecerían huérfanas y se liberarían. Antes que eso, no se
+// barre. (Mismo criterio que el bloque de apartados de arriba.)
+$apFiable  = true;
+$reclamaAp = ($vigentes !== null) ? $vigentes : apartados_28($apFiable);
+if (!$apFiable) {
+    logline('RECONCILE huerfanas: lista de apartados no fiable, no se barre');
+    $reclamaAp = null;
+}
+foreach (($reclamaAp === null ? [] : $stageDe) as $uid => $st) {
+    if ($st !== 'RESERVADO' && $st !== 'FIRMADO') continue;
+    if (isset($actual[$uid]))     continue;   // tiene parentId2
+    if (isset($desired[$uid]))    continue;   // un deal de CLIENTES la nombra
+    if (isset($reclamaAp[$uid]))  continue;   // apartada desde Prospectos
+    if (apply_unit_stage((int)$uid, null, 'DISPONIBLE', false)) {
+        $huerfanas++;
+        logline("RECONCILE huerfana u=$uid estaba $st sin deal que la reclame -> DISPONIBLE");
+    }
 }
 
 // ==== STAGES (red de seguridad de etapas) =====================================
@@ -290,7 +338,7 @@ foreach (COBRANZAS_TRIGGERS as $stageId => $target) {
     } while ($start !== null && $start !== '');
 }
 
-$msg = 'RECONCILE ok desired=' . count($desired) . ' actual=' . count($actual)
+$msg = 'RECONCILE ok huerfanas=' . $huerfanas . ' desired=' . count($desired) . ' actual=' . count($actual)
      . " link_cambios=$cambios stage_cambios=$stageCambios";
 logline($msg);
 if ($isHttp) echo $msg;
