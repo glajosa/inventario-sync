@@ -361,6 +361,7 @@ function propagar_quitada(array $unitIds, int $dealOrigen, int $contacto): int {
  * Devuelve un resumen para el log.
  */
 function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
+    global $DATA_DIR;
     // guardar.php ya hizo el crm.deal.get para validar: se reusa en vez de repetirlo
     // (350 ms medidos de puro trámite).
     if ($dealYaLeido !== null) {
@@ -440,31 +441,68 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     $etapa  = (string)($deal['STAGE_ID'] ?? '');
     $target = CLIENTES_TRIGGERS[$etapa] ?? null;
 
-    foreach ($agregar as $uid) {
-        bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid,
-                               'fields' => ['parentId2' => $dealId]]);
-        sync_unit_owner($uid, $deal);                       // responsable + cliente
-    }
+    // UNA lectura y UNA escritura por unidad. Antes, para UNA sola unidad, este
+    // bloque hacía 3 lecturas y 3 escrituras: un update para parentId2, otro para
+    // responsable/cliente y otro para el stage, más las lecturas que cada decisión
+    // necesitaba por separado (y puede_liberar() releía otra vez). Medido: 2,6 s.
+    //
+    // El stage se aplica a TODAS las del campo, no solo a las recién agregadas: si
+    // no, al mover el deal de etapa (Promesa firmada, Cierre de promesa,
+    // Firmados-caídos) las que ya estaban atadas se quedaban igual.
+    $movidas   = 0;
+    $agregarSet = array_flip($agregar);
 
-    // El stage se aplica a TODAS las unidades del campo, no solo a las recién
-    // agregadas: si no, al mover el deal de etapa (Promesa firmada, Cierre de
-    // promesa, Firmados-caídos) las que ya estaban atadas se quedaban igual.
-    $movidas = 0;
-    if ($target) {
-        foreach ($quiere as $uid) {
-            // si el stage del deal manda a DISPONIBLE (reserva/firma caída), solo se
-            // suelta lo que sigue siendo de este deal, no lo ya revendido a otro
-            if ($target === 'DISPONIBLE' && !puede_liberar((int)$uid, (string)$dealId)) continue;
-            if (apply_unit_stage((int)$uid, null, $target, false)) $movidas++;
+    foreach (array_merge($quiere, $soltar) as $uid) {
+        $uid = (int)$uid;
+        $suelta = in_array($uid, $soltar, true);
+
+        $r = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $uid]);
+        if (!$r['ok']) { logline("ERR get u=$uid: {$r['error']}"); continue; }
+        $it = $r['result']['item'] ?? $r['result'];
+
+        $campos = [];
+        $nuevoStage = null;
+
+        if ($suelta) {
+            // Se borra también el contacto: al atar se le copia el cliente del deal,
+            // y si al soltar no se limpia, la unidad queda libre pero con el cliente
+            // del deal anterior pegado (dato sucio que confunde en la ficha).
+            $campos['parentId2'] = 0;
+            $campos['contactId'] = 0;
+            $nuevoStage = 'DISPONIBLE';
+        } else {
+            if (isset($agregarSet[$uid])) {
+                $campos['parentId2'] = $dealId;
+                $campos += campos_owner($it, $deal);        // responsable + cliente
+            }
+            if ($target) {
+                // Si el stage del deal manda a DISPONIBLE (reserva/firma caída), solo
+                // se suelta lo que sigue siendo de este deal, no lo ya revendido a
+                // otro. El dueño se lee del item que YA tenemos: puede_liberar()
+                // hacía otro crm.item.get para averiguar lo mismo.
+                $dueno = (int)($it['parentId2'] ?? 0);
+                $puede = ($target !== 'DISPONIBLE') || $dueno === 0 || $dueno === $dealId;
+                if ($puede) $nuevoStage = $target;
+            }
         }
-    }
-    foreach ($soltar as $uid) {
-        // También se borra el contacto: al atar se le copia el cliente del deal,
-        // y si al soltar no se limpia, la unidad queda libre pero con el cliente
-        // del deal anterior pegado (dato sucio que confunde en la ficha).
-        bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid,
-                               'fields' => ['parentId2' => 0, 'contactId' => 0]]);
-        apply_unit_stage($uid, null, 'DISPONIBLE', false);  // se quitó del deal -> libre
+
+        if ($nuevoStage !== null) {
+            $sid = stage_objetivo($uid, $it, $nuevoStage, false);
+            if ($sid !== null) { $campos['stageId'] = $sid; } else { $nuevoStage = null; }
+        }
+        if (!$campos) continue;
+
+        // marca de escritura propia: el guardián del kanban la usa para distinguir
+        // un cambio del sistema de un arrastre humano
+        if (isset($campos['stageId'])) @touch($DATA_DIR . '/self_u_' . $uid);
+
+        $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid, 'fields' => $campos]);
+        if (!$u['ok']) { logline("ERR update u=$uid: {$u['error']}"); continue; }
+
+        if ($nuevoStage !== null) { $movidas++; logline("STAGE unit=$uid -> $nuevoStage"); }
+        // el caché se actualiza con lo que acabamos de escribir, sin releer
+        cache_unidad($uid, $nuevoStage,
+                     array_key_exists('parentId2', $campos) ? (int)$campos['parentId2'] : null);
     }
 
     // Ya NO se copia la primera unidad al campo nativo PARENT_ID_1072: los 4
@@ -491,9 +529,6 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     if ($soltar && !etapa_libera($etapaDeal)) {
         $propagadas = propagar_quitada($soltar, $dealId, (int)($deal['CONTACT_ID'] ?? 0));
     }
-
-    // que la lista del selector muestre el estado nuevo de inmediato
-    refrescar_cache(array_values(array_unique(array_merge($quiere, $soltar))));
 
     return ['ok' => true, 'quiere' => count($quiere), 'agregadas' => count($agregar),
             'soltadas' => count($soltar), 'stage' => $target ?: '-', 'movidas' => $movidas,
