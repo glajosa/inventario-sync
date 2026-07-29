@@ -142,6 +142,22 @@ if ($EXPECT_TOKEN === '' || !hash_equals($EXPECT_TOKEN, (string)$token)) {
 $event  = strtoupper((string)($_REQUEST['event'] ?? ''));
 $dealId = (string)($_REQUEST['data']['FIELDS']['ID'] ?? '');
 
+// ---- 1.5) Eventos del SPA Inventario (unidades) -----------------------------
+// El mismo webhook de salida trae los eventos de DEALS y los de UNIDADES. Se
+// reutiliza a propósito: crear un webhook aparte traería su propio
+// application_token y no coincidiría con OUTBOUND_TOKEN.
+// El catálogo del campo se actualiza al instante en vez de esperar el cron.
+if (strpos($event, 'DYNAMICITEM') !== false) {
+    require_once __DIR__ . '/unidadlib.php';
+    $r = unidad_evento(
+        $event,
+        (int)($_REQUEST['data']['FIELDS']['ID'] ?? 0),
+        (int)($_REQUEST['data']['FIELDS']['ENTITY_TYPE_ID'] ?? 0)
+    );
+    echo $r;
+    exit;
+}
+
 if ($dealId === '') { echo 'no-id'; exit; }
 
 // ---- 2) DELETE: soltar unidades atadas a ese deal ---------------------------
