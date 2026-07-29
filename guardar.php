@@ -53,15 +53,28 @@ if (!$g['ok']) {
     echo json_encode(['ok' => false, 'error' => 'el deal no existe']); exit;
 }
 // Pipelines donde el campo tiene sentido:
-//   PROSPECTOS(28) -> el vendedor elige la unidad al cerrar el acuerdo (APARTA).
+//   PROSPECTOS(28) -> se aparta al llegar a RESERVA (ver candado de etapa abajo).
 //   CLIENTES(44)   -> la reserva oficial (ATA de verdad).
 // Cobranzas(48) y el resto no: 48 es read-only por regla del negocio.
 $cat      = (int)($g['result']['CATEGORY_ID'] ?? -1);
 $contacto = (int)($g['result']['CONTACT_ID'] ?? 0);
+$stage    = (string)($g['result']['STAGE_ID'] ?? '');
 if ($cat !== CLIENTES_CAT && $cat !== PROSPECTOS_CAT) {
     logline("deal=$dealId RECHAZADO: pipeline $cat no soportado");
     echo json_encode(['ok' => false,
         'error' => 'Las unidades solo se eligen en Prospectos Ventas o Clientes']); exit;
+}
+
+// CANDADO DE ETAPA (28) — jul-2026. Antes se podía apartar desde CUALQUIER etapa
+// del 28: dos vendedores nombraban la misma unidad en negociaciones que todavía
+// no eran nada, y la primera en llegar la dejaba trabada para el resto.
+// Vaciar el campo SÍ se permite en cualquier etapa: es la válvula para liberar
+// una unidad mal apartada sin tener que mover el deal de etapa.
+// Este es el candado de verdad; el de field.php es solo la capa visual.
+if ($cat === PROSPECTOS_CAT && $limpio !== '' && $stage !== etapa_28_reserva()) {
+    logline("deal=$dealId RECHAZADO: etapa $stage no es RESERVA (28)");
+    echo json_encode(['ok' => false,
+        'error' => 'En Prospectos Ventas la unidad solo se elige en la etapa RESERVA']); exit;
 }
 
 // Las unidades deben existir y no estar tomadas por OTRA venta (anti doble-venta).

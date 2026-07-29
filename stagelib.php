@@ -248,11 +248,41 @@ function etapas_28_activas(): array {
     // SEMANTICS: 'F' = perdida, 'S' = ganada, vacío = en proceso. Solo las
     // perdidas dejan de apartar: una ganada (RESERVA) sigue apartando hasta que
     // la copia de CLIENTES tome la unidad de verdad.
+    $reserva = ''; $ganada = '';
     if ($r['ok']) foreach (($r['result'] ?? []) as $s) {
         if ((string)($s['SEMANTICS'] ?? '') !== 'F') $out[] = (string)$s['STATUS_ID'];
+        // De paso se resuelve RESERVA: es la MISMA llamada, así etapa_28_reserva()
+        // no gasta una segunda contra el cupo del portal.
+        if (strtoupper(trim((string)($s['NAME'] ?? ''))) === 'RESERVA') $reserva = (string)$s['STATUS_ID'];
+        if ((string)($s['SEMANTICS'] ?? '') === 'S' && $ganada === '')   $ganada  = (string)$s['STATUS_ID'];
     }
     if ($out) @file_put_contents($path, json_encode($out));
+    if ($reserva !== '' || $ganada !== '') {
+        @file_put_contents($DATA_DIR . '/reserva28.txt', $reserva ?: $ganada);
+    }
     return $out;
+}
+
+/**
+ * STATUS_ID de la etapa RESERVA en PROSPECTOS(28).
+ *
+ * La unidad solo se puede elegir ahí (regla de negocio, jul-2026). Se resuelve
+ * POR NOMBRE y no se hardcodea: si mañana renombran o recrean la etapa, el
+ * candado sigue apuntando a la correcta en vez de bloquear el pipeline entero.
+ * El valor lo deja escrito etapas_28_activas() en su propia llamada, así que
+ * esto normalmente NO le cuesta nada al API.
+ */
+function etapa_28_reserva(): string {
+    global $DATA_DIR;
+    $path = $DATA_DIR . '/reserva28.txt';
+    $c = trim((string)@file_get_contents($path));
+    if ($c !== '') return $c;
+
+    etapas_28_activas();                    // resuelve y cachea de paso
+    $c = trim((string)@file_get_contents($path));
+    // 'C28:WON' = única etapa ganada del 28 (verificado en vivo). Solo se usa si
+    // el API no respondió; no se cachea, para que el próximo intento reintente.
+    return $c !== '' ? $c : 'C28:WON';
 }
 
 /**

@@ -109,6 +109,16 @@ function catalogo_cache(): array {
 
 function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
 
+/**
+ * Etapa RESERVA del 28, leída del caché que deja stagelib.php (cero llamadas).
+ * Solo alimenta el candado VISUAL: el que decide de verdad es guardar.php.
+ */
+function reserva28_cache(): string {
+    $p = (getenv('DATA_DIR') ?: '/data') . '/reserva28.txt';
+    $c = trim((string)@file_get_contents($p));
+    return $c !== '' ? $c : 'C28:WON';
+}
+
 $cat   = catalogo_cache();
 $units = $cat['units'] ?? [];
 $proys = $cat['proyectos'] ?? [];
@@ -208,6 +218,9 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?> .gu-campo{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:26px;
       cursor:pointer;padding:2px 7px}
   #<?= $uid ?> .gu-ph{color:#a8adb4;display:inline-flex;align-items:center;height:20px}
+  /* candado de etapa: el valor se sigue leyendo, pero el campo no invita a abrir */
+  #<?= $uid ?>.gu-bloq .gu-campo{cursor:default}
+  #<?= $uid ?>.gu-bloq .gu-caret{opacity:.25}
   /* cerrado: texto plano, igual que los campos nativos del deal (sin chips ni ✕) */
   #<?= $uid ?> .gu-txt{display:inline-flex;align-items:center;height:20px;overflow:hidden;
       white-space:nowrap;text-overflow:ellipsis}
@@ -324,7 +337,10 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     // firma del id del deal: guardar.php no escribe nada sin ella
     firma: <?= json_encode($dealId > 0
         ? hash_hmac('sha256', (string)$dealId, (string)getenv('OUTBOUND_TOKEN'))
-        : '') ?>
+        : '') ?>,
+    // candado visual: en PROSPECTOS(28) la unidad solo se elige en RESERVA
+    prospectos: 28,
+    reserva28: <?= json_encode(reserva28_cache()) ?>
   };
 </script>
 
@@ -416,6 +432,7 @@ foreach ($elegidos as $id) {
   R.dataset.listo = '1';
 
   var CFG = window['GU_CFG_<?= $uid ?>'] || {};
+  var BLOQ = false;             // true = la etapa del deal no permite elegir unidad
   var val     = document.getElementById('<?= $uid ?>_val');
   var campo    = document.getElementById('<?= $uid ?>_campo');
   var txt      = document.getElementById('<?= $uid ?>_txt');
@@ -647,6 +664,7 @@ foreach ($elegidos as $id) {
   }
 
   function abrir(si){
+    if (si && BLOQ) return;         // etapa que no permite elegir: no abre
     R.classList.toggle('abierto', si);
     // fija el documento al alto del iframe mientras está abierto
     document.documentElement.classList.toggle('gu-open', !!si);
@@ -724,8 +742,47 @@ foreach ($elegidos as $id) {
 
   document.addEventListener('click', function(){ abrirMenu(false); });
 
+  /**
+   * Candado de etapa (capa VISUAL). En PROSPECTOS(28) la unidad se elige solo en
+   * RESERVA; en el resto de etapas el campo queda de lectura.
+   *
+   * La etapa se pregunta con BX24.callMethod, es decir con el token del USUARIO,
+   * a propósito: nuestro webhook entrante es compartido y el portal ya va al tope
+   * (~120 llamadas/min entre todos los sistemas). Un crm.deal.get por apertura de
+   * deal contra ese webhook le quitaba turno a cobranzas.
+   *
+   * Si esto falla (sin BX24, error del API) NO se bloquea nada: quien decide de
+   * verdad es guardar.php, que rechaza con el mismo criterio y sin depender del
+   * navegador. Aquí solo se evita que el vendedor elija para que se lo tumben.
+   */
+  function candadoEtapa(){
+    if (!CFG.deal || typeof BX24 === 'undefined' || !BX24.callMethod) return;
+    try {
+      BX24.callMethod('crm.deal.get', {id: CFG.deal}, function(res){
+        try {
+          if (!res || (res.error && res.error())) return;
+          var d = res.data() || {};
+          if (String(d.CATEGORY_ID) !== String(CFG.prospectos)) return;
+          if (String(d.STAGE_ID) === String(CFG.reserva28)) return;
+          bloquear();
+        } catch(e) {}
+      });
+    } catch(e) {}
+  }
+
+  /** Deja el campo de lectura: no abre el panel y avisa por qué. */
+  function bloquear(){
+    BLOQ = true;
+    abrir(false);
+    R.classList.add('gu-bloq');
+    campo.title = 'La unidad se elige en la etapa RESERVA';
+    var ph = campo.querySelector('.gu-ph');
+    if (ph) ph.textContent = 'Se elige en RESERVA';
+    ajustarIframe();
+  }
+
   pintar(); pintarElegidas();
-  function iniciar(){ ajustarIframe(); }
+  function iniciar(){ ajustarIframe(); candadoEtapa(); }
   if (typeof BX24 !== 'undefined') { try { BX24.init(iniciar); } catch(e) { iniciar(); } }
 
 
