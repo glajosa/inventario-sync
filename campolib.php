@@ -40,6 +40,7 @@ function logline(string $msg): void {
 
 function bx(string $method, array $params = []): array {
     global $WEBHOOK_IN;
+    $__t0 = microtime(true);   // TEMPORAL: medir de donde salen los segundos
     usleep(200000);   // throttle: no vaciar el presupuesto de API de Bitrix
     for ($try = 0; $try < 4; $try++) {
         $ch = curl_init($WEBHOOK_IN . $method);
@@ -63,6 +64,7 @@ function bx(string $method, array $params = []): array {
             return ['ok' => false, 'error' => $d !== '' ? ($e !== '' ? "$e: $d" : $d) : $e];
         }
         if (!is_array($j)) { if ($try < 3) { sleep(1); continue; } return ['ok' => false, 'error' => 'bad-json']; }
+        logline(sprintf('T %6.0fms %s', (microtime(true) - $__t0) * 1000, $method));
         return ['ok' => true, 'result' => $j['result'] ?? null, 'next' => $j['next'] ?? null];
     }
     return ['ok' => false, 'error' => 'retries-exhausted'];
