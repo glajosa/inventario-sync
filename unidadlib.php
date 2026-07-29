@@ -72,30 +72,48 @@ function u_rebuild_fondo(): void {
 }
 
 /**
- * GUARDIÁN DE ESTADO: deshace un movimiento manual del kanban del SPA que
- * contradiga la realidad de la unidad.
+ * GUARDIÁN DE ESTADO: el stage de una unidad lo manda la ETAPA DE SU DEAL.
  *
- * El problema: en el kanban del SPA se puede arrastrar una unidad de RESERVADO a
- * DISPONIBLE y ahí se queda — como si se le olvidara que está reservada, aunque
- * siga atada a un deal y con responsable. Después queda visible como libre y otro
- * vendedor puede escogerla: doble venta.
+ * En el kanban del SPA se puede arrastrar una unidad a cualquier columna y ahí se
+ * queda. Eso está mal por diseño: una unidad pasa a FIRMADO porque su deal llegó a
+ * PROMESA FIRMADA o CIERRE DE PROMESA, no porque alguien la arrastró. Y arrastrarla
+ * a DISPONIBLE estando atada la vuelve escogible por otro vendedor: doble venta.
  *
- * La regla: si la unidad tiene un motivo real para estar tomada, ese motivo manda
- * sobre el arrastre. Motivos reales, en orden:
- *   1. `parentId2` = un deal de CLIENTES la tiene atada (reserva/firma de verdad).
- *   2. está en el registro de APARTADOS del 28 (un deal está cerrando el acuerdo).
- * En ambos casos se vuelve a sincronizar el deal dueño, que es quien sabe qué
- * stage corresponde a su etapa. Se DELEGA a propósito en vez de recalcularlo
- * aquí: duplicar el mapa de etapas es la forma segura de que se desincronice.
+ * Regla: cualquier cambio de stage hecho A MANO sobre una unidad que tenga deal se
+ * revierte. Se revierte re-sincronizando el DEAL DUEÑO, que es quien sabe qué stage
+ * corresponde a su etapa. Se delega a propósito en vez de recalcularlo aquí:
+ * duplicar el mapa de etapas es la forma segura de que se desincronice.
  *
- * Solo se revierte cuando la movieron a DISPONIBLE, que es la que causa daño
- * (queda escogible). BLOQUEADO y PERDIDO se respetan: son gerenciales por diseño
- * y el resto del sistema tampoco los pisa (ver apply_unit_stage).
+ * Excepciones, y son deliberadas:
+ *   - BLOQUEADO y PERDIDO son gerenciales: se mueven a mano a propósito.
+ *   - VENDIDO no lo dicta CLIENTES sino COBRANZAS(48), que empareja por
+ *     código+contacto y no por parentId2. Aquí no hay forma de distinguir un
+ *     VENDIDO legítimo de uno puesto a mano, y revertirlo podría deshacer una
+ *     venta real. Se registra en el log y no se toca.
+ *   - Sin deal dueño no hay etapa que dicte nada, así que no se revierte.
+ *
+ * Coste: CERO llamadas extra en los movimientos del propio sistema, porque
+ * apply_unit_stage() deja una marca de escritura propia. Solo se paga el re-sync
+ * en los movimientos humanos, que son pocos.
  */
-function guardian_estado(int $unitId, array $u): void {
-    if (($u['stage'] ?? '') !== 'DISPONIBLE') return;
+function guardian_estado(int $unitId, array $u, string $stageAntes): void {
+    $ahora = (string)($u['stage'] ?? '');
+    if ($ahora === '' || $ahora === $stageAntes) return;   // no cambió el stage
 
     $dir = getenv('DATA_DIR') ?: '/data';
+
+    // ¿lo escribimos nosotros? apply_unit_stage deja la marca antes de escribir.
+    $propia = $dir . '/self_u_' . $unitId;
+    if (is_file($propia) && (time() - (int)@filemtime($propia)) < 25) return;
+
+    if ($ahora === 'BLOQUEADO' || $ahora === 'PERDIDO') {
+        ulog("GUARDIAN u=$unitId $stageAntes -> $ahora a mano: gerencial, se respeta");
+        return;
+    }
+    if ($ahora === 'VENDIDO') {
+        ulog("GUARDIAN u=$unitId $stageAntes -> VENDIDO a mano: NO se revierte (lo manda Cobranzas)");
+        return;
+    }
 
     // Anti-eco: la corrección dispara otro ONCRMDYNAMICITEMUPDATE. Sin esto dos
     // eventos casi simultáneos pueden pedir el mismo re-sync dos veces.
@@ -103,19 +121,21 @@ function guardian_estado(int $unitId, array $u): void {
     if (is_file($marca) && (time() - (int)@filemtime($marca)) < 30) return;
 
     $dueno = (int)($u['dealId'] ?? 0);          // parentId2, ya resuelto por quien llama
-
     if ($dueno === 0) {
         // ¿la tiene apartada un deal del 28? El registro está en disco: 0 llamadas.
         $ap = json_decode((string)@file_get_contents($dir . '/apartados_puestos.json'), true);
         if (is_array($ap) && isset($ap[(string)$unitId])) $dueno = (int)$ap[(string)$unitId];
     }
-    if ($dueno <= 0) return;                    // libre de verdad: el arrastre es válido
+    if ($dueno <= 0) {
+        ulog("GUARDIAN u=$unitId $stageAntes -> $ahora a mano, sin deal dueno: no hay etapa que la dicte");
+        return;
+    }
 
     @touch($marca);
-    ulog("GUARDIAN u=$unitId la movieron a DISPONIBLE pero sigue tomada por deal=$dueno -> re-sync");
+    ulog("GUARDIAN u=$unitId movida a mano $stageAntes -> $ahora; manda deal=$dueno -> re-sync");
 
     // Se delega en sync-campo.php (usa campolib) por HTTP local: unidadlib no
-    // puede requerir campolib, sus bx()/logline() choparían por redeclaración.
+    // puede requerir campolib, sus bx()/logline() chocarían por redeclaración.
     $tok = (string)getenv('OUTBOUND_TOKEN');
     if ($tok === '') return;
     $ch = curl_init('http://127.0.0.1/sync-campo.php?deal=' . $dueno . '&token=' . urlencode($tok));
@@ -204,7 +224,13 @@ function unidad_evento(string $event, int $unitId, int $etid): string {
     // ---- GUARDIÁN DE ESTADO --------------------------------------------------
     // Se corre ANTES de tocar el caché para que, si la corrección se dispara, el
     // caché lo refresque el evento de la corrección con el valor definitivo.
-    guardian_estado($unitId, $nueva);
+    // El stage ANTERIOR sale del caché: así se distingue un cambio de stage de un
+    // cambio de cualquier otro campo, sin gastar ni una llamada al API.
+    $stageAntes = '';
+    foreach ($cache['units'] as $vu) {
+        if ((int)($vu['id'] ?? 0) === $unitId) { $stageAntes = (string)($vu['stage'] ?? ''); break; }
+    }
+    guardian_estado($unitId, $nueva, $stageAntes);
 
     $reemplazada = false;
     foreach ($cache['units'] as $i => $u) {

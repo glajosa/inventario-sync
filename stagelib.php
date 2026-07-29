@@ -129,6 +129,12 @@ function apply_unit_stage(int $unitId, ?array $item, string $targetName, bool $w
     $target = stage_id($cat, $targetName);
     if ($target === null) { logline("WARN stage '$targetName' no existe en cat $cat (unit $unitId)"); return false; }
 
+    // Marca de ESCRITURA PROPIA, justo antes de escribir. El guardián del kanban la
+    // lee para saber que este cambio de stage lo hizo el sistema y no una persona.
+    // Sin ella habría que preguntar la etapa del deal dueño en CADA evento de
+    // unidad, y el propio sistema mueve cientos: el portal ya va al tope de API.
+    @touch((getenv('DATA_DIR') ?: '/data') . '/self_u_' . $unitId);
+
     $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $unitId, 'fields' => ['stageId' => $target]]);
     if ($u['ok']) { logline("STAGE unit=$unitId $curName -> $targetName"); return true; }
     logline("ERR stage unit=$unitId -> $targetName: {$u['error']}");
