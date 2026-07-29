@@ -62,6 +62,23 @@ $name   = (string)($opciones['FIELD_NAME'] ?? ($_REQUEST['field']['NAME'] ?? $_R
 $value = (string)($opciones['VALUE'] ?? $_REQUEST['value'] ?? '');
 if ($value === 'null') $value = '';
 
+// El modal "Complete los campos obligatorios para cambiar la etapa" se renderiza
+// con el URI del KANBAN, no con el del deal. Verificado en web.log: de 250+
+// renders, es el ÚNICO cuyo URI es /crm/deal/kanban/... (el resto son
+// /crm/deal/details/<id>/?IFRAME=Y). Ahí el campo se está pidiendo PARA pasar a
+// RESERVA, así que el candado de etapa tiene que abrirse: si no, el vendedor
+// queda trabado — no puede llenar el obligatorio hasta estar en RESERVA, y
+// Bitrix no lo deja entrar a RESERVA sin llenarlo.
+$enKanban = (bool)preg_match('#/crm/deal/kanban/#', (string)($opciones['URI'] ?? ''));
+
+// Permiso de un solo uso lógico para saltarse el candado de etapa. Lo firma el
+// SERVIDOR, al ver él mismo que el render viene del modal; el navegador no puede
+// fabricarlo (no tiene OUTBOUND_TOKEN), solo reenviarlo. Por eso guardar.php
+// puede confiar en él en vez de en un flag suelto tipo "?kanban=1".
+$permisoEtapa = ($enKanban && $dealId > 0)
+    ? hash_hmac('sha256', $dealId . '|kanban', (string)getenv('OUTBOUND_TOKEN'))
+    : '';
+
 // Guardar NO puede depender del formulario del deal: el campo vive en un iframe
 // y su <input> nunca viaja en el submit. Se guarda por API desde el navegador,
 // con el token que Bitrix entrega en cada render (AUTH_ID).
@@ -340,7 +357,10 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
         : '') ?>,
     // candado visual: en PROSPECTOS(28) la unidad solo se elige en RESERVA
     prospectos: 28,
-    reserva28: <?= json_encode(reserva28_cache()) ?>
+    reserva28: <?= json_encode(reserva28_cache()) ?>,
+    // modal de campos obligatorios del kanban: ahí el candado se abre
+    kanban:  <?= $enKanban ? 'true' : 'false' ?>,
+    permiso: <?= json_encode($permisoEtapa) ?>
   };
 </script>
 
@@ -493,6 +513,7 @@ foreach ($elegidos as $id) {
     cuerpo.set('deal',  CFG.deal);
     cuerpo.set('valor', val.value);
     cuerpo.set('firma', CFG.firma);
+    if (CFG.permiso) cuerpo.set('permiso', CFG.permiso);   // viene del modal de etapa
 
     fetch('guardar.php', {method:'POST', body:cuerpo})
       .then(function(r){ return r.json(); })
@@ -756,6 +777,10 @@ foreach ($elegidos as $id) {
    * navegador. Aquí solo se evita que el vendedor elija para que se lo tumben.
    */
   function candadoEtapa(){
+    // En el modal de obligatorios el campo se pide PARA pasar a RESERVA: si se
+    // bloquea ahí, el cambio de etapa queda imposible. El servidor ya firmó el
+    // permiso, así que guardar.php también lo va a aceptar.
+    if (CFG.kanban) return;
     if (!CFG.deal || typeof BX24 === 'undefined' || !BX24.callMethod) return;
     try {
       BX24.callMethod('crm.deal.get', {id: CFG.deal}, function(res){

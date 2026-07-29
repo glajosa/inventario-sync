@@ -71,7 +71,21 @@ if ($cat !== CLIENTES_CAT && $cat !== PROSPECTOS_CAT) {
 // Vaciar el campo SÍ se permite en cualquier etapa: es la válvula para liberar
 // una unidad mal apartada sin tener que mover el deal de etapa.
 // Este es el candado de verdad; el de field.php es solo la capa visual.
-if ($cat === PROSPECTOS_CAT && $limpio !== '' && $stage !== etapa_28_reserva()) {
+//
+// EXCEPCIÓN: el modal "Complete los campos obligatorios para cambiar la etapa".
+// El campo está marcado obligatorio para entrar a RESERVA, así que sin esta
+// excepción el candado se muerde la cola: no se puede elegir hasta estar en
+// RESERVA, y Bitrix no deja entrar a RESERVA sin haber elegido. field.php firma
+// el permiso SOLO cuando el propio servidor ve que el render viene de ese modal
+// (URI del kanban); el navegador no tiene el token, así que no puede fabricarlo.
+$permisoOk = false;
+$permiso   = (string)($_POST['permiso'] ?? '');
+if ($permiso !== '') {
+    $esperado  = hash_hmac('sha256', $dealId . '|kanban', (string)getenv('OUTBOUND_TOKEN'));
+    $permisoOk = hash_equals($esperado, $permiso);
+    if (!$permisoOk) logline("deal=$dealId permiso de etapa INVALIDO");
+}
+if ($cat === PROSPECTOS_CAT && $limpio !== '' && !$permisoOk && $stage !== etapa_28_reserva()) {
     logline("deal=$dealId RECHAZADO: etapa $stage no es RESERVA (28)");
     echo json_encode(['ok' => false,
         'error' => 'En Prospectos Ventas la unidad solo se elige en la etapa RESERVA']); exit;
