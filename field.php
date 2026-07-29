@@ -44,6 +44,15 @@ $DATA_DIR = getenv('DATA_DIR') ?: '/data';
     . ' field_keys=[' . (is_array($_REQUEST['field'] ?? null) ? implode(',', array_keys($_REQUEST['field'])) : '-') . ']'
     . ' PLACEMENT=' . (string)($_REQUEST['PLACEMENT'] ?? '-')
     . ' OPTIONS=' . substr((string)($_REQUEST['PLACEMENT_OPTIONS'] ?? '-'), 0, 400)
+    // TEMPORAL: cabeceras HTTP, para ver si el modal de campos obligatorios se
+    // distingue de un render normal por algo que NO venga en PLACEMENT_OPTIONS
+    // (ahí los dos son idénticos: MODE=edit, URI de /details/, MANDATORY=N).
+    . ' HDR{ref=' . substr((string)($_SERVER['HTTP_REFERER'] ?? '-'), 0, 90)
+    . ' sfd=' . (string)($_SERVER['HTTP_SEC_FETCH_DEST'] ?? '-')
+    . ' sfm=' . (string)($_SERVER['HTTP_SEC_FETCH_MODE'] ?? '-')
+    . ' sfs=' . (string)($_SERVER['HTTP_SEC_FETCH_SITE'] ?? '-')
+    . ' met=' . (string)($_SERVER['REQUEST_METHOD'] ?? '-')
+    . ' qs='  . substr((string)($_SERVER['QUERY_STRING'] ?? '-'), 0, 60) . '}'
     . "\n", FILE_APPEND | LOCK_EX);
 
 // Bitrix manda todo en PLACEMENT_OPTIONS (verificado en el log):
