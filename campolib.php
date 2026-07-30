@@ -28,6 +28,61 @@ set_time_limit(120);
 const SPA_ENTITY     = 1072;
 const CAMPO_NUEVO    = 'UF_CRM_1785205972989';   // campo "Inventario" (tipo propio)
 
+// ── AUTOLLENADO de la ficha del deal desde la unidad elegida ─────────────────
+// Al elegir la unidad, estos 4 campos del deal se llenan solos con lo que ya
+// está en la tarjeta de la unidad. Antes el vendedor los tecleaba a mano y son
+// obligatorios para cambiar de etapa.
+const D_PROYECTO = 'UF_CRM_5EECED2074CC5';   // "Proyectos 1"      (lista)
+const D_ACTIVO   = 'UF_CRM_1732047127';      // "ACTIVO COMPRADO"  (texto)
+const D_VALOR    = 'UF_CRM_1731969538';      // "VALOR DEL ACTIVO" (money)
+// (el monto son los nativos OPPORTUNITY + CURRENCY_ID)
+
+const U_PVP  = 'ufCrm25_1784563253861';      // PVP de la unidad (money "n|USD")
+const U_TIPO = 'ufCrm25_1782616418179';      // Tipo de bien (lista)
+
+/**
+ * Pipeline del SPA + tipo de bien -> opción de "Proyectos 1" del deal.
+ *
+ * El mapa NO es 1:1 por pipeline: Noral Plaza se parte en 4 opciones y Galero
+ * Casas en 2, según el TIPO DE BIEN. No está inventado — se derivó de los 946
+ * deals de CLIENTES que ya tienen unidad atada y proyecto cargado a mano, tomando
+ * la combinación mayoritaria de cada par (pipeline, tipo). Ahí se vio, por
+ * ejemplo, que un Departamento de Noral Plaza va a "Noral Plaza (Suites)" y no a
+ * "Locales Comerciales".
+ *
+ * '*' = default del pipeline cuando el tipo no está listado.
+ */
+const MAPA_PROYECTO = [
+    33 => [1791 => 162, 1951 => 1743, 1793 => 1625, 1797 => 1625, 1801 => 1753, '*' => 162],
+    39 => ['*' => 516],    // Noral Apartments
+    43 => ['*' => 142],    // Barranca Apartments
+    49 => ['*' => 200],    // Sun Bay
+    47 => ['*' => 73],     // Galero Torre C  -> Departamentos en Playas
+    51 => ['*' => 73],     // Galero Torre D  -> Departamentos en Playas
+    53 => ['*' => 150],    // Galero Suites
+    55 => [1799 => 115, 1947 => 115, 1945 => 115, 1943 => 514, 1949 => 514, '*' => 115],
+];
+
+/**
+ * Código de la unidad como lo espera "ACTIVO COMPRADO": con guion entre la letra
+ * y el primer número. En el SPA el título es "S3-3" o "C10-3", pero los 946 deals
+ * ya cargados lo escriben "S-3-3" y "C-10-3". Los que ya vienen con guion
+ * ("B-1-6", "G-2", "D-10") se dejan intactos.
+ */
+function codigo_activo(string $titulo): string {
+    $cod = trim(explode('(', $titulo)[0]);
+    return preg_replace('/^([A-Za-z]+)(?=\d)/', '$1-', $cod) ?? $cod;
+}
+
+/** Opción de "Proyectos 1" para una unidad, o 0 si su pipeline no está mapeado. */
+function proyecto_de_unidad(int $cat, $tipoId): int {
+    $m = MAPA_PROYECTO[$cat] ?? null;
+    if ($m === null) return 0;
+    $t = (string)(int)$tipoId;
+    foreach ($m as $k => $v) if ((string)$k === $t) return (int)$v;
+    return (int)($m['*'] ?? 0);
+}
+
 $DATA_DIR   = getenv('DATA_DIR') ?: '/data';
 $WEBHOOK_IN = rtrim((string)getenv('BITRIX_WEBHOOK'), '/') . '/';
 
@@ -357,6 +412,51 @@ function propagar_quitada(array $unitIds, int $dealOrigen, int $contacto): int {
 }
 
 /**
+ * Llena en el deal de CLIENTES los 4 campos que salen de la tarjeta de la unidad:
+ * Monto y moneda (OPPORTUNITY + CURRENCY_ID), Proyectos 1, VALOR DEL ACTIVO y
+ * ACTIVO COMPRADO. Antes se teclaban a mano y son obligatorios para cambiar de
+ * etapa.
+ *
+ * CUÁNDO corre: solo cuando el vendedor ACABA de elegir (o cambiar) la unidad, es
+ * decir cuando hay unidades recién agregadas. En un barrido del reconcile o en un
+ * simple cambio de etapa no se toca nada, y eso es a propósito: el monto del deal
+ * NO siempre es el PVP de lista. Hay casos reales (deal 397331, unidad C10-3: PVP
+ * 127.125 vs monto 141.900) donde el precio pactado incluye upgrades, bodega o
+ * balcón. Si esto se ejecutara en cada sincronización, cada barrido le borraría al
+ * vendedor el precio negociado y lo dejaría en el de lista.
+ *
+ * Varias unidades en un mismo deal (fusiones): el monto y el valor se SUMAN, los
+ * códigos se concatenan y el proyecto se toma de la primera.
+ *
+ * Coste: 1 escritura. Cero lecturas — los datos salen del crm.item.get que el
+ * bucle de arriba ya hizo para atar la unidad.
+ */
+function autollenar_ficha(int $dealId, array $fichas): array {
+    $cods = []; $suma = 0.0; $proy = 0;
+    foreach ($fichas as $f) {
+        if ($f['cod'] !== '') $cods[] = $f['cod'];
+        $suma += (float)$f['pvp'];
+        if (!$proy && !empty($f['proy'])) $proy = (int)$f['proy'];
+    }
+    if (!$cods) return [];
+
+    $campos = [D_ACTIVO => implode(', ', $cods)];
+    if ($suma > 0) {
+        $monto = rtrim(rtrim(number_format($suma, 2, '.', ''), '0'), '.');
+        $campos['OPPORTUNITY'] = $monto;
+        $campos['CURRENCY_ID'] = 'USD';
+        $campos[D_VALOR]       = $monto . '|USD';
+    }
+    if ($proy > 0) $campos[D_PROYECTO] = $proy;
+
+    $u = bx('crm.deal.update', ['id' => $dealId, 'fields' => $campos]);
+    if (!$u['ok']) { logline("deal=$dealId ficha ERR: {$u['error']}"); return ['err' => $u['error']]; }
+    logline("deal=$dealId ficha autollenada: activo=" . implode(',', $cods)
+          . " monto=" . ($campos['OPPORTUNITY'] ?? '-') . " proy=" . ($proy ?: '-'));
+    return ['activo' => implode(', ', $cods), 'monto' => $campos['OPPORTUNITY'] ?? null, 'proy' => $proy];
+}
+
+/**
  * Sincroniza un deal: deja atadas exactamente las unidades del campo.
  * Devuelve un resumen para el log.
  */
@@ -451,6 +551,7 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     // Firmados-caídos) las que ya estaban atadas se quedaban igual.
     $movidas   = 0;
     $agregarSet = array_flip($agregar);
+    $fichas     = [];   // datos de las unidades del campo, para el autollenado de abajo
 
     foreach (array_merge($quiere, $soltar) as $uid) {
         $uid = (int)$uid;
@@ -459,6 +560,16 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
         $r = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $uid]);
         if (!$r['ok']) { logline("ERR get u=$uid: {$r['error']}"); continue; }
         $it = $r['result']['item'] ?? $r['result'];
+
+        // Se aprovecha ESTE get (ya pagado) para el autollenado de la ficha del
+        // deal: así no cuesta ninguna llamada extra de lectura.
+        if (!$suelta) {
+            $fichas[$uid] = [
+                'cod'  => codigo_activo((string)($it['title'] ?? '')),
+                'pvp'  => (float)explode('|', (string)($it[U_PVP] ?? ''))[0],
+                'proy' => proyecto_de_unidad((int)($it['categoryId'] ?? 0), $it[U_TIPO] ?? 0),
+            ];
+        }
 
         $campos = [];
         $nuevoStage = null;
@@ -530,8 +641,11 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
         $propagadas = propagar_quitada($soltar, $dealId, (int)($deal['CONTACT_ID'] ?? 0));
     }
 
+    // Autollenado de la ficha del deal con los datos de la unidad elegida.
+    $ficha = ($agregar && $fichas) ? autollenar_ficha($dealId, $fichas) : [];
+
     return ['ok' => true, 'quiere' => count($quiere), 'agregadas' => count($agregar),
             'soltadas' => count($soltar), 'stage' => $target ?: '-', 'movidas' => $movidas,
-            'propagadas' => $propagadas];
+            'propagadas' => $propagadas, 'ficha' => $ficha ?: '-'];
 }
 
