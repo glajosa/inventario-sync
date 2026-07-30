@@ -61,6 +61,7 @@ const MAPA_PROYECTO = [
     51 => ['*' => 73],     // Galero Torre D  -> Departamentos en Playas
     53 => ['*' => 150],    // Galero Suites
     55 => [1799 => 115, 1947 => 115, 1945 => 115, 1943 => 514, 1949 => 514, '*' => 115],
+    61 => ['*' => 134],    // Elite Apartments (pipeline nuevo, jul-2026)
 ];
 
 /**
