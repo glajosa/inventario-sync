@@ -214,12 +214,35 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
     if ($vieja === null) $vieja = unidad_por_codigo_contacto($codViejo, $contacto);
     $viejaId = (int)($vieja['id'] ?? 0);
 
+    // Si se identificó la unidad vieja de verdad, su CÓDIGO manda sobre el texto
+    // del campo ACTIVO COMPRADO. Hace falta porque ese campo lo escriben también
+    // otras automatizaciones del portal y llega sucio: se vio un deal con
+    // ACTIVO COMPRADO = "1234" (la cédula del cliente), y así ACTIVO INICIAL
+    // guardaba "1234" en vez del código de la unidad. El dato bueno es la unidad.
+    $codDeCampo = $codViejo;
+    if ($viejaId > 0) {
+        $c = codigo_activo((string)($vieja['title'] ?? ''));
+        if ($c !== '') $codViejo = $c;
+    }
+
     // Precio de la unidad vieja. Regla del negocio: si el VALOR DEL ACTIVO del
     // deal difiere del PVP de lista, manda el del deal — ahí está el precio que
     // realmente se pactó (upgrades, bodega, balcón). Si coinciden, da igual cuál.
-    $valorDeal  = money_num($deal[D_VALOR] ?? '');
-    $pvpViejo   = money_num($vieja[U_PVP] ?? '');
-    $precioViejo = ($valorDeal > 0 && abs($valorDeal - $pvpViejo) > 0.01) ? $valorDeal : $pvpViejo;
+    //
+    // Con un cordón: el valor del deal solo se cree si la ficha de ese deal está
+    // sana, o sea si su ACTIVO COMPRADO es de verdad el código de la unidad vieja.
+    // Si el campo trae otra cosa (se vio la cédula del cliente ahí), su VALOR DEL
+    // ACTIVO tampoco es de fiar y se usa el PVP del SPA.
+    $valorDeal = money_num($deal[D_VALOR] ?? '');
+    $pvpViejo  = money_num($vieja[U_PVP] ?? '');
+    $norm      = fn($s) => strtoupper(str_replace(' ', '', trim((string)$s)));
+    $fichaSana = ($viejaId === 0) || ($norm($codDeCampo) === $norm($codViejo));
+    if (!$fichaSana) {
+        logline("REUBICA deal=$dealId ficha sucia: ACTIVO COMPRADO=\"$codDeCampo\" no es la unidad"
+              . " $viejaId ($codViejo) -> uso el PVP del SPA, no el valor del deal");
+    }
+    $precioViejo = ($fichaSana && $valorDeal > 0 && abs($valorDeal - $pvpViejo) > 0.01)
+        ? $valorDeal : $pvpViejo;
     if ($precioViejo <= 0) $precioViejo = $valorDeal > 0 ? $valorDeal : $pvpViejo;
 
     // --- qué trío de campos toca (1ª, 2ª o 3ª vez) ---------------------------
