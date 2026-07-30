@@ -28,8 +28,6 @@ header('Content-Type: text/plain; charset=utf-8');
 
 // ---- Rutas y constantes -----------------------------------------------------
 const CATEGORY_ID   = 44;                       // pipeline CLIENTES
-const SPA_ENTITY    = 1072;                      // SPA Inventario
-const CAMPO_NUEVO   = 'UF_CRM_1785205972989';    // campo "Inventario" (tipo propio, multi)
 // Los userfields viejos de Inventario ya se borraron: el campo nuevo es la unica
 // fuente. La lista queda vacia a proposito (no se borra la constante para no
 // tocar el resto del flujo). OJO: nunca volver a filtrar por un campo borrado,
@@ -42,42 +40,16 @@ $LOG_FILE      = $DATA_DIR . '/sync.log';
 $WEBHOOK_IN    = rtrim((string)getenv('BITRIX_WEBHOOK'), '/') . '/'; // webhook ENTRANTE
 $EXPECT_TOKEN  = (string)getenv('OUTBOUND_TOKEN');         // token del webhook SALIENTE
 
-require_once __DIR__ . '/stagelib.php';   // lógica de STAGE (Clientes tiempo real)
+// campolib.php trae bx(), logline(), las constantes y —lo importante—
+// sincronizar_deal(), que es la ÚNICA lógica de atado. Antes este archivo tenía
+// copias propias de bx/logline y no incluía campolib: al llamar a sincronizar_deal
+// el hook moría con un fatal (función inexistente), devolvía 500 y no dejaba ni
+// rastro en el log. De ahí que "no pasara nada" al copiarse un deal a Clientes.
+// stagelib entra por dentro de campolib, así que no hace falta pedirlo aquí.
+require_once __DIR__ . '/campolib.php';
 
-// ---- Utilidades -------------------------------------------------------------
-function logline(string $msg): void {
-    global $LOG_FILE, $DATA_DIR;
-    // timestamp sin depender de tz del server: se guarda epoch + ISO UTC
-    $line = gmdate('Y-m-d\TH:i:s\Z') . '  ' . $msg . "\n";
-    // sync.log lo crea el cron como root, así que Apache (www-data) NO puede
-    // escribir ahí: TODA la traza del hook se perdía en silencio (el @ la tapaba).
-    // Si falla, se cae a web.log, que sí es de Apache. El visor muestra los dos.
-    if (@file_put_contents($LOG_FILE, $line, FILE_APPEND | LOCK_EX) === false) {
-        @file_put_contents($DATA_DIR . '/web.log', $line, FILE_APPEND | LOCK_EX);
-    }
-}
-
-/** Llama al webhook ENTRANTE de Bitrix. Devuelve ['ok'=>bool,'result'=>mixed,'error'=>str]. */
-function bx(string $method, array $params = []): array {
-    global $WEBHOOK_IN;
-    $url = $WEBHOOK_IN . $method;
-    $ch  = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => http_build_query($params),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 20,
-        CURLOPT_CONNECTTIMEOUT => 10,
-    ]);
-    $raw  = curl_exec($ch);
-    $errno = curl_errno($ch);
-    curl_close($ch);
-    if ($errno) return ['ok' => false, 'error' => "curl:$errno"];
-    $j = json_decode((string)$raw, true);
-    if (!is_array($j))          return ['ok' => false, 'error' => 'bad-json'];
-    if (isset($j['error']))     return ['ok' => false, 'error' => $j['error'] . ':' . ($j['error_description'] ?? '')];
-    return ['ok' => true, 'result' => $j['result'] ?? null];
-}
+// Evento en vivo: sin freno entre llamadas (el freno es para los barridos).
+$BX_FRENO_US = 0;
 
 /** Lee la lista blanca (IDs de deals P44) como set [id=>true]. */
 function load_allowlist(): array {
@@ -227,6 +199,8 @@ if (ids_de((string)($deal[CAMPO_NUEVO] ?? '')) === []) {
     if ($viejas) $deal[CAMPO_NUEVO] = implode(',', array_keys($viejas));
 }
 
-$res = sincronizar_deal($dealId, $deal);
+// (int) obligatorio: $dealId viaja como string desde el payload del webhook y
+// campolib.php declara strict_types, así que pasarlo tal cual era un TypeError.
+$res = sincronizar_deal((int)$dealId, $deal);
 logline("HOOK deal=$dealId sync=" . json_encode($res));
 echo 'ok-sync ' . json_encode($res);
