@@ -238,15 +238,19 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
     $hecho = ['ok' => true, 'ocasion' => $ocasion, 'de' => $codViejo, 'a' => $codNuevo,
               'unidad_vieja' => $viejaId, 'unidad_nueva' => $nuevoId, 'proyecto' => $proyTxt];
 
-    // 1) COBRANZAS(48)
+    // 1) COBRANZAS(48) — SOLO ACTIVO COMPRADO, el trío de reubicación y el título.
+    //
+    // Ni VALOR DEL ACTIVO ni Monto y moneda ni Proyectos 1: en Cobranzas esos los
+    // llenan sus propias automatizaciones (el valor sale de la tabla de pagos
+    // cuando se sube). Escribirlos desde aquí sería pisar el trabajo de otro
+    // sistema con un precio de lista. El proyecto sí se calcula, pero solo para
+    // armar el título.
     $c48 = [
         D_ACTIVO          => $codNuevo,
         $trio['flag']     => 1,
         $trio['activo']   => $codViejo,
         $trio['precio']   => $precioViejo > 0 ? money_fmt($precioViejo) : '',
     ];
-    if ($pvpNuevo > 0) $c48[D_VALOR] = money_fmt($pvpNuevo);
-    if ($proyId > 0)   $c48[D_PROYECTO] = $proyId;
     $t48 = titulo_reubicado((string)($deal['TITLE'] ?? ''), $proyTxt, $codNuevo);
     if ($t48 !== null) $c48['TITLE'] = $t48;
 
