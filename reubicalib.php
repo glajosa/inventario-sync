@@ -291,6 +291,33 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
         logline("REUBICA deal=$dealId no ubiqué la unidad vieja $codViejo (contacto $contacto)");
     }
 
+    // 3b) La unidad vieja fuera del campo Inventario de los HERMANOS.
+    //     Hace falta porque el portal copia deals solo (28->44 al reservar, 44->48
+    //     al firmar, y los de FAMILIA/EXPERIENCIAS) arrastrando el campo. Si no se
+    //     limpia, esos deals siguen nombrando la unidad vieja y el reconcile la
+    //     vuelve a atar: quedaría ocupada otra vez sin que nadie la haya vendido.
+    //     Se recorren TODAS las categorías del contacto, no solo 28/44, porque el
+    //     arrastre llega hasta Cobranzas y Familia.
+    if ($viejaId > 0) {
+        $r = bx('crm.deal.list', [
+            'filter' => ['CONTACT_ID' => $contacto, '!' . CAMPO_NUEVO => ''],
+            'select' => ['ID', 'CATEGORY_ID', CAMPO_NUEVO],
+        ]);
+        $nLimpios = 0;
+        foreach (($r['result'] ?? []) as $d) {
+            $did = (int)($d['ID'] ?? 0);
+            if ($did <= 0 || $did === $dealId) continue;
+            if ($h && $did === (int)$h['ID']) continue;              // el destino ya quedó bien
+            $tiene = ids_de((string)($d[CAMPO_NUEVO] ?? ''));
+            $queda = array_values(array_diff($tiene, [$viejaId]));
+            if (count($queda) === count($tiene)) continue;
+            $u = bx('crm.deal.update', ['id' => $did, 'fields' => [CAMPO_NUEVO => implode(',', $queda)]]);
+            if ($u['ok']) { $nLimpios++; logline("REUBICA hermano deal=$did: quitada u=$viejaId del campo"); }
+            else logline("REUBICA hermano deal=$did ERR: {$u['error']}");
+        }
+        $hecho['hermanos_limpiados'] = $nLimpios;
+    }
+
     // 4) FAMILIA(58) — solo los tres campos de ficha, sin renombrar
     $r = bx('crm.deal.list', [
         'filter' => ['CONTACT_ID' => $contacto, 'CATEGORY_ID' => FAMILIA_CAT],
