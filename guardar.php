@@ -104,6 +104,23 @@ if ($cat === PROSPECTOS_CAT && $limpio !== '' && !$permisoOk && $stage !== etapa
         'error' => 'En Prospectos Ventas la unidad solo se elige en la etapa RESERVA']); exit;
 }
 
+// COBRANZAS: si el vendedor abre el campo y guarda SIN cambiar la unidad, esto se
+// tiene que ver como "no pasó nada". Sin esta salida temprana caía en el candado
+// anti doble-venta de abajo —la unidad está atada al deal de Clientes, no a este—
+// y le respondía "unidad ya apartada", que asusta y no describe lo que pasó.
+if ($cat === COBRANZAS_CAT && count($ids) === 1) {
+    $q = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => (int)$ids[0]]);
+    if ($q['ok']) {
+        $cod = codigo_activo((string)(($q['result']['item'] ?? $q['result'])['title'] ?? ''));
+        $act = (string)($g['result'][D_ACTIVO] ?? '');
+        $norm = fn($s) => strtoupper(str_replace(' ', '', trim($s)));
+        if ($cod !== '' && $norm($cod) === $norm($act)) {
+            echo json_encode(['ok' => true, 'guardado' => $limpio,
+                'nota' => "El deal ya está en $cod: no hay reubicación que hacer"]); exit;
+        }
+    }
+}
+
 // Las unidades deben existir y no estar tomadas por OTRA venta (anti doble-venta).
 // Se pasa el contacto para que la copia en CLIENTES pueda tomar la unidad que su
 // propio deal de Prospectos apartó.
