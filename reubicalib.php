@@ -173,7 +173,7 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
     $proyTxt  = proyecto_nombre($proyId);
     $pvpNuevo = money_num($nueva[U_PVP] ?? '');
 
-    // --- la unidad VIEJA: el código que hoy dice el deal 48 ------------------
+    // --- la unidad VIEJA -----------------------------------------------------
     $codViejo = trim((string)($deal[D_ACTIVO] ?? ''));
     if ($codViejo === '') {
         return ['ok' => false, 'error' => 'El deal no tiene ACTIVO COMPRADO: no sé de qué unidad se reubica'];
@@ -181,7 +181,37 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
     if (strtoupper(str_replace(' ', '', $codViejo)) === strtoupper(str_replace(' ', '', $codNuevo))) {
         return ['ok' => true, 'nada' => 'la unidad del campo es la que ya estaba: no es reubicación'];
     }
-    $vieja   = unidad_por_codigo_contacto($codViejo, $contacto);
+
+    // El deal de CLIENTES se resuelve antes de la unidad vieja: es la fuente más
+    // firme, porque ahí vive la dependencia (parentId2) de la unidad que se está
+    // reemplazando. Buscar solo por código+contacto no basta — en una segunda
+    // reubicación la unidad anterior puede no tener contacto puesto, y entonces no
+    // se encontraba y quedaba ocupada de fantasma.
+    $h = clientes_hermano($contacto, 0);
+
+    // Tres caminos, del más firme al más flojo:
+    //   1. lo que el propio campo del deal 48 tenía antes de este cambio
+    //   2. lo que cuelga del deal de CLIENTES por parentId2
+    //   3. código + contacto (el que usa reconcile para Cobranzas)
+    $vieja = null;
+    $candidatos = array_values(array_diff(ids_de((string)($deal[CAMPO_NUEVO] ?? '')), $nuevas));
+    if (!$candidatos && $h) {
+        $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => ['parentId2' => (int)$h['ID']]]);
+        foreach (($r['result']['items'] ?? []) as $it) {
+            if (in_array((int)$it['id'], $nuevas, true)) continue;
+            $candidatos[] = (int)$it['id'];
+        }
+    }
+    foreach ($candidatos as $cid) {
+        $x = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => (int)$cid]);
+        if (!$x['ok']) continue;
+        $it = $x['result']['item'] ?? $x['result'];
+        // solo vale si de verdad es la unidad del ACTIVO COMPRADO que dice el deal
+        $c = strtoupper(str_replace(' ', '', codigo_activo((string)($it['title'] ?? ''))));
+        if ($c === strtoupper(str_replace(' ', '', $codViejo))) { $vieja = $it; break; }
+        if ($vieja === null) $vieja = $it;   // se guarda por si ninguno coincide de código
+    }
+    if ($vieja === null) $vieja = unidad_por_codigo_contacto($codViejo, $contacto);
     $viejaId = (int)($vieja['id'] ?? 0);
 
     // Precio de la unidad vieja. Regla del negocio: si el VALOR DEL ACTIVO del
@@ -226,7 +256,7 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
     logline("REUBICA deal=$dealId ocasion=$ocasion $codViejo -> $codNuevo (48 listo)");
 
     // 2) CLIENTES(44) — el que de verdad ata la unidad
-    $h = clientes_hermano($contacto, $viejaId);
+    if ($h === null) $h = clientes_hermano($contacto, $viejaId);
     if ($h) {
         $hid  = (int)$h['ID'];
         $c44  = [
@@ -260,7 +290,12 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
             }
             foreach ($nuevas as $uid) {
                 @touch(($GLOBALS['DATA_DIR'] ?? '/data') . '/self_u_' . (int)$uid);
-                $campos = ['parentId2' => $hid];
+                // El contacto y el asesor van en la MISMA escritura que la
+                // dependencia. Sin el contacto, una segunda reubicación no podía
+                // reconocer esta unidad como la anterior y la dejaba ocupada de
+                // fantasma; además es lo que hace que salga el nombre en el kanban.
+                $campos = campos_owner(['contactId' => 0, 'assignedById' => 0], $h);
+                $campos['parentId2'] = $hid;
                 if ($stageDestino !== null) {
                     $sid = stage_id((string)$catNueva, $stageDestino);
                     if ($sid !== null) $campos['stageId'] = $sid;
