@@ -18,6 +18,7 @@
 
 declare(strict_types=1);
 require_once __DIR__ . '/campolib.php';
+require_once __DIR__ . '/reubicalib.php';
 
 // Acción interactiva: sin freno entre llamadas. El freno es para los barridos.
 $BX_FRENO_US = 0;
@@ -58,14 +59,23 @@ if (!$g['ok']) {
 // Pipelines donde el campo tiene sentido:
 //   PROSPECTOS(28) -> se aparta al llegar a RESERVA (ver candado de etapa abajo).
 //   CLIENTES(44)   -> la reserva oficial (ATA de verdad).
-// Cobranzas(48) y el resto no: 48 es read-only por regla del negocio.
+//   COBRANZAS(48)  -> REUBICACIÓN: el cliente ya compró y cambia de unidad.
+//                     No ata (la dependencia vive en el 44), pero sí reescribe la
+//                     ficha de los tres deals y deja el rastro de la reubicación.
 $cat      = (int)($g['result']['CATEGORY_ID'] ?? -1);
 $contacto = (int)($g['result']['CONTACT_ID'] ?? 0);
 $stage    = (string)($g['result']['STAGE_ID'] ?? '');
-if ($cat !== CLIENTES_CAT && $cat !== PROSPECTOS_CAT) {
+if ($cat !== CLIENTES_CAT && $cat !== PROSPECTOS_CAT && $cat !== COBRANZAS_CAT) {
     logline("deal=$dealId RECHAZADO: pipeline $cat no soportado");
     echo json_encode(['ok' => false,
-        'error' => 'Las unidades solo se eligen en Prospectos Ventas o Clientes']); exit;
+        'error' => 'Las unidades solo se eligen en Prospectos Ventas, Clientes o Cobranzas']); exit;
+}
+
+// COBRANZAS: vaciar el campo no reubica nada, y dejarlo pasar sería una forma
+// silenciosa de perder el rastro. Se rechaza con un mensaje claro.
+if ($cat === COBRANZAS_CAT && $ids === []) {
+    echo json_encode(['ok' => false,
+        'error' => 'Para reubicar hay que escoger la unidad nueva, no vaciar el campo']); exit;
 }
 
 // CANDADO DE ETAPA (28) — jul-2026. Antes se podía apartar desde CUALQUIER etapa
@@ -120,6 +130,20 @@ if (!$up['ok']) {
 // Sin esto, sincronizar_deal leería el valor viejo y ataría lo que ya no toca.
 $deal = $g['result'];
 $deal[CAMPO_NUEVO] = $limpio;
+
+// COBRANZAS va por otro camino: no ata unidades, reubica. reubicar() recibe el
+// deal tal como estaba ANTES del update a propósito — necesita el ACTIVO COMPRADO
+// y el VALOR DEL ACTIVO viejos para saber de qué unidad se está saliendo.
+if ($cat === COBRANZAS_CAT) {
+    $r = reubicar($dealId, $g['result'], $ids);
+    logline("deal=$dealId REUBICACION guardado=[$limpio] r=" . json_encode($r));
+    if (empty($r['ok'])) {
+        echo json_encode(['ok' => false, 'error' => $r['error'] ?? 'no pude reubicar']); exit;
+    }
+    echo json_encode(['ok' => true, 'guardado' => $limpio, 'reubicacion' => $r]);
+    exit;
+}
+
 $r = sincronizar_deal($dealId, $deal);
 logline("deal=$dealId guardado=[$limpio] sync=" . json_encode($r));
 
