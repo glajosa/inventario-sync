@@ -131,6 +131,66 @@ if (!empty($_GET['huerfanas'])) {
     exit;
 }
 
+
+// ?desfase=1 -> unidades cuyo stage NO coincide con el que dicta la etapa de su
+// deal, y en particular los deals con VARIAS unidades donde no todas quedaron
+// igual. Es el chequeo del reporte "solo una de las dos quedó en reservado".
+if (!empty($_GET['desfase'])) {
+    $rev = [];
+    foreach (stages_map() as $c => $m) foreach ($m as $n => $sid) $rev[$sid] = $n;
+    $stageDe = [];
+    $start = 0;
+    do {
+        $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'order' => ['id' => 'ASC'], 'start' => $start]);
+        if (!$r['ok']) break;
+        foreach (($r['result']['items'] ?? []) as $it) {
+            $stageDe[(int)($it['id'] ?? 0)] = $rev[(string)($it['stageId'] ?? '')] ?? '?';
+        }
+        $start = $r['next'] ?? null;
+    } while ($start !== null && $start !== '');
+
+    $malos = 0; $multi = 0; $multiDesigual = 0;
+    $start = 0;
+    do {
+        $r = bx('crm.deal.list', [
+            'filter' => ['CATEGORY_ID' => CLIENTES_CAT, '!' . CAMPO_NUEVO => ''],
+            'select' => ['ID', 'STAGE_ID', CAMPO_NUEVO], 'order' => ['ID' => 'ASC'], 'start' => $start,
+        ]);
+        if (!$r['ok']) { echo "ERROR: {$r['error']}\n"; break; }
+        foreach (($r['result'] ?? []) as $d) {
+            $ids = ids_de((string)($d[CAMPO_NUEVO] ?? ''));
+            if (!$ids) continue;
+            $esperado = CLIENTES_TRIGGERS[(string)($d['STAGE_ID'] ?? '')] ?? null;
+            if (count($ids) > 1) {
+                $multi++;
+                $sts = array_unique(array_map(fn($u) => $stageDe[$u] ?? '?', $ids));
+                if (count($sts) > 1) {
+                    $multiDesigual++;
+                    echo "deal {$d['ID']} ({$d['STAGE_ID']}) unidades DESIGUALES: ";
+                    foreach ($ids as $u) echo "$u=" . ($stageDe[$u] ?? '?') . " ";
+                    echo "\n";
+                }
+            }
+            if ($esperado === null) continue;   // etapa sin regla: no dicta nada
+            foreach ($ids as $u) {
+                $st = $stageDe[$u] ?? '?';
+                // VENDIDO lo manda Cobranzas; BLOQUEADO/PERDIDO son gerenciales
+                if (in_array($st, ['VENDIDO', 'BLOQUEADO', 'PERDIDO'], true)) continue;
+                if ($st !== $esperado) {
+                    $malos++;
+                    if ($malos <= 25) echo "  u=$u esta $st pero deal {$d['ID']} ({$d['STAGE_ID']}) dicta $esperado\n";
+                }
+            }
+        }
+        $start = $r['next'] ?? null;
+    } while ($start !== null && $start !== '');
+
+    echo "\ndeals con VARIAS unidades      : $multi\n";
+    echo "de esos, con stages DESIGUALES : $multiDesigual\n";
+    echo "unidades con stage desfasado   : $malos\n";
+    exit;
+}
+
 // ?poretapa=1 -> deals de CLIENTES con unidad en el campo, agrupados por etapa,
 // y en qué stage está cada unidad. Sirve para medir el alcance de una regla antes
 // de que el barrido la aplique (ej: cuántas reservas caídas van a liberar unidad).
