@@ -203,79 +203,30 @@ if (!isset($allow[$dealId])) {
     exit;
 }
 
-// ---- 5) Es P44: leer los 3 campos extra y sincronizar -----------------------
+// ---- 5) Es P44: sincronizar ------------------------------------------------
+// Este bloque tenía ANTES su propia copia de la lógica de atado: leía el deal,
+// calculaba diffs, escribía parentId2 y aplicaba stages por su cuenta. Dos
+// implementaciones de lo mismo, y divergieron: a esta le faltaba el autollenado de
+// la ficha (ACTIVO COMPRADO / VALOR DEL ACTIVO / Proyectos 1 / Monto) y la
+// limpieza del campo en Prospectos. Resultado real: un deal que llegaba a RESERVA
+// por la copia automática del 28 se quedaba con la ficha sin llenar y con la
+// unidad todavía puesta en Prospectos, porque por este camino nadie las hacía.
+// Ahora llama a la MISMA función que guardar.php. Una sola lógica, un solo sitio.
 $r = bx('crm.deal.get', ['id' => $dealId]);           // 1 llamada
 if (!$r['ok']) { logline("ERR get deal=$dealId: {$r['error']}"); echo 'err-get'; exit; }
 $deal = $r['result'];
 
-// Unidades que el deal DICE tener.
-// PRECEDENCIA, no unión: si el campo nuevo "Inventario" tiene algo, ese manda y
-// los viejos se ignoran. Si está vacío, se cae a los viejos (deals sin migrar).
-//
-// Antes se hacía la UNIÓN y eso era un error de fondo: en un deal ya migrado los
-// dos campos están llenos, así que al quitar una unidad del campo nuevo la unión
-// la veía todavía en el viejo y la volvía a atar. El cambio rebotaba solo.
-$quieren = [];
-foreach (preg_split('/[,;\s]+/', (string)($deal[CAMPO_NUEVO] ?? '')) as $x) {
-    $x = trim($x);
-    if ($x !== '' && ctype_digit($x) && (int)$x > 0) $quieren[(int)$x] = true;
-}
-if (!$quieren) {
+// Compatibilidad con los deals sin migrar: si el campo nuevo está vacío pero los
+// viejos tienen algo, se le pasa a sincronizar_deal por el campo nuevo.
+if (ids_de((string)($deal[CAMPO_NUEVO] ?? '')) === []) {
+    $viejas = [];
     foreach (FIELDS_EXTRA as $f) {
         $v = $deal[$f] ?? '';
-        if ($v !== '' && $v !== null && (int)$v > 0) $quieren[(int)$v] = true;
+        if ($v !== '' && $v !== null && (int)$v > 0) $viejas[(int)$v] = true;
     }
-}
-// Deal caído (RESERVAS CAIDAS / FIRMADOS-CAIDOS): no quiere ninguna, se sueltan.
-// El campo se deja como estaba, de registro de lo que se había reservado.
-if (etapa_libera((string)($deal['STAGE_ID'] ?? ''))) $quieren = [];
-$quieren = array_keys($quieren);   // ids de unidades objetivo
-
-// unidades que HOY apuntan a este deal via parentId2
-$r = bx('crm.item.list', [                            // 1 llamada
-    'entityTypeId' => SPA_ENTITY,
-    'filter'       => ['parentId2' => $dealId],
-    'select'       => ['id'],
-]);
-$tienen = [];
-if ($r['ok']) foreach (($r['result']['items'] ?? []) as $it) $tienen[(int)$it['id']] = true;
-$tienen = array_keys($tienen);
-
-// diffs
-$agregar = array_values(array_diff($quieren, $tienen)); // atar
-$soltar  = array_values(array_diff($tienen, $quieren)); // desatar (ya no está en los campos)
-
-$cambios = 0;
-foreach ($agregar as $uid) {
-    $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid,
-                                'fields' => ['parentId2' => $dealId]]);
-    if ($u['ok']) $cambios++; else logline("ERR set u=$uid deal=$dealId: {$u['error']}");
-}
-foreach ($soltar as $uid) {
-    $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid,
-                                'fields' => ['parentId2' => 0]]);
-    if ($u['ok']) $cambios++; else logline("ERR unset u=$uid deal=$dealId: {$u['error']}");
+    if ($viejas) $deal[CAMPO_NUEVO] = implode(',', array_keys($viejas));
 }
 
-if ($cambios > 0) {
-    logline(sprintf('SYNC deal=%s +[%s] -[%s]', $dealId,
-        implode(',', $agregar), implode(',', $soltar)));
-}
-
-// ---- 6) STAGE + RESPONSABLE/CLIENTE de las unidades del deal de Clientes -----
-// Para cada unidad atada a este deal: copia el asesor (responsable) y el contacto
-// (cliente) del deal a la unidad, y mueve el stage según la etapa del deal.
-$deal_units  = units_of_clientes_deal($dealId, $deal);
-$stage       = (string)($deal['STAGE_ID'] ?? '');
-$stageTarget = CLIENTES_TRIGGERS[$stage] ?? null;
-$stageCambios = 0;
-foreach ($deal_units as $uid) {
-    sync_unit_owner((int)$uid, $deal);                                    // asesor + contacto
-    if ($stageTarget && apply_unit_stage((int)$uid, null, $stageTarget, false)) $stageCambios++;
-}
-// unidades que se acaban de SOLTAR de este deal -> DISPONIBLE (perdieron su deal)
-foreach ($soltar as $uid) {
-    apply_unit_stage((int)$uid, null, 'DISPONIBLE', false);
-}
-
-echo "ok-sync changes=$cambios stage=$stageCambios";
+$res = sincronizar_deal($dealId, $deal);
+logline("HOOK deal=$dealId sync=" . json_encode($res));
+echo 'ok-sync ' . json_encode($res);

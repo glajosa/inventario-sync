@@ -354,6 +354,58 @@ function apartar_prospecto(int $dealId, array $deal): array {
 }
 
 /**
+ * Vacía la unidad del campo Inventario del deal de PROSPECTOS(28) una vez que
+ * CLIENTES(44) ya la tomó de verdad (parentId2 puesto).
+ *
+ * Por qué: el 28 solo APARTA — es un "no me la toquen mientras negocio". Cuando
+ * el deal se copia a CLIENTES y ahí queda atada, el apartado ya no significa
+ * nada y tener la misma unidad en los dos campos solo desordena: el vendedor ve
+ * la unidad en dos sitios y no sabe cuál manda.
+ *
+ * Se hace DESPUÉS del atado, nunca antes: si se vaciara primero y el atado
+ * fallara, la unidad quedaría libre en los dos pipelines y otro podría venderla.
+ *
+ * Solo toca deals del 28 del MISMO contacto, y solo les quita las unidades que el
+ * 44 acaba de atar. Lo demás que tengan en el campo se queda.
+ */
+function limpiar_prospecto(int $deal44, int $contacto, array $unidades): int {
+    $unidades = array_values(array_unique(array_map('intval', $unidades)));
+    if (!$unidades || $contacto <= 0) return 0;
+
+    $r = bx('crm.deal.list', [
+        'filter' => ['CONTACT_ID' => $contacto, 'CATEGORY_ID' => PROSPECTOS_CAT,
+                     '!' . CAMPO_NUEVO => ''],
+        'select' => ['ID', CAMPO_NUEVO],
+    ]);
+    if (!$r['ok']) { logline("limpiar_prospecto ERR list: {$r['error']}"); return 0; }
+
+    $n = 0;
+    foreach (($r['result'] ?? []) as $d) {
+        $did   = (int)($d['ID'] ?? 0);
+        $tiene = ids_de((string)($d[CAMPO_NUEVO] ?? ''));
+        $queda = array_values(array_diff($tiene, $unidades));
+        if (count($queda) === count($tiene)) continue;
+
+        $u = bx('crm.deal.update', ['id' => $did, 'fields' => [CAMPO_NUEVO => implode(',', $queda)]]);
+        if (!$u['ok']) { logline("limpiar_prospecto deal=$did ERR: {$u['error']}"); continue; }
+        logline("PROSPECTO deal=$did: campo limpiado, CLIENTES($deal44) ya ató ["
+              . implode(',', array_intersect($tiene, $unidades)) . ']');
+        $n++;
+    }
+
+    // El apartado también sale del registro: la unidad ya no está "apartada por el
+    // 28", está vendida. Si se dejara, el barrido intentaría liberarla.
+    $puestos = apartados_puestos();
+    $tocado  = false;
+    foreach ($unidades as $uid) {
+        if (isset($puestos[(string)$uid])) { unset($puestos[(string)$uid]); $tocado = true; }
+    }
+    if ($tocado) apartados_puestos_guardar($puestos);
+
+    return $n;
+}
+
+/**
  * Quita unas unidades del campo Inventario de los deals HERMANOS.
  *
  * Cuando el deal del 28 llega a RESERVA se copia a CLIENTES(44) arrastrando el
@@ -644,8 +696,14 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     // Autollenado de la ficha del deal con los datos de la unidad elegida.
     $ficha = ($agregar && $fichas) ? autollenar_ficha($dealId, $fichas) : [];
 
+    // Lo que CLIENTES acaba de atar se saca del campo de PROSPECTOS: ahí ya no es
+    // un apartado, es una venta. Va al final, cuando el atado ya está hecho.
+    $prospectos = $agregar
+        ? limpiar_prospecto($dealId, (int)($deal['CONTACT_ID'] ?? 0), $agregar)
+        : 0;
+
     return ['ok' => true, 'quiere' => count($quiere), 'agregadas' => count($agregar),
             'soltadas' => count($soltar), 'stage' => $target ?: '-', 'movidas' => $movidas,
-            'propagadas' => $propagadas, 'ficha' => $ficha ?: '-'];
+            'propagadas' => $propagadas, 'ficha' => $ficha ?: '-', 'prospecto' => $prospectos];
 }
 
