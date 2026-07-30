@@ -42,7 +42,10 @@ const FAMILIA_CAT = 58;
 // Los tres tríos de reubicación, en orden de uso. Cada uno: interruptor Sí/No,
 // código de la unidad de la que se salió, y su precio.
 const REUBICA_TRIOS = [
-    ['flag' => 'UF_CRM_1783975554626', 'activo' => 'UF_CRM_1783975581192', 'precio' => 'UF_CRM_1783975599567'],
+    // El precio de la 1ª ocasión usa "PRECIO ACTIVO NO. 1 (1ra Compra)", que es de
+    // tipo MONEY. El campo anterior ("PRECIO INICIAL", UF_CRM_1783975599567) era
+    // texto suelto y quedó fuera de uso: obligaba a escribir la moneda a mano.
+    ['flag' => 'UF_CRM_1783975554626', 'activo' => 'UF_CRM_1783975581192', 'precio' => 'UF_CRM_1785443661310'],
     ['flag' => 'UF_CRM_1785415565344', 'activo' => 'UF_CRM_1785417527109', 'precio' => 'UF_CRM_1785417550374'],
     ['flag' => 'UF_CRM_1785429826419', 'activo' => 'UF_CRM_1785429969203', 'precio' => 'UF_CRM_1785417711317'],
 ];
