@@ -480,17 +480,44 @@ function propagar_quitada(array $unitIds, int $dealOrigen, int $contacto): int {
  * Varias unidades en un mismo deal (fusiones): el monto y el valor se SUMAN, los
  * códigos se concatenan y el proyecto se toma de la primera.
  *
+ * DESCUENTO DE PARQUEO — solo Noral Plaza (Suites). Ahí, cuando el deal lleva más
+ * de una unidad, las de más son parqueos y NO entran en el precio de venta: se
+ * resta 20.000 del total. Son 20.000 fijos, no 20.000 por parqueo: con tres
+ * unidades (una suite y dos parqueos) se resta lo mismo que con dos. Es la regla
+ * del negocio, no un cálculo.
+ *
+ * Cómo se reconoce que es Suites: por el PROYECTO que resuelve la unidad, no por
+ * la palabra del Tipo de bien. En Noral Plaza el Sheet nunca dice "suite" —dice
+ * "Departamento"— y los dos tipos caen en "Noral Plaza (Suites)". Mirar el
+ * proyecto evita depender de que el Tipo de bien esté bien puesto en cada ficha,
+ * que no siempre lo está.
+ *
  * Coste: 1 escritura. Cero lecturas — los datos salen del crm.item.get que el
  * bucle de arriba ya hizo para atar la unidad.
  */
+const PROY_NORAL_SUITES = 1625;   // "Noral Plaza (Suites)" en la lista Proyectos 1
+const DESCUENTO_PARQUEO = 20000;
+
 function autollenar_ficha(int $dealId, array $fichas): array {
-    $cods = []; $suma = 0.0; $proy = 0;
+    // El proyecto lo manda la unidad PRINCIPAL, o sea la de mayor PVP — no la
+    // primera del campo. Con "la primera" bastaba que el vendedor pusiera el
+    // parqueo antes de la suite para que Proyectos 1 recibiera el proyecto del
+    // parqueo, que ni siquiera es una opción válida de esa lista.
+    $cods = []; $suma = 0.0; $proy = 0; $mejorPvp = -1.0; $esSuites = false;
     foreach ($fichas as $f) {
         if ($f['cod'] !== '') $cods[] = $f['cod'];
-        $suma += (float)$f['pvp'];
-        if (!$proy && !empty($f['proy'])) $proy = (int)$f['proy'];
+        $pvp   = (float)$f['pvp'];
+        $suma += $pvp;
+        if (!empty($f['proy']) && $pvp > $mejorPvp) { $mejorPvp = $pvp; $proy = (int)$f['proy']; }
+        if ((int)($f['proy'] ?? 0) === PROY_NORAL_SUITES) $esSuites = true;
     }
     if (!$cods) return [];
+
+    if ($esSuites && count($fichas) > 1 && $suma > DESCUENTO_PARQUEO) {
+        $suma -= DESCUENTO_PARQUEO;
+        logline("deal=$dealId Noral Plaza Suites con " . count($fichas)
+              . ' unidades -> se resta el parqueo (' . DESCUENTO_PARQUEO . ')');
+    }
 
     $campos = [D_ACTIVO => implode(', ', $cods)];
     if ($suma > 0) {
