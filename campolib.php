@@ -179,6 +179,39 @@ function refrescar_cache(array $unitIds): void {
  * sin volver a preguntárselo a Bitrix. Pasar null en un campo = dejarlo como está.
  * Antes esto costaba un crm.item.get por unidad en cada guardado.
  */
+/**
+ * Registro unidad -> deal que la tiene atada.
+ *
+ * Existe por una sola razón: cuando se BORRA un deal, Bitrix elimina las
+ * relaciones en cascada ANTES de disparar el evento, así que el hook ya no puede
+ * preguntar "¿qué unidades eran de este deal?" — el filtro por parentId2 devuelve
+ * cero. Sin este registro la unidad se quedaba en RESERVADO/FIRMADO con el cliente
+ * pegado y nadie la podía vender.
+ *
+ * No sustituye a parentId2, que sigue siendo la verdad: esto es solo la libreta
+ * para el instante en que la verdad ya se borró.
+ */
+function atados(): array {
+    global $DATA_DIR;
+    $j = json_decode((string)@file_get_contents($DATA_DIR . '/atados.json'), true);
+    return is_array($j) ? $j : [];
+}
+
+function atados_anotar(int $unitId, int $dealId): void {
+    global $DATA_DIR;
+    $m = atados();
+    if ($dealId > 0) $m[(string)$unitId] = $dealId;
+    else unset($m[(string)$unitId]);
+    @file_put_contents($DATA_DIR . '/atados.json', json_encode($m), LOCK_EX);
+}
+
+/** Unidades que el registro dice que tenía este deal. */
+function atados_de(int $dealId): array {
+    $out = [];
+    foreach (atados() as $uid => $did) if ((int)$did === $dealId) $out[] = (int)$uid;
+    return $out;
+}
+
 function cache_unidad(int $unitId, ?string $stage, ?int $dealId): void {
     global $DATA_DIR;
     $path = $DATA_DIR . '/selector_cache.json';
@@ -910,6 +943,8 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
         // el caché se actualiza con lo que acabamos de escribir, sin releer
         cache_unidad($uid, $nuevoStage,
                      array_key_exists('parentId2', $campos) ? (int)$campos['parentId2'] : null);
+        // libreta unidad->deal: la única pista que queda si el deal se borra
+        if (array_key_exists('parentId2', $campos)) atados_anotar($uid, (int)$campos['parentId2']);
     }
 
     // Ya NO se copia la primera unidad al campo nativo PARENT_ID_1072: los 4

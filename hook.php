@@ -151,15 +151,19 @@ if ($event === 'ONCRMDEALDELETE') {
     // El rastro sí está en el caché del selector, que guarda para cada unidad el
     // deal que la tenía. Se filtra luego contra Bitrix: solo se libera la que de
     // verdad quedó sin dueño.
-    $cand = [];
+    // 1) la libreta propia (atados.json), que se escribe en el mismo momento del
+    //    atado y por eso sobrevive al borrado en cascada
+    $cand = atados_de((int)$dealId);
+    // 2) el caché del selector, como segunda fuente
     $cache = json_decode((string)@file_get_contents($DATA_DIR . '/selector_cache.json'), true);
     foreach (($cache['units'] ?? []) as $u) {
         if ((int)($u['dealId'] ?? 0) === (int)$dealId) $cand[] = (int)$u['id'];
     }
-    // por si el caché estuviera viejo, se prueba igual el filtro directo
+    // 3) y el filtro directo, por si el borrado no hubiera arrastrado la relación
     $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => ['parentId2' => $dealId]]);
     if ($r['ok']) foreach (($r['result']['items'] ?? []) as $it) $cand[] = (int)($it['id'] ?? 0);
     $cand = array_values(array_unique(array_filter($cand)));
+    logline("DELETE deal=$dealId candidatas=[" . implode(',', $cand) . ']');
 
     $n = 0;
     foreach ($cand as $uid) {
@@ -175,7 +179,7 @@ if ($event === 'ONCRMDEALDELETE') {
         // marca de escritura propia para que el guardián no lo lea como arrastre
         @touch($DATA_DIR . '/self_u_' . $uid);
         $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid, 'fields' => $campos]);
-        if ($u['ok']) { $n++; cache_unidad($uid, 'DISPONIBLE', 0); }
+        if ($u['ok']) { $n++; cache_unidad($uid, 'DISPONIBLE', 0); atados_anotar($uid, 0); }
         else logline("DELETE u=$uid ERR: {$u['error']}");
     }
     logline("DELETE deal=$dealId -> $n unidad(es) a DISPONIBLE, sin dueño ni cliente");
