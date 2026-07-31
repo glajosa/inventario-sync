@@ -247,9 +247,6 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?>.gu-bloq .gu-fila{cursor:default}
   #<?= $uid ?>.gu-bloq .gu-fila:hover{background:transparent}
   #<?= $uid ?>.gu-bloq .gu-quita{display:none}
-  #<?= $uid ?>.gu-bloq .gu-pie::after{content:'solo consulta — la unidad se elige en RESERVA';
-      color:#9a6700;background:#fff8c5;border:1px solid #f0e2a0;border-radius:5px;
-      padding:1px 7px;font-size:11px;margin-left:8px}
   /* cerrado: texto plano, igual que los campos nativos del deal (sin chips ni ✕) */
   #<?= $uid ?> .gu-txt{display:inline-flex;align-items:center;height:20px;overflow:hidden;
       white-space:nowrap;text-overflow:ellipsis}
