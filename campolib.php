@@ -540,7 +540,10 @@ function noral_avisar_generador(int $catId, string $codigo, string $accion): voi
     $det = is_array($j)
         ? ($j['skip'] ?? ($j['clave'] ?? ($j['error'] ?? 'ok')))
         : "http=$code";
-    logline("NORAL $accion «$codigo» ($proy) -> $det");
+    // llaves obligatorias: «$codigo» hace que PHP lea la comilla angular como parte
+    // del nombre de la variable -> warning "Undefined variable" impreso ANTES del
+    // JSON, que rompe el fetch().json() del vendedor al guardar.
+    logline("NORAL $accion {$codigo} ($proy) -> $det");
 }
 
 function autollenar_ficha(int $dealId, array $fichas): array {
