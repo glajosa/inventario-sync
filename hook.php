@@ -141,27 +141,42 @@ if ($event === 'ONCRMDEALDELETE') {
     // seguía en FIRMADO y con el nombre del cliente en la tarjeta del kanban: nadie
     // podía venderla y parecía ocupada por un deal que ya no existe.
     //
-    // SIN 'select': pedirlo explícitamente hace que Bitrix devuelva id y
-    // categoryId en null (bug verificado), y sin categoryId no se puede resolver el
-    // stage DISPONIBLE, que tiene distinto STATUS_ID en cada pipeline.
-    $r = bx('crm.item.list', [
-        'entityTypeId' => SPA_ENTITY,
-        'filter'       => ['parentId2' => $dealId],
-    ]);
+    // De dónde salen las unidades del deal borrado: NO de un filtro por parentId2.
+    // Bitrix borra las relaciones EN CASCADA antes de disparar el evento, así que
+    // cuando llega aquí ya no queda ninguna unidad apuntando al deal y el filtro
+    // devuelve cero. Verificado: el handler anterior no liberaba nada nunca y solo
+    // lo parecía, porque Bitrix ya había limpiado el parentId2 por su cuenta — el
+    // stage y el cliente se quedaban pegados para siempre.
+    //
+    // El rastro sí está en el caché del selector, que guarda para cada unidad el
+    // deal que la tenía. Se filtra luego contra Bitrix: solo se libera la que de
+    // verdad quedó sin dueño.
+    $cand = [];
+    $cache = json_decode((string)@file_get_contents($DATA_DIR . '/selector_cache.json'), true);
+    foreach (($cache['units'] ?? []) as $u) {
+        if ((int)($u['dealId'] ?? 0) === (int)$dealId) $cand[] = (int)$u['id'];
+    }
+    // por si el caché estuviera viejo, se prueba igual el filtro directo
+    $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => ['parentId2' => $dealId]]);
+    if ($r['ok']) foreach (($r['result']['items'] ?? []) as $it) $cand[] = (int)($it['id'] ?? 0);
+    $cand = array_values(array_unique(array_filter($cand)));
+
     $n = 0;
-    if ($r['ok']) {
-        foreach (($r['result']['items'] ?? []) as $it) {
-            $uid    = (int)($it['id'] ?? 0);
-            if ($uid <= 0) continue;
-            $campos = ['parentId2' => 0, 'contactId' => 0];
-            $sid    = stage_id((string)($it['categoryId'] ?? ''), 'DISPONIBLE');
-            if ($sid !== null) $campos['stageId'] = $sid;
-            // marca de escritura propia para que el guardián no lo lea como arrastre
-            @touch($DATA_DIR . '/self_u_' . $uid);
-            $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid, 'fields' => $campos]);
-            if ($u['ok']) { $n++; cache_unidad($uid, 'DISPONIBLE', 0); }
-            else logline("DELETE u=$uid ERR: {$u['error']}");
-        }
+    foreach ($cand as $uid) {
+        $g = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $uid]);
+        if (!$g['ok']) continue;
+        $it = $g['result']['item'] ?? $g['result'];
+        // si otro deal ya la tomó, no se toca: sería quitarle la unidad a una
+        // venta viva por haber borrado un deal antiguo
+        if ((int)($it['parentId2'] ?? 0) > 0) continue;
+        $campos = ['parentId2' => 0, 'contactId' => 0];
+        $sid    = stage_id((string)($it['categoryId'] ?? ''), 'DISPONIBLE');
+        if ($sid !== null) $campos['stageId'] = $sid;
+        // marca de escritura propia para que el guardián no lo lea como arrastre
+        @touch($DATA_DIR . '/self_u_' . $uid);
+        $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid, 'fields' => $campos]);
+        if ($u['ok']) { $n++; cache_unidad($uid, 'DISPONIBLE', 0); }
+        else logline("DELETE u=$uid ERR: {$u['error']}");
     }
     logline("DELETE deal=$dealId -> $n unidad(es) a DISPONIBLE, sin dueño ni cliente");
     echo "ok-delete liberadas=$n";
