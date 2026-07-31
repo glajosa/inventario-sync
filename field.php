@@ -241,9 +241,15 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?> .gu-campo{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:26px;
       cursor:pointer;padding:2px 7px}
   #<?= $uid ?> .gu-ph{color:#a8adb4;display:inline-flex;align-items:center;height:20px}
-  /* candado de etapa: el valor se sigue leyendo, pero el campo no invita a abrir */
-  #<?= $uid ?>.gu-bloq .gu-campo{cursor:default}
-  #<?= $uid ?>.gu-bloq .gu-caret{opacity:.25}
+  /* Candado de etapa. Antes cerraba el campo entero; ahora deja CONSULTAR y solo
+     impide elegir: el vendedor necesita ver qué hay libre y a qué precio en
+     cualquier etapa de Prospectos, aunque todavía no pueda apartar. */
+  #<?= $uid ?>.gu-bloq .gu-fila{cursor:default}
+  #<?= $uid ?>.gu-bloq .gu-fila:hover{background:transparent}
+  #<?= $uid ?>.gu-bloq .gu-quita{display:none}
+  #<?= $uid ?>.gu-bloq .gu-pie::after{content:'solo consulta — la unidad se elige en RESERVA';
+      color:#9a6700;background:#fff8c5;border:1px solid #f0e2a0;border-radius:5px;
+      padding:1px 7px;font-size:11px;margin-left:8px}
   /* cerrado: texto plano, igual que los campos nativos del deal (sin chips ni ✕) */
   #<?= $uid ?> .gu-txt{display:inline-flex;align-items:center;height:20px;overflow:hidden;
       white-space:nowrap;text-overflow:ellipsis}
@@ -428,12 +434,14 @@ foreach ($elegidos as $id) {
             $yo    = in_array((int)$u['id'], $elegidos, true);
             $meta  = trim(($u['torre'] !== '' ? 'T' . $u['torre'] : '')
                         . ($u['piso']  !== '' ? ' · P' . $u['piso'] : ''));
-            $pvp   = $u['pvp'] !== '' ? '$' . number_format((float)str_replace(['|USD', ','], '', $u['pvp']), 0) : '';
+            $pvpNum = (float)str_replace(['|USD', ','], '', (string)$u['pvp']);
+            $pvp   = $u['pvp'] !== '' ? '$' . number_format($pvpNum, 0) : '';
             $est   = $u['stage'] ?: 'BLOQUEADO';
       ?>
         <div class="gu-fila <?= $libre ? '' : 'gu-no' ?>"
              data-cat="<?= h((string)$cid) ?>" data-cod="<?= h(strtoupper($u['codigo'])) ?>"
              data-libre="<?= $libre ? 1 : 0 ?>" data-id="<?= (int)$u['id'] ?>"
+             data-pvp="<?= $pvpNum ?>"
              data-cod-txt="<?= h($u['codigo']) ?>" data-proy="<?= h($nom) ?>">
           <span class="gu-cod"><?= h($u['codigo']) ?></span>
           <span class="gu-tag <?= h($est) ?>"><?= h($est) ?></span>
@@ -649,9 +657,16 @@ foreach ($elegidos as $id) {
     } catch(e) {}
   }
 
+  // "$1.234.567" — la cuantía se lee de un vistazo, sin decimales: son cifras de
+  // seis y siete dígitos y los centavos solo estorban.
+  function plata(n){
+    if (!n) return '';
+    return '$' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
   function filtrar(){
     var t = q.value.trim().toUpperCase();
-    var n = 0;
+    var n = 0, monto = 0;
     filas.forEach(function(f){
       // las ya elegidas no se repiten en el listado: salen arriba, en "Elegidas".
       // Y con el filtro "Disponibles" tampoco aparecen las ocupadas.
@@ -661,7 +676,7 @@ foreach ($elegidos as $id) {
             && (!t || f.dataset.cod.indexOf(t) !== -1)
             && (!soloLibres || f.dataset.libre === '1');
       f.style.display = ok ? '' : 'none';
-      if (ok) n++;
+      if (ok) { n++; monto += parseFloat(f.dataset.pvp || 0) || 0; }
     });
     grupos.forEach(function(g){
       var hay = false, node = g.nextElementSibling;
@@ -672,7 +687,11 @@ foreach ($elegidos as $id) {
       g.style.display = (hay && !cat) ? '' : 'none';
     });
     vacio.style.display = n ? 'none' : '';
+    // Cuantía de lo que se está viendo: cambia con el proyecto elegido, con la
+    // búsqueda y con Disponibles/Todos. Sirve para saber cuánto inventario queda
+    // por vender sin salir a hacer la suma por fuera.
     pie.textContent = n + (n === 1 ? ' unidad' : ' unidades')
+                    + (monto ? ' · ' + plata(monto) : '')
                     + (sel.length ? ' · ' + sel.length + ' elegida' + (sel.length > 1 ? 's' : '') : '');
     lista.scrollTop = 0;
   }
@@ -706,7 +725,9 @@ foreach ($elegidos as $id) {
   }
 
   function abrir(si){
-    if (si && BLOQ) return;         // etapa que no permite elegir: no abre
+    // Estando bloqueado el panel SÍ abre: el vendedor necesita consultar qué hay
+    // y a qué precio en cualquier etapa. Lo que no puede es elegir, y de eso se
+    // encarga la clase gu-bloq (filas sin clic) más el candado real de guardar.php.
     R.classList.toggle('abierto', si);
     // fija el documento al alto del iframe mientras está abierto
     document.documentElement.classList.toggle('gu-open', !!si);
@@ -774,6 +795,7 @@ foreach ($elegidos as $id) {
   lista.addEventListener('click', function(e){
     var f = e.target.closest('.gu-fila'); if (!f) return;
     var id = f.dataset.id;
+    if (BLOQ) return;                             // solo consulta: se ve, no se elige
     if (f.dataset.libre !== '1') return;          // ocupada: no seleccionable
     if (sel.indexOf(id) !== -1) return;           // ya elegida (se quita desde "Elegidas")
     sel.push(id);
@@ -819,11 +841,10 @@ foreach ($elegidos as $id) {
   /** Deja el campo de lectura: no abre el panel y avisa por qué. */
   function bloquear(){
     BLOQ = true;
-    abrir(false);
     R.classList.add('gu-bloq');
-    campo.title = 'La unidad se elige en la etapa RESERVA';
+    campo.title = 'Puedes consultar el inventario; la unidad se elige en la etapa RESERVA';
     var ph = campo.querySelector('.gu-ph');
-    if (ph) ph.textContent = 'Se elige en RESERVA';
+    if (ph) ph.textContent = 'Ver inventario (se elige en RESERVA)';
     ajustarIframe();
   }
 

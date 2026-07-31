@@ -135,20 +135,36 @@ if ($dealId === '') { echo 'no-id'; exit; }
 // ---- 2) DELETE: soltar unidades atadas a ese deal ---------------------------
 if ($event === 'ONCRMDEALDELETE') {
     allowlist_remove($dealId);
-    // soltar cualquier unidad que apuntara a este deal
+
+    // Las unidades del deal borrado quedan COMO NUEVAS: sin dependencia, sin
+    // cliente y en DISPONIBLE. Antes solo se quitaba parentId2, así que la unidad
+    // seguía en FIRMADO y con el nombre del cliente en la tarjeta del kanban: nadie
+    // podía venderla y parecía ocupada por un deal que ya no existe.
+    //
+    // SIN 'select': pedirlo explícitamente hace que Bitrix devuelva id y
+    // categoryId en null (bug verificado), y sin categoryId no se puede resolver el
+    // stage DISPONIBLE, que tiene distinto STATUS_ID en cada pipeline.
     $r = bx('crm.item.list', [
         'entityTypeId' => SPA_ENTITY,
         'filter'       => ['parentId2' => $dealId],
-        'select'       => ['id'],
     ]);
+    $n = 0;
     if ($r['ok']) {
         foreach (($r['result']['items'] ?? []) as $it) {
-            bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $it['id'],
-                                   'fields' => ['parentId2' => 0]]);
+            $uid    = (int)($it['id'] ?? 0);
+            if ($uid <= 0) continue;
+            $campos = ['parentId2' => 0, 'contactId' => 0];
+            $sid    = stage_id((string)($it['categoryId'] ?? ''), 'DISPONIBLE');
+            if ($sid !== null) $campos['stageId'] = $sid;
+            // marca de escritura propia para que el guardián no lo lea como arrastre
+            @touch($DATA_DIR . '/self_u_' . $uid);
+            $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid, 'fields' => $campos]);
+            if ($u['ok']) { $n++; cache_unidad($uid, 'DISPONIBLE', 0); }
+            else logline("DELETE u=$uid ERR: {$u['error']}");
         }
     }
-    logline("DELETE deal=$dealId -> unidades liberadas");
-    echo 'ok-delete';
+    logline("DELETE deal=$dealId -> $n unidad(es) a DISPONIBLE, sin dueño ni cliente");
+    echo "ok-delete liberadas=$n";
     exit;
 }
 

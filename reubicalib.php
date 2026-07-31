@@ -50,41 +50,8 @@ const REUBICA_TRIOS = [
     ['flag' => 'UF_CRM_1785429826419', 'activo' => 'UF_CRM_1785429969203', 'precio' => 'UF_CRM_1785417711317'],
 ];
 
-/**
- * Nombre visible del proyecto (el que va en el título del deal), a partir del ID
- * de la lista "Proyectos 1". Los títulos existentes usan exactamente el texto de
- * esa lista ("Noral Apartments (Nuevo Samborondón)"), así que se lee de ahí en
- * vez de mantener una tabla paralela que se desincronizaría.
- *
- * Se cachea en disco: crm.deal.fields devuelve los 315 campos del portal y no
- * vale gastar eso en cada reubicación.
- */
-function proyecto_nombre(int $enumId): string {
-    if ($enumId <= 0) return '';
-    $f = ($GLOBALS['DATA_DIR'] ?? '/data') . '/proyectos_enum.json';
-    $m = json_decode((string)@file_get_contents($f), true);
-    if (!is_array($m) || !isset($m[(string)$enumId])) {
-        $r = bx('crm.deal.fields', []);
-        $items = $r['result'][D_PROYECTO]['items'] ?? [];
-        if (!$items) { logline("proyecto_nombre: no pude leer la lista Proyectos 1"); return ''; }
-        $m = [];
-        foreach ($items as $x) $m[(string)$x['ID']] = (string)$x['VALUE'];
-        @file_put_contents($f, json_encode($m), LOCK_EX);
-    }
-    return (string)($m[(string)$enumId] ?? '');
-}
-
-/** Convierte "134630|USD" (o "134630.00") en float. */
-function money_num($v): float {
-    $s = trim((string)$v);
-    if ($s === '') return 0.0;
-    return (float)explode('|', $s)[0];
-}
-
-/** Formatea para los campos money del CRM: "134630|USD". */
-function money_fmt(float $n): string {
-    return rtrim(rtrim(number_format($n, 2, '.', ''), '0'), '.') . '|USD';
-}
+// proyecto_nombre(), money_num() y money_fmt() viven en campolib.php: las usa
+// también el autollenado de la ficha, y campolib se carga antes que este archivo.
 
 /**
  * Renombra un título que viene en segmentos "--", cambiando SOLO los dos últimos

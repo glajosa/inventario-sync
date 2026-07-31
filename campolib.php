@@ -407,6 +407,50 @@ function limpiar_prospecto(int $deal44, int $contacto, array $unidades): int {
 }
 
 /**
+ * DEAL CAÍDO: saca las unidades del campo Inventario en TODOS los deals del
+ * cliente que las nombren — Prospectos(28), Clientes(44), Cobranzas(48) y
+ * Familia(58) — no solo en el que cayó.
+ *
+ * Por qué hace falta: la caída se propaga por cascada (Cobranzas DADO DE BAJA
+ * arrastra Clientes a FIRMADOS CAÍDOS y Familia a su etapa negativa, y al revés),
+ * pero la cascada mueve ETAPAS, no vacía campos. La unidad quedaba escrita en los
+ * tres o cuatro deals de una venta que ya no existe.
+ *
+ * Se diferencia de propagar_quitada() en una cosa importante: aquí NO se respeta
+ * el "no tocar ventas cerradas". Un FIRMADO CAÍDO viene precisamente de una venta
+ * que estaba cerrada, y ese es el caso que hay que limpiar.
+ *
+ * Solo se quitan las unidades que el deal caído nombraba. Si un cliente tiene otra
+ * compra viva, ese otro deal no nombra estas unidades y no se toca.
+ */
+function limpiar_campo_caido(int $dealOrigen, int $contacto, array $unidades): int {
+    $unidades = array_values(array_unique(array_map('intval', $unidades)));
+    if (!$unidades || $contacto <= 0) return 0;
+
+    $r = bx('crm.deal.list', [
+        'filter' => ['CONTACT_ID' => $contacto, '!' . CAMPO_NUEVO => ''],
+        'select' => ['ID', 'CATEGORY_ID', CAMPO_NUEVO],
+    ]);
+    if (!$r['ok']) { logline("caido deal=$dealOrigen ERR list: {$r['error']}"); return 0; }
+
+    $n = 0;
+    foreach (($r['result'] ?? []) as $d) {
+        $did   = (int)($d['ID'] ?? 0);
+        if ($did <= 0) continue;
+        $tiene = ids_de((string)($d[CAMPO_NUEVO] ?? ''));
+        $queda = array_values(array_diff($tiene, $unidades));
+        if (count($queda) === count($tiene)) continue;
+
+        $u = bx('crm.deal.update', ['id' => $did, 'fields' => [CAMPO_NUEVO => implode(',', $queda)]]);
+        if (!$u['ok']) { logline("caido: ERR update deal $did: {$u['error']}"); continue; }
+        logline("CAIDO deal=$did (cat {$d['CATEGORY_ID']}): quitada(s) u=["
+              . implode(',', array_intersect($tiene, $unidades)) . "] — origen $dealOrigen");
+        $n++;
+    }
+    return $n;
+}
+
+/**
  * Quita unas unidades del campo Inventario de los deals HERMANOS.
  *
  * Cuando el deal del 28 llega a RESERVA se copia a CLIENTES(44) arrastrando el
@@ -465,6 +509,42 @@ function propagar_quitada(array $unitIds, int $dealOrigen, int $contacto): int {
 }
 
 /**
+ * Nombre visible del proyecto (el que va en el título del deal), a partir del ID
+ * de la lista "Proyectos 1". Los títulos existentes usan exactamente el texto de
+ * esa lista ("Noral Apartments (Nuevo Samborondón)"), así que se lee de ahí en
+ * vez de mantener una tabla paralela que se desincronizaría.
+ *
+ * Se cachea en disco: crm.deal.fields devuelve los 315 campos del portal y no
+ * vale gastar eso en cada reubicación.
+ */
+function proyecto_nombre(int $enumId): string {
+    if ($enumId <= 0) return '';
+    $f = ($GLOBALS['DATA_DIR'] ?? '/data') . '/proyectos_enum.json';
+    $m = json_decode((string)@file_get_contents($f), true);
+    if (!is_array($m) || !isset($m[(string)$enumId])) {
+        $r = bx('crm.deal.fields', []);
+        $items = $r['result'][D_PROYECTO]['items'] ?? [];
+        if (!$items) { logline("proyecto_nombre: no pude leer la lista Proyectos 1"); return ''; }
+        $m = [];
+        foreach ($items as $x) $m[(string)$x['ID']] = (string)$x['VALUE'];
+        @file_put_contents($f, json_encode($m), LOCK_EX);
+    }
+    return (string)($m[(string)$enumId] ?? '');
+}
+
+/** Convierte "134630|USD" (o "134630.00") en float. */
+function money_num($v): float {
+    $s = trim((string)$v);
+    if ($s === '') return 0.0;
+    return (float)explode('|', $s)[0];
+}
+
+/** Formatea para los campos money del CRM: "134630|USD". */
+function money_fmt(float $n): string {
+    return rtrim(rtrim(number_format($n, 2, '.', ''), '0'), '.') . '|USD';
+}
+
+/**
  * Llena en el deal de CLIENTES los 4 campos que salen de la tarjeta de la unidad:
  * Monto y moneda (OPPORTUNITY + CURRENCY_ID), Proyectos 1, VALOR DEL ACTIVO y
  * ACTIVO COMPRADO. Antes se teclaban a mano y son obligatorios para cambiar de
@@ -499,7 +579,70 @@ function propagar_quitada(array $unitIds, int $dealOrigen, int $contacto): int {
 const PROY_NORAL_SUITES = 1625;   // "Noral Plaza (Suites)" en la lista Proyectos 1
 const DESCUENTO_PARQUEO = 20000;
 
-function autollenar_ficha(int $dealId, array $fichas): array {
+/**
+ * Junta varios códigos de unidad en el formato comprimido que usan los títulos de
+ * los deals: F-4-14 + F-4-15 -> "F-4-14-15".
+ *
+ * Se busca el prefijo que comparten (hasta el último guion común) y se pegan solo
+ * los tramos que cambian. Si no comparten prefijo —dos unidades de torres
+ * distintas— se listan separados por coma, porque comprimirlos daría un código
+ * que no existe y sería peor que un título largo.
+ */
+function codigos_comprimidos(array $cods): string {
+    $cods = array_values(array_filter(array_map('trim', $cods), fn($c) => $c !== ''));
+    if (!$cods)            return '';
+    if (count($cods) === 1) return $cods[0];
+
+    $partes = array_map(fn($c) => explode('-', $c), $cods);
+    $comun  = [];
+    for ($i = 0; ; $i++) {
+        $v = $partes[0][$i] ?? null;
+        if ($v === null) break;
+        foreach ($partes as $p) if (($p[$i] ?? null) !== $v) { $v = null; break; }
+        if ($v === null) break;
+        $comun[] = $v;
+    }
+    // hace falta prefijo común Y que a cada código le quede algo propio detrás
+    $n = count($comun);
+    if ($n === 0) return implode(', ', $cods);
+    foreach ($partes as $p) if (count($p) <= $n) return implode(', ', $cods);
+
+    $colas = [];
+    foreach ($partes as $p) $colas[] = implode('-', array_slice($p, $n));
+    return implode('-', $comun) . '-' . implode('-', $colas);
+}
+
+/**
+ * Título del deal: "Cliente--Proyecto--Unidad(es)".
+ *
+ * El nombre del cliente va pegado —"DeliaTerán", "MaritzaJacome Delgado"— porque
+ * así están escritos los cientos de títulos que ya existen: es NOMBRE y APELLIDO
+ * sin separador. Se respeta para no romper búsquedas ni informes que ya dependen
+ * de ese patrón.
+ *
+ * Si el título actual ya tiene la forma "A--B--C", se cambian solo los dos últimos
+ * tramos y el nombre se deja como está: puede tener correcciones hechas a mano y
+ * reconstruirlo desde el contacto las borraría.
+ */
+function titulo_deal(string $actual, int $contactoId, string $proyecto, string $codigo): ?string {
+    if ($proyecto === '' || $codigo === '') return null;
+
+    $p = explode('--', $actual);
+    if (count($p) >= 3) {
+        $p = array_slice($p, 0, count($p) - 2);
+        $p[] = $proyecto; $p[] = $codigo;
+        return implode('--', $p);
+    }
+    // sin formato (viene del 28, con nombre de campaña o del canal): se arma entero
+    if ($contactoId <= 0) return null;
+    $c = bx('crm.contact.get', ['id' => $contactoId]);
+    if (!$c['ok']) return null;
+    $nom = trim((string)($c['result']['NAME'] ?? '')) . trim((string)($c['result']['LAST_NAME'] ?? ''));
+    if ($nom === '') return null;
+    return $nom . '--' . $proyecto . '--' . $codigo;
+}
+
+function autollenar_ficha(int $dealId, array $fichas, array $deal = []): array {
     // El proyecto lo manda la unidad PRINCIPAL, o sea la de mayor PVP — no la
     // primera del campo. Con "la primera" bastaba que el vendedor pusiera el
     // parqueo antes de la suite para que Proyectos 1 recibiera el proyecto del
@@ -529,11 +672,22 @@ function autollenar_ficha(int $dealId, array $fichas): array {
     }
     if ($proy > 0) $campos[D_PROYECTO] = $proy;
 
+    // Título "Cliente--Proyecto--Unidad(es)", con los códigos comprimidos
+    // (F-4-14-15). Se rehace en cada cambio de unidades a propósito: si el
+    // vendedor saca una, el nombre tiene que dejar de nombrarla.
+    if ($deal) {
+        $t = titulo_deal((string)($deal['TITLE'] ?? ''), (int)($deal['CONTACT_ID'] ?? 0),
+                         proyecto_nombre($proy), codigos_comprimidos($cods));
+        if ($t !== null && $t !== (string)($deal['TITLE'] ?? '')) $campos['TITLE'] = $t;
+    }
+
     $u = bx('crm.deal.update', ['id' => $dealId, 'fields' => $campos]);
     if (!$u['ok']) { logline("deal=$dealId ficha ERR: {$u['error']}"); return ['err' => $u['error']]; }
     logline("deal=$dealId ficha autollenada: activo=" . implode(',', $cods)
-          . " monto=" . ($campos['OPPORTUNITY'] ?? '-') . " proy=" . ($proy ?: '-'));
-    return ['activo' => implode(', ', $cods), 'monto' => $campos['OPPORTUNITY'] ?? null, 'proy' => $proy];
+          . " monto=" . ($campos['OPPORTUNITY'] ?? '-') . " proy=" . ($proy ?: '-')
+          . (isset($campos['TITLE']) ? " titulo=\"{$campos['TITLE']}\"" : ''));
+    return ['activo' => implode(', ', $cods), 'monto' => $campos['OPPORTUNITY'] ?? null,
+            'proy' => $proy, 'titulo' => $campos['TITLE'] ?? '-'];
 }
 
 /**
@@ -600,9 +754,14 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     }
 
     // Si el deal se cayó (RESERVAS CAIDAS / FIRMADOS-CAIDOS) no quiere ninguna:
-    // las unidades se sueltan. El campo se deja como estaba, de registro.
+    // las unidades se sueltan Y se borran del campo, aquí y en los deals hermanos
+    // (Cobranzas y Familia). Antes el campo se dejaba escrito "de registro", pero
+    // eso hacía que la unidad siguiera nombrada en tres o cuatro deals de una venta
+    // que ya no existe. El registro de qué se había reservado está en el Historial
+    // del deal, que nadie confunde con el estado actual.
     $etapaDeal = (string)($deal['STAGE_ID'] ?? '');
-    if (etapa_libera($etapaDeal)) $quiere = [];
+    $cayo      = etapa_libera($etapaDeal);
+    if ($cayo) $quiere = [];
 
     // Lo que hoy apunta a este deal.
     // SIN `select`: con select explícito Bitrix devuelve id/title en null (bug
@@ -717,12 +876,31 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     // Solo cuando el usuario la sacó del campo, no cuando la etapa la liberó
     // (deal caído): ahí el campo se deja de registro, es a propósito.
     $propagadas = 0;
-    if ($soltar && !etapa_libera($etapaDeal)) {
+    if ($soltar && !$cayo) {
         $propagadas = propagar_quitada($soltar, $dealId, (int)($deal['CONTACT_ID'] ?? 0));
     }
 
-    // Autollenado de la ficha del deal con los datos de la unidad elegida.
-    $ficha = ($agregar && $fichas) ? autollenar_ficha($dealId, $fichas) : [];
+    // Deal caído: el campo se vacía en este deal y en los del mismo cliente que
+    // nombren esas unidades (Cobranzas, Familia, Prospectos). Se hace DESPUÉS de
+    // soltarlas, para que si algo falla la unidad ya esté libre.
+    $limpiados = 0;
+    if ($cayo) {
+        $eran = array_values(array_unique(array_merge($tiene, ids_de((string)($deal[CAMPO_NUEVO] ?? '')))));
+        if ($eran) $limpiados = limpiar_campo_caido($dealId, (int)($deal['CONTACT_ID'] ?? 0), $eran);
+    }
+
+    // Autollenado de la ficha del deal con los datos de las unidades del campo.
+    //
+    // Corre cuando el vendedor AGREGA o QUITA unidades. Antes solo con "agregar", y
+    // eso dejaba un agujero: al sacar una unidad de un deal de dos, el monto seguía
+    // con la suma de las dos —descuento de parqueo incluido— y ACTIVO COMPRADO y el
+    // título seguían nombrando la que ya no está. Al recalcular con las que quedan,
+    // si queda una sola el descuento de parqueo desaparece por sí mismo y el valor
+    // vuelve completo, que es justo lo que debe pasar.
+    //
+    // Con el campo vacío no se toca nada: es lo que ocurre cuando el deal cae, y ahí
+    // borrar el monto de una venta perdida sería destruir el registro.
+    $ficha = (($agregar || $soltar) && $fichas) ? autollenar_ficha($dealId, $fichas, $deal) : [];
 
     // Lo que CLIENTES acaba de atar se saca del campo de PROSPECTOS: ahí ya no es
     // un apartado, es una venta. Va al final, cuando el atado ya está hecho.
@@ -732,6 +910,7 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
 
     return ['ok' => true, 'quiere' => count($quiere), 'agregadas' => count($agregar),
             'soltadas' => count($soltar), 'stage' => $target ?: '-', 'movidas' => $movidas,
-            'propagadas' => $propagadas, 'ficha' => $ficha ?: '-', 'prospecto' => $prospectos];
+            'propagadas' => $propagadas, 'ficha' => $ficha ?: '-', 'prospecto' => $prospectos,
+            'caido' => $cayo ? $limpiados : '-'];
 }
 
