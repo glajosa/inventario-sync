@@ -499,6 +499,50 @@ function propagar_quitada(array $unitIds, int $dealOrigen, int $contacto): int {
 const PROY_NORAL_SUITES = 1625;   // "Noral Plaza (Suites)" en la lista Proyectos 1
 const DESCUENTO_PARQUEO = 20000;
 
+// ── Generador de historias Noral ─────────────────────────────────────────────
+// Solo estos 2 pipelines tienen plano allá. Barranca, Sun Bay y Galero están en el
+// SPA pero no en el generador: no se les avisa y no es un error.
+const NORAL_PROY = [33 => 'NORAL PLAZA', 39 => 'NORAL APARTMENTS'];
+
+/**
+ * Avisa al generador de historias que una unidad se ató (marcar) o se liberó
+ * (desmarcar), para que el sello aparezca/desaparezca solo en el plano.
+ *
+ * Se manda el código CRUDO del título; la traducción a la nomenclatura del
+ * generador (`A-2-1` -> `A2.1`) vive allá, junto a su coords.json, que es el único
+ * que sabe qué páginas existen y cómo se llama cada celda.
+ *
+ * Fire-and-forget con timeout corto: si el generador está caído, atar la unidad en
+ * Bitrix NO se puede caer por eso. El sello se puede poner a mano con un clic.
+ */
+function noral_avisar_generador(int $catId, string $codigo, string $accion): void {
+    $proy = NORAL_PROY[$catId] ?? null;
+    if ($proy === null || $codigo === '') return;
+
+    $url = rtrim((string)getenv('NORAL_URL'), '/');
+    $tok = (string)getenv('NORAL_SYNC_TOKEN');
+    if ($url === '' || $tok === '') return;          // sin configurar -> no hace nada
+
+    $ch = curl_init($url . '/sync-inventario.php');
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => http_build_query([
+            'proyecto' => $proy, 'codigo' => $codigo, 'accion' => $accion, 'token' => $tok,
+        ]),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 6, CURLOPT_CONNECTTIMEOUT => 3,
+    ]);
+    $raw = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $j = json_decode((string)$raw, true);
+    // se registra el motivo cuando el generador no tiene ese plano, así queda
+    // rastro de qué unidades quedan sin sello (bloque D de Plaza, bloque J de Apt)
+    $det = is_array($j)
+        ? ($j['skip'] ?? ($j['clave'] ?? ($j['error'] ?? 'ok')))
+        : "http=$code";
+    logline("NORAL $accion «$codigo» ($proy) -> $det");
+}
+
 function autollenar_ficha(int $dealId, array $fichas): array {
     // El proyecto lo manda la unidad PRINCIPAL, o sea la de mayor PVP — no la
     // primera del campo. Con "la primera" bastaba que el vendedor pusiera el
@@ -650,6 +694,16 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
                 'proy' => proyecto_de_unidad((int)($it['categoryId'] ?? 0), $it[U_TIPO] ?? 0),
             ];
         }
+
+        // Generador de historias: que nadie tenga que ir a marcar a mano lo que
+        // Bitrix ya sabe. Se avisa al ATAR (marcar) y al SOLTAR (desmarcar), con el
+        // código crudo del título — el generador hace la traducción a su propia
+        // nomenclatura. Solo aplica a los 2 proyectos que tienen plano allá.
+        noral_avisar_generador(
+            (int)($it['categoryId'] ?? 0),
+            trim(explode('(', (string)($it['title'] ?? ''))[0]),
+            $suelta ? 'desmarcar' : 'marcar'
+        );
 
         $campos = [];
         $nuevoStage = null;
