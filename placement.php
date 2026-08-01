@@ -35,9 +35,11 @@ const TITULO    = 'Cotizador';
 
 $accion = (string)($_GET['accion'] ?? 'ver');
 
-/** Lista compacta de lo enlazado, para ver antes y después sin adivinar. */
+/** Lista compacta de lo ENLAZADO, para ver antes y después sin adivinar.
+ *  OJO: placement.list devuelve los códigos DISPONIBLES del portal (cientos);
+ *  lo que esta app tiene enlazado se pide con placement.get. */
 function mostrar(): void {
-    $r = app_bx('placement.list');
+    $r = app_bx('placement.get');
     if (!($r['ok'] ?? true) || isset($r['error'])) {
         echo "  no se pudo listar: {$r['error']} {$r['desc']}\n"; return;
     }
