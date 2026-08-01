@@ -32,7 +32,14 @@ function auth_guardar(array $a): void {
 
 function auth_cargar(): array {
     $j = json_decode((string)@file_get_contents(auth_path()), true);
-    return is_array($j) ? $j : [];
+    $j = is_array($j) ? $j : [];
+    // client_id/secret desde el entorno si no quedaron guardados al instalar.
+    // Bitrix solo los manda si se configuraron en la ficha de la app, y sin ellos
+    // auth_refrescar() devuelve false: el token muere en 1h y la app queda inútil
+    // hasta que alguien la abre a mano en Bitrix. Con esto se renueva sola.
+    if (($j['client_id'] ?? '') === '')     $j['client_id']     = (string)getenv('APP_CLIENT_ID');
+    if (($j['client_secret'] ?? '') === '') $j['client_secret'] = (string)getenv('APP_CLIENT_SECRET');
+    return $j;
 }
 
 /** Renueva el access_token con el refresh_token. Devuelve true si quedó válido. */
