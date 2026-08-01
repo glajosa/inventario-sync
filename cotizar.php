@@ -46,18 +46,25 @@ header('Content-Type: text/html; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 header('Cache-Control: no-store');
 
-/** Firma de la misma forma que field.php. Clave = el secreto del servicio. */
-function cot_firma(int $unidad, int $deal, int $exp): string {
+/** Firma de la misma forma que field.php. Clave = el secreto del servicio.
+ *  Cubre el DEAL y el vencimiento, NO la lista de unidades: el asesor arma la
+ *  fusión eligiendo en el desplegable y esa selección cambia sin recargar la
+ *  página, así que no hay forma de firmar cada combinación desde el servidor.
+ *  Lo que se expone a cambio es el precio de otra unidad del catálogo, que el
+ *  mismo asesor ya ve en la lista. El enlace sigue venciendo a las 12h. */
+function cot_firma(int $deal, int $exp): string {
     $k = (string)getenv('OUTBOUND_TOKEN');
-    return hash_hmac('sha256', "u{$unidad}|d{$deal}|e{$exp}", $k);
+    return hash_hmac('sha256', "d{$deal}|e{$exp}", $k);
 }
 
-$unidadId = (int)($_GET['u'] ?? 0);
-$dealId   = (int)($_GET['d'] ?? 0);
-$exp      = (int)($_GET['exp'] ?? 0);
-$sig      = (string)($_GET['s'] ?? '');
+// Una o VARIAS unidades: "u=1263" o "u=1263,1265" (activos fusionados).
+$ids = array_values(array_unique(array_filter(array_map(
+    'intval', explode(',', (string)($_GET['u'] ?? ''))))));
+$dealId = (int)($_GET['d'] ?? 0);
+$exp    = (int)($_GET['exp'] ?? 0);
+$sig    = (string)($_GET['s'] ?? '');
 
-if (!$unidadId || !$exp || !hash_equals(cot_firma($unidadId, $dealId, $exp), $sig)) {
+if (!$ids || !$exp || !hash_equals(cot_firma($dealId, $exp), $sig)) {
     http_response_code(403);
     exit('<!doctype html><meta charset="utf-8"><p style="font:15px system-ui;padding:30px">Enlace no válido.</p>');
 }
@@ -67,17 +74,37 @@ if (time() > $exp) {
        . 'Este enlace ya venció. Vuelve al negocio en Bitrix y pulsa <b>Cotizar</b> otra vez.</p>');
 }
 
-// ---------- unidad ----------
+// ---------- unidades ----------
 $cat = cot_catalogo();
-$unidad = null;
-foreach (($cat['units'] ?? []) as $u) if ((int)$u['id'] === $unidadId) { $unidad = $u; break; }
-if (!$unidad) {
+$porId = [];
+foreach (($cat['units'] ?? []) as $u) $porId[(int)$u['id']] = $u;
+
+$unidades = [];
+foreach ($ids as $id) if (isset($porId[$id])) $unidades[] = $porId[$id];
+if (!$unidades) {
     http_response_code(404);
     exit('<!doctype html><meta charset="utf-8"><p style="font:15px system-ui;padding:30px">No se encontró la unidad.</p>');
 }
-$proyecto = (string)(($cat['proyectos'] ?? [])[(string)$unidad['cat']] ?? '');
-$pvp = (float)str_replace(['|USD', ','], '', (string)$unidad['pvp']);
-$m2  = (float)str_replace(',', '.', (string)$unidad['m2']);
+
+// Activos fusionados: se cotizan como UNO solo. El precio y los metros se suman,
+// los códigos se listan y el plazo lo manda la entrega MÁS TEMPRANA de los
+// proyectos involucrados — si una torre entrega antes, ahí se corta el plazo.
+$pvp = 0.0; $m2 = 0.0; $codigos = []; $proyectosSet = []; $entrega = null; $sinPrecio = []; $ocupadas = [];
+foreach ($unidades as $u) {
+    $p = (float)str_replace(['|USD', ','], '', (string)$u['pvp']);
+    $pvp += $p;
+    $m2  += (float)str_replace(',', '.', (string)$u['m2']);
+    $codigos[] = (string)$u['codigo'];
+    $nomProy = (string)(($cat['proyectos'] ?? [])[(string)$u['cat']] ?? '');
+    if ($nomProy !== '') $proyectosSet[$nomProy] = true;
+    if ($p <= 0) $sinPrecio[] = (string)$u['codigo'];
+    if (($u['stage'] ?? '') !== 'DISPONIBLE') $ocupadas[] = $u['codigo'] . ' (' . ($u['stage'] ?: 'sin etapa') . ')';
+    $e = cot_entrega((int)$u['cat']);
+    if ($e && (!$entrega || ($e['y'] * 12 + $e['m']) < ($entrega['y'] * 12 + $entrega['m']))) $entrega = $e;
+}
+$unidad   = $unidades[0];
+$proyecto = implode(' · ', array_keys($proyectosSet));
+$fusion   = count($unidades) > 1;
 
 // ---------- cliente ----------
 $cliente = '';
@@ -101,7 +128,6 @@ $modalidad = (($_GET['mod'] ?? '') === 'iguales') ? 'iguales' : 'estandar';
 $cuotas    = (int)($_GET['n'] ?? 0);
 $mesIni    = (string)($_GET['mes'] ?? '');
 $presu     = (float)str_replace([',', '$', ' '], '', (string)($_GET['presu'] ?? ''));
-$entrega   = cot_entrega((int)$unidad['cat']);
 
 $plan = cot_plan($pvp, $cuotas, $modalidad, $mesIni, $entrega, $presu);
 $hoy  = new DateTimeImmutable('now');
@@ -109,7 +135,7 @@ $hoy  = new DateTimeImmutable('now');
 <!doctype html>
 <html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cotización<?= $cliente !== '' ? ' · ' . h($cliente) : '' ?> · <?= h($unidad['codigo']) ?></title>
+<title>Cotización<?= $cliente !== '' ? ' · ' . h($cliente) : '' ?> · <?= h(implode(' + ', $codigos)) ?></title>
 <style>
   :root{ --azul:#0c6c9c; --tinta:#0c2c44; --linea:#dfe6ec; --gris:#5a6b7a; }
   *{box-sizing:border-box}
@@ -170,7 +196,7 @@ $hoy  = new DateTimeImmutable('now');
 <div class="envoltura"><div class="tarjeta">
 
   <form class="ajustes" method="get">
-    <input type="hidden" name="u" value="<?= (int)$unidadId ?>">
+    <input type="hidden" name="u" value="<?= h(implode(',', $ids)) ?>">
     <input type="hidden" name="d" value="<?= (int)$dealId ?>">
     <input type="hidden" name="exp" value="<?= (int)$exp ?>">
     <input type="hidden" name="s" value="<?= h($sig) ?>">
@@ -210,18 +236,21 @@ $hoy  = new DateTimeImmutable('now');
     <div class="aviso">Este proyecto no tiene fecha de entrega configurada, así que el plazo no se limita solo.
       Verifica que las <?= (int)$plan['cuotas'] ?> cuotas terminen antes de la entrega real.</div>
   <?php endif; ?>
-  <?php if ($pvp <= 0): ?>
-    <div class="aviso">Esta unidad no tiene <b>PVP cargado en Bitrix</b>: no se puede cotizar hasta que se le ponga precio.</div>
+  <?php if ($sinPrecio): ?>
+    <div class="aviso"><b><?= h(implode(', ', $sinPrecio)) ?></b>
+      <?= count($sinPrecio) > 1 ? 'no tienen' : 'no tiene' ?> <b>PVP cargado en Bitrix</b>,
+      así que <?= count($sinPrecio) > 1 ? 'no suman' : 'no suma' ?> nada al total.</div>
   <?php endif; ?>
-  <?php if (($unidad['stage'] ?? '') !== 'DISPONIBLE'): ?>
-    <div class="aviso">Ojo: la unidad está <b><?= h((string)$unidad['stage']) ?></b> en el inventario.</div>
+  <?php if ($ocupadas): ?>
+    <div class="aviso">Ojo, en el inventario está: <b><?= h(implode(' · ', $ocupadas)) ?></b>.</div>
   <?php endif; ?>
 
   <dl class="datos">
     <?php if ($cliente !== ''): ?><dt>Cliente</dt><dd><?= h($cliente) ?></dd><?php endif; ?>
     <dt>Proyecto</dt><dd><?= h($proyecto) ?></dd>
-    <dt>Unidad</dt><dd><?= h($unidad['codigo']) ?></dd>
-    <?php if ($m2 > 0): ?><dt>Metros</dt><dd><?= number_format($m2, 2) ?> m²</dd><?php endif; ?>
+    <dt><?= $fusion ? 'Unidades' : 'Unidad' ?></dt>
+    <dd><?= h(implode(' + ', $codigos)) ?><?= $fusion ? ' <span style="font-weight:400;color:var(--gris)">(' . count($codigos) . ' activos fusionados)</span>' : '' ?></dd>
+    <?php if ($m2 > 0): ?><dt>Metros<?= $fusion ? ' (suma)' : '' ?></dt><dd><?= number_format($m2, 2) ?> m²</dd><?php endif; ?>
   </dl>
 
   <div class="precio"><span>Precio final</span><span><?= h(cot_money($plan['valor'])) ?></span></div>

@@ -55,18 +55,23 @@ if (!empty($_REQUEST['PLACEMENT_OPTIONS'])) {
     if (is_array($tmp)) $opciones = $tmp;
 }
 
-/** Enlace firmado a la cotización de una unidad.
- *  La firma (HMAC con el secreto del servicio) evita tener que poner el token en
- *  la URL, que quedaría a la vista del vendedor y de cualquiera con quien
- *  comparta el enlace. Amarra unidad + deal + vencimiento, así que no sirve para
- *  pedir otra cosa ni queda válida para siempre. */
-function cot_url(int $unidadId, int $dealId): string {
+/** Base firmada de la cotización, para este deal y por 12 horas.
+ *  La firma (HMAC con el secreto del servicio) evita poner el token en la URL,
+ *  que quedaría a la vista de cualquiera con quien se comparta el enlace.
+ *  Cubre el deal y el vencimiento, NO la lista de unidades: los activos
+ *  fusionados se arman eligiendo en el desplegable, y esa selección cambia sin
+ *  recargar la página, así que el servidor no puede firmar cada combinación.
+ *  Lo que queda expuesto a cambio es el precio de otra unidad del catálogo, que
+ *  el mismo asesor ya está viendo en la lista. */
+function cot_base(int $dealId): array {
     $exp = time() + 12 * 3600;                    // dura la jornada del asesor
-    $sig = hash_hmac('sha256', "u{$unidadId}|d{$dealId}|e{$exp}", (string)getenv('OUTBOUND_TOKEN'));
+    $sig = hash_hmac('sha256', "d{$dealId}|e{$exp}", (string)getenv('OUTBOUND_TOKEN'));
     $host = (string)($_SERVER['HTTP_X_FORWARDED_HOST'] ?? $_SERVER['HTTP_HOST'] ?? '');
-    return 'https://' . $host . '/cotizar.php?' . http_build_query([
-        'u' => $unidadId, 'd' => $dealId, 'exp' => $exp, 's' => $sig,
-    ]);
+    return ['url' => 'https://' . $host . '/cotizar.php', 'd' => $dealId, 'exp' => $exp, 's' => $sig];
+}
+function cot_url(int $unidadId, int $dealId): string {
+    $b = cot_base($dealId);
+    return $b['url'] . '?' . http_build_query(['u' => $unidadId] + array_diff_key($b, ['url' => 1]));
 }
 
 $mode   = (string)($opciones['MODE'] ?? $_REQUEST['mode'] ?? 'edit');
@@ -362,6 +367,10 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   /* Botón por unidad: abre NUESTRA cotización en otra pestaña. Va discreto y solo
      se enciende al pasar por la fila, para no competir con el precio ni invitar a
      pulsarlo por error cuando lo que se quiere es elegir la unidad. */
+  #<?= $uid ?> .gu-cottodas{float:right;font-size:10.5px;font-weight:700;letter-spacing:.3px;
+     color:#fff;background:#0969da;border-radius:6px;padding:2px 9px;text-decoration:none;
+     margin-top:-2px}
+  #<?= $uid ?> .gu-cottodas:hover{background:#0757b3}
   #<?= $uid ?> .gu-cot{flex:0 0 auto;margin-left:8px;font-size:11px;font-weight:600;
      letter-spacing:.3px;color:#0c6c9c;border:1px solid #cfe2f0;border-radius:6px;
      padding:2px 8px;text-decoration:none;background:#f2f8fc;opacity:.55;transition:opacity .12s}
@@ -507,6 +516,12 @@ foreach ($elegidos as $id) {
   var campo    = document.getElementById('<?= $uid ?>_campo');
   var txt      = document.getElementById('<?= $uid ?>_txt');
   var elegidas = document.getElementById('<?= $uid ?>_elegidas');
+  var COT = <?= json_encode(cot_base($dealId), JSON_UNESCAPED_SLASHES) ?>;
+  /** Cotización de TODAS las unidades elegidas: los activos fusionados se cotizan
+   *  como uno solo (precio y metros sumados, un único plan de pago). */
+  function cotUrlDe(ids){
+    return COT.url + '?u=' + ids.join(',') + '&d=' + COT.d + '&exp=' + COT.exp + '&s=' + COT.s;
+  }
   var q       = document.getElementById('<?= $uid ?>_q');
   var seg     = document.getElementById('<?= $uid ?>_seg');
   var dropbtn = document.getElementById('<?= $uid ?>_dropbtn');
@@ -605,7 +620,10 @@ foreach ($elegidos as $id) {
 
   function datos(id){
     var f = filas.filter(function(x){ return x.dataset.id === id; })[0];
-    return f ? {cod: f.dataset.codTxt, proy: f.dataset.proy} : {cod: '#' + id, proy: ''};
+    // pvp va incluido: el botón de cotizar el conjunto descarta las unidades sin
+    // precio, que no suman nada al total.
+    return f ? {cod: f.dataset.codTxt, proy: f.dataset.proy, pvp: f.dataset.pvp}
+             : {cod: '#' + id, proy: '', pvp: 0};
   }
 
   /** Cerrado: texto plano, igual que los campos nativos del deal. */
@@ -645,6 +663,21 @@ foreach ($elegidos as $id) {
     var t = document.createElement('div');
     t.className = 'gu-eltit';
     t.textContent = 'Elegidas';
+    // Con más de una, lo que hay que cotizar es el CONJUNTO, no cada una suelta:
+    // así se cotiza una fusión (dos locales, oficina + parqueo…) en un solo plan.
+    var conPrecio = sel.filter(function(id){ return parseFloat((datos(id)||{}).pvp || 0) > 0; });
+    if (conPrecio.length) {
+      var a = document.createElement('a');
+      a.className = 'gu-cottodas';
+      a.target = '_blank'; a.rel = 'noopener';
+      a.href = cotUrlDe(conPrecio);
+      a.textContent = conPrecio.length > 1 ? ('Cotizar las ' + conPrecio.length + ' juntas') : 'Cotizar';
+      a.title = conPrecio.length > 1
+        ? 'Un solo plan de pago con el precio y los metros sumados'
+        : 'Cotizar la unidad elegida';
+      a.addEventListener('click', function(e){ e.stopPropagation(); });
+      t.appendChild(a);
+    }
     elegidas.appendChild(t);
     sel.forEach(function(id){
       var d = datos(id);
