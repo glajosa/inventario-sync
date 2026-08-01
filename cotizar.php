@@ -100,9 +100,10 @@ $cliente = mb_strtoupper((string)($_GET['cliente'] ?? $cliente), 'UTF-8');
 $modalidad = (($_GET['mod'] ?? '') === 'iguales') ? 'iguales' : 'estandar';
 $cuotas    = (int)($_GET['n'] ?? 0);
 $mesIni    = (string)($_GET['mes'] ?? '');
+$presu     = (float)str_replace([',', '$', ' '], '', (string)($_GET['presu'] ?? ''));
 $entrega   = cot_entrega((int)$unidad['cat']);
 
-$plan = cot_plan($pvp, $cuotas, $modalidad, $mesIni, $entrega);
+$plan = cot_plan($pvp, $cuotas, $modalidad, $mesIni, $entrega, $presu);
 $hoy  = new DateTimeImmutable('now');
 ?>
 <!doctype html>
@@ -177,6 +178,11 @@ $hoy  = new DateTimeImmutable('now');
       <input type="text" name="cliente" value="<?= h($cliente) ?>" placeholder="Nombre del cliente" size="24"></div>
     <div><label>Cuotas</label>
       <input type="number" name="n" min="1" max="<?= (int)($plan['plazoMax'] ?? 120) ?>" value="<?= (int)$plan['cuotas'] ?>" style="width:90px"></div>
+    <!-- La otra forma de preguntar, y la que más se usa vendiendo: el cliente dice
+         cuánto puede pagar al mes y salen las cuotas. Si se llena, manda sobre "Cuotas". -->
+    <div><label>o paga al mes</label>
+      <input type="text" name="presu" inputmode="decimal" placeholder="$"
+             value="<?= $presu > 0 ? h(number_format($presu, 0)) : '' ?>" style="width:100px"></div>
     <div><label>Modalidad</label>
       <select name="mod">
         <option value="estandar" <?= $modalidad === 'estandar' ? 'selected' : '' ?>>Estándar (con extraordinarias)</option>
@@ -187,6 +193,15 @@ $hoy  = new DateTimeImmutable('now');
     <button class="ir" type="submit">Recalcular</button>
   </form>
 
+  <?php if (!empty($plan['insuficiente'])): ?>
+    <div class="aviso">Con <b><?= h(cot_money($plan['presupuesto'])) ?>/mes</b> no alcanza ni pagando hasta la entrega.
+      La cuota mínima posible para esta unidad es <b><?= h(cot_money($plan['cuotaMinima'])) ?>/mes</b>
+      (a <?= (int)$plan['cuotas'] ?> cuotas). Es lo que se muestra abajo.</div>
+  <?php elseif ($plan['presupuesto'] > 0): ?>
+    <div class="aviso" style="background:#eaf6ff;border-color:#b9ddf5;color:#0c4a6e">
+      Con <b><?= h(cot_money($plan['presupuesto'])) ?>/mes</b> son
+      <b><?= (int)$plan['cuotas'] ?> cuotas</b> de <b><?= h(cot_money($plan['mensual'])) ?></b>.</div>
+  <?php endif; ?>
   <?php if ($plan['recortado']): ?>
     <div class="aviso">Se ajustó a <b><?= (int)$plan['cuotas'] ?> cuotas</b>: es el máximo que cabe antes de la
       entrega (<?= h(cot_mes_es((int)$entrega['m']) . ' ' . $entrega['y']) ?>) empezando en <?= h($plan['inicioTxt']) ?>.</div>

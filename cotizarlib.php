@@ -52,8 +52,10 @@ const COT_SEPARACION = 1000;  // la separación siempre es $1.000 (o el 10% si e
  * @param string $modalidad  'estandar' | 'iguales'
  * @param string $mesInicio  "AAAA-MM" de la primera cuota ('' = mes siguiente)
  * @param array|null $entrega ['y'=>2031,'m'=>4] o null si el proyecto no la tiene
+ * @param float  $presupuesto  si es > 0 MANDA sobre $nCuotas: el cliente dice cuánto
+ *                             puede pagar al mes y salen las cuotas que hagan falta.
  */
-function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInicio, ?array $entrega): array {
+function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInicio, ?array $entrega, float $presupuesto = 0.0): array {
     $iguales = ($modalidad === 'iguales');
     $porc    = $iguales ? 0.30 : 0.20;          // lo que va en cuotas mensuales
     $v       = max(0.0, $valor);
@@ -77,19 +79,33 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
                          + ((int)$entrega['m'] - (int)$primera->format('n')) + 1);
     }
 
-    $n = $nCuotas > 0 ? $nCuotas : ($plazoMax !== null ? min(COT_PLAZO_REF, $plazoMax) : COT_PLAZO_REF);
-    $recortado = false;
-    if ($plazoMax !== null && $n > $plazoMax) { $n = $plazoMax; $recortado = true; }
-    $n = max(1, $n);
-
-    // --- reparto del precio ---
+    // --- cuánto se reparte en las cuotas mensuales ---
     $reserva10     = 0.10 * $v;
     $separacion    = min((float)COT_SEPARACION, $reserva10);
     $firma         = $reserva10 - $separacion;
     $contraentrega = 0.60 * $v;
     $cargaCuotas   = $porc * $v;
-    $mensual       = $cargaCuotas / $n;
-    $extraTotal    = $iguales ? 0.0 : 0.10 * $v;
+
+    // --- número de cuotas: por PRESUPUESTO si lo dieron, si no por plazo ---
+    // Con presupuesto se invierte la pregunta: el cliente dice cuánto puede pagar
+    // al mes y salen las cuotas necesarias. Es la forma en que se vende de verdad.
+    $recortado = false;
+    $insuficiente = false;
+    $cuotaMinima = 0.0;
+    if ($presupuesto > 0 && $v > 0) {
+        $n = max(1, (int)ceil($cargaCuotas / $presupuesto));
+        if ($plazoMax !== null && $n > $plazoMax) {
+            // No alcanza: ni pagando hasta la entrega llega. Se topa al plazo real y
+            // se avisa cuál es la cuota mínima posible, que es el dato accionable.
+            $n = $plazoMax; $insuficiente = true; $cuotaMinima = $cargaCuotas / $plazoMax;
+        }
+    } else {
+        $n = $nCuotas > 0 ? $nCuotas : ($plazoMax !== null ? min(COT_PLAZO_REF, $plazoMax) : COT_PLAZO_REF);
+        if ($plazoMax !== null && $n > $plazoMax) { $n = $plazoMax; $recortado = true; }
+    }
+    $n = max(1, $n);
+    $mensual    = $cargaCuotas / $n;
+    $extraTotal = $iguales ? 0.0 : 0.10 * $v;
 
     // --- fechas de las cuotas (el 16 de cada mes) ---
     $fechas = [];
@@ -145,6 +161,9 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         'inicioTxt'     => cot_mes_es((int)$primera->format('n')) . ' ' . $primera->format('Y'),
         'plazoMax'      => $plazoMax,
         'recortado'     => $recortado,
+        'presupuesto'   => $presupuesto,
+        'insuficiente'  => $insuficiente,
+        'cuotaMinima'   => $cuotaMinima,
         'filas'         => $filas,
         // Cuadre: separación + firma + todas las cuotas + contraentrega debe dar el valor.
         'suma'          => $separacion + $firma + array_sum(array_column($filas, 'monto')) + $contraentrega,
