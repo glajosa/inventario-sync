@@ -55,6 +55,20 @@ if (!empty($_REQUEST['PLACEMENT_OPTIONS'])) {
     if (is_array($tmp)) $opciones = $tmp;
 }
 
+/** Enlace firmado a la cotización de una unidad.
+ *  La firma (HMAC con el secreto del servicio) evita tener que poner el token en
+ *  la URL, que quedaría a la vista del vendedor y de cualquiera con quien
+ *  comparta el enlace. Amarra unidad + deal + vencimiento, así que no sirve para
+ *  pedir otra cosa ni queda válida para siempre. */
+function cot_url(int $unidadId, int $dealId): string {
+    $exp = time() + 12 * 3600;                    // dura la jornada del asesor
+    $sig = hash_hmac('sha256', "u{$unidadId}|d{$dealId}|e{$exp}", (string)getenv('OUTBOUND_TOKEN'));
+    $host = (string)($_SERVER['HTTP_X_FORWARDED_HOST'] ?? $_SERVER['HTTP_HOST'] ?? '');
+    return 'https://' . $host . '/cotizar.php?' . http_build_query([
+        'u' => $unidadId, 'd' => $dealId, 'exp' => $exp, 's' => $sig,
+    ]);
+}
+
 $mode   = (string)($opciones['MODE'] ?? $_REQUEST['mode'] ?? 'edit');
 $dealId = (int)($opciones['ENTITY_VALUE_ID'] ?? 0);
 $name   = (string)($opciones['FIELD_NAME'] ?? ($_REQUEST['field']['NAME'] ?? $_REQUEST['name'] ?? 'UF_UNIDAD'));
@@ -345,6 +359,14 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?> .gu-tag.BLOQUEADO,#<?= $uid ?> .gu-tag.PERDIDO{background:#eaeef2;color:#57606a}
   #<?= $uid ?> .gu-meta{flex:0 1 auto;color:#8b949e;font-size:11px;white-space:nowrap;
       overflow:hidden;text-overflow:ellipsis}
+  /* Botón por unidad: abre NUESTRA cotización en otra pestaña. Va discreto y solo
+     se enciende al pasar por la fila, para no competir con el precio ni invitar a
+     pulsarlo por error cuando lo que se quiere es elegir la unidad. */
+  #<?= $uid ?> .gu-cot{flex:0 0 auto;margin-left:8px;font-size:11px;font-weight:600;
+     letter-spacing:.3px;color:#0c6c9c;border:1px solid #cfe2f0;border-radius:6px;
+     padding:2px 8px;text-decoration:none;background:#f2f8fc;opacity:.55;transition:opacity .12s}
+  #<?= $uid ?> .gu-fila:hover .gu-cot{opacity:1}
+  #<?= $uid ?> .gu-cot:hover{background:#0c6c9c;color:#fff;border-color:#0c6c9c;opacity:1}
   #<?= $uid ?> .gu-precio{margin-left:auto;flex:0 0 auto;font-variant-numeric:tabular-nums;
       font-size:12px;color:#57606a}
   #<?= $uid ?> .gu-vacio{padding:16px 10px;text-align:center;color:#8b949e}
@@ -444,6 +466,10 @@ foreach ($elegidos as $id) {
           <span class="gu-tag <?= h($est) ?>"><?= h($est) ?></span>
           <?php if ($meta !== ''): ?><span class="gu-meta"><?= h($meta) ?></span><?php endif; ?>
           <?php if ($pvp !== ''): ?><span class="gu-precio"><?= h($pvp) ?></span><?php endif; ?>
+          <?php if ($pvpNum > 0): ?>
+            <a class="gu-cot" target="_blank" rel="noopener" title="Cotizar esta unidad"
+               href="<?= h(cot_url((int)$u['id'], $dealId)) ?>">Cotizar</a>
+          <?php endif; ?>
         </div>
       <?php endforeach; ?>
     <?php endforeach; ?>
@@ -790,6 +816,9 @@ foreach ($elegidos as $id) {
   });
 
   lista.addEventListener('click', function(e){
+    // "Cotizar" es un enlace dentro de la fila: si no se corta aquí, además de
+    // abrir la cotización marcaría la unidad como elegida sin que nadie lo pida.
+    if (e.target.closest('.gu-cot')) { e.stopPropagation(); return; }
     var f = e.target.closest('.gu-fila'); if (!f) return;
     var id = f.dataset.id;
     if (BLOQ) return;                             // solo consulta: se ve, no se elige
