@@ -63,7 +63,9 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     if (preg_match('/^(\d{4})-(\d{2})$/', $mesInicio, $m)) {
         $primera = new DateTimeImmutable(sprintf('%04d-%02d-16', (int)$m[1], (int)$m[2]));
     } else {
-        $primera = new DateTimeImmutable($hoy->format('Y-m-16'))->modify('+1 month');
+        // Paréntesis obligatorios: encadenar sobre `new` sin ellos es sintaxis de
+        // PHP 8.4, y el contenedor corre 8.2 — revienta con parse error.
+        $primera = (new DateTimeImmutable($hoy->format('Y-m-16')))->modify('+1 month');
     }
     $piso = new DateTimeImmutable($hoy->format('Y-m-16'));
     if ($primera < $piso) $primera = $piso;
