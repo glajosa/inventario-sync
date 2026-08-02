@@ -100,8 +100,66 @@ function logline(string $msg): void {
 // guardar.php lo pone en 0; reconcile y la migración lo dejan como está.
 $BX_FRENO_US = 200000;
 
+/**
+ * CANDADO DE BORRADO — nace del incidente del 2026-07-31.
+ * Un script de limpieza leyó mal un archivo, el filtro CONTACT_ID quedó vacío,
+ * Bitrix devolvió TODO en vez de nada y el bucle borró 50 ventas REALES de
+ * CLIENTES. Los warnings de PHP estaban en la misma salida y nadie los miró.
+ * Estas cuatro barreras cortan esa cadena en cuatro puntos distintos:
+ *   1. Borrar está PROHIBIDO salvo que se pida a propósito (BX_ALLOW_DELETE=1).
+ *   2. Hay que pasar un id explícito — nunca el resultado de una búsqueda suelta.
+ *   3. No se borra nada CON MONTO ni creado hace más de 24 h: un dato de prueba
+ *      vale 0 y nació hace minutos. Una venta real no.
+ *   4. Tope de 10 por proceso. El accidente fue un bucle de 50: con esto se
+ *      habría detenido en el 11.
+ * Para un caso legítimo que choque con 3 o 4: BX_ALLOW_DELETE=FORCE (y queda
+ * en el log igual).
+ */
+const BX_MAX_BORRADOS = 10;
+function bx_log_borrado(string $txt): void {
+    $f = ($d = getenv('DATA_DIR') ?: sys_get_temp_dir()) . '/borrados.log';
+    @file_put_contents($f, gmdate('c') . '  ' . $txt . "\n", FILE_APPEND | LOCK_EX);
+}
+function bx_guard_borrado(string $method, array $params): ?array {
+    if (!preg_match('/\.delete$/i', $method)) return null;      // no es un borrado: pasa
+    static $hechos = 0;
+    $permiso = strtoupper(trim((string)getenv('BX_ALLOW_DELETE')));
+    $id = (int)($params['id'] ?? 0);
+
+    if ($permiso === '') {
+        bx_log_borrado("BLOQUEADO $method id=$id (sin BX_ALLOW_DELETE)");
+        return ['ok'=>false,'error'=>'BORRADO BLOQUEADO: exporta BX_ALLOW_DELETE=1 para permitirlo'];
+    }
+    if ($id <= 0) {
+        bx_log_borrado("BLOQUEADO $method SIN ID — posible filtro vacío");
+        return ['ok'=>false,'error'=>'BORRADO BLOQUEADO: id vacío o no numérico (¿filtro sin valor?)'];
+    }
+    if ($hechos >= BX_MAX_BORRADOS && $permiso !== 'FORCE') {
+        bx_log_borrado("BLOQUEADO $method id=$id — tope de " . BX_MAX_BORRADOS . " alcanzado");
+        return ['ok'=>false,'error'=>'BORRADO BLOQUEADO: ya van '.BX_MAX_BORRADOS.' en este proceso. Si es correcto, BX_ALLOW_DELETE=FORCE'];
+    }
+    if (stripos($method, 'crm.deal.delete') === 0 && $permiso !== 'FORCE') {
+        $g = bx('crm.deal.get', ['id'=>$id]);                    // .get no entra al candado: no hay recursión
+        $d = $g['result'] ?? [];
+        if ($d) {
+            $monto = (float)($d['OPPORTUNITY'] ?? 0);
+            $creado = strtotime((string)($d['DATE_CREATE'] ?? ''));
+            $viejo = $creado && (time() - $creado) > 86400;
+            if ($monto > 0 || $viejo) {
+                $por = $monto > 0 ? ('monto ' . $monto) : 'creado hace más de 24 h';
+                bx_log_borrado("BLOQUEADO crm.deal.delete id=$id ($por) — \"" . substr((string)($d['TITLE'] ?? ''),0,60) . '"');
+                return ['ok'=>false,'error'=>"BORRADO BLOQUEADO: el deal $id parece REAL ($por). Si de verdad hay que borrarlo, BX_ALLOW_DELETE=FORCE"];
+            }
+        }
+    }
+    $hechos++;
+    bx_log_borrado("PERMITIDO $method id=$id (permiso=$permiso, #$hechos)");
+    return null;
+}
+
 function bx(string $method, array $params = []): array {
     global $WEBHOOK_IN, $BX_FRENO_US;
+    if ($bloqueo = bx_guard_borrado($method, $params)) return $bloqueo;
     if ($BX_FRENO_US > 0) usleep($BX_FRENO_US);
     for ($try = 0; $try < 4; $try++) {
         $ch = curl_init($WEBHOOK_IN . $method);
