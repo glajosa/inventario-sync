@@ -33,6 +33,7 @@ const FIELDS_EXTRA = [
 const U_NUM = 'ufCrm25_1782615753112';
 const U_M2  = 'ufCrm25_1782615822688';
 const U_PVP = 'ufCrm25_1784563253861';
+const U_TIPO= 'ufCrm25_1782616418179';   // Tipo de bien (enum): 1791 Local · 1793 Departamento · 1951 Oficina
 const U_TOR = 'ufCrm25_1784314119';
 const U_PIS = 'ufCrm25_1784313244';
 
@@ -288,6 +289,11 @@ function catalogo(bool $force = false): array {
                 'torre'  => $enum[U_TOR][(string)($it[U_TOR] ?? '')] ?? '',
                 'piso'   => $enum[U_PIS][(string)($it[U_PIS] ?? '')] ?? '',
                 'dealId' => (int)($it['parentId2'] ?? 0),
+                // Tipo de bien (Local/Departamento/Oficina…). Hace falta porque el CÓDIGO
+                // no basta: los edificios E y F de Noral Plaza tienen locales Y suites, y
+                // la regla del parqueo aplica solo a las suites. Sin esto, un local
+                // comercial de $237.000 recibiría el descuento de $20.000.
+                'tipo'   => (int)($it[U_TIPO] ?? 0),
             ];
         }
         $start = $r['next'] ?? null;

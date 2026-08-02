@@ -43,6 +43,26 @@ function cot_entrega(int $categoryId): ?array {
 
 const COT_PLAZO_REF = 60;     // plazo de referencia
 const COT_SEPARACION = 1000;  // la separación siempre es $1.000 (o el 10% si es menor)
+const COT_PARQUEO = 20000;    // valor de un parqueo de Noral Plaza Suites
+
+/** ¿La unidad es una SUITE de Noral Plaza? Es el único producto con la regla del
+ *  parqueo. Se decide por el TIPO DE BIEN, no por el código: los edificios E y F
+ *  tienen locales comerciales Y suites, y un local de $237.000 no puede llevarse
+ *  el descuento de $20.000 solo por empezar con «E-». */
+const COT_TIPO_DEPARTAMENTO = 1793;
+function cot_es_suite(int $categoryId, int $tipo): bool {
+    return $categoryId === 33 && $tipo === COT_TIPO_DEPARTAMENTO;
+}
+
+/** Descuento por parqueo NO obligatorio.
+ *  Regla del negocio: cada suite se vende con parqueo obligatorio, PERO en una
+ *  compra de 2 o más se puede perdonar UNO — y solo uno, no importa cuántas
+ *  sean. Con 2 suites: 1 paga completa y a la otra se le restan $20.000. Con 3:
+ *  dos pagan completas con sus parqueos y a la tercera se le restan $20.000.
+ *  Por eso el tope es 1 y no "n-1". */
+function cot_descuento_parqueo(int $suites, bool $aplicar): float {
+    return ($aplicar && $suites >= 2) ? (float)COT_PARQUEO : 0.0;
+}
 
 /**
  * Arma el plan completo.

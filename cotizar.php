@@ -90,6 +90,7 @@ if (!$unidades) {
 // los códigos se listan y el plazo lo manda la entrega MÁS TEMPRANA de los
 // proyectos involucrados — si una torre entrega antes, ahí se corta el plazo.
 $pvp = 0.0; $m2 = 0.0; $codigos = []; $proyectosSet = []; $entrega = null; $sinPrecio = []; $ocupadas = [];
+$suites = 0;   // suites de Noral Plaza en la compra: deciden si aplica el descuento de parqueo
 foreach ($unidades as $u) {
     $p = (float)str_replace(['|USD', ','], '', (string)$u['pvp']);
     $pvp += $p;
@@ -98,6 +99,7 @@ foreach ($unidades as $u) {
     $nomProy = (string)(($cat['proyectos'] ?? [])[(string)$u['cat']] ?? '');
     if ($nomProy !== '') $proyectosSet[$nomProy] = true;
     if ($p <= 0) $sinPrecio[] = (string)$u['codigo'];
+    if (cot_es_suite((int)$u['cat'], (int)($u['tipo'] ?? 0))) $suites++;
     if (($u['stage'] ?? '') !== 'DISPONIBLE') $ocupadas[] = $u['codigo'] . ' (' . ($u['stage'] ?: 'sin etapa') . ')';
     $e = cot_entrega((int)$u['cat']);
     if ($e && (!$entrega || ($e['y'] * 12 + $e['m']) < ($entrega['y'] * 12 + $entrega['m']))) $entrega = $e;
@@ -128,8 +130,13 @@ $modalidad = (($_GET['mod'] ?? '') === 'iguales') ? 'iguales' : 'estandar';
 $cuotas    = (int)($_GET['n'] ?? 0);
 $mesIni    = (string)($_GET['mes'] ?? '');
 $presu     = (float)str_replace([',', '$', ' '], '', (string)($_GET['presu'] ?? ''));
+// Parqueo: en una compra de 2+ suites se puede perdonar UNO solo. Apagado por
+// defecto — lo decide el asesor, no se descuenta a espaldas de nadie.
+$sinParqueo = (($_GET['sinparq'] ?? '') === '1');
+$dctoParq   = cot_descuento_parqueo($suites, $sinParqueo);
+$pvpFinal   = max(0.0, $pvp - $dctoParq);
 
-$plan = cot_plan($pvp, $cuotas, $modalidad, $mesIni, $entrega, $presu);
+$plan = cot_plan($pvpFinal, $cuotas, $modalidad, $mesIni, $entrega, $presu);
 $hoy  = new DateTimeImmutable('now');
 ?>
 <!doctype html>
@@ -216,6 +223,16 @@ $hoy  = new DateTimeImmutable('now');
       </select></div>
     <div><label>Primera cuota</label>
       <input type="month" name="mes" value="<?= h($plan['inicio']) ?>" min="<?= $hoy->format('Y-m') ?>"></div>
+    <?php if ($suites >= 2): ?>
+    <!-- Solo aparece con 2+ suites de Noral Plaza: es el único caso donde la regla existe. -->
+    <div style="align-self:center">
+      <label style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--tinta);cursor:pointer">
+        <input type="checkbox" name="sinparq" value="1" <?= $sinParqueo ? 'checked' : '' ?>
+               style="width:auto;margin-right:6px;vertical-align:-2px">
+        Una unidad sin parqueo <b>(−<?= h(cot_money((float)COT_PARQUEO)) ?>)</b>
+      </label>
+    </div>
+    <?php endif; ?>
     <button class="ir" type="submit">Recalcular</button>
   </form>
 
@@ -253,6 +270,13 @@ $hoy  = new DateTimeImmutable('now');
     <?php if ($m2 > 0): ?><dt>Metros<?= $fusion ? ' (suma)' : '' ?></dt><dd><?= number_format($m2, 2) ?> m²</dd><?php endif; ?>
   </dl>
 
+  <?php if ($dctoParq > 0): ?>
+    <div class="datos" style="grid-template-columns:1fr auto;margin-bottom:10px;font-size:14px">
+      <div>Suma de las <?= (int)$suites ?> unidades</div><div><?= h(cot_money($pvp)) ?></div>
+      <div style="color:var(--gris)">Una unidad sin parqueo</div>
+      <div style="color:var(--gris)">− <?= h(cot_money($dctoParq)) ?></div>
+    </div>
+  <?php endif; ?>
   <div class="precio"><span>Precio final</span><span><?= h(cot_money($plan['valor'])) ?></span></div>
   <div class="legal"><span>Valores legales promesa C/V</span><span><?= h(cot_money((float)$plan['legal'])) ?></span></div>
   <p>Pago directo para el notario. Se da al momento de la firma del contrato.</p>
