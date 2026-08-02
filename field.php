@@ -69,10 +69,6 @@ function cot_base(int $dealId): array {
     $host = (string)($_SERVER['HTTP_X_FORWARDED_HOST'] ?? $_SERVER['HTTP_HOST'] ?? '');
     return ['url' => 'https://' . $host . '/cotizar.php', 'd' => $dealId, 'exp' => $exp, 's' => $sig];
 }
-function cot_url(int $unidadId, int $dealId): string {
-    $b = cot_base($dealId);
-    return $b['url'] . '?' . http_build_query(['u' => $unidadId] + array_diff_key($b, ['url' => 1]));
-}
 
 $mode   = (string)($opciones['MODE'] ?? $_REQUEST['mode'] ?? 'edit');
 $dealId = (int)($opciones['ENTITY_VALUE_ID'] ?? 0);
@@ -376,7 +372,8 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?> .gu-cottodas:hover{background:#0757b3}
   #<?= $uid ?> .gu-cot{flex:0 0 auto;margin-left:8px;font-size:11px;font-weight:600;
      letter-spacing:.3px;color:#0c6c9c;border:1px solid #cfe2f0;border-radius:6px;
-     padding:2px 8px;text-decoration:none;background:#f2f8fc;opacity:.55;transition:opacity .12s}
+     padding:2px 8px;text-decoration:none;background:#f2f8fc;opacity:.55;transition:opacity .12s;
+     cursor:pointer;user-select:none}
   #<?= $uid ?> .gu-fila:hover .gu-cot{opacity:1}
   #<?= $uid ?> .gu-cot:hover{background:#0c6c9c;color:#fff;border-color:#0c6c9c;opacity:1}
   #<?= $uid ?> .gu-precio{margin-left:auto;flex:0 0 auto;font-variant-numeric:tabular-nums;
@@ -478,10 +475,7 @@ foreach ($elegidos as $id) {
           <span class="gu-tag <?= h($est) ?>"><?= h($est) ?></span>
           <?php if ($meta !== ''): ?><span class="gu-meta"><?= h($meta) ?></span><?php endif; ?>
           <?php if ($pvp !== ''): ?><span class="gu-precio"><?= h($pvp) ?></span><?php endif; ?>
-          <?php if ($pvpNum > 0): ?>
-            <a class="gu-cot" target="_blank" rel="noopener" title="Cotizar esta unidad"
-               href="<?= h(cot_url((int)$u['id'], $dealId)) ?>">Cotizar</a>
-          <?php endif; ?>
+          <?php if ($pvpNum > 0): ?><a class="gu-cot">Cotizar</a><?php endif; ?>
         </div>
       <?php endforeach; ?>
     <?php endforeach; ?>
@@ -874,9 +868,18 @@ foreach ($elegidos as $id) {
   });
 
   lista.addEventListener('click', function(e){
-    // "Cotizar" es un enlace dentro de la fila: si no se corta aquí, además de
-    // abrir la cotización marcaría la unidad como elegida sin que nadie lo pida.
-    if (e.target.closest('.gu-cot')) { e.stopPropagation(); return; }
+    // "Cotizar" va SIN href: la firma es la misma para todas las filas, así que
+    // repetir la URL entera en cada una engordaba el fragmento ~400 KB (1.418
+    // unidades × 286 bytes) y Bitrix llegó a cortar la conexión del iframe.
+    // Se arma aquí, en el momento del clic. Y se corta la propagación: si no,
+    // además de cotizar marcaría la unidad sin que nadie lo pida.
+    var bc = e.target.closest('.gu-cot');
+    if (bc) {
+      e.stopPropagation(); e.preventDefault();
+      var fc = bc.closest('.gu-fila');
+      if (fc) window.open(cotUrlDe([fc.dataset.id]), '_blank', 'noopener');
+      return;
+    }
     var f = e.target.closest('.gu-fila'); if (!f) return;
     var id = f.dataset.id;
     if (BLOQ) {
