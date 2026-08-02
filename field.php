@@ -365,6 +365,9 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
      pulsarlo por error cuando lo que se quiere es elegir la unidad. */
   /* marcada para cotizar: azul suave y una ✓, distinto de "elegida" (que sí aparta) */
   #<?= $uid ?> .gu-fila.gu-cotsel{background:#eaf4ff;box-shadow:inset 3px 0 0 #0969da}
+  /* Con unidades marcadas, la única acción válida es cotizarlas juntas: se oculta
+     el botón por fila para que no haya dos caminos y se elija el equivocado. */
+  #<?= $uid ?>.gu-marcando .gu-cot{display:none}
   #<?= $uid ?> .gu-fila.gu-cotsel .gu-cod::before{content:'\2713\00a0';color:#0969da;font-weight:700}
   #<?= $uid ?> .gu-cottodas{float:right;font-size:10.5px;font-weight:700;letter-spacing:.3px;
      color:#fff;background:#0969da;border-radius:6px;padding:2px 9px;text-decoration:none;
@@ -529,13 +532,18 @@ foreach ($elegidos as $id) {
   function pintarCotSel(){
     if (!btnCot) return;
     filas.forEach(function(f){ f.classList.toggle('gu-cotsel', selCot.indexOf(f.dataset.id) !== -1); });
+    R.classList.toggle('gu-marcando', selCot.length > 0);
     if (!selCot.length) { btnCot.style.display = 'none'; return; }
     btnCot.style.display = '';
     btnCot.href = cotUrlDe(selCot);
     btnCot.textContent = selCot.length > 1
       ? ('Cotizar las ' + selCot.length + ' juntas')
       : 'Cotizar la marcada';
-    btnCot.title = 'Abre la cotización. No reserva ni aparta nada.';
+    btnCot.title = selCot.length > 1
+      ? 'Un solo plan: precio y metros sumados, una reserva y una serie de cuotas. No aparta nada.'
+      : 'Abre la cotización. No reserva ni aparta nada.';
+    // El pie dice qué se lleva marcado; sin esto, con la lista larga, no se ve.
+    if (pie) pie.textContent = selCot.length + (selCot.length > 1 ? ' marcadas para cotizar' : ' marcada para cotizar');
   }
   function cotUrlDe(ids){
     return COT.url + '?u=' + ids.join(',') + '&d=' + COT.d + '&exp=' + COT.exp + '&s=' + COT.s;
@@ -761,13 +769,15 @@ foreach ($elegidos as $id) {
       g.style.display = (hay && !cat) ? '' : 'none';
     });
     vacio.style.display = n ? 'none' : '';
-    pintarCotSel();
     // Cuantía de lo que se está viendo: cambia con el proyecto elegido, con la
     // búsqueda y con Disponibles/Todos. Sirve para saber cuánto inventario queda
     // por vender sin salir a hacer la suma por fuera.
     pie.textContent = n + (n === 1 ? ' unidad' : ' unidades')
                     + (monto ? ' · ' + plata(monto) : '')
                     + (sel.length ? ' · ' + sel.length + ' elegida' + (sel.length > 1 ? 's' : '') : '');
+    // DESPUÉS del pie: cuando hay unidades marcadas para cotizar, pintarCotSel lo
+    // reemplaza por ese conteo. Si se llamara antes, esta línea lo borraría.
+    pintarCotSel();
     lista.scrollTop = 0;
   }
 
@@ -888,7 +898,10 @@ foreach ($elegidos as $id) {
       if ((parseFloat(f.dataset.pvp || 0) || 0) <= 0) return;   // sin precio no suma
       var i = selCot.indexOf(id);
       if (i === -1) selCot.push(id); else selCot.splice(i, 1);
-      pintarCotSel();
+      // filtrar() y no pintarCotSel() a secas: filtrar reescribe el pie con el
+      // conteo normal y luego llama a pintarCotSel, así que al desmarcar la
+      // última el pie vuelve a su texto en vez de quedarse en "1 marcada".
+      filtrar();
       return;
     }
     if (f.dataset.libre !== '1') return;          // ocupada: no seleccionable
