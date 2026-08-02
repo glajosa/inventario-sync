@@ -136,30 +136,7 @@ $sinParqueo = (($_GET['sinparq'] ?? '') === '1');
 $dctoParq   = cot_descuento_parqueo($suites, $sinParqueo);
 $pvpFinal   = max(0.0, $pvp - $dctoParq);
 
-// UNIFICAR: por defecto las unidades van en UN solo plan (es como Galjosa vende una
-// fusión y como lo trata cobranzas). Apagarlo saca un plan POR UNIDAD, útil para que
-// el cliente compare "si compro una" contra "si compro las dos".
-$unificar = $fusion ? (($_GET['unif'] ?? '1') !== '0') : true;
-
-$bloques = [];
-if ($unificar) {
-    $bloques[] = ['cods'=>$codigos, 'pvp'=>$pvpFinal, 'm2'=>$m2, 'dcto'=>$dctoParq, 'bruto'=>$pvp,
-                  'plan'=>cot_plan($pvpFinal, $cuotas, $modalidad, $mesIni, $entrega, $presu)];
-} else {
-    // Separado: el descuento de parqueo NO se reparte — pertenece a una unidad concreta,
-    // así que se muestra solo en la primera y el resto va a precio pleno.
-    $primero = true;
-    foreach ($unidades as $u) {
-        $p = (float)str_replace(['|USD', ','], '', (string)$u['pvp']);
-        $d = ($primero && $dctoParq > 0) ? $dctoParq : 0.0;
-        $e = cot_entrega((int)$u['cat']);
-        $bloques[] = ['cods'=>[(string)$u['codigo']], 'pvp'=>max(0.0,$p-$d),
-                      'm2'=>(float)str_replace(',', '.', (string)$u['m2']), 'dcto'=>$d, 'bruto'=>$p,
-                      'plan'=>cot_plan(max(0.0,$p-$d), $cuotas, $modalidad, $mesIni, $e, $presu)];
-        $primero = false;
-    }
-}
-$plan = $bloques[0]['plan'];          // el primero manda para los avisos de plazo
+$plan = cot_plan($pvpFinal, $cuotas, $modalidad, $mesIni, $entrega, $presu);
 $hoy  = new DateTimeImmutable('now');
 ?>
 <!doctype html>
@@ -230,7 +207,6 @@ $hoy  = new DateTimeImmutable('now');
     <input type="hidden" name="d" value="<?= (int)$dealId ?>">
     <input type="hidden" name="exp" value="<?= (int)$exp ?>">
     <input type="hidden" name="s" value="<?= h($sig) ?>">
-    <?php if ($fusion): ?><input type="hidden" name="unif" value="0"><?php endif; ?>
     <div><label>Cliente</label>
       <input type="text" name="cliente" value="<?= h($cliente) ?>" placeholder="Nombre del cliente" size="24"></div>
     <div><label>Cuotas</label>
@@ -247,16 +223,6 @@ $hoy  = new DateTimeImmutable('now');
       </select></div>
     <div><label>Primera cuota</label>
       <input type="month" name="mes" value="<?= h($plan['inicio']) ?>" min="<?= $hoy->format('Y-m') ?>"></div>
-    <?php if ($fusion): ?>
-    <div style="align-self:center">
-      <label style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--tinta);cursor:pointer"
-             title="Unificado = un solo plan por el total. Separado = un plan por cada unidad.">
-        <input type="checkbox" name="unif" value="1" <?= $unificar ? 'checked' : '' ?>
-               style="width:auto;margin-right:6px;vertical-align:-2px">
-        Unificar las <?= count($unidades) ?> en un solo plan
-      </label>
-    </div>
-    <?php endif; ?>
     <?php if ($suites >= 2): ?>
     <!-- Solo aparece con 2+ suites de Noral Plaza: es el único caso donde la regla existe. -->
     <div style="align-self:center">
@@ -296,28 +262,17 @@ $hoy  = new DateTimeImmutable('now');
     <div class="aviso">Ojo, en el inventario está: <b><?= h(implode(' · ', $ocupadas)) ?></b>.</div>
   <?php endif; ?>
 
-  <?php if ($cliente !== ''): ?>
-  <dl class="datos"><dt>Cliente</dt><dd><?= h($cliente) ?></dd></dl>
-  <?php endif; ?>
-
-  <?php foreach ($bloques as $bi => $B): $plan = $B['plan']; ?>
-  <?php if (count($bloques) > 1): ?>
-    <h2 style="font-size:15px;margin:26px 0 10px;padding-top:16px;
-               border-top:1px solid var(--linea);letter-spacing:.3px">
-      Opción <?= $bi + 1 ?> · <?= h(implode(' + ', $B['cods'])) ?></h2>
-  <?php endif; ?>
-
   <dl class="datos">
+    <?php if ($cliente !== ''): ?><dt>Cliente</dt><dd><?= h($cliente) ?></dd><?php endif; ?>
     <dt>Proyecto</dt><dd><?= h($proyecto) ?></dd>
-    <dt><?= count($B['cods']) > 1 ? 'Unidades' : 'Unidad' ?></dt>
-    <dd><?= h(implode(' + ', $B['cods'])) ?><?= count($B['cods']) > 1 ? ' <span style="font-weight:400;color:var(--gris)">(' . count($B['cods']) . ' activos fusionados)</span>' : '' ?></dd>
-    <?php if ($B['m2'] > 0): ?><dt>Metros<?= count($B['cods']) > 1 ? ' (suma)' : '' ?></dt><dd><?= number_format($B['m2'], 2) ?> m²</dd><?php endif; ?>
+    <dt><?= $fusion ? 'Unidades' : 'Unidad' ?></dt>
+    <dd><?= h(implode(' + ', $codigos)) ?><?= $fusion ? ' <span style="font-weight:400;color:var(--gris)">(' . count($codigos) . ' activos fusionados)</span>' : '' ?></dd>
+    <?php if ($m2 > 0): ?><dt>Metros<?= $fusion ? ' (suma)' : '' ?></dt><dd><?= number_format($m2, 2) ?> m²</dd><?php endif; ?>
   </dl>
 
-  <?php if ($B['dcto'] > 0): ?>
+  <?php if ($dctoParq > 0): ?>
     <div class="datos" style="grid-template-columns:1fr auto;margin-bottom:10px;font-size:14px">
-      <div><?= count($B['cods']) > 1 ? 'Suma de las ' . count($B['cods']) . ' unidades' : 'Precio de lista' ?></div>
-      <div><?= h(cot_money($B['bruto'])) ?></div>
+      <div>Suma de las <?= (int)$suites ?> unidades</div><div><?= h(cot_money($pvp)) ?></div>
       <div style="color:var(--gris)">Una unidad sin parqueo</div>
       <div style="color:var(--gris)">− <?= h(cot_money($dctoParq)) ?></div>
     </div>
@@ -359,22 +314,7 @@ $hoy  = new DateTimeImmutable('now');
       Incluye <?= (int)$plan['nExtra'] ?> cuota<?= $plan['nExtra'] > 1 ? 's' : '' ?> extraordinaria<?= $plan['nExtra'] > 1 ? 's' : '' ?>
       de <?= h(cot_money($plan['valorExtra'])) ?> (una por año), que van sumadas a la cuota de ese mes.
     <?php endif; ?>
-  </p>
-  <?php endforeach; ?>
-
-  <?php if (count($bloques) > 1): ?>
-    <div class="datos" style="grid-template-columns:1fr auto;font-size:15px;font-weight:700;
-         border-top:2px solid var(--tinta);margin-top:22px;padding-top:12px">
-      <div>Si se lleva <?= count($bloques) ?> unidades</div>
-      <div><?= h(cot_money(array_sum(array_column($bloques,'pvp')))) ?></div>
-      <div style="font-weight:400;color:var(--gris);font-size:13px">Cuota mensual sumada</div>
-      <div style="font-weight:400;color:var(--gris);font-size:13px">
-        <?= h(cot_money(array_sum(array_map(fn($b)=>$b['plan']['mensual'], $bloques)))) ?></div>
-    </div>
-  <?php endif; ?>
-
-  <p class="pie" style="margin-top:18px">
-    Cotización generada el <?= $hoy->format('d/m/Y') ?>. Precios sujetos a cambio sin previo aviso;
+    <br>Cotización generada el <?= $hoy->format('d/m/Y') ?>. Precios sujetos a cambio sin previo aviso;
     la unidad se confirma únicamente con la reserva.
   </p>
 
