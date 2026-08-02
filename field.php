@@ -367,6 +367,9 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   /* Botón por unidad: abre NUESTRA cotización en otra pestaña. Va discreto y solo
      se enciende al pasar por la fila, para no competir con el precio ni invitar a
      pulsarlo por error cuando lo que se quiere es elegir la unidad. */
+  /* marcada para cotizar: azul suave y una ✓, distinto de "elegida" (que sí aparta) */
+  #<?= $uid ?> .gu-fila.gu-cotsel{background:#eaf4ff;box-shadow:inset 3px 0 0 #0969da}
+  #<?= $uid ?> .gu-fila.gu-cotsel .gu-cod::before{content:'\2713\00a0';color:#0969da;font-weight:700}
   #<?= $uid ?> .gu-cottodas{float:right;font-size:10.5px;font-weight:700;letter-spacing:.3px;
      color:#fff;background:#0969da;border-radius:6px;padding:2px 9px;text-decoration:none;
      margin-top:-2px}
@@ -487,6 +490,10 @@ foreach ($elegidos as $id) {
 
   <div class="gu-pie">
     <span id="<?= $uid ?>_pie"></span>
+    <!-- Marcar para COTIZAR no es elegir: no toca el campo ni aparta nada. Por eso
+         existe también en las etapas donde la unidad todavía no se puede reservar. -->
+    <a class="gu-cottodas" id="<?= $uid ?>_cotsel" style="display:none;float:none;margin-left:auto"
+       target="_blank" rel="noopener"></a>
     <button type="button" class="gu-listo" id="<?= $uid ?>_listo">Listo</button>
   </div>
 </div>
@@ -517,8 +524,25 @@ foreach ($elegidos as $id) {
   var txt      = document.getElementById('<?= $uid ?>_txt');
   var elegidas = document.getElementById('<?= $uid ?>_elegidas');
   var COT = <?= json_encode(cot_base($dealId), JSON_UNESCAPED_SLASHES) ?>;
+  // Unidades marcadas SOLO para cotizar. Es una lista aparte de `sel` a propósito:
+  // no se guarda, no cambia la etapa de la unidad y no ocupa nada. Así el asesor
+  // puede armar una fusión y cotizarla desde cualquier etapa, aunque todavía no
+  // pueda apartar (en Prospectos la unidad se elige solo en RESERVA).
+  var selCot = [];
+  var btnCot = document.getElementById('<?= $uid ?>_cotsel');
   /** Cotización de TODAS las unidades elegidas: los activos fusionados se cotizan
    *  como uno solo (precio y metros sumados, un único plan de pago). */
+  function pintarCotSel(){
+    if (!btnCot) return;
+    filas.forEach(function(f){ f.classList.toggle('gu-cotsel', selCot.indexOf(f.dataset.id) !== -1); });
+    if (!selCot.length) { btnCot.style.display = 'none'; return; }
+    btnCot.style.display = '';
+    btnCot.href = cotUrlDe(selCot);
+    btnCot.textContent = selCot.length > 1
+      ? ('Cotizar las ' + selCot.length + ' juntas')
+      : 'Cotizar la marcada';
+    btnCot.title = 'Abre la cotización. No reserva ni aparta nada.';
+  }
   function cotUrlDe(ids){
     return COT.url + '?u=' + ids.join(',') + '&d=' + COT.d + '&exp=' + COT.exp + '&s=' + COT.s;
   }
@@ -743,6 +767,7 @@ foreach ($elegidos as $id) {
       g.style.display = (hay && !cat) ? '' : 'none';
     });
     vacio.style.display = n ? 'none' : '';
+    pintarCotSel();
     // Cuantía de lo que se está viendo: cambia con el proyecto elegido, con la
     // búsqueda y con Disponibles/Todos. Sirve para saber cuánto inventario queda
     // por vender sin salir a hacer la suma por fuera.
@@ -854,7 +879,15 @@ foreach ($elegidos as $id) {
     if (e.target.closest('.gu-cot')) { e.stopPropagation(); return; }
     var f = e.target.closest('.gu-fila'); if (!f) return;
     var id = f.dataset.id;
-    if (BLOQ) return;                             // solo consulta: se ve, no se elige
+    if (BLOQ) {
+      // No se puede APARTAR en esta etapa, pero sí cotizar: el clic marca y
+      // desmarca para armar la fusión que se va a cotizar. Nada se guarda.
+      if ((parseFloat(f.dataset.pvp || 0) || 0) <= 0) return;   // sin precio no suma
+      var i = selCot.indexOf(id);
+      if (i === -1) selCot.push(id); else selCot.splice(i, 1);
+      pintarCotSel();
+      return;
+    }
     if (f.dataset.libre !== '1') return;          // ocupada: no seleccionable
     if (sel.indexOf(id) !== -1) return;           // ya elegida (se quita desde "Elegidas")
     sel.push(id);
@@ -901,7 +934,7 @@ foreach ($elegidos as $id) {
   function bloquear(){
     BLOQ = true;
     R.classList.add('gu-bloq');
-    campo.title = 'Puedes consultar el inventario; la unidad se elige en la etapa RESERVA';
+    campo.title = 'Puedes consultar y cotizar el inventario; apartar la unidad se hace en la etapa RESERVA';
     var ph = campo.querySelector('.gu-ph');
     if (ph) ph.textContent = 'Ver inventario (se elige en RESERVA)';
     ajustarIframe();
