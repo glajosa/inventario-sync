@@ -91,6 +91,11 @@ if (!$unidades) {
 // proyectos involucrados — si una torre entrega antes, ahí se corta el plazo.
 $pvp = 0.0; $m2 = 0.0; $codigos = []; $proyectosSet = []; $entrega = null; $sinPrecio = []; $ocupadas = [];
 $suites = 0;   // suites de Noral Plaza en la compra: deciden si aplica el descuento de parqueo
+// Logo del proyecto (como el cotizador original): 33 = Noral Plaza, 39 = Noral
+// Apartments. El de Galjosa va siempre; el de Noral es el que corresponda a la
+// categoría de la unidad — si es otro proyecto (Galero, Barranca...) no hay logo
+// propio todavía y solo sale el de Galjosa.
+$esPlaza = false; $esApartments = false;
 foreach ($unidades as $u) {
     $p = (float)str_replace(['|USD', ','], '', (string)$u['pvp']);
     $pvp += $p;
@@ -100,6 +105,8 @@ foreach ($unidades as $u) {
     if ($nomProy !== '') $proyectosSet[$nomProy] = true;
     if ($p <= 0) $sinPrecio[] = (string)$u['codigo'];
     if (cot_es_suite((int)$u['cat'], (int)($u['tipo'] ?? 0))) $suites++;
+    if ((int)$u['cat'] === 33) $esPlaza = true;
+    if ((int)$u['cat'] === 39) $esApartments = true;
     if (($u['stage'] ?? '') !== 'DISPONIBLE') $ocupadas[] = $u['codigo'] . ' (' . ($u['stage'] ?: 'sin etapa') . ')';
     $e = cot_entrega((int)$u['cat']);
     if ($e && (!$entrega || ($e['y'] * 12 + $e['m']) < ($entrega['y'] * 12 + $entrega['m']))) $entrega = $e;
@@ -292,6 +299,10 @@ $hoy  = new DateTimeImmutable('now');
              cursor:pointer;align-self:center;font-family:var(--font);text-transform:none;
              letter-spacing:normal;font-weight:400}
   .chk-linea input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--accent);cursor:pointer}
+
+  /* Logos del documento (Galjosa + proyecto): igual que el cotizador original. */
+  .logos{display:flex;align-items:center;gap:22px;margin-bottom:20px;flex-wrap:wrap}
+  .logos img{height:48px;width:auto}
 
   .datos{display:grid;grid-template-columns:auto 1fr;gap:6px 20px;font-size:14px;margin-bottom:16px}
   .datos dt{color:var(--gris)}
@@ -532,6 +543,20 @@ $hoy  = new DateTimeImmutable('now');
 </script>
 
 <div class="tarjeta">
+  <!-- Logos: como el cotizador original — Galjosa siempre, más el del proyecto
+       (Noral Plaza o Noral Apartments) según la unidad. Van en pantalla Y en el
+       PDF (no son un anexo de impresión, son parte del documento). onerror los
+       oculta solos si algún día falta el archivo, en vez de romper el layout. -->
+  <div class="logos">
+    <img src="assets/logo_galjosa_transparente.png" alt="Galjosa" onerror="this.style.display='none'">
+    <?php if ($esPlaza): ?>
+    <img src="assets/logo_noral_plaza.png" alt="Noral Plaza" onerror="this.style.display='none'">
+    <?php endif; ?>
+    <?php if ($esApartments): ?>
+    <img src="assets/logo_noral_apartments.png" alt="Noral Apartments" onerror="this.style.display='none'">
+    <?php endif; ?>
+  </div>
+
   <?php if (!empty($plan['insuficiente'])): ?>
     <div class="aviso">Con <b><?= h(cot_money($plan['presupuesto'])) ?>/mes</b> no alcanza ni pagando hasta la entrega.
       La cuota mínima posible para esta unidad es <b><?= h(cot_money($plan['cuotaMinima'])) ?>/mes</b>
