@@ -382,9 +382,16 @@ $hoy  = new DateTimeImmutable('now');
         Diferir la firma en cuotas (opcional)
       </div>
       <div class="grupo-campos">
+        <!-- "Meses" SIEMPRE muestra el número real que salió del cálculo
+             (plan.diferidoMeses), no lo que se haya escrito a mano — si no,
+             quedaba en 0 aunque el motor ya hubiera resuelto los meses a
+             partir de "Cuota mensual de eso". Se deshabilita cuando esa cuota
+             tiene valor, mismo patrón que Cuotas/o-paga-al-mes: dos formas de
+             pedir lo mismo no pueden estar las dos activas a la vez. -->
         <div><label>Meses</label>
-          <input type="number" name="firmames" min="0" max="12" placeholder="0" value="<?= $vFirmaMeses > 0 ? (int)$vFirmaMeses : '' ?>"
-                 class="w-xs" title="Sobre cuántos meses repartir la firma. Tope 12."></div>
+          <input type="number" name="firmames" min="0" max="12" placeholder="0"
+                 value="<?= (int)$plan['diferidoMeses'] > 0 ? (int)$plan['diferidoMeses'] : ($vFirmaMeses > 0 ? (int)$vFirmaMeses : '') ?>"
+                 class="w-xs" title="Sobre cuántos meses repartir la firma. Tope 12. Se calcula solo si llenas 'Cuota mensual de eso'."></div>
         <div><label>Cuota mensual de eso</label>
           <input type="text" name="firmacuota" inputmode="decimal" placeholder="auto" value="<?= h($vFirmaCuota) ?>"
                  class="w-md" title="Monto mensual editable de esa firma diferida. Si en 12 meses no alcanza a cubrirla, el resto se suma a las extraordinarias."></div>
@@ -445,36 +452,81 @@ $hoy  = new DateTimeImmutable('now');
 
 <script>
 (function(){
-  // "Todo estricto": Cuotas y "o paga al mes" son mutuamente excluyentes — el
-  // motor SIEMPRE prioriza el presupuesto cuando tiene valor, así que dejar
-  // "Cuotas" editable al mismo tiempo era engañoso (se veía activo pero no hacía
-  // nada). Al escribir un presupuesto, Cuotas se deshabilita visualmente; al
-  // borrarlo, vuelve a activarse.
-  var cuotasEl = document.querySelector('input[name="n"]');
-  var presuEl  = document.querySelector('input[name="presu"]');
-  if (!cuotasEl || !presuEl) return;
-  function sync(){
-    var activo = presuEl.value.trim() !== '';
-    cuotasEl.disabled = activo;
-    cuotasEl.title = activo ? 'Se calcula solo a partir de "o paga al mes"' : '';
-  }
-  presuEl.addEventListener('input', sync);
-  sync();
-
-  // "Todo debe estar relacionado": escribir cuánto quiere pagar (o cambiar
-  // Cuotas / Financia %) recalcula TODO solo — Cuotas real, resumen, tabla,
-  // avisos — sin tener que apretar "Recalcular" a mano. El cálculo sigue
-  // siendo del servidor (PHP): se manda el formulario solo, con una pausa
-  // corta después de dejar de escribir, para no recargar en cada tecla.
-  var form = document.querySelector('form.ajustes');
+  var form      = document.querySelector('form.ajustes');
+  var cuotasEl  = document.querySelector('input[name="n"]');
+  var presuEl   = document.querySelector('input[name="presu"]');
+  var mesesEl   = document.querySelector('input[name="firmames"]');
+  var cuotaFEl  = document.querySelector('input[name="firmacuota"]');
   var financiarEl = document.querySelector('input[name="financiar"]');
+  if (!form || !cuotasEl || !presuEl) return;
+
+  // "Todo estricto": dos formas de pedir lo mismo no pueden estar activas a la
+  // vez. Cuotas ↔ o-paga-al-mes, y Meses ↔ cuota-mensual-de-la-firma-diferida
+  // (el motor siempre prioriza el segundo de cada par cuando tiene valor).
+  function exclusivo(principal, secundario, explicacion){
+    if (!principal || !secundario) return;
+    function sync(){
+      var activo = secundario.value.trim() !== '';
+      principal.disabled = activo;
+      principal.title = activo ? explicacion : '';
+    }
+    secundario.addEventListener('input', sync);
+    sync();
+  }
+  exclusivo(cuotasEl, presuEl,  'Se calcula solo a partir de "o paga al mes"');
+  exclusivo(mesesEl,  cuotaFEl, 'Se calcula solo a partir de "cuota mensual de eso"');
+
+  // "Todo debe estar relacionado", sin refrescar la página: escribir cuánto
+  // quiere pagar (o cambiar Cuotas / Financia % / la firma diferida) recalcula
+  // TODO solo — Cuotas real, Meses real, resumen, tabla, avisos — 900ms después
+  // de dejar de escribir. El cálculo sigue siendo 100% del servidor (PHP): se
+  // pide la MISMA página por fetch con los valores actuales del formulario, y
+  // solo se reemplaza el contenido — no hay navegación ni parpadeo de recarga.
+  // Si el fetch fallara por algo (red, CORS raro), cae a un submit normal.
+  function serializar(){
+    var qs = new URLSearchParams();
+    Array.prototype.forEach.call(form.elements, function(el){
+      if (!el.name || el.disabled) return;
+      if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) return;
+      qs.append(el.name, el.value);
+    });
+    return qs.toString();
+  }
+  // ejecutarRecalculo() es la acción real (sin espera). autoRecalcular() es el
+  // envoltorio con pausa, para no disparar un fetch en cada tecla mientras se
+  // sigue escribiendo un número. Selects y checkboxes llaman a la acción real
+  // DIRECTO — son una elección discreta, no hace falta esperar nada.
+  function ejecutarRecalculo(){
+    var url = window.location.pathname + '?' + serializar();
+    fetch(url, { credentials: 'same-origin' })
+      .then(function(r){ if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
+      .then(function(html){
+        var nuevo = new DOMParser().parseFromString(html, 'text/html');
+        // Campos que el servidor recalcula y hay que reflejar de vuelta —
+        // "Cuotas" y "Meses" cuando el otro campo del par manda sobre ellos.
+        ['n', 'firmames'].forEach(function(name){
+          var actual = form.querySelector('[name="' + name + '"]');
+          var fresco = nuevo.querySelector('[name="' + name + '"]');
+          if (actual && fresco) actual.value = fresco.value;
+        });
+        // Resultado (precio, resumen, tabla, avisos): se reemplaza entero, es
+        // la misma tarjeta con los números ya al día.
+        var resActual = document.querySelector('.tarjeta');
+        var resFresco = nuevo.querySelector('.tarjeta');
+        if (resActual && resFresco) resActual.innerHTML = resFresco.innerHTML;
+        history.replaceState(null, '', url);
+      })
+      .catch(function(){ form.submit(); });
+  }
   var timer = null;
   function autoRecalcular(){
     clearTimeout(timer);
-    timer = setTimeout(function(){ form.submit(); }, 900);
+    timer = setTimeout(ejecutarRecalculo, 900);
   }
-  [presuEl, cuotasEl, financiarEl].forEach(function(el){
-    if (el) el.addEventListener('input', autoRecalcular);
+  Array.prototype.forEach.call(form.elements, function(el){
+    if (!el.name || el.type === 'hidden' || el.type === 'submit') return;
+    var inmediato = (el.tagName === 'SELECT' || el.type === 'checkbox');
+    el.addEventListener(inmediato ? 'change' : 'input', inmediato ? ejecutarRecalculo : autoRecalcular);
   });
 })();
 </script>
