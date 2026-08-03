@@ -202,28 +202,30 @@ $hoy  = new DateTimeImmutable('now');
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* Hallmark · genre: modern-minimal · theme: Quiet (custom, anclado en el azul de marca
-   Galjosa oklch(50.5% 0.11 239) = #0c6c9c) · alcance: chrome de página + panel de
-   opciones. La tabla de pagos y los bloques de datos de abajo NO se tocan — siguen
-   usando las variables --azul/--tinta/--linea/--gris tal cual, con sus valores
+/* Hallmark · genre: modern-minimal · theme: Quiet (custom, anclado en el AZUL MARINO
+   real de Galjosa — el mismo #1A52A8 que usa el Sales War Room dashboard, oklch(45.4%
+   0.15 259) — no el teal/celeste del primer intento). Alcance: chrome de página +
+   panel de opciones. La tabla de pagos y los bloques de datos de abajo NO se tocan —
+   siguen usando las variables --azul/--tinta/--linea/--gris tal cual, con sus valores
    originales sin cambiar, para que ese formato quede exactamente igual. */
 :root{
   /* Variables originales: se QUEDAN con su valor de siempre — de ellas depende la
      tabla de pagos y los bloques de abajo, que no se tocan en este rediseño. */
   --azul:#0c6c9c; --tinta:#0c2c44; --linea:#dfe6ec; --gris:#5a6b7a;
 
-  /* Tokens nuevos: solo los usa el chrome de página y el panel de opciones. */
-  --paper:      oklch(98.2% 0.004 240);
-  --paper-2:    oklch(95.8% 0.007 240);
-  --ink:        oklch(22%   0.016 240);
-  --ink-2:      oklch(40%   0.013 240);
-  --muted:      oklch(53%   0.014 240);
-  --border:     oklch(89%   0.010 240);
-  --border-2:   oklch(93.5% 0.008 240);
-  --accent:     oklch(50.5% 0.110 239);   /* = #0c6c9c, mismo azul de marca */
-  --accent-ink: oklch(20%   0.045 239);
-  --focus:      oklch(58%   0.150 239);
-  --chrome:     oklch(17%   0.030 240);   /* barra superior: azul-noche, no el azul plano */
+  /* Tokens nuevos: solo los usa el chrome de página y el panel de opciones. Hue 259 =
+     el azul marino de marca (#1A52A8), no el hue 240 anterior (más celeste/teal). */
+  --paper:      oklch(98.2% 0.004 259);
+  --paper-2:    oklch(95.8% 0.007 259);
+  --ink:        oklch(22%   0.018 259);
+  --ink-2:      oklch(40%   0.015 259);
+  --muted:      oklch(53%   0.016 259);
+  --border:     oklch(89%   0.012 259);
+  --border-2:   oklch(93.5% 0.009 259);
+  --accent:     oklch(45.4% 0.150 259);   /* = #1A52A8, azul marino real de Galjosa */
+  --accent-ink: oklch(20%   0.050 259);
+  --focus:      oklch(56%   0.170 259);
+  --chrome:     oklch(15%   0.035 259);   /* barra superior: azul marino casi negro */
 
   --space-3xs:.125rem; --space-2xs:.25rem; --space-xs:.5rem; --space-sm:.75rem;
   --space-md:1rem; --space-lg:1.5rem; --space-xl:2.5rem;
@@ -237,18 +239,18 @@ $hoy  = new DateTimeImmutable('now');
   /* ---------- Chrome de página (barra superior) ---------- */
   .barra{background:var(--chrome);color:#fff;padding:var(--space-md) var(--space-lg);
          display:flex;align-items:center;gap:var(--space-md);flex-wrap:wrap;
-         border-bottom:1px solid oklch(50.5% 0.11 239 / .35);font-family:var(--font)}
+         border-bottom:1px solid oklch(45.4% 0.15 259 / .4);font-family:var(--font)}
   .barra h1{font-size:13px;margin:0;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
-            color:oklch(78% 0.03 240)}
+            color:oklch(78% 0.04 259)}
   .barra .sp{margin-left:auto;display:flex;gap:var(--space-xs)}
   .barra button{border:1.5px solid oklch(100% 0 0 / .28);border-radius:var(--radius-pill);
                 padding:9px 20px;font-size:13.5px;font-weight:600;font-family:var(--font);
                 cursor:pointer;transition:background var(--dur-fast,140ms) var(--ease-out),
                 border-color var(--dur-fast,140ms) var(--ease-out);background:transparent;color:#fff}
   .barra button:hover{background:oklch(100% 0 0 / .08);border-color:oklch(100% 0 0 / .5)}
-  .barra button:focus-visible{outline:2px solid oklch(72% 0.13 239);outline-offset:2px}
+  .barra button:focus-visible{outline:2px solid oklch(70% 0.15 259);outline-offset:2px}
   .imprimir{background:#fff !important;color:var(--accent-ink) !important;border-color:#fff !important}
-  .imprimir:hover{background:oklch(93% 0.01 240) !important}
+  .imprimir:hover{background:oklch(93% 0.015 259) !important}
 
   .envoltura{max-width:820px;margin:var(--space-xl) auto;padding:0 var(--space-md)}
 
@@ -261,9 +263,9 @@ $hoy  = new DateTimeImmutable('now');
   .ajustes input,.ajustes select{padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
                  font-size:14px;font-family:var(--font);color:var(--ink);background:#fff;
                  transition:border-color 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
-  .ajustes input:hover,.ajustes select:hover{border-color:oklch(70% 0.02 240)}
+  .ajustes input:hover,.ajustes select:hover{border-color:oklch(65% 0.03 259)}
   .ajustes input:focus-visible,.ajustes select:focus-visible{outline:none;border-color:var(--accent);
-                 box-shadow:0 0 0 3px oklch(50.5% 0.11 239 / .15)}
+                 box-shadow:0 0 0 3px oklch(45.4% 0.15 259 / .16)}
   .ajustes input:disabled{background:var(--paper-2);color:var(--muted);border-color:var(--border-2);cursor:not-allowed}
   .campo-fijo{font-size:11px;color:var(--muted);margin-top:4px;font-style:normal}
   .w-xs{width:64px} .w-sm{width:84px} .w-md{width:104px} .w-lg{width:160px} .w-select{width:118px}
