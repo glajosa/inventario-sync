@@ -307,9 +307,12 @@ $hoy  = new DateTimeImmutable('now');
   .datos{display:grid;grid-template-columns:auto 1fr;gap:6px 20px;font-size:14px;margin-bottom:16px}
   .datos dt{color:var(--gris)}
   .datos dd{margin:0;font-weight:600}
-  .precio{background:#fff8c5;border-radius:8px;padding:11px 14px;display:flex;justify-content:space-between;
+  /* Amarillo #fff200 y verde #6f8f3f: los MISMOS del cotizador original
+     (cotizador-galjosa), no una versión pálida. Se veían apagados porque
+     antes usaba #fff8c5/#e8f2e2 — colores propios, no los de la marca. */
+  .precio{background:#fff200;border-radius:8px;padding:11px 14px;display:flex;justify-content:space-between;
           font-size:17px;font-weight:700;margin-bottom:10px}
-  .legal{background:#e8f2e2;border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;
+  .legal{background:#6f8f3f;color:#fff;border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;
          font-weight:700;font-size:14px}
   .legal + p{font-size:12px;color:var(--gris);font-style:italic;margin:6px 0 18px}
   .resumen{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0 20px}
