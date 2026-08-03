@@ -225,7 +225,8 @@ $hoy  = new DateTimeImmutable('now');
   --accent:     oklch(45.4% 0.150 259);   /* = #1A52A8, azul marino real de Galjosa */
   --accent-ink: oklch(20%   0.050 259);
   --focus:      oklch(56%   0.170 259);
-  --chrome:     oklch(15%   0.035 259);   /* barra superior: azul marino casi negro */
+  --chrome:     oklch(28%   0.120 259);   /* barra superior: azul marino de verdad (#012a68-ish), no casi-negro */
+  --chrome-2:   oklch(23%   0.110 259);   /* hover del botón Recalcular: un tono más oscuro del mismo marino */
 
   --space-3xs:.125rem; --space-2xs:.25rem; --space-xs:.5rem; --space-sm:.75rem;
   --space-md:1rem; --space-lg:1.5rem; --space-xl:2.5rem;
@@ -269,10 +270,12 @@ $hoy  = new DateTimeImmutable('now');
   .ajustes input:disabled{background:var(--paper-2);color:var(--muted);border-color:var(--border-2);cursor:not-allowed}
   .campo-fijo{font-size:11px;color:var(--muted);margin-top:4px;font-style:normal}
   .w-xs{width:64px} .w-sm{width:84px} .w-md{width:104px} .w-lg{width:160px} .w-select{width:118px}
-  .ajustes .ir{background:var(--ink);color:#fff;border:0;border-radius:var(--radius-pill);
+  /* Recalcular: azul marino de marca, no negro/tinta — el usuario lo pidió puntual
+     junto con la franja de arriba. */
+  .ajustes .ir{background:var(--chrome);color:#fff;border:0;border-radius:var(--radius-pill);
                padding:11px 22px;font-size:14px;font-weight:600;font-family:var(--font);cursor:pointer;
                transition:background 120ms var(--ease-out),transform 80ms var(--ease-out)}
-  .ajustes .ir:hover{background:var(--ink-2)}
+  .ajustes .ir:hover{background:var(--chrome-2)}
   .ajustes .ir:active{transform:scale(.98)}
   .ajustes .ir:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
   /* Grupos de campos relacionados (firma diferida, extraordinaria): un rótulo que
