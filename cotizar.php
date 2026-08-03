@@ -460,6 +460,22 @@ $hoy  = new DateTimeImmutable('now');
   }
   presuEl.addEventListener('input', sync);
   sync();
+
+  // "Todo debe estar relacionado": escribir cuánto quiere pagar (o cambiar
+  // Cuotas / Financia %) recalcula TODO solo — Cuotas real, resumen, tabla,
+  // avisos — sin tener que apretar "Recalcular" a mano. El cálculo sigue
+  // siendo del servidor (PHP): se manda el formulario solo, con una pausa
+  // corta después de dejar de escribir, para no recargar en cada tecla.
+  var form = document.querySelector('form.ajustes');
+  var financiarEl = document.querySelector('input[name="financiar"]');
+  var timer = null;
+  function autoRecalcular(){
+    clearTimeout(timer);
+    timer = setTimeout(function(){ form.submit(); }, 900);
+  }
+  [presuEl, cuotasEl, financiarEl].forEach(function(el){
+    if (el) el.addEventListener('input', autoRecalcular);
+  });
 })();
 </script>
 
