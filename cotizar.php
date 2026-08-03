@@ -280,8 +280,12 @@ $hoy  = new DateTimeImmutable('now');
          padding:var(--space-md) var(--space-md);margin-top:var(--space-2xs)}
   .grupo-tit{font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:var(--space-sm);font-family:var(--font)}
   .grupo-campos{display:flex;gap:var(--space-md);flex-wrap:wrap;align-items:flex-end}
-  .chk-linea{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2);cursor:pointer;
-             align-self:center;font-family:var(--font)}
+  /* .ajustes .chk-linea (dos clases) para ganarle en especificidad a ".ajustes
+     label" — si no, el checkbox hereda el text-transform:uppercase pensado
+     para las etiquetas de los campos, no para texto de un checkbox. */
+  .ajustes .chk-linea{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2);
+             cursor:pointer;align-self:center;font-family:var(--font);text-transform:none;
+             letter-spacing:normal;font-weight:400}
   .chk-linea input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--accent);cursor:pointer}
 
   .datos{display:grid;grid-template-columns:auto 1fr;gap:6px 20px;font-size:14px;margin-bottom:16px}
