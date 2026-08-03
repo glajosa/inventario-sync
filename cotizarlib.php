@@ -102,7 +102,14 @@ function cot_descuento_parqueo(int $suites, bool $aplicar): float {
  *        'extraTotal'   total en extraordinarias (alternativa a extraCada).
  *        'extraPartes'  1 o 2: parte la extraordinaria de cada año en dos pagos
  *                       (abril + diciembre, 14vo/18vo sueldo) en vez de uno solo.
- *        'contraPct'    porcentaje de contraentrega (0.60 por defecto).
+ *        'contraPct'    porcentaje de contraentrega directo (0.60 por defecto). Lo
+ *                       normal es usar 'financiarPct' en su lugar, que ya trae el
+ *                       piso de negocio; este queda para uso interno/pruebas.
+ *        'financiarPct' % del precio que se financia ANTES de la entrega (separación +
+ *                       firma + cuotas + extraordinarias). Lo común es 40; el vendedor
+ *                       puede bajarlo, pero el PISO ES 35 — se topa aquí adentro, no
+ *                       en la pantalla, así que ninguna URL armada a mano lo salta.
+ *                       contraPct = 1 - financiarPct/100.
  *        'firmaMeses'   diferir la firma sobre N meses (tope 12, regla del director:
  *                       "inadmisible que el 10% se reparta en toda la deuda") en vez
  *                       de pagarla toda al firmar. Se SUMA a la cuota de esos meses.
@@ -110,6 +117,9 @@ function cot_descuento_parqueo(int $suites, bool $aplicar): float {
  *                       parejo entre firmaMeses). Si no alcanza a cubrir la firma en
  *                       12 meses, el resto se cae a las extraordinarias — nunca se
  *                       pierde ni se estira más allá del tope.
+ *        'extraMes1'    mes (1-12) de la primera/única extraordinaria de cada año, en
+ *                       vez del automático. 'extraMes2' es el de la segunda cuando
+ *                       extraPartes=2 (por defecto abril y diciembre).
  */
 function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInicio, ?array $entrega, float $presupuesto = 0.0, array $opts = []): array {
     $iguales = ($modalidad === 'iguales');
@@ -137,9 +147,17 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
 
     // --- piezas fijas ---
     // La separación es siempre $1.000 (o el 10% si la unidad valiera menos): es lo
-    // que aparta la unidad y no se negocia. La contraentrega sí es un porcentaje
-    // configurable, porque en algunos casos el cliente adelanta y baja.
-    $contraPct     = isset($opts['contraPct']) ? max(0.0, min(1.0, (float)$opts['contraPct'])) : 0.60;
+    // que aparta la unidad y no se negocia.
+    // La contraentrega sale de cuánto se FINANCIA antes de la entrega. Lo común es
+    // financiar 40%; el vendedor puede bajarlo según lo que pida el cliente, PERO el
+    // piso de negocio es 35% — se topa aquí, no en la pantalla, porque un piso que
+    // solo vive en el HTML se salta con una URL armada a mano.
+    if (isset($opts['financiarPct'])) {
+        $financiarPct = max(35.0, min(100.0, (float)$opts['financiarPct']));
+        $contraPct = 1.0 - $financiarPct / 100.0;
+    } else {
+        $contraPct = isset($opts['contraPct']) ? max(0.0, min(1.0, (float)$opts['contraPct'])) : 0.60;
+    }
     $reserva10     = 0.10 * $v;
     $separacion    = min((float)COT_SEPARACION, $reserva10);
     $contraentrega = $contraPct * $v;
@@ -180,11 +198,15 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     // Por defecto UNA, en el mes que usa el año con más cuotas (un año completo); si
     // ese mes no existe en un año parcial, va al medio de su bloque — igual que antes.
     // Con extraPartes=2 se parte en DOS: abril y diciembre (14vo/18vo sueldo, que es
-    // cuando de verdad les entra ese dinero a los clientes). Si un año no llega a
-    // diciembre (el plan termina antes), ese año se queda con una sola, no se fuerza.
+    // cuando de verdad les entra ese dinero a los clientes) — pero el asesor puede
+    // elegir otro mes con extraMes1/extraMes2 si el cliente cobra distinto. Si un año
+    // no llega al mes elegido (el plan termina antes), ese año se queda con la que sí
+    // le cabe, no se fuerza.
     // Las posiciones se calculan ANTES del reparto del dinero: para saber cuánto
     // suman las extraordinarias hace falta saber antes cuántas son.
     $extraPartes = ($iguales) ? 1 : max(1, min(2, (int)($opts['extraPartes'] ?? 1)));
+    $mesExtra1 = (int)($opts['extraMes1'] ?? 0);   // 0 = automático (el de siempre)
+    $mesExtra2 = max(1, min(12, (int)($opts['extraMes2'] ?? 12)));
     $posExtra = [];
     if (!$iguales) {
         $porAnio = [];
@@ -193,18 +215,19 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         foreach ($porAnio as $y => $idxs) if ($mejor === null || count($idxs) > count($porAnio[$mejor])) $mejor = $y;
         $ref     = $porAnio[$mejor];
         $mesAncla = (int)$fechas[$ref[intdiv(count($ref) - 1, 2)]]->format('n');
+        $mes1 = $mesExtra1 > 0 ? $mesExtra1 : ($extraPartes === 2 ? 4 : $mesAncla);
         foreach ($porAnio as $y => $idxs) {
             $buscar = function (int $mes) use ($fechas, $idxs): ?int {
                 foreach ($idxs as $i) if ((int)$fechas[$i]->format('n') === $mes) return $i;
                 return null;
             };
             if ($extraPartes === 2) {
-                $slotA = $buscar(4) ?? $idxs[intdiv(count($idxs) - 1, 2)];
-                $slotB = $buscar(12);
+                $slotA = $buscar($mes1) ?? $idxs[intdiv(count($idxs) - 1, 2)];
+                $slotB = $buscar($mesExtra2);
                 $posExtra[] = $slotA;
                 if ($slotB !== null && $slotB !== $slotA) $posExtra[] = $slotB;
             } else {
-                $enMes = $buscar($mesAncla);
+                $enMes = $buscar($mes1);
                 $posExtra[] = $enMes !== null ? $enMes : $idxs[intdiv(count($idxs) - 1, 2)];
             }
         }
@@ -329,6 +352,13 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         'reservaPct'    => $v > 0 ? ($separacion + $firma) / $v : 0.0,
         'contraentrega' => $contraentrega,
         'contraPct'     => $v > 0 ? $contraentrega / $v : 0.0,
+        // Objetivo elegido (financiarPct, ya con el piso 35 aplicado) ANTES de que
+        // firma/cuota fija pudieran empujar la contraentrega más abajo todavía —
+        // es lo que 'bajaContraentrega' compara, y lo que el aviso necesita nombrar
+        // en vez de un "60%" fijo que ya no es siempre el punto de partida real.
+        'contraPctObjetivo' => $contraPct,
+        // % financiado real (piso 35 ya aplicado arriba, esto es lo que quedó).
+        'financiarPct'  => $v > 0 ? round((1 - $contraentrega / $v) * 100, 2) : 0.0,
         'cuotasTotal'   => $sumaCuotas,
         'cuotasPct'     => $v > 0 ? $sumaCuotas / $v : 0.0,
         'extraPct'      => $v > 0 ? $extraTotal / $v : 0.0,
@@ -344,6 +374,10 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         'nExtra'        => $nExtra,
         'extraPartes'   => $extraPartes,
         'valorExtra'    => $valorExtra,
+        // Meses reales que quedaron para la(s) extraordinaria(s), para que la
+        // pantalla los muestre y el asesor pueda editarlos.
+        'extraMes1'     => $iguales ? 0 : (isset($mes1) ? $mes1 : 0),
+        'extraMes2'     => $iguales ? 0 : $mesExtra2,
         // Firma diferida: 0 meses = se pagó normal al firmar (o no había firma).
         'firmaBase'     => $firmaBase,
         'diferidoMeses' => $diferidoMeses,

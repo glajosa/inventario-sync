@@ -130,8 +130,7 @@ $modalidad = (($_GET['mod'] ?? '') === 'iguales') ? 'iguales' : 'estandar';
 $cuotas    = (int)($_GET['n'] ?? 0);
 $mesIni    = (string)($_GET['mes'] ?? '');
 $presu     = (float)str_replace([',', '$', ' '], '', (string)($_GET['presu'] ?? ''));
-// Solo las DOS variantes reales que pidió el director (audio 2026-08-03). Nada
-// vacío = plan clásico de siempre, no se toca nada.
+// Variantes reales que pidió el negocio. Nada vacío = plan clásico, no se toca nada.
 $num = function (string $k): string {
     $s = str_replace([',', '$', ' '], '', (string)($_GET[$k] ?? ''));
     return preg_match('/^\d+(\.\d+)?$/', $s) ? $s : '';
@@ -141,12 +140,25 @@ $num = function (string $k): string {
 //    resto se cae a las extraordinarias.
 $vFirmaMeses = (int)($_GET['firmames'] ?? 0);
 $vFirmaCuota = $num('firmacuota');
-// 2) Extraordinaria partida en 2 (abril + diciembre, 14vo/18vo sueldo).
+// 2) Monto exacto a la firma (independiente de la firma diferida: se puede fijar
+//    cuánto paga al firmar sin tocar el mecanismo de deferencia).
+$vFirma = $num('firma');
+// 3) Extraordinaria partida en 2 (abril + diciembre por defecto), y en qué mes
+//    exacto cae cada una — el asesor la mueve si el cliente cobra distinto.
 $extraPartes = (($_GET['extrapartes'] ?? '') === '2') ? 2 : 1;
+$vExtraMes1  = (int)($_GET['extrames1'] ?? 0);
+$vExtraMes2  = (int)($_GET['extrames2'] ?? 0);
+// 4) % a financiar antes de la entrega: 40 es lo común, el vendedor lo puede bajar
+//    según lo que pida el cliente, pero el PISO ES 35 — se topa dentro del motor
+//    (cot_plan), no aquí, así que ninguna URL armada a mano lo salta.
+$vFinanciar = $num('financiar');
 $opts = ['extraPartes' => $extraPartes];
 if ($vFirmaMeses > 0) $opts['firmaMeses'] = min(12, $vFirmaMeses);
 if ($vFirmaCuota !== '') $opts['firmaCuota'] = (float)$vFirmaCuota;
-$opts['extraPartes'] = $extraPartes;
+if ($vFirma !== '') $opts['firma'] = (float)$vFirma;
+if ($vExtraMes1 >= 1 && $vExtraMes1 <= 12) $opts['extraMes1'] = $vExtraMes1;
+if ($vExtraMes2 >= 1 && $vExtraMes2 <= 12) $opts['extraMes2'] = $vExtraMes2;
+if ($vFinanciar !== '') $opts['financiarPct'] = (float)$vFinanciar;
 // Parqueo: en una compra de 2+ suites se puede perdonar UNO solo. Apagado por
 // defecto — lo decide el asesor, no se descuenta a espaldas de nadie.
 $sinParqueo = (($_GET['sinparq'] ?? '') === '1');
@@ -270,22 +282,46 @@ $hoy  = new DateTimeImmutable('now');
       </select></div>
     <div><label>Primera cuota</label>
       <input type="month" name="mes" value="<?= h($plan['inicio']) ?>" min="<?= $hoy->format('Y-m') ?>"></div>
-    <!-- Las dos variantes reales que pidió el director (audio 2026-08-03). -->
+    <!-- % a financiar antes de la entrega: 40 es lo común, piso de negocio 35
+         (se topa DENTRO del motor, el min/max de aquí es solo guía visual). -->
+    <div><label>Financia %</label>
+      <input type="number" name="financiar" min="35" max="100" step="1"
+             value="<?= $vFinanciar !== '' ? h($vFinanciar) : round($plan['financiarPct']) ?>"
+             style="width:80px" title="% del precio que se paga antes de la entrega (separación + firma + cuotas + extraordinarias). Lo común es 40. El piso de negocio es 35 — no baja de ahí aunque se escriba menos."></div>
+    <div><label>A la firma</label>
+      <input type="text" name="firma" inputmode="decimal" placeholder="auto" value="<?= h($vFirma) ?>"
+             style="width:100px" title="Monto exacto que paga al firmar. Vacío = el que sale del reparto normal."></div>
     <div><label>Diferir firma (meses)</label>
       <input type="number" name="firmames" min="0" max="12" placeholder="0" value="<?= $vFirmaMeses > 0 ? (int)$vFirmaMeses : '' ?>"
              style="width:80px" title="Sobre cuántos meses repartir la firma en vez de pagarla toda al firmar. Tope 12."></div>
     <div><label>...cuota de eso</label>
       <input type="text" name="firmacuota" inputmode="decimal" placeholder="auto" value="<?= h($vFirmaCuota) ?>"
              style="width:100px" title="Monto mensual editable de esa firma diferida. Si en 12 meses no alcanza a cubrirla, el resto se suma a las extraordinarias."></div>
-    <?php if ($modalidad !== 'iguales'): ?>
+    <?php if ($modalidad !== 'iguales'):
+      $mesesSel = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    ?>
     <div style="align-self:center">
       <label style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--tinta);cursor:pointer"
-             title="Parte la extraordinaria de cada año en dos pagos, abril y diciembre (14vo/18vo sueldo), en vez de uno solo.">
+             title="Parte la extraordinaria de cada año en dos pagos en vez de uno solo.">
         <input type="checkbox" name="extrapartes" value="2" <?= $extraPartes === 2 ? 'checked' : '' ?>
                style="width:auto;margin-right:6px;vertical-align:-2px">
-        Partir la extraordinaria en 2 (abril + diciembre)
+        Partir la extraordinaria en 2
       </label>
     </div>
+    <div><label>Mes extraord.<?= $extraPartes === 2 ? ' 1' : '' ?></label>
+      <select name="extrames1" style="width:80px">
+        <?php for ($m = 1; $m <= 12; $m++): ?>
+        <option value="<?= $m ?>" <?= (int)$plan['extraMes1'] === $m ? 'selected' : '' ?>><?= $mesesSel[$m] ?></option>
+        <?php endfor; ?>
+      </select></div>
+    <?php if ($extraPartes === 2): ?>
+    <div><label>Mes extraord. 2</label>
+      <select name="extrames2" style="width:80px">
+        <?php for ($m = 1; $m <= 12; $m++): ?>
+        <option value="<?= $m ?>" <?= (int)$plan['extraMes2'] === $m ? 'selected' : '' ?>><?= $mesesSel[$m] ?></option>
+        <?php endfor; ?>
+      </select></div>
+    <?php endif; ?>
     <?php endif; ?>
     <?php if ($fusion): ?>
     <div style="align-self:center">
@@ -340,11 +376,14 @@ $hoy  = new DateTimeImmutable('now');
       cuota a <b><?= h(cot_money($plan['mensual'])) ?></b>, que es el máximo que cabe en
       <?= (int)$plan['cuotas'] ?> cuotas con esa firma y esas extraordinarias.</div>
   <?php elseif (!empty($plan['bajaContraentrega'])): ?>
-    <!-- No es un error: adelantar más deja menos para el final. Pero el 60% suele estar
-         amarrado al crédito del cliente, así que esto lo tiene que ver un humano. -->
-    <div class="aviso">Con este plan el cliente adelanta más de lo normal, así que la
+    <!-- No es un error: adelantar más deja menos para el final. Pero el % objetivo
+         suele estar amarrado al crédito del cliente, así que esto lo tiene que ver
+         un humano. Se compara contra 'contraPctObjetivo' (lo elegido con Financia %),
+         no un 60% fijo — el objetivo ya puede ser 65% si el vendedor bajó a 35%. -->
+    <div class="aviso">Con este plan el cliente adelanta más de lo elegido, así que la
       <b>contraentrega baja a <?= h(cot_money($plan['contraentrega'])) ?></b>
-      (<?= h($pc($plan['contraPct'])) ?> en vez del 60%). Verifica que el crédito del cliente cuadre con eso.</div>
+      (<?= h($pc($plan['contraPct'])) ?> en vez de <?= h($pc($plan['contraPctObjetivo'])) ?>).
+      Verifica que el crédito del cliente cuadre con eso.</div>
   <?php endif; ?>
   <?php if ($plan['mensual'] <= 0.01 && $plan['cuotas'] > 0): ?>
     <div class="aviso">La cuota mensual quedó en <b>$0</b>: entre la firma y las extraordinarias
