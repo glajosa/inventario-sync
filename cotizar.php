@@ -130,27 +130,20 @@ $modalidad = (($_GET['mod'] ?? '') === 'iguales') ? 'iguales' : 'estandar';
 $cuotas    = (int)($_GET['n'] ?? 0);
 $mesIni    = (string)($_GET['mes'] ?? '');
 $presu     = (float)str_replace([',', '$', ' '], '', (string)($_GET['presu'] ?? ''));
-// Variantes del plan. Cada una vacía = "no la toques", así el plan por defecto sigue
-// siendo el 10/60/30 de siempre y el asesor solo mueve lo que el cliente pidió.
+// Solo las DOS variantes reales que pidió el director (audio 2026-08-03). Nada
+// vacío = plan clásico de siempre, no se toca nada.
 $num = function (string $k): string {
     $s = str_replace([',', '$', ' '], '', (string)($_GET[$k] ?? ''));
     return preg_match('/^\d+(\.\d+)?$/', $s) ? $s : '';
 };
-$vFirma  = $num('firma');      // "nada a la firma" se escribe 0, no vacío
-$vCuota  = $num('cuota');      // cuota mensual fija
-$vExtra  = $num('extra');      // monto de CADA extraordinaria
-$vHasta  = preg_match('/^\d{4}-\d{2}$/', (string)($_GET['hasta'] ?? '')) ? (string)$_GET['hasta'] : '';
-// Firma diferida: "el 10% se suma a las cuotas" en vez de pagarse toda al firmar,
-// tope de 12 meses (regla del director). O bien N meses parejos, o un monto
-// mensual editable y el resto se cae a las extraordinarias.
+// 1) Firma diferida: "el 10% se suma a las cuotas" en vez de pagarse toda al firmar,
+//    tope de 12 meses. O bien N meses parejos, o un monto mensual editable y el
+//    resto se cae a las extraordinarias.
 $vFirmaMeses = (int)($_GET['firmames'] ?? 0);
 $vFirmaCuota = $num('firmacuota');
+// 2) Extraordinaria partida en 2 (abril + diciembre, 14vo/18vo sueldo).
 $extraPartes = (($_GET['extrapartes'] ?? '') === '2') ? 2 : 1;
-$opts = [];
-if ($vFirma !== '') $opts['firma']       = (float)$vFirma;
-if ($vCuota !== '') $opts['mensual']     = (float)$vCuota;
-if ($vExtra !== '') $opts['extraCada']   = (float)$vExtra;
-if ($vHasta !== '') $opts['hasta']       = $vHasta;
+$opts = ['extraPartes' => $extraPartes];
 if ($vFirmaMeses > 0) $opts['firmaMeses'] = min(12, $vFirmaMeses);
 if ($vFirmaCuota !== '') $opts['firmaCuota'] = (float)$vFirmaCuota;
 $opts['extraPartes'] = $extraPartes;
@@ -277,20 +270,7 @@ $hoy  = new DateTimeImmutable('now');
       </select></div>
     <div><label>Primera cuota</label>
       <input type="month" name="mes" value="<?= h($plan['inicio']) ?>" min="<?= $hoy->format('Y-m') ?>"></div>
-    <!-- "Hasta cuándo quiere pagar": la forma en que el cliente lo dice de verdad,
-         en vez de traducirlo él mismo a un número de cuotas. -->
-    <div><label>Pagar hasta</label>
-      <input type="month" name="hasta" value="<?= h($vHasta) ?>" min="<?= h($plan['inicio']) ?>"
-             title="Último mes de pago. Si se llena, manda sobre Cuotas."></div>
-    <!-- Las tres variantes que hacen movible el reparto. Vacías = plan clásico. -->
-    <div><label>A la firma</label>
-      <input type="text" name="firma" inputmode="decimal" placeholder="auto" value="<?= h($vFirma) ?>"
-             style="width:100px" title="Escribe 0 para que no pague nada a la firma. La cuota mensual sube para compensar."></div>
-    <div><label>Cuota fija</label>
-      <input type="text" name="cuota" inputmode="decimal" placeholder="auto" value="<?= h($vCuota) ?>"
-             style="width:100px" title="Cuota mensual exacta que quiere pagar. Baja la firma; si aun así sobra, baja la contraentrega."></div>
-    <!-- Firma diferida: en vez de pagarla toda al firmar, se reparte sobre varios
-         meses sumada a la cuota (tope 12 — regla de negocio, no se estira más). -->
+    <!-- Las dos variantes reales que pidió el director (audio 2026-08-03). -->
     <div><label>Diferir firma (meses)</label>
       <input type="number" name="firmames" min="0" max="12" placeholder="0" value="<?= $vFirmaMeses > 0 ? (int)$vFirmaMeses : '' ?>"
              style="width:80px" title="Sobre cuántos meses repartir la firma en vez de pagarla toda al firmar. Tope 12."></div>
@@ -298,9 +278,6 @@ $hoy  = new DateTimeImmutable('now');
       <input type="text" name="firmacuota" inputmode="decimal" placeholder="auto" value="<?= h($vFirmaCuota) ?>"
              style="width:100px" title="Monto mensual editable de esa firma diferida. Si en 12 meses no alcanza a cubrirla, el resto se suma a las extraordinarias."></div>
     <?php if ($modalidad !== 'iguales'): ?>
-    <div><label>Cada extraord.</label>
-      <input type="text" name="extra" inputmode="decimal" placeholder="auto" value="<?= h($vExtra) ?>"
-             style="width:100px" title="Monto de cada cuota extraordinaria. Subirlo alivia la mensual."></div>
     <div style="align-self:center">
       <label style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--tinta);cursor:pointer"
              title="Parte la extraordinaria de cada año en dos pagos, abril y diciembre (14vo/18vo sueldo), en vez de uno solo.">
