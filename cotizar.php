@@ -198,29 +198,92 @@ $hoy  = new DateTimeImmutable('now');
 <html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cotización<?= $cliente !== '' ? ' · ' . h($cliente) : '' ?> · <?= h(implode(' + ', $codigos)) ?></title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root{ --azul:#0c6c9c; --tinta:#0c2c44; --linea:#dfe6ec; --gris:#5a6b7a; }
+/* Hallmark · genre: modern-minimal · theme: Quiet (custom, anclado en el azul de marca
+   Galjosa oklch(50.5% 0.11 239) = #0c6c9c) · alcance: chrome de página + panel de
+   opciones. La tabla de pagos y los bloques de datos de abajo NO se tocan — siguen
+   usando las variables --azul/--tinta/--linea/--gris tal cual, con sus valores
+   originales sin cambiar, para que ese formato quede exactamente igual. */
+:root{
+  /* Variables originales: se QUEDAN con su valor de siempre — de ellas depende la
+     tabla de pagos y los bloques de abajo, que no se tocan en este rediseño. */
+  --azul:#0c6c9c; --tinta:#0c2c44; --linea:#dfe6ec; --gris:#5a6b7a;
+
+  /* Tokens nuevos: solo los usa el chrome de página y el panel de opciones. */
+  --paper:      oklch(98.2% 0.004 240);
+  --paper-2:    oklch(95.8% 0.007 240);
+  --ink:        oklch(22%   0.016 240);
+  --ink-2:      oklch(40%   0.013 240);
+  --muted:      oklch(53%   0.014 240);
+  --border:     oklch(89%   0.010 240);
+  --border-2:   oklch(93.5% 0.008 240);
+  --accent:     oklch(50.5% 0.110 239);   /* = #0c6c9c, mismo azul de marca */
+  --accent-ink: oklch(20%   0.045 239);
+  --focus:      oklch(58%   0.150 239);
+  --chrome:     oklch(17%   0.030 240);   /* barra superior: azul-noche, no el azul plano */
+
+  --space-3xs:.125rem; --space-2xs:.25rem; --space-xs:.5rem; --space-sm:.75rem;
+  --space-md:1rem; --space-lg:1.5rem; --space-xl:2.5rem;
+  --radius-sm:8px; --radius-md:10px; --radius-lg:16px; --radius-pill:999px;
+  --font: 'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --ease-out: cubic-bezier(.16,1,.3,1);
+}
   *{box-sizing:border-box}
   body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--tinta);background:#eef2f6}
-  .barra{background:var(--azul);color:#fff;padding:12px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-  .barra h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.4px}
-  .barra .sp{margin-left:auto;display:flex;gap:8px}
-  .barra button{border:0;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer}
-  .imprimir{background:#fff;color:var(--azul)}
-  .envoltura{max-width:820px;margin:18px auto;padding:0 14px}
-  .tarjeta{background:#fff;border-radius:12px;padding:22px 24px;box-shadow:0 2px 14px rgba(12,44,68,.08)}
-  .ajustes{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:18px;
-           padding-bottom:16px;border-bottom:1px solid var(--linea)}
-  .ajustes label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--gris);margin-bottom:5px}
-  .ajustes input,.ajustes select{padding:9px 11px;border:1.5px solid var(--linea);border-radius:8px;font-size:14px;font-family:inherit}
-  .ajustes .ir{background:var(--azul);color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer}
+
+  /* ---------- Chrome de página (barra superior) ---------- */
+  .barra{background:var(--chrome);color:#fff;padding:var(--space-md) var(--space-lg);
+         display:flex;align-items:center;gap:var(--space-md);flex-wrap:wrap;
+         border-bottom:1px solid oklch(50.5% 0.11 239 / .35);font-family:var(--font)}
+  .barra h1{font-size:13px;margin:0;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+            color:oklch(78% 0.03 240)}
+  .barra .sp{margin-left:auto;display:flex;gap:var(--space-xs)}
+  .barra button{border:1.5px solid oklch(100% 0 0 / .28);border-radius:var(--radius-pill);
+                padding:9px 20px;font-size:13.5px;font-weight:600;font-family:var(--font);
+                cursor:pointer;transition:background var(--dur-fast,140ms) var(--ease-out),
+                border-color var(--dur-fast,140ms) var(--ease-out);background:transparent;color:#fff}
+  .barra button:hover{background:oklch(100% 0 0 / .08);border-color:oklch(100% 0 0 / .5)}
+  .barra button:focus-visible{outline:2px solid oklch(72% 0.13 239);outline-offset:2px}
+  .imprimir{background:#fff !important;color:var(--accent-ink) !important;border-color:#fff !important}
+  .imprimir:hover{background:oklch(93% 0.01 240) !important}
+
+  .envoltura{max-width:820px;margin:var(--space-xl) auto;padding:0 var(--space-md)}
+
+  /* ---------- Panel de opciones (tarjeta propia, separada de los resultados) ---------- */
+  .tarjeta-opciones{background:var(--paper);border:1px solid var(--border-2);border-radius:var(--radius-lg);
+                    padding:var(--space-lg);margin-bottom:var(--space-md);font-family:var(--font)}
+  .ajustes{display:flex;gap:var(--space-md);flex-wrap:wrap;align-items:flex-end}
+  .ajustes label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.07em;
+                 color:var(--muted);margin-bottom:6px;font-weight:600}
+  .ajustes input,.ajustes select{padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+                 font-size:14px;font-family:var(--font);color:var(--ink);background:#fff;
+                 transition:border-color 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
+  .ajustes input:hover,.ajustes select:hover{border-color:oklch(70% 0.02 240)}
+  .ajustes input:focus-visible,.ajustes select:focus-visible{outline:none;border-color:var(--accent);
+                 box-shadow:0 0 0 3px oklch(50.5% 0.11 239 / .15)}
+  .ajustes input:disabled{background:var(--paper-2);color:var(--muted);border-color:var(--border-2);cursor:not-allowed}
+  .campo-fijo{font-size:11px;color:var(--muted);margin-top:4px;font-style:normal}
+  .w-xs{width:64px} .w-sm{width:84px} .w-md{width:104px} .w-lg{width:160px} .w-select{width:118px}
+  .ajustes .ir{background:var(--ink);color:#fff;border:0;border-radius:var(--radius-pill);
+               padding:11px 22px;font-size:14px;font-weight:600;font-family:var(--font);cursor:pointer;
+               transition:background 120ms var(--ease-out),transform 80ms var(--ease-out)}
+  .ajustes .ir:hover{background:var(--ink-2)}
+  .ajustes .ir:active{transform:scale(.98)}
+  .ajustes .ir:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
   /* Grupos de campos relacionados (firma diferida, extraordinaria): un rótulo que
      explica la idea en una frase, con sus campos justo debajo — para que no se lean
      como una fila suelta de labels sin conexión entre sí. */
-  .grupo{flex:1 1 100%;background:#f7f9fb;border:1px solid var(--linea);border-radius:8px;
-         padding:12px 14px;margin-top:2px}
-  .grupo-tit{font-size:12px;font-weight:700;color:var(--tinta);margin-bottom:10px}
-  .grupo-campos{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
+  .grupo{flex:1 1 100%;background:var(--paper-2);border:1px solid var(--border-2);border-radius:var(--radius-md);
+         padding:var(--space-md) var(--space-md);margin-top:var(--space-2xs)}
+  .grupo-tit{font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:var(--space-sm);font-family:var(--font)}
+  .grupo-campos{display:flex;gap:var(--space-md);flex-wrap:wrap;align-items:flex-end}
+  .chk-linea{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2);cursor:pointer;
+             align-self:center;font-family:var(--font)}
+  .chk-linea input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--accent);cursor:pointer}
+
   .datos{display:grid;grid-template-columns:auto 1fr;gap:6px 20px;font-size:14px;margin-bottom:16px}
   .datos dt{color:var(--gris)}
   .datos dd{margin:0;font-weight:600}
@@ -251,7 +314,7 @@ $hoy  = new DateTimeImmutable('now');
   .pie{font-size:11.5px;color:var(--gris);margin-top:16px;line-height:1.5}
   @media print{
     body{background:#fff}
-    .barra,.ajustes,.noimp{display:none !important}
+    .barra,.ajustes,.tarjeta-opciones,.noimp{display:none !important}
     .envoltura{max-width:none;margin:0;padding:0}
     .tarjeta{box-shadow:none;border-radius:0;padding:0}
     thead th{background:var(--tinta) !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -261,11 +324,11 @@ $hoy  = new DateTimeImmutable('now');
 </head><body>
 
 <div class="barra">
-  <h1>COTIZACIÓN · GALJOSA</h1>
+  <h1><span style="color:#fff;font-weight:700;letter-spacing:.02em">GALJOSA</span> · Cotización</h1>
   <div class="sp"><button class="imprimir" onclick="window.print()">Descargar PDF</button></div>
 </div>
 
-<div class="envoltura"><div class="tarjeta">
+<div class="envoltura"><div class="tarjeta-opciones">
 
   <form class="ajustes" method="get">
     <input type="hidden" name="u" value="<?= h(implode(',', $ids)) ?>">
@@ -274,14 +337,16 @@ $hoy  = new DateTimeImmutable('now');
     <input type="hidden" name="s" value="<?= h($sig) ?>">
     <?php if ($fusion): ?><input type="hidden" name="unif" value="0"><?php endif; ?>
     <div><label>Cliente</label>
-      <input type="text" name="cliente" value="<?= h($cliente) ?>" placeholder="Nombre del cliente" size="24"></div>
+      <input type="text" name="cliente" value="<?= h($cliente) ?>" placeholder="Nombre del cliente" class="w-lg"></div>
     <div><label>Cuotas</label>
-      <input type="number" name="n" min="1" max="<?= (int)($plan['plazoMax'] ?? 120) ?>" value="<?= (int)$plan['cuotas'] ?>" style="width:90px"></div>
+      <input type="number" name="n" min="1" max="<?= (int)($plan['plazoMax'] ?? 120) ?>" value="<?= (int)$plan['cuotas'] ?>" class="w-sm"
+             title="Se deshabilita si llenas 'o paga al mes' — el motor siempre prioriza el presupuesto sobre este número."></div>
     <!-- La otra forma de preguntar, y la que más se usa vendiendo: el cliente dice
-         cuánto puede pagar al mes y salen las cuotas. Si se llena, manda sobre "Cuotas". -->
+         cuánto puede pagar al mes y salen las cuotas. Si se llena, MANDA sobre "Cuotas"
+         (que por eso se deshabilita — ver script al final del formulario). -->
     <div><label>o paga al mes</label>
-      <input type="text" name="presu" inputmode="decimal" placeholder="$"
-             value="<?= $presu > 0 ? h(number_format($presu, 0)) : '' ?>" style="width:100px"></div>
+      <input type="text" name="presu" inputmode="decimal" placeholder="$" class="w-md"
+             value="<?= $presu > 0 ? h(number_format($presu, 0)) : '' ?>"></div>
     <div><label>Modalidad</label>
       <select name="mod">
         <option value="estandar" <?= $modalidad === 'estandar' ? 'selected' : '' ?>>Estándar (con extraordinarias)</option>
@@ -292,12 +357,12 @@ $hoy  = new DateTimeImmutable('now');
     <!-- % a financiar antes de la entrega: 40 es lo común, piso de negocio 35
          (se topa DENTRO del motor, el min/max de aquí es solo guía visual). -->
     <div><label>Financia %</label>
-      <input type="number" name="financiar" min="35" max="100" step="1"
+      <input type="number" name="financiar" min="35" max="100" step="1" class="w-xs"
              value="<?= $vFinanciar !== '' ? h($vFinanciar) : round($plan['financiarPct']) ?>"
-             style="width:80px" title="% del precio que se paga antes de la entrega (separación + firma + cuotas + extraordinarias). Lo común es 40. El piso de negocio es 35 — no baja de ahí aunque se escriba menos."></div>
+             title="% del precio que se paga antes de la entrega (separación + firma + cuotas + extraordinarias). Lo común es 40. El piso de negocio es 35 — no baja de ahí aunque se escriba menos."></div>
     <div><label>A la firma</label>
-      <input type="text" name="firma" inputmode="decimal" placeholder="auto" value="<?= h($vFirma) ?>"
-             style="width:100px" title="Monto exacto que paga al firmar. Vacío = el que sale del reparto normal."></div>
+      <input type="text" name="firma" inputmode="decimal" placeholder="auto" value="<?= h($vFirma) ?>" class="w-md"
+             title="Monto exacto que paga al firmar. Vacío = el que sale del reparto normal."></div>
 
     <!-- Grupo "firma diferida": los dos campos van juntos, con un rótulo arriba que
          explica la idea completa en una frase, porque separados como dos labels
@@ -310,10 +375,10 @@ $hoy  = new DateTimeImmutable('now');
       <div class="grupo-campos">
         <div><label>Meses</label>
           <input type="number" name="firmames" min="0" max="12" placeholder="0" value="<?= $vFirmaMeses > 0 ? (int)$vFirmaMeses : '' ?>"
-                 style="width:70px" title="Sobre cuántos meses repartir la firma. Tope 12."></div>
+                 class="w-xs" title="Sobre cuántos meses repartir la firma. Tope 12."></div>
         <div><label>Cuota mensual de eso</label>
           <input type="text" name="firmacuota" inputmode="decimal" placeholder="auto" value="<?= h($vFirmaCuota) ?>"
-                 style="width:100px" title="Monto mensual editable de esa firma diferida. Si en 12 meses no alcanza a cubrirla, el resto se suma a las extraordinarias."></div>
+                 class="w-md" title="Monto mensual editable de esa firma diferida. Si en 12 meses no alcanza a cubrirla, el resto se suma a las extraordinarias."></div>
       </div>
     </div>
 
@@ -326,23 +391,21 @@ $hoy  = new DateTimeImmutable('now');
     <div class="grupo">
       <div class="grupo-tit">Cuota extraordinaria (una por año)</div>
       <div class="grupo-campos">
-        <label style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--tinta);cursor:pointer;align-self:center"
-               title="Parte la extraordinaria de cada año en dos pagos en vez de uno solo.">
+        <label class="chk-linea" title="Parte la extraordinaria de cada año en dos pagos en vez de uno solo.">
           <input type="checkbox" name="extrapartes" value="2" id="chk-partes" <?= $extraPartes === 2 ? 'checked' : '' ?>
                  onchange="document.getElementById('wrap-mes2').style.display=this.checked?'':'none';
-                           document.getElementById('lbl-mes1').textContent=this.checked?'Mes 1 de 2':'Mes de pago'"
-                 style="width:auto;margin-right:6px;vertical-align:-2px">
+                           document.getElementById('lbl-mes1').textContent=this.checked?'Mes 1 de 2':'Mes de pago'">
           Partir en 2 pagos
         </label>
         <div><label id="lbl-mes1"><?= $extraPartes === 2 ? 'Mes 1 de 2' : 'Mes de pago' ?></label>
-          <select name="extrames1" style="width:110px">
+          <select name="extrames1" class="w-select">
             <?php for ($m = 1; $m <= 12; $m++): ?>
             <option value="<?= $m ?>" <?= (int)$plan['extraMes1'] === $m ? 'selected' : '' ?>><?= $mesesSel[$m] ?></option>
             <?php endfor; ?>
           </select></div>
         <div id="wrap-mes2" style="<?= $extraPartes === 2 ? '' : 'display:none' ?>">
           <label>Mes 2 de 2</label>
-          <select name="extrames2" style="width:110px">
+          <select name="extrames2" class="w-select">
             <?php for ($m = 1; $m <= 12; $m++): ?>
             <option value="<?= $m ?>" <?= (int)$plan['extraMes2'] === $m ? 'selected' : '' ?>><?= $mesesSel[$m] ?></option>
             <?php endfor; ?>
@@ -352,10 +415,8 @@ $hoy  = new DateTimeImmutable('now');
     <?php endif; ?>
     <?php if ($fusion): ?>
     <div style="align-self:center">
-      <label style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--tinta);cursor:pointer"
-             title="Unificado = un solo plan por el total. Separado = un plan por cada unidad.">
-        <input type="checkbox" name="unif" value="1" <?= $unificar ? 'checked' : '' ?>
-               style="width:auto;margin-right:6px;vertical-align:-2px">
+      <label class="chk-linea" title="Unificado = un solo plan por el total. Separado = un plan por cada unidad.">
+        <input type="checkbox" name="unif" value="1" <?= $unificar ? 'checked' : '' ?>>
         Unificar las <?= count($unidades) ?> en un solo plan
       </label>
     </div>
@@ -363,16 +424,37 @@ $hoy  = new DateTimeImmutable('now');
     <?php if ($suites >= 2): ?>
     <!-- Solo aparece con 2+ suites de Noral Plaza: es el único caso donde la regla existe. -->
     <div style="align-self:center">
-      <label style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--tinta);cursor:pointer">
-        <input type="checkbox" name="sinparq" value="1" <?= $sinParqueo ? 'checked' : '' ?>
-               style="width:auto;margin-right:6px;vertical-align:-2px">
+      <label class="chk-linea">
+        <input type="checkbox" name="sinparq" value="1" <?= $sinParqueo ? 'checked' : '' ?>>
         Una unidad sin parqueo <b>(−<?= h(cot_money((float)COT_PARQUEO)) ?>)</b>
       </label>
     </div>
     <?php endif; ?>
     <button class="ir" type="submit">Recalcular</button>
   </form>
+</div>
 
+<script>
+(function(){
+  // "Todo estricto": Cuotas y "o paga al mes" son mutuamente excluyentes — el
+  // motor SIEMPRE prioriza el presupuesto cuando tiene valor, así que dejar
+  // "Cuotas" editable al mismo tiempo era engañoso (se veía activo pero no hacía
+  // nada). Al escribir un presupuesto, Cuotas se deshabilita visualmente; al
+  // borrarlo, vuelve a activarse.
+  var cuotasEl = document.querySelector('input[name="n"]');
+  var presuEl  = document.querySelector('input[name="presu"]');
+  if (!cuotasEl || !presuEl) return;
+  function sync(){
+    var activo = presuEl.value.trim() !== '';
+    cuotasEl.disabled = activo;
+    cuotasEl.title = activo ? 'Se calcula solo a partir de "o paga al mes"' : '';
+  }
+  presuEl.addEventListener('input', sync);
+  sync();
+})();
+</script>
+
+<div class="tarjeta">
   <?php if (!empty($plan['insuficiente'])): ?>
     <div class="aviso">Con <b><?= h(cot_money($plan['presupuesto'])) ?>/mes</b> no alcanza ni pagando hasta la entrega.
       La cuota mínima posible para esta unidad es <b><?= h(cot_money($plan['cuotaMinima'])) ?>/mes</b>
