@@ -130,6 +130,30 @@ $modalidad = (($_GET['mod'] ?? '') === 'iguales') ? 'iguales' : 'estandar';
 $cuotas    = (int)($_GET['n'] ?? 0);
 $mesIni    = (string)($_GET['mes'] ?? '');
 $presu     = (float)str_replace([',', '$', ' '], '', (string)($_GET['presu'] ?? ''));
+// Variantes del plan. Cada una vacía = "no la toques", así el plan por defecto sigue
+// siendo el 10/60/30 de siempre y el asesor solo mueve lo que el cliente pidió.
+$num = function (string $k): string {
+    $s = str_replace([',', '$', ' '], '', (string)($_GET[$k] ?? ''));
+    return preg_match('/^\d+(\.\d+)?$/', $s) ? $s : '';
+};
+$vFirma  = $num('firma');      // "nada a la firma" se escribe 0, no vacío
+$vCuota  = $num('cuota');      // cuota mensual fija
+$vExtra  = $num('extra');      // monto de CADA extraordinaria
+$vHasta  = preg_match('/^\d{4}-\d{2}$/', (string)($_GET['hasta'] ?? '')) ? (string)$_GET['hasta'] : '';
+// Firma diferida: "el 10% se suma a las cuotas" en vez de pagarse toda al firmar,
+// tope de 12 meses (regla del director). O bien N meses parejos, o un monto
+// mensual editable y el resto se cae a las extraordinarias.
+$vFirmaMeses = (int)($_GET['firmames'] ?? 0);
+$vFirmaCuota = $num('firmacuota');
+$extraPartes = (($_GET['extrapartes'] ?? '') === '2') ? 2 : 1;
+$opts = [];
+if ($vFirma !== '') $opts['firma']       = (float)$vFirma;
+if ($vCuota !== '') $opts['mensual']     = (float)$vCuota;
+if ($vExtra !== '') $opts['extraCada']   = (float)$vExtra;
+if ($vHasta !== '') $opts['hasta']       = $vHasta;
+if ($vFirmaMeses > 0) $opts['firmaMeses'] = min(12, $vFirmaMeses);
+if ($vFirmaCuota !== '') $opts['firmaCuota'] = (float)$vFirmaCuota;
+$opts['extraPartes'] = $extraPartes;
 // Parqueo: en una compra de 2+ suites se puede perdonar UNO solo. Apagado por
 // defecto — lo decide el asesor, no se descuenta a espaldas de nadie.
 $sinParqueo = (($_GET['sinparq'] ?? '') === '1');
@@ -144,7 +168,7 @@ $unificar = $fusion ? (($_GET['unif'] ?? '1') !== '0') : true;
 $bloques = [];
 if ($unificar) {
     $bloques[] = ['cods'=>$codigos, 'pvp'=>$pvpFinal, 'm2'=>$m2, 'dcto'=>$dctoParq, 'bruto'=>$pvp,
-                  'plan'=>cot_plan($pvpFinal, $cuotas, $modalidad, $mesIni, $entrega, $presu)];
+                  'plan'=>cot_plan($pvpFinal, $cuotas, $modalidad, $mesIni, $entrega, $presu, $opts)];
 } else {
     // Separado: el descuento de parqueo NO se reparte — pertenece a una unidad concreta,
     // así que se muestra solo en la primera y el resto va a precio pleno.
@@ -155,11 +179,14 @@ if ($unificar) {
         $e = cot_entrega((int)$u['cat']);
         $bloques[] = ['cods'=>[(string)$u['codigo']], 'pvp'=>max(0.0,$p-$d),
                       'm2'=>(float)str_replace(',', '.', (string)$u['m2']), 'dcto'=>$d, 'bruto'=>$p,
-                      'plan'=>cot_plan(max(0.0,$p-$d), $cuotas, $modalidad, $mesIni, $e, $presu)];
+                      'plan'=>cot_plan(max(0.0,$p-$d), $cuotas, $modalidad, $mesIni, $e, $presu, $opts)];
         $primero = false;
     }
 }
 $plan = $bloques[0]['plan'];          // el primero manda para los avisos de plazo
+// Los porcentajes se CALCULAN, no se escriben a mano: el reparto ya no es fijo, así que
+// un "10%" rotulado mentiría en cuanto el asesor mueva una variante.
+$pc = fn(float $x) => rtrim(rtrim(number_format($x * 100, 1), '0'), '.') . '%';
 $hoy  = new DateTimeImmutable('now');
 ?>
 <!doctype html>
@@ -202,7 +229,10 @@ $hoy  = new DateTimeImmutable('now');
   td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
   tr.hito td{background:#f5f8fa;font-weight:700}
   tr.extra td{background:#fff8e6}
+  tr.diferido td{background:#eef5ff}
   .etq{display:inline-block;background:#f0b429;color:#4a3200;font-size:9.5px;font-weight:700;
+       padding:2px 6px;border-radius:4px;margin-left:7px;letter-spacing:.6px}
+  .etq2{display:inline-block;background:#3b82c4;color:#fff;font-size:9.5px;font-weight:700;
        padding:2px 6px;border-radius:4px;margin-left:7px;letter-spacing:.6px}
   .aviso{background:#fff4e5;border:1px solid #ffd9a0;color:#7a5200;border-radius:8px;
          padding:10px 13px;font-size:13px;margin-bottom:16px}
@@ -247,6 +277,39 @@ $hoy  = new DateTimeImmutable('now');
       </select></div>
     <div><label>Primera cuota</label>
       <input type="month" name="mes" value="<?= h($plan['inicio']) ?>" min="<?= $hoy->format('Y-m') ?>"></div>
+    <!-- "Hasta cuándo quiere pagar": la forma en que el cliente lo dice de verdad,
+         en vez de traducirlo él mismo a un número de cuotas. -->
+    <div><label>Pagar hasta</label>
+      <input type="month" name="hasta" value="<?= h($vHasta) ?>" min="<?= h($plan['inicio']) ?>"
+             title="Último mes de pago. Si se llena, manda sobre Cuotas."></div>
+    <!-- Las tres variantes que hacen movible el reparto. Vacías = plan clásico. -->
+    <div><label>A la firma</label>
+      <input type="text" name="firma" inputmode="decimal" placeholder="auto" value="<?= h($vFirma) ?>"
+             style="width:100px" title="Escribe 0 para que no pague nada a la firma. La cuota mensual sube para compensar."></div>
+    <div><label>Cuota fija</label>
+      <input type="text" name="cuota" inputmode="decimal" placeholder="auto" value="<?= h($vCuota) ?>"
+             style="width:100px" title="Cuota mensual exacta que quiere pagar. Baja la firma; si aun así sobra, baja la contraentrega."></div>
+    <!-- Firma diferida: en vez de pagarla toda al firmar, se reparte sobre varios
+         meses sumada a la cuota (tope 12 — regla de negocio, no se estira más). -->
+    <div><label>Diferir firma (meses)</label>
+      <input type="number" name="firmames" min="0" max="12" placeholder="0" value="<?= $vFirmaMeses > 0 ? (int)$vFirmaMeses : '' ?>"
+             style="width:80px" title="Sobre cuántos meses repartir la firma en vez de pagarla toda al firmar. Tope 12."></div>
+    <div><label>...cuota de eso</label>
+      <input type="text" name="firmacuota" inputmode="decimal" placeholder="auto" value="<?= h($vFirmaCuota) ?>"
+             style="width:100px" title="Monto mensual editable de esa firma diferida. Si en 12 meses no alcanza a cubrirla, el resto se suma a las extraordinarias."></div>
+    <?php if ($modalidad !== 'iguales'): ?>
+    <div><label>Cada extraord.</label>
+      <input type="text" name="extra" inputmode="decimal" placeholder="auto" value="<?= h($vExtra) ?>"
+             style="width:100px" title="Monto de cada cuota extraordinaria. Subirlo alivia la mensual."></div>
+    <div style="align-self:center">
+      <label style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--tinta);cursor:pointer"
+             title="Parte la extraordinaria de cada año en dos pagos, abril y diciembre (14vo/18vo sueldo), en vez de uno solo.">
+        <input type="checkbox" name="extrapartes" value="2" <?= $extraPartes === 2 ? 'checked' : '' ?>
+               style="width:auto;margin-right:6px;vertical-align:-2px">
+        Partir la extraordinaria en 2 (abril + diciembre)
+      </label>
+    </div>
+    <?php endif; ?>
     <?php if ($fusion): ?>
     <div style="align-self:center">
       <label style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--tinta);cursor:pointer"
@@ -295,6 +358,27 @@ $hoy  = new DateTimeImmutable('now');
   <?php if ($ocupadas): ?>
     <div class="aviso">Ojo, en el inventario está: <b><?= h(implode(' · ', $ocupadas)) ?></b>.</div>
   <?php endif; ?>
+  <?php if (!empty($plan['sobrepago'])): ?>
+    <div class="aviso">Lo que se pidió pagar antes de la entrega <b>excede el precio</b>. Se recortó la
+      cuota a <b><?= h(cot_money($plan['mensual'])) ?></b>, que es el máximo que cabe en
+      <?= (int)$plan['cuotas'] ?> cuotas con esa firma y esas extraordinarias.</div>
+  <?php elseif (!empty($plan['bajaContraentrega'])): ?>
+    <!-- No es un error: adelantar más deja menos para el final. Pero el 60% suele estar
+         amarrado al crédito del cliente, así que esto lo tiene que ver un humano. -->
+    <div class="aviso">Con este plan el cliente adelanta más de lo normal, así que la
+      <b>contraentrega baja a <?= h(cot_money($plan['contraentrega'])) ?></b>
+      (<?= h($pc($plan['contraPct'])) ?> en vez del 60%). Verifica que el crédito del cliente cuadre con eso.</div>
+  <?php endif; ?>
+  <?php if ($plan['mensual'] <= 0.01 && $plan['cuotas'] > 0): ?>
+    <div class="aviso">La cuota mensual quedó en <b>$0</b>: entre la firma y las extraordinarias
+      ya se cubre todo lo que va antes de la entrega. Baja alguna de las dos si quieres cuotas reales.</div>
+  <?php endif; ?>
+  <?php if ($plan['diferidoMeses'] > 0): ?>
+    <div class="aviso" style="background:#eaf6ff;border-color:#b9ddf5;color:#0c4a6e">
+      La firma no se paga al firmar: se reparte en <b><?= (int)$plan['diferidoMeses'] ?> cuota<?= $plan['diferidoMeses'] > 1 ? 's' : '' ?></b>
+      de <b><?= h(cot_money($plan['diferidoCuota'])) ?></b> cada una, sumadas a la cuota normal (marcadas <b>FIRMA</b> en la tabla).
+      <?= $plan['diferidoMeses'] >= 12 ? ' Es el tope: no se puede diferir más de 12 meses.' : '' ?></div>
+  <?php endif; ?>
 
   <?php if ($cliente !== ''): ?>
   <dl class="datos"><dt>Cliente</dt><dd><?= h($cliente) ?></dd></dl>
@@ -327,8 +411,8 @@ $hoy  = new DateTimeImmutable('now');
   <p>Pago directo para el notario. Se da al momento de la firma del contrato.</p>
 
   <div class="resumen">
-    <div><span>Reserva 10%</span><b><?= h(cot_money($plan['reserva'])) ?></b></div>
-    <div><span>Contraentrega 60%</span><b><?= h(cot_money($plan['contraentrega'])) ?></b></div>
+    <div><span>Reserva <?= h($pc($plan['reservaPct'])) ?></span><b><?= h(cot_money($plan['reserva'])) ?></b></div>
+    <div><span>Contraentrega <?= h($pc($plan['contraPct'])) ?></span><b><?= h(cot_money($plan['contraentrega'])) ?></b></div>
     <div><span>Cuota mensual</span><b><?= h(cot_money($plan['mensual'])) ?></b></div>
     <div><span>Total cuotas</span><b><?= (int)$plan['cuotas'] ?></b></div>
   </div>
@@ -341,9 +425,9 @@ $hoy  = new DateTimeImmutable('now');
       <tr class="hito"><td></td><td>A LA FIRMA</td><td><?= h(cot_money($plan['firma'])) ?></td></tr>
       <?php endif; ?>
       <?php foreach ($plan['filas'] as $f): ?>
-      <tr class="<?= $f['extra'] ? 'extra' : '' ?>">
+      <tr class="<?= $f['extra'] ? 'extra' : ($f['diferido'] ? 'diferido' : '') ?>">
         <td><?= (int)$f['n'] ?></td>
-        <td><?= h($f['fecha']) ?><?= $f['extra'] ? '<span class="etq">EXTRA</span>' : '' ?></td>
+        <td><?= h($f['fecha']) ?><?= $f['extra'] ? '<span class="etq">EXTRA</span>' : '' ?><?= $f['diferido'] ? '<span class="etq2">FIRMA</span>' : '' ?></td>
         <td><?= h(cot_money($f['monto'])) ?></td>
       </tr>
       <?php endforeach; ?>
@@ -352,12 +436,15 @@ $hoy  = new DateTimeImmutable('now');
   </table>
 
   <p class="pie">
-    Plan: 10% de reserva (separación <?= h(cot_money($plan['separacion'])) ?> + saldo a la firma),
-    <?= $plan['modalidad'] === 'iguales' ? '30% en cuotas iguales' : '20% en cuotas mensuales + 10% en cuotas extraordinarias' ?>
-    y 60% contraentrega. Las cuotas vencen el 16 de cada mes.
+    Plan: <?= h($pc($plan['reservaPct'])) ?> de reserva (separación <?= h(cot_money($plan['separacion'])) ?>
+    <?= $plan['firma'] > 0 ? '+ ' . h(cot_money($plan['firma'])) . ' a la firma' : '· nada a la firma' ?>),
+    <?= h($pc($plan['cuotasPct'])) ?> en cuotas mensuales<?= $plan['extraTotal'] > 0 ? ' + ' . h($pc($plan['extraPct'])) . ' en cuotas extraordinarias' : '' ?>
+    y <?= h($pc($plan['contraPct'])) ?> contraentrega. Las cuotas vencen el 16 de cada mes
+    y la última es en <?= h($plan['hastaTxt']) ?>.
     <?php if ($plan['nExtra'] > 0): ?>
       Incluye <?= (int)$plan['nExtra'] ?> cuota<?= $plan['nExtra'] > 1 ? 's' : '' ?> extraordinaria<?= $plan['nExtra'] > 1 ? 's' : '' ?>
-      de <?= h(cot_money($plan['valorExtra'])) ?> (una por año), que van sumadas a la cuota de ese mes.
+      de <?= h(cot_money($plan['valorExtra'])) ?>
+      (<?= $plan['extraPartes'] === 2 ? 'dos por año, en abril y diciembre' : 'una por año' ?>), que van sumadas a la cuota de ese mes.
     <?php endif; ?>
   </p>
   <?php endforeach; ?>
