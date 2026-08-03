@@ -214,6 +214,13 @@ $hoy  = new DateTimeImmutable('now');
   .ajustes label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--gris);margin-bottom:5px}
   .ajustes input,.ajustes select{padding:9px 11px;border:1.5px solid var(--linea);border-radius:8px;font-size:14px;font-family:inherit}
   .ajustes .ir{background:var(--azul);color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer}
+  /* Grupos de campos relacionados (firma diferida, extraordinaria): un rótulo que
+     explica la idea en una frase, con sus campos justo debajo — para que no se lean
+     como una fila suelta de labels sin conexión entre sí. */
+  .grupo{flex:1 1 100%;background:#f7f9fb;border:1px solid var(--linea);border-radius:8px;
+         padding:12px 14px;margin-top:2px}
+  .grupo-tit{font-size:12px;font-weight:700;color:var(--tinta);margin-bottom:10px}
+  .grupo-campos{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
   .datos{display:grid;grid-template-columns:auto 1fr;gap:6px 20px;font-size:14px;margin-bottom:16px}
   .datos dt{color:var(--gris)}
   .datos dd{margin:0;font-weight:600}
@@ -291,37 +298,57 @@ $hoy  = new DateTimeImmutable('now');
     <div><label>A la firma</label>
       <input type="text" name="firma" inputmode="decimal" placeholder="auto" value="<?= h($vFirma) ?>"
              style="width:100px" title="Monto exacto que paga al firmar. Vacío = el que sale del reparto normal."></div>
-    <div><label>Diferir firma (meses)</label>
-      <input type="number" name="firmames" min="0" max="12" placeholder="0" value="<?= $vFirmaMeses > 0 ? (int)$vFirmaMeses : '' ?>"
-             style="width:80px" title="Sobre cuántos meses repartir la firma en vez de pagarla toda al firmar. Tope 12."></div>
-    <div><label>...cuota de eso</label>
-      <input type="text" name="firmacuota" inputmode="decimal" placeholder="auto" value="<?= h($vFirmaCuota) ?>"
-             style="width:100px" title="Monto mensual editable de esa firma diferida. Si en 12 meses no alcanza a cubrirla, el resto se suma a las extraordinarias."></div>
-    <?php if ($modalidad !== 'iguales'):
-      $mesesSel = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-    ?>
-    <div style="align-self:center">
-      <label style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--tinta);cursor:pointer"
-             title="Parte la extraordinaria de cada año en dos pagos en vez de uno solo.">
-        <input type="checkbox" name="extrapartes" value="2" <?= $extraPartes === 2 ? 'checked' : '' ?>
-               style="width:auto;margin-right:6px;vertical-align:-2px">
-        Partir la extraordinaria en 2
-      </label>
+
+    <!-- Grupo "firma diferida": los dos campos van juntos, con un rótulo arriba que
+         explica la idea completa en una frase, porque separados como dos labels
+         sueltas ("Diferir firma (meses)" / "...cuota de eso") no se entendía qué
+         hacían entre sí. -->
+    <div class="grupo">
+      <div class="grupo-tit" title="En vez de pagar toda la firma al firmar, se reparte sumada a la cuota de los primeros meses.">
+        Diferir la firma en cuotas (opcional)
+      </div>
+      <div class="grupo-campos">
+        <div><label>Meses</label>
+          <input type="number" name="firmames" min="0" max="12" placeholder="0" value="<?= $vFirmaMeses > 0 ? (int)$vFirmaMeses : '' ?>"
+                 style="width:70px" title="Sobre cuántos meses repartir la firma. Tope 12."></div>
+        <div><label>Cuota mensual de eso</label>
+          <input type="text" name="firmacuota" inputmode="decimal" placeholder="auto" value="<?= h($vFirmaCuota) ?>"
+                 style="width:100px" title="Monto mensual editable de esa firma diferida. Si en 12 meses no alcanza a cubrirla, el resto se suma a las extraordinarias."></div>
+      </div>
     </div>
-    <div><label>Mes extraord.<?= $extraPartes === 2 ? ' 1' : '' ?></label>
-      <select name="extrames1" style="width:80px">
-        <?php for ($m = 1; $m <= 12; $m++): ?>
-        <option value="<?= $m ?>" <?= (int)$plan['extraMes1'] === $m ? 'selected' : '' ?>><?= $mesesSel[$m] ?></option>
-        <?php endfor; ?>
-      </select></div>
-    <?php if ($extraPartes === 2): ?>
-    <div><label>Mes extraord. 2</label>
-      <select name="extrames2" style="width:80px">
-        <?php for ($m = 1; $m <= 12; $m++): ?>
-        <option value="<?= $m ?>" <?= (int)$plan['extraMes2'] === $m ? 'selected' : '' ?>><?= $mesesSel[$m] ?></option>
-        <?php endfor; ?>
-      </select></div>
-    <?php endif; ?>
+
+    <?php if ($modalidad !== 'iguales'):
+      $mesesSel = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    ?>
+    <!-- Grupo "extraordinaria": el checkbox y los meses van juntos, y el segundo mes
+         se muestra/oculta con JS al toque — antes solo aparecía después de apretar
+         Recalcular, que confundía porque parecía que no había pasado nada. -->
+    <div class="grupo">
+      <div class="grupo-tit">Cuota extraordinaria (una por año)</div>
+      <div class="grupo-campos">
+        <label style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--tinta);cursor:pointer;align-self:center"
+               title="Parte la extraordinaria de cada año en dos pagos en vez de uno solo.">
+          <input type="checkbox" name="extrapartes" value="2" id="chk-partes" <?= $extraPartes === 2 ? 'checked' : '' ?>
+                 onchange="document.getElementById('wrap-mes2').style.display=this.checked?'':'none';
+                           document.getElementById('lbl-mes1').textContent=this.checked?'Mes 1 de 2':'Mes de pago'"
+                 style="width:auto;margin-right:6px;vertical-align:-2px">
+          Partir en 2 pagos
+        </label>
+        <div><label id="lbl-mes1"><?= $extraPartes === 2 ? 'Mes 1 de 2' : 'Mes de pago' ?></label>
+          <select name="extrames1" style="width:110px">
+            <?php for ($m = 1; $m <= 12; $m++): ?>
+            <option value="<?= $m ?>" <?= (int)$plan['extraMes1'] === $m ? 'selected' : '' ?>><?= $mesesSel[$m] ?></option>
+            <?php endfor; ?>
+          </select></div>
+        <div id="wrap-mes2" style="<?= $extraPartes === 2 ? '' : 'display:none' ?>">
+          <label>Mes 2 de 2</label>
+          <select name="extrames2" style="width:110px">
+            <?php for ($m = 1; $m <= 12; $m++): ?>
+            <option value="<?= $m ?>" <?= (int)$plan['extraMes2'] === $m ? 'selected' : '' ?>><?= $mesesSel[$m] ?></option>
+            <?php endfor; ?>
+          </select></div>
+      </div>
+    </div>
     <?php endif; ?>
     <?php if ($fusion): ?>
     <div style="align-self:center">
