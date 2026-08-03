@@ -245,7 +245,11 @@ $hoy  = new DateTimeImmutable('now');
   body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--tinta);background:#eef2f6}
 
   /* ---------- Chrome de página (barra superior) ---------- */
-  .barra{background:var(--chrome);color:#fff;padding:var(--space-md) var(--space-lg);
+  /* Pegajoso: al hacer scroll se queda arriba, para no tener que subir de
+     nuevo a buscar "Descargar PDF". En @media print se anula abajo (position
+     sticky en una hoja impresa no significa nada, pero mejor ser explícito). */
+  .barra{position:sticky;top:0;z-index:20;background:var(--chrome);color:#fff;
+         padding:var(--space-md) var(--space-lg);
          display:flex;align-items:center;gap:var(--space-md);flex-wrap:wrap;
          border-bottom:1px solid oklch(45.4% 0.15 259 / .4);font-family:var(--font)}
   .barra h1{font-size:13px;margin:0;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
