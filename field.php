@@ -140,6 +140,55 @@ function catalogo_cache(): array {
 function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
 
 /**
+ * Categoría y etapa del deal, con caché en disco de 60 segundos.
+ *
+ * Existe para que el campo salga con el TEXTO FINAL desde el primer pixel. Antes
+ * el servidor no sabía la etapa, así que renderizaba un texto neutro y el navegador
+ * lo corregía cuando volvía el crm.deal.get: el asesor veía el campo cambiar solo,
+ * y con razón le parecía un bug.
+ *
+ * Se evitaba llamar al API justamente por costo: Bitrix renderiza este placement
+ * ~8 veces por apertura de deal (medido en web.log) y el portal ya va al tope
+ * (~120 llamadas/min entre todos los sistemas). El caché resuelve eso: la primera
+ * render de la ráfaga paga UNA llamada y las otras siete la leen del disco. O sea
+ * ~1 llamada por apertura de deal, no 8.
+ *
+ * Y en el modal (MODE=edit) no se llama nunca: ahí el campo va siempre abierto.
+ *
+ * Si el API falla o tarda, se devuelve el caché viejo, y si no hay, null — el
+ * navegador sigue resolviéndolo como antes. Nunca se deja al asesor esperando: 4s
+ * de techo y a dibujar.
+ */
+function deal_estado(int $dealId): ?array {
+    if ($dealId <= 0) return null;
+    $dir  = (getenv('DATA_DIR') ?: '/data') . '/dealcache';
+    $path = $dir . '/' . $dealId . '.json';
+    $viejo = json_decode((string)@file_get_contents($path), true);
+    if (is_array($viejo) && (time() - (int)($viejo['ts'] ?? 0)) < 60) return $viejo;
+
+    $wh = rtrim((string)getenv('BITRIX_WEBHOOK'), '/') . '/';
+    if ($wh === '/') return is_array($viejo) ? $viejo : null;
+
+    $ch = curl_init($wh . 'crm.deal.get');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => http_build_query(['id' => $dealId]),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 4,
+        CURLOPT_CONNECTTIMEOUT => 2,
+    ]);
+    $r = json_decode((string)curl_exec($ch), true);
+    $d = $r['result'] ?? null;
+    if (!is_array($d)) return is_array($viejo) ? $viejo : null;
+
+    $out = ['cat' => (int)($d['CATEGORY_ID'] ?? -1),
+            'stage' => (string)($d['STAGE_ID'] ?? ''), 'ts' => time()];
+    if (!is_dir($dir)) @mkdir($dir, 0775, true);
+    @file_put_contents($path, json_encode($out), LOCK_EX);
+    return $out;
+}
+
+/**
  * Etapa RESERVA del 28, leída del caché que deja stagelib.php (cero llamadas).
  * Solo alimenta el candado VISUAL: el que decide de verdad es guardar.php.
  */
@@ -227,9 +276,32 @@ foreach ($porProyecto as &$l) usort($l, fn($a, $b) => strnatcasecmp($a['codigo']
 unset($l);
 
 $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios campos en el form
+
+/*
+ * Estado inicial del candado, resuelto AQUÍ para que no haya parpadeo.
+ *
+ *   $bloqIni = 'si'  -> Prospectos(28) fuera de RESERVA: cerrado, texto definitivo.
+ *   $bloqIni = 'no'  -> se puede elegir (otro pipeline, ya en RESERVA, o el modal).
+ *   $bloqIni = '?'   -> no se pudo averiguar: se cierra por precaución con el texto
+ *                       neutro y el navegador lo resuelve, como hacía antes.
+ *
+ * En el modal (MODE=edit) se responde 'no' sin preguntarle nada al API: ahí el campo
+ * va abierto siempre, porque es donde Bitrix pide la unidad para pasar a RESERVA.
+ */
+if ($mode === 'edit') {
+    $bloqIni = 'no';
+} else {
+    $est = deal_estado($dealId);
+    if ($est === null)                      $bloqIni = '?';
+    elseif ((int)$est['cat'] !== 28)        $bloqIni = 'no';
+    elseif ($est['stage'] === reserva28_cache()) $bloqIni = 'no';
+    else                                    $bloqIni = 'si';
+}
+$phIni = $bloqIni === 'si' ? 'Ver inventario (se elige en RESERVA)'
+       : ($bloqIni === '?' ? 'Ver inventario…' : 'Elegir unidad…');
 ?>
 <script src="//api.bitrix24.com/api/v1/"></script>
-<div class="gu" id="<?= $uid ?>">
+<div class="gu<?= $bloqIni !== 'no' ? ' gu-bloq' : '' ?>" id="<?= $uid ?>">
 <style>
   /* Bitrix dimensiona este iframe según el ALTO DEL DOCUMENTO que devolvemos.
      Por eso el alto debe ser natural: con height:100% + overflow:hidden el
@@ -403,7 +475,10 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     // requeridos para cambiar la etapa". No confundir con la vista de solo lectura
     // de este mismo archivo: esa solo se usa si Bitrix manda `solo_lectura`, que
     // no manda nunca, así que el desplegable se dibuja igual en los dos modos.
-    modo: <?= json_encode($mode) ?>
+    modo: <?= json_encode($mode) ?>,
+    // Estado que ya resolvio el servidor: 'si' | 'no' | '?'. El JS solo
+    // CORRIGE si el cache estaba viejo, no vuelve a pintar lo mismo.
+    bloqIni: <?= json_encode($bloqIni) ?>
   };
 </script>
 
@@ -422,7 +497,7 @@ foreach ($elegidos as $id) {
 <div class="gu-campo" id="<?= $uid ?>_campo">
   <span class="gu-txt" id="<?= $uid ?>_txt"><?= $piezas
       ? implode('<span class="gu-sep">&middot;</span>', $piezas)
-      : '<span class="gu-ph">Ver inventario&hellip;</span>' ?></span>
+      : '<span class="gu-ph">' . h($phIni) . '</span>' ?></span>
   <span class="gu-nota" id="<?= $uid ?>_nota"></span>
   <span class="gu-caret">&#9660;</span>
 </div>
@@ -532,7 +607,9 @@ foreach ($elegidos as $id) {
     }
   } catch(e) {}
 
-  var BLOQ = false;             // true = la etapa del deal no permite elegir unidad
+  // Arranca donde lo dejó el SERVIDOR (clase gu-bloq ya puesta en el HTML), no en
+  // false: si arrancara en false habría un instante en que el campo se cree abierto.
+  var BLOQ = (CFG.bloqIni || '?') !== 'no';
 
   /*
    * Texto del campo vacío, en UNA sola variable.
@@ -547,7 +624,8 @@ foreach ($elegidos as $id) {
    * primer pintado no cambia nada. De ahí solo se mueve UNA vez, cuando se resuelve
    * la etapa: a "(se elige en RESERVA)" si toca candado, o a "Elegir unidad…" si no.
    */
-  var PH_TXT = 'Ver inventario…';
+  var PH_TXT = (campo.querySelector('.gu-ph') || {}).textContent || 'Ver inventario…';
+  var BLOQ_INI = CFG.bloqIni || '?';
   /** Escribe el placeholder de una sola forma, desde PH_TXT. */
   function phTexto(t){
     PH_TXT = t;
@@ -1048,23 +1126,35 @@ foreach ($elegidos as $id) {
      */
     if (CFG.modo === 'edit') return;
     if (!CFG.deal) return;  // deal nuevo: no hay etapa que comprobar todavía
-    // FAIL-CLOSED: cerrado hasta que se confirme que la etapa deja elegir. Si
-    // arrancara abierto, entre el render y la respuesta del crm.deal.get hay una
-    // ventana en la que se puede elegir igual — así quedó apartada la A-1-1.
-    bloquear('verificando');
+
+    /*
+     * El servidor ya dejó el campo en su estado final (CFG.bloqIni). Esto de aquí
+     * ya NO pinta: solo CORRIGE si el caché de 60s estaba viejo — por ejemplo si el
+     * deal acaba de pasar a RESERVA en otra pestaña. Si coincide, no se toca nada, y
+     * por eso se acabó el parpadeo: antes esta función repintaba siempre, dos veces.
+     *
+     * Cuando el servidor no pudo averiguarlo ('?') el campo está cerrado por
+     * precaución con el texto neutro, y esta comprobación es la que lo resuelve.
+     */
+    if (BLOQ_INI !== '?' && (typeof BX24 === 'undefined' || !BX24.callMethod)) return;
     if (typeof BX24 === 'undefined' || !BX24.callMethod) { bloquear('sin-verificar'); return; }
     try {
       BX24.callMethod('crm.deal.get', {id: CFG.deal}, function(res){
         try {
-          if (!res || (res.error && res.error())) { bloquear('sin-verificar'); return; }
+          if (!res || (res.error && res.error())) {
+            if (BLOQ_INI === '?') bloquear('sin-verificar');
+            return;
+          }
           var d = res.data() || {};
-          // fuera de Prospectos, o ya en RESERVA: el campo se usa normal
-          if (String(d.CATEGORY_ID) !== String(CFG.prospectos)) { desbloquear(); return; }
-          if (String(d.STAGE_ID) === String(CFG.reserva28))     { desbloquear(); return; }
-          bloquear();
-        } catch(e) { bloquear('sin-verificar'); }
+          var toca = String(d.CATEGORY_ID) === String(CFG.prospectos)
+                  && String(d.STAGE_ID)    !== String(CFG.reserva28);
+          // solo se escribe si el servidor se equivocó (o no supo)
+          if (toca && !BLOQ)      bloquear();
+          else if (!toca && BLOQ) desbloquear();
+          else if (BLOQ_INI === '?') { toca ? bloquear() : desbloquear(); }
+        } catch(e) { if (BLOQ_INI === '?') bloquear('sin-verificar'); }
       });
-    } catch(e) { bloquear('sin-verificar'); }
+    } catch(e) { if (BLOQ_INI === '?') bloquear('sin-verificar'); }
   }
 
   /**
