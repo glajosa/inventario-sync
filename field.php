@@ -456,35 +456,47 @@ foreach ($elegidos as $id) {
 
   <div class="gu-elegidas" id="<?= $uid ?>_elegidas" style="display:none"></div>
 
+  <?php
+  /*
+   * La lista NO se imprime en HTML: viaja como JSON y la arma el navegador.
+   *
+   * Antes cada una de las 1.274 unidades era un <div> con 7 data-attributes, y el
+   * render pesaba 745 KB — el 94% eran esas filas. Bitrix crea el iframe con 200px
+   * y lo deja en blanco hasta que llega la respuesta, así que el asesor veía un
+   * cuadro blanco grande 1-2 segundos en CADA apertura de deal (medido: 0,6-1,1s
+   * de primer byte y hasta 7s de total en el peor caso). El gzip ya estaba puesto
+   * (49 KB por la red), o sea lo que costaba era parsear el HTML, no bajarlo.
+   *
+   * En JSON las mismas unidades ocupan ~9 veces menos y el navegador construye las
+   * filas de un solo golpe con innerHTML. El HTML resultante es IDÉNTICO al que se
+   * imprimía aquí — mismas clases y mismos data-*, para que filtrar() y el resto
+   * del JS sigan funcionando sin tocarse.
+   */
+  $datos = [];
+  foreach ($proys as $cid => $nom) {
+      $lst = $porProyecto[(string)$cid] ?? [];
+      if (!$lst) continue;
+      $us = [];
+      foreach ($lst as $u) {
+          $pvpNum = (float)str_replace(['|USD', ','], '', (string)$u['pvp']);
+          $us[] = [
+              (int)$u['id'],
+              (string)$u['codigo'],
+              (string)($u['stage'] ?: 'BLOQUEADO'),
+              ($u['stage'] === 'DISPONIBLE' && empty($u['dealId'])) ? 1 : 0,
+              trim(($u['torre'] !== '' ? 'T' . $u['torre'] : '')
+                 . ($u['piso']  !== '' ? ' · P' . $u['piso'] : '')),
+              $pvpNum,
+          ];
+      }
+      $datos[] = [(string)$cid, (string)$nom, $us];
+  }
+  ?>
   <div class="gu-lista" id="<?= $uid ?>_lista">
-    <?php foreach ($proys as $cid => $nom):
-          $lista = $porProyecto[(string)$cid] ?? [];
-          if (!$lista) continue; ?>
-      <div class="gu-grupo" data-cat="<?= h((string)$cid) ?>"><?= h($nom) ?></div>
-      <?php foreach ($lista as $u):
-            $libre = ($u['stage'] === 'DISPONIBLE' && empty($u['dealId']));
-            $yo    = in_array((int)$u['id'], $elegidos, true);
-            $meta  = trim(($u['torre'] !== '' ? 'T' . $u['torre'] : '')
-                        . ($u['piso']  !== '' ? ' · P' . $u['piso'] : ''));
-            $pvpNum = (float)str_replace(['|USD', ','], '', (string)$u['pvp']);
-            $pvp   = $u['pvp'] !== '' ? '$' . number_format($pvpNum, 0) : '';
-            $est   = $u['stage'] ?: 'BLOQUEADO';
-      ?>
-        <div class="gu-fila <?= $libre ? '' : 'gu-no' ?>"
-             data-cat="<?= h((string)$cid) ?>" data-cod="<?= h(strtoupper($u['codigo'])) ?>"
-             data-libre="<?= $libre ? 1 : 0 ?>" data-id="<?= (int)$u['id'] ?>"
-             data-pvp="<?= $pvpNum ?>"
-             data-cod-txt="<?= h($u['codigo']) ?>" data-proy="<?= h($nom) ?>">
-          <span class="gu-cod"><?= h($u['codigo']) ?></span>
-          <span class="gu-tag <?= h($est) ?>"><?= h($est) ?></span>
-          <?php if ($meta !== ''): ?><span class="gu-meta"><?= h($meta) ?></span><?php endif; ?>
-          <?php if ($pvp !== ''): ?><span class="gu-precio"><?= h($pvp) ?></span><?php endif; ?>
-          <?php if ($pvpNum > 0): ?><a class="gu-cot">Cotizar</a><?php endif; ?>
-        </div>
-      <?php endforeach; ?>
-    <?php endforeach; ?>
     <div class="gu-vacio" id="<?= $uid ?>_vacio" style="display:none">Sin resultados</div>
   </div>
+  <script>window['GU_DATOS_<?= $uid ?>'] = <?= json_encode($datos,
+      JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
 
   <div class="gu-pie">
     <span id="<?= $uid ?>_pie"></span>
@@ -563,6 +575,47 @@ foreach ($elegidos as $id) {
   var vacio   = document.getElementById('<?= $uid ?>_vacio');
   var pie     = document.getElementById('<?= $uid ?>_pie');
   var listoBt = document.getElementById('<?= $uid ?>_listo');
+
+  /*
+   * Se arman las filas desde el JSON, de un solo innerHTML.
+   *
+   * El HTML que sale de aquí es EL MISMO que antes imprimía PHP: mismas clases y
+   * mismos data-*, así que filtrar(), el clic de la fila y el marcado para cotizar
+   * siguen igual. Corre ANTES de capturar `filas`/`grupos`, que es lo único que
+   * pedía el orden anterior.
+   */
+  (function armarFilas(){
+    var D = window['GU_DATOS_<?= $uid ?>'] || [];
+    var esc = function(s){
+      return String(s).replace(/[&<>"]/g, function(c){
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+      });
+    };
+    // "$1.234.567" sin decimales, igual que el number_format del PHP que había
+    var money = function(n){ return '$' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); };
+    var h = [];
+    for (var i = 0; i < D.length; i++) {
+      var cid = esc(D[i][0]), nom = esc(D[i][1]), us = D[i][2];
+      if (!us || !us.length) continue;
+      h.push('<div class="gu-grupo" data-cat="', cid, '">', nom, '</div>');
+      for (var j = 0; j < us.length; j++) {
+        var u = us[j];                      // [id, codigo, estado, libre, meta, pvp]
+        var cod = esc(u[1]), est = esc(u[2]), libre = u[3] ? 1 : 0, meta = esc(u[4]), pvp = u[5] || 0;
+        h.push('<div class="gu-fila', (libre ? '' : ' gu-no'),
+               '" data-cat="', cid, '" data-cod="', esc(String(u[1]).toUpperCase()),
+               '" data-libre="', libre, '" data-id="', u[0], '" data-pvp="', pvp,
+               '" data-cod-txt="', cod, '" data-proy="', nom, '">',
+               '<span class="gu-cod">', cod, '</span>',
+               '<span class="gu-tag ', est, '">', est, '</span>');
+        if (meta) h.push('<span class="gu-meta">', meta, '</span>');
+        if (pvp)  h.push('<span class="gu-precio">', money(pvp), '</span>',
+                         '<a class="gu-cot">Cotizar</a>');
+        h.push('</div>');
+      }
+    }
+    // antes del "Sin resultados", que es lo único que ya vive en la lista
+    if (h.length && vacio) vacio.insertAdjacentHTML('beforebegin', h.join(''));
+  })();
 
   var filas  = Array.prototype.slice.call(R.querySelectorAll('.gu-fila'));
   var grupos = Array.prototype.slice.call(R.querySelectorAll('.gu-grupo'));
