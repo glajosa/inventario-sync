@@ -43,7 +43,10 @@ $DATA_DIR = getenv('DATA_DIR') ?: '/data';
     . ' value=' . substr((string)($_REQUEST['value'] ?? ''), 0, 40)
     . ' field_keys=[' . (is_array($_REQUEST['field'] ?? null) ? implode(',', array_keys($_REQUEST['field'])) : '-') . ']'
     . ' PLACEMENT=' . (string)($_REQUEST['PLACEMENT'] ?? '-')
-    . ' OPTIONS=' . substr((string)($_REQUEST['PLACEMENT_OPTIONS'] ?? '-'), 0, 400)
+    // 2000 y no 400: se está buscando qué distingue el render del modal "Complete
+    // los campos obligatorios" del de abrir el deal. Con 400 se cortaba justo
+    // después del URI, así que si Bitrix manda algo más ahí, nunca se vio.
+    . ' OPTIONS=' . substr((string)($_REQUEST['PLACEMENT_OPTIONS'] ?? '-'), 0, 2000)
     . "\n", FILE_APPEND | LOCK_EX);
 
 // Bitrix manda todo en PLACEMENT_OPTIONS (verificado en el log):
@@ -251,13 +254,10 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?>.gu-bloq .gu-fila{cursor:default}
   #<?= $uid ?>.gu-bloq .gu-fila:hover{background:transparent}
   #<?= $uid ?>.gu-bloq .gu-quita{display:none}
-  /* Nota al lado del campo. En Prospectos fuera de RESERVA la unidad se puede
-     ELEGIR pero todavía no queda apartada, y eso hay que decirlo: si no, el asesor
-     la ve puesta y cree que ya es suya cuando cualquiera puede llevársela. */
+  /* El candado vuelve a ser UNA sola línea de texto, como estaba al principio.
+     La nota queda en el DOM sin usarse: el estado se dice en el propio placeholder
+     y meter un segundo texto al lado ensuciaba el campo. */
   #<?= $uid ?> .gu-nota{display:none}
-  #<?= $uid ?>.gu-aviso .gu-nota, #<?= $uid ?>.gu-bloq .gu-nota{
-      display:inline-flex;align-items:center;color:#b8860b;font-size:11px;line-height:1.35}
-  #<?= $uid ?>.gu-bloq .gu-nota{color:#8b949e}
   /* cerrado: texto plano, igual que los campos nativos del deal (sin chips ni ✕) */
   #<?= $uid ?> .gu-txt{display:inline-flex;align-items:center;height:20px;overflow:hidden;
       white-space:nowrap;text-overflow:ellipsis}
@@ -498,6 +498,21 @@ foreach ($elegidos as $id) {
 
   var CFG = window['GU_CFG_<?= $uid ?>'] || {};
 
+  /*
+   * Encoger el iframe LO PRIMERO de todo.
+   *
+   * Bitrix crea el app-frame con 200px fijos, y hasta que corría el ajuste se veía
+   * un cuadro blanco enorme donde debería haber una línea: el ajuste vivía dentro
+   * de BX24.init(), que espera a que cargue la librería, y ese salto era bien
+   * visible. Ahora se pide al parsear el script; si BX24 todavía no está, se
+   * reintenta en cuanto esté (iniciar() vuelve a llamar a ajustarIframe()).
+   */
+  try {
+    if (typeof BX24 !== 'undefined') {
+      if (BX24.resizeWindow) BX24.resizeWindow(document.documentElement.scrollWidth || 400, 28);
+      if (BX24.fitWindow)    BX24.fitWindow();
+    }
+  } catch(e) {}
 
   var BLOQ = false;             // true = la etapa del deal no permite elegir unidad
   var val     = document.getElementById('<?= $uid ?>_val');
@@ -929,27 +944,25 @@ foreach ($elegidos as $id) {
    *
    * Aquí lo único que hace falta es no dejar creer al asesor que ya la tiene.
    */
-  function avisoEtapa(){
-    if (!CFG.deal) return;  // deal nuevo: no hay etapa que consultar todavía
-    if (typeof BX24 === 'undefined' || !BX24.callMethod) return;
+  function candadoEtapa(){
+    if (!CFG.deal) return;  // deal nuevo: no hay etapa que comprobar todavía
+    // FAIL-CLOSED: cerrado hasta que se confirme que la etapa deja elegir. Si
+    // arrancara abierto, entre el render y la respuesta del crm.deal.get hay una
+    // ventana en la que se puede elegir igual — así quedó apartada la A-1-1.
+    bloquear('verificando');
+    if (typeof BX24 === 'undefined' || !BX24.callMethod) { bloquear('sin-verificar'); return; }
     try {
       BX24.callMethod('crm.deal.get', {id: CFG.deal}, function(res){
         try {
-          if (!res || (res.error && res.error())) return;
+          if (!res || (res.error && res.error())) { bloquear('sin-verificar'); return; }
           var d = res.data() || {};
-          if (String(d.CATEGORY_ID) !== String(CFG.prospectos)) return;   // no es Prospectos
-          if (String(d.STAGE_ID) === String(CFG.reserva28))     return;   // ya está en RESERVA
-          avisar('Se aparta al pasar a RESERVA · hasta entonces sigue disponible');
-        } catch(e) {}
+          // fuera de Prospectos, o ya en RESERVA: el campo se usa normal
+          if (String(d.CATEGORY_ID) !== String(CFG.prospectos)) { desbloquear(); return; }
+          if (String(d.STAGE_ID) === String(CFG.reserva28))     { desbloquear(); return; }
+          bloquear();
+        } catch(e) { bloquear('sin-verificar'); }
       });
-    } catch(e) {}
-  }
-
-  /** Nota al lado del campo. No toca lo que se puede hacer, solo lo explica. */
-  function avisar(txt){
-    if (notaEl) notaEl.textContent = txt;
-    R.classList.toggle('gu-aviso', !!txt);
-    ajustarIframe();
+    } catch(e) { bloquear('sin-verificar'); }
   }
 
   /**
@@ -958,32 +971,29 @@ foreach ($elegidos as $id) {
    * mensaje: mentir con "se elige en RESERVA" cuando en realidad no pudimos
    * comprobar la etapa manda al asesor a buscar un problema que no existe.
    *
-   * OJO: hoy NADIE la llama. El candado de etapa del 28 se retiró de aquí porque
-   * el campo es obligatorio para entrar a RESERVA y bloquearlo hacía imposible el
-   * cambio de etapa; la regla la garantiza el servidor en apartar_prospecto(). Se
-   * conserva el mecanismo entero (BLOQ + .gu-bloq) porque funciona y sirve para
-   * cualquier otro caso en que haya que dejar el campo de solo lectura.
+   * Se mantiene en UNA línea de texto, como estaba al principio: el asesor abre el
+   * desplegable, mira disponibles, marca las que quiera y cotiza (esa selección es
+   * aparte, `selCot`, y no se guarda ni ocupa nada). Lo único apagado es elegir la
+   * unidad de verdad.
    */
   function bloquear(motivo){
     BLOQ = true;
     R.classList.add('gu-bloq');
-    // El texto del campo queda corto y neutro: el botón es el que dice qué SÍ se
-    // puede hacer, y la nota dice por qué lo otro todavía no.
-    var txtPh, nota, txtTitle;
+    var txtPh, txtTitle;
     if (motivo === 'verificando') {
-      txtPh = '—';  nota = 'Comprobando etapa…';
+      txtPh = 'Ver inventario…';
       txtTitle = 'Comprobando la etapa del deal…';
     } else if (motivo === 'sin-verificar') {
-      txtPh = '—';  nota = 'No pude comprobar la etapa · recarga el deal';
+      txtPh = 'Ver inventario (no pude comprobar la etapa · recarga el deal)';
       txtTitle = 'No pude comprobar la etapa del deal. Puedes consultar y cotizar; para apartar, recarga el deal.';
     } else {
-      txtPh = '—';  nota = 'Apartar se habilita en RESERVA';
+      txtPh = 'Ver inventario (se elige en RESERVA)';
       txtTitle = 'Puedes consultar y cotizar el inventario; apartar la unidad se hace en la etapa RESERVA';
     }
     campo.title = txtTitle;
     var ph = campo.querySelector('.gu-ph');
     if (ph) ph.textContent = txtPh;
-    if (notaEl) notaEl.textContent = nota;
+    if (notaEl) notaEl.textContent = '';
     ajustarIframe();
   }
 
@@ -999,7 +1009,7 @@ foreach ($elegidos as $id) {
   }
 
   pintar(); pintarElegidas();
-  function iniciar(){ ajustarIframe(); avisoEtapa(); }
+  function iniciar(){ ajustarIframe(); candadoEtapa(); }
   if (typeof BX24 !== 'undefined') { try { BX24.init(iniciar); } catch(e) { iniciar(); } }
 
 
