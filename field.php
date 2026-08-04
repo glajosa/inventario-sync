@@ -90,13 +90,17 @@ $enKanban = (bool)preg_match('#/crm/deal/kanban/#', (string)($opciones['URI'] ??
 // SERVIDOR, al ver él mismo que el render viene del modal; el navegador no puede
 // fabricarlo (no tiene OUTBOUND_TOKEN), solo reenviarlo. Por eso guardar.php
 // puede confiar en él en vez de en un flag suelto tipo "?kanban=1".
-// Se firma en TODO render (antes solo en el del kanban). Motivo: el modal abierto
-// desde DENTRO del deal manda exactamente lo mismo que un render normal —
-// MODE=edit, URI de /details/, MANDATORY=N, y hasta las cabeceras HTTP idénticas
-// (comprobado generando los dos casos y comparándolos). Desde el servidor NO hay
-// forma de distinguirlo, así que el que lo detecta es el navegador (ver EN_MODAL)
-// y solo entonces reenvía este permiso. El token nunca sale de aquí.
-$permisoEtapa = ($dealId > 0)
+// Se firma SOLO cuando el render viene del kanban. Antes se firmaba en todo render
+// y era el navegador el que decidía reenviarlo o no, midiendo su propio ancho: eso
+// convertía "tengo la ventana angosta" en "puedo apartar en cualquier etapa del 28"
+// (ver el comentario largo de EN_MODAL, y la A-1-1 que quedó trabada por eso).
+//
+// El precio de cerrarlo: el modal de campos obligatorios abierto desde DENTRO del
+// deal ya no puede apartar, porque desde el servidor es indistinguible de un render
+// normal — manda MODE=edit, URI de /details/, MANDATORY=N y hasta las cabeceras
+// HTTP idénticas (comprobado generando los dos casos y comparándolos). Ese camino
+// se hace desde el kanban, o dejando que el deal llegue a RESERVA y eligiendo ahí.
+$permisoEtapa = ($dealId > 0 && $enKanban)
     ? hash_hmac('sha256', $dealId . '|kanban', (string)getenv('OUTBOUND_TOKEN'))
     : '';
 
@@ -503,17 +507,31 @@ foreach ($elegidos as $id) {
 
   var CFG = window['GU_CFG_<?= $uid ?>'] || {};
 
-  // ¿Estamos dentro del modal "Complete los campos obligatorios para cambiar la
-  // etapa"? Bitrix no lo dice por ningún lado, pero SÍ le da al iframe un ancho
-  // distinto: ~470px en ese modal contra ~645px en la ficha (medido en vivo con
-  // los dos casos abiertos a la vez). Se mide ANTES de llamar a resizeWindow,
-  // que cambiaría el ancho.
-  //
-  // Es una heurística, y por eso solo decide lo VISUAL (si el candado se abre).
-  // Lo que garantiza la regla de negocio no depende de esto: el apartado de la
-  // unidad y el portero anti doble-venta siguen viviendo en el servidor.
-  var ANCHO0   = window.innerWidth || 0;
-  var EN_MODAL = !!CFG.kanban || (ANCHO0 > 0 && ANCHO0 < 560);
+  /*
+   * ANTES: EN_MODAL = CFG.kanban || window.innerWidth < 560.
+   *
+   * La idea era detectar el modal "Complete los campos obligatorios" por el ancho
+   * del iframe (~470px en el modal contra ~645px en la ficha). El comentario decía
+   * que la heurística "solo decide lo VISUAL" — y era falso: EN_MODAL también
+   * decide si se manda `permiso`, y guardar.php acepta ese permiso como bypass
+   * COMPLETO del candado de etapa. O sea el ancho de la ventana apagaba la regla
+   * de negocio, y de paso candadoEtapa() hacía return y no se pintaba ni el
+   * candado.
+   *
+   * No era un caso raro: en la ficha de un deal del 28, con la ventana normal, la
+   * columna del campo mide ~435px (medido en vivo el 2026-08-04). O sea el bypass
+   * estaba activo en la vista de todos los días. Así quedó la A-1-1 de Noral
+   * Apartments apartada por un prospecto en VOLVER A LLAMAR.
+   *
+   * AHORA: la única excepción es el kanban, que el SERVIDOR reconoce por la URI
+   * (`$enKanban`), no el navegador por su tamaño. Fuera de RESERVA el campo se
+   * consulta y se cotiza, pero no aparta — que es la regla, sin adivinanzas.
+   *
+   * Sigue siendo un dato que viaja por el navegador (PLACEMENT_OPTIONS llega en el
+   * POST), así que alguien con las devtools abiertas podría falsearlo a propósito.
+   * Lo que se acabó es apartar sin querer sólo por tener la ventana angosta.
+   */
+  var EN_MODAL = !!CFG.kanban;
 
   var BLOQ = false;             // true = la etapa del deal no permite elegir unidad
   var val     = document.getElementById('<?= $uid ?>_val');
@@ -604,8 +622,9 @@ foreach ($elegidos as $id) {
     cuerpo.set('deal',  CFG.deal);
     cuerpo.set('valor', val.value);
     cuerpo.set('firma', CFG.firma);
-    // Solo desde el modal. Si se mandara siempre, el candado de etapa no serviría
-    // de nada: cualquier render podría saltárselo.
+    // Solo desde el kanban (EN_MODAL ya es exactamente eso). Si se mandara siempre,
+    // el candado de etapa no serviría de nada: cualquier render lo saltaría — que
+    // es justo lo que pasaba cuando esto dependía del ancho de la ventana.
     if (CFG.permiso && EN_MODAL) cuerpo.set('permiso', CFG.permiso);
 
     fetch('guardar.php', {method:'POST', body:cuerpo})

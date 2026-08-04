@@ -85,12 +85,17 @@ if ($cat === COBRANZAS_CAT && $ids === []) {
 // una unidad mal apartada sin tener que mover el deal de etapa.
 // Este es el candado de verdad; el de field.php es solo la capa visual.
 //
-// EXCEPCIÓN: el modal "Complete los campos obligatorios para cambiar la etapa".
-// El campo está marcado obligatorio para entrar a RESERVA, así que sin esta
-// excepción el candado se muerde la cola: no se puede elegir hasta estar en
-// RESERVA, y Bitrix no deja entrar a RESERVA sin haber elegido. field.php firma
-// el permiso SOLO cuando el propio servidor ve que el render viene de ese modal
-// (URI del kanban); el navegador no tiene el token, así que no puede fabricarlo.
+// EXCEPCIÓN: el kanban. Al arrastrar a RESERVA, Bitrix pide el campo obligatorio
+// antes de mover, así que sin excepción el candado se muerde la cola. field.php
+// firma el permiso SOLO en los renders cuya URI es la del kanban; el navegador no
+// tiene OUTBOUND_TOKEN, así que no puede fabricarlo.
+//
+// Ago-2026: esta excepción estaba MUCHO más abierta de lo que dice este comentario.
+// field.php firmaba el permiso en TODO render y el navegador lo reenviaba cuando se
+// veía a sí mismo con menos de 560px de ancho — y la columna del campo en la ficha
+// de un deal mide ~435px. O sea el bypass estaba activo en la vista normal, y por
+// ahí se apartó la A-1-1 de Noral Apartments desde VOLVER A LLAMAR. Ahora la firma
+// solo existe si el render viene del kanban.
 $permisoOk = false;
 $permiso   = (string)($_POST['permiso'] ?? '');
 if ($permiso !== '') {
