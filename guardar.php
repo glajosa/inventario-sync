@@ -96,18 +96,22 @@ if ($cat === COBRANZAS_CAT && $ids === []) {
 // de un deal mide ~435px. O sea el bypass estaba activo en la vista normal, y por
 // ahí se apartó la A-1-1 de Noral Apartments desde VOLVER A LLAMAR. Ahora la firma
 // solo existe si el render viene del kanban.
-$permisoOk = false;
-$permiso   = (string)($_POST['permiso'] ?? '');
-if ($permiso !== '') {
-    $esperado  = hash_hmac('sha256', $dealId . '|kanban', (string)getenv('OUTBOUND_TOKEN'));
-    $permisoOk = hash_equals($esperado, $permiso);
-    if (!$permisoOk) logline("deal=$dealId permiso de etapa INVALIDO");
-}
-if ($cat === PROSPECTOS_CAT && $limpio !== '' && !$permisoOk && $stage !== etapa_28_reserva()) {
-    logline("deal=$dealId RECHAZADO: etapa $stage no es RESERVA (28)");
-    echo json_encode(['ok' => false,
-        'error' => 'En Prospectos Ventas la unidad solo se elige en la etapa RESERVA']); exit;
-}
+// Ago-2026: aquí YA NO se rechaza nada por etapa, y el permiso del kanban se fue
+// con él. La regla se mudó a apartar_prospecto() en campolib.php, que es por donde
+// pasan los cuatro caminos (este, hook.php, sync-campo.php y reconcile.php).
+//
+// Motivo: rechazar la ESCRITURA DEL CAMPO era incompatible con que el campo sea
+// OBLIGATORIO para entrar a RESERVA. Bitrix lo pide ANTES de mover, y ahí el deal
+// todavía no está en RESERVA, así que el guardado se rechazaba y el asesor no podía
+// pasar la etapa — ni desde el deal ni desde el kanban. Y no hay forma de detectar
+// ese momento desde el servidor (MANDATORY llega "N" siempre, MODE "edit" también
+// viene de /details/); el intento de adivinarlo por el ancho del iframe dejó el
+// candado abierto en la vista normal del deal.
+//
+// Ahora: ELEGIR se guarda en cualquier etapa, APARTAR (mover la unidad a RESERVADO)
+// solo ocurre en RESERVA. Lo que había que evitar era trabar inventario, y elegir
+// ya no traba: la unidad sigue DISPONIBLE hasta que el deal llegue a RESERVA.
+$enReserva28 = ($cat === PROSPECTOS_CAT) && ($stage === etapa_28_reserva());
 
 // COBRANZAS: si el vendedor abre el campo y guarda SIN cambiar la unidad, esto se
 // tiene que ver como "no pasó nada". Sin esta salida temprana caía en el candado
@@ -169,4 +173,13 @@ if ($cat === COBRANZAS_CAT) {
 $r = sincronizar_deal($dealId, $deal);
 logline("deal=$dealId guardado=[$limpio] sync=" . json_encode($r));
 
-echo json_encode(['ok' => true, 'guardado' => $limpio, 'sync' => $r]);
+// En Prospectos fuera de RESERVA el campo SÍ se guardó pero la unidad NO se apartó.
+// Se dice explícito para que el asesor no crea que ya la tiene: hasta que el deal
+// entre a RESERVA la unidad sigue disponible y otro puede llevársela.
+$nota = null;
+if ($cat === PROSPECTOS_CAT && !$enReserva28 && $limpio !== '') {
+    $nota = 'Unidad elegida. Se aparta cuando el deal pase a RESERVA — hasta entonces sigue disponible.';
+}
+echo json_encode(array_filter([
+    'ok' => true, 'guardado' => $limpio, 'sync' => $r, 'nota' => $nota,
+], fn($v) => $v !== null));

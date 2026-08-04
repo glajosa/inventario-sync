@@ -77,32 +77,17 @@ $name   = (string)($opciones['FIELD_NAME'] ?? ($_REQUEST['field']['NAME'] ?? $_R
 $value = (string)($opciones['VALUE'] ?? $_REQUEST['value'] ?? '');
 if ($value === 'null') $value = '';
 
-// El modal "Complete los campos obligatorios para cambiar la etapa" se renderiza
-// con el URI del KANBAN, no con el del deal. Verificado en web.log: de 250+
-// renders, es el ÚNICO cuyo URI es /crm/deal/kanban/... (el resto son
-// /crm/deal/details/<id>/?IFRAME=Y). Ahí el campo se está pidiendo PARA pasar a
-// RESERVA, así que el candado de etapa tiene que abrirse: si no, el vendedor
-// queda trabado — no puede llenar el obligatorio hasta estar en RESERVA, y
-// Bitrix no lo deja entrar a RESERVA sin llenarlo.
-$enKanban = (bool)preg_match('#/crm/deal/kanban/#', (string)($opciones['URI'] ?? ''));
-
-// Permiso de un solo uso lógico para saltarse el candado de etapa. Lo firma el
-// SERVIDOR, al ver él mismo que el render viene del modal; el navegador no puede
-// fabricarlo (no tiene OUTBOUND_TOKEN), solo reenviarlo. Por eso guardar.php
-// puede confiar en él en vez de en un flag suelto tipo "?kanban=1".
-// Se firma SOLO cuando el render viene del kanban. Antes se firmaba en todo render
-// y era el navegador el que decidía reenviarlo o no, midiendo su propio ancho: eso
-// convertía "tengo la ventana angosta" en "puedo apartar en cualquier etapa del 28"
-// (ver el comentario largo de EN_MODAL, y la A-1-1 que quedó trabada por eso).
+// El campo es OBLIGATORIO para entrar a RESERVA, así que Bitrix lo pide ANTES de
+// mover el deal. Aquí hubo dos intentos de detectar ese momento para abrirle el
+// candado: la URI del kanban (solo cubre arrastrar en el tablero) y el ancho del
+// iframe (<560px, que resultó ser también el de la ficha normal, o sea el candado
+// quedaba abierto siempre). Ninguno servía, porque desde el servidor ese render es
+// idéntico al de abrir el deal: MANDATORY llega "N" y MODE "edit" también sale de
+// /details/, comprobado en el log real.
 //
-// El precio de cerrarlo: el modal de campos obligatorios abierto desde DENTRO del
-// deal ya no puede apartar, porque desde el servidor es indistinguible de un render
-// normal — manda MODE=edit, URI de /details/, MANDATORY=N y hasta las cabeceras
-// HTTP idénticas (comprobado generando los dos casos y comparándolos). Ese camino
-// se hace desde el kanban, o dejando que el deal llegue a RESERVA y eligiendo ahí.
-$permisoEtapa = ($dealId > 0 && $enKanban)
-    ? hash_hmac('sha256', $dealId . '|kanban', (string)getenv('OUTBOUND_TOKEN'))
-    : '';
+// Ya no hace falta detectarlo. La regla la garantiza apartar_prospecto() en
+// campolib.php: elegir la unidad se puede en cualquier etapa (así el obligatorio
+// funciona desde el deal y desde el kanban) y apartarla solo pasa en RESERVA.
 
 // Guardar NO puede depender del formulario del deal: el campo vive en un iframe
 // y su <input> nunca viaja en el submit. Se guarda por API desde el navegador,
@@ -266,22 +251,13 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?>.gu-bloq .gu-fila{cursor:default}
   #<?= $uid ?>.gu-bloq .gu-fila:hover{background:transparent}
   #<?= $uid ?>.gu-bloq .gu-quita{display:none}
-  /* Bloqueado, el campo se veía como un campo muerto en gris ("Ver inventario (se
-     elige en RESERVA)") y nadie adivinaba que igual se puede abrir para consultar y
-     cotizar. Ahora lo dice con un botón de verdad, y aparte la nota de por qué no
-     se puede apartar todavía. Dos acciones separadas en el mismo campo. */
-  #<?= $uid ?> .gu-vercot{display:none}
-  #<?= $uid ?>.gu-bloq .gu-vercot{display:inline-flex;align-items:center;gap:5px;
-      border:1px solid #c3d5e8;background:#f1f6fb;color:#0b62c4;border-radius:5px;
-      font:inherit;font-size:11.5px;font-weight:600;padding:3px 9px;cursor:pointer;
-      line-height:1.35}
-  #<?= $uid ?>.gu-bloq .gu-vercot:hover{background:#e4eef8;border-color:#a8c4e0}
+  /* Nota al lado del campo. En Prospectos fuera de RESERVA la unidad se puede
+     ELEGIR pero todavía no queda apartada, y eso hay que decirlo: si no, el asesor
+     la ve puesta y cree que ya es suya cuando cualquiera puede llevársela. */
   #<?= $uid ?> .gu-nota{display:none}
-  #<?= $uid ?>.gu-bloq .gu-nota{display:inline-flex;align-items:center;color:#8b949e;
-      font-size:11px;line-height:1.35}
-  /* bloqueado el texto del campo ya no invita a clickear: el botón es el que invita */
-  #<?= $uid ?>.gu-bloq .gu-campo{cursor:default}
-  #<?= $uid ?>.gu-bloq .gu-caret{display:none}
+  #<?= $uid ?>.gu-aviso .gu-nota, #<?= $uid ?>.gu-bloq .gu-nota{
+      display:inline-flex;align-items:center;color:#b8860b;font-size:11px;line-height:1.35}
+  #<?= $uid ?>.gu-bloq .gu-nota{color:#8b949e}
   /* cerrado: texto plano, igual que los campos nativos del deal (sin chips ni ✕) */
   #<?= $uid ?> .gu-txt{display:inline-flex;align-items:center;height:20px;overflow:hidden;
       white-space:nowrap;text-overflow:ellipsis}
@@ -418,12 +394,10 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     firma: <?= json_encode($dealId > 0
         ? hash_hmac('sha256', (string)$dealId, (string)getenv('OUTBOUND_TOKEN'))
         : '') ?>,
-    // candado visual: en PROSPECTOS(28) la unidad solo se elige en RESERVA
+    // Para el aviso: en PROSPECTOS(28) fuera de RESERVA la unidad se puede elegir
+    // pero todavía no queda apartada, y el asesor tiene que saberlo.
     prospectos: 28,
-    reserva28: <?= json_encode(reserva28_cache()) ?>,
-    // modal de campos obligatorios del kanban: ahí el candado se abre
-    kanban:  <?= $enKanban ? 'true' : 'false' ?>,
-    permiso: <?= json_encode($permisoEtapa) ?>
+    reserva28: <?= json_encode(reserva28_cache()) ?>
   };
 </script>
 
@@ -443,11 +417,6 @@ foreach ($elegidos as $id) {
   <span class="gu-txt" id="<?= $uid ?>_txt"><?= $piezas
       ? implode('<span class="gu-sep">&middot;</span>', $piezas)
       : '<span class="gu-ph">Elegir unidad&hellip;</span>' ?></span>
-  <!-- Solo se ven con .gu-bloq (ver CSS). El botón abre el MISMO panel, que estando
-       bloqueado ya es de consulta: filas sin clic y sin ✕. No hay un segundo iframe
-       porque el catálogo, el buscador y el cotizador son los de siempre; lo que
-       cambia es que ahora se entra por una puerta que se ve. -->
-  <button type="button" class="gu-vercot" id="<?= $uid ?>_vercot">Ver disponibles y cotizar</button>
   <span class="gu-nota" id="<?= $uid ?>_nota"></span>
   <span class="gu-caret">&#9660;</span>
 </div>
@@ -529,37 +498,11 @@ foreach ($elegidos as $id) {
 
   var CFG = window['GU_CFG_<?= $uid ?>'] || {};
 
-  /*
-   * ANTES: EN_MODAL = CFG.kanban || window.innerWidth < 560.
-   *
-   * La idea era detectar el modal "Complete los campos obligatorios" por el ancho
-   * del iframe (~470px en el modal contra ~645px en la ficha). El comentario decía
-   * que la heurística "solo decide lo VISUAL" — y era falso: EN_MODAL también
-   * decide si se manda `permiso`, y guardar.php acepta ese permiso como bypass
-   * COMPLETO del candado de etapa. O sea el ancho de la ventana apagaba la regla
-   * de negocio, y de paso candadoEtapa() hacía return y no se pintaba ni el
-   * candado.
-   *
-   * No era un caso raro: en la ficha de un deal del 28, con la ventana normal, la
-   * columna del campo mide ~435px (medido en vivo el 2026-08-04). O sea el bypass
-   * estaba activo en la vista de todos los días. Así quedó la A-1-1 de Noral
-   * Apartments apartada por un prospecto en VOLVER A LLAMAR.
-   *
-   * AHORA: la única excepción es el kanban, que el SERVIDOR reconoce por la URI
-   * (`$enKanban`), no el navegador por su tamaño. Fuera de RESERVA el campo se
-   * consulta y se cotiza, pero no aparta — que es la regla, sin adivinanzas.
-   *
-   * Sigue siendo un dato que viaja por el navegador (PLACEMENT_OPTIONS llega en el
-   * POST), así que alguien con las devtools abiertas podría falsearlo a propósito.
-   * Lo que se acabó es apartar sin querer sólo por tener la ventana angosta.
-   */
-  var EN_MODAL = !!CFG.kanban;
 
   var BLOQ = false;             // true = la etapa del deal no permite elegir unidad
   var val     = document.getElementById('<?= $uid ?>_val');
   var campo    = document.getElementById('<?= $uid ?>_campo');
   var notaEl   = document.getElementById('<?= $uid ?>_nota');
-  var verCot   = document.getElementById('<?= $uid ?>_vercot');
   var txt      = document.getElementById('<?= $uid ?>_txt');
   var elegidas = document.getElementById('<?= $uid ?>_elegidas');
   var COT = <?= json_encode(cot_base($dealId), JSON_UNESCAPED_SLASHES) ?>;
@@ -646,10 +589,6 @@ foreach ($elegidos as $id) {
     cuerpo.set('deal',  CFG.deal);
     cuerpo.set('valor', val.value);
     cuerpo.set('firma', CFG.firma);
-    // Solo desde el kanban (EN_MODAL ya es exactamente eso). Si se mandara siempre,
-    // el candado de etapa no serviría de nada: cualquier render lo saltaría — que
-    // es justo lo que pasaba cuando esto dependía del ancho de la ventana.
-    if (CFG.permiso && EN_MODAL) cuerpo.set('permiso', CFG.permiso);
 
     fetch('guardar.php', {method:'POST', body:cuerpo})
       .then(function(r){ return r.json(); })
@@ -891,14 +830,6 @@ foreach ($elegidos as $id) {
       abrirUnidad(ir.dataset.ir);
       return;
     }
-    // bloqueado, el campo entero deja de ser el interruptor: se entra por el botón
-    if (BLOQ && !(ev.target.closest && ev.target.closest('.gu-vercot'))) return;
-    abrir(!R.classList.contains('abierto'));
-  });
-  // "Ver disponibles y cotizar": la puerta visible al panel de consulta. Abre el
-  // mismo panel, que con .gu-bloq ya viene sin poder elegir (filas sin clic, sin ✕).
-  if (verCot) verCot.addEventListener('click', function(ev){
-    ev.stopPropagation();
     abrir(!R.classList.contains('abierto'));
   });
   listoBt.addEventListener('click', function(){ abrir(false); });
@@ -987,26 +918,38 @@ foreach ($elegidos as $id) {
    * Ahora nace cerrado y solo se abre cuando se confirma que la etapa lo permite;
    * si la comprobación falla, se queda cerrado y lo dice.
    */
-  function candadoEtapa(){
-    // En el modal de obligatorios el campo se pide PARA pasar a RESERVA: si se
-    // bloquea ahí, el cambio de etapa queda imposible. El servidor ya firmó el
-    // permiso, así que guardar.php también lo va a aceptar.
-    if (EN_MODAL) return;   // el modal PIDE la unidad para poder pasar a RESERVA
-    if (!CFG.deal) return;  // deal nuevo: no hay etapa que comprobar todavía
-    bloquear('verificando');
-    if (typeof BX24 === 'undefined' || !BX24.callMethod) { bloquear('sin-verificar'); return; }
+  /*
+   * Ya NO bloquea: AVISA.
+   *
+   * El campo es obligatorio para entrar a RESERVA, así que bloquearlo fuera de
+   * RESERVA hacía imposible cambiar de etapa — ni desde el deal ni desde el kanban.
+   * La regla ahora la garantiza el servidor de otra forma (apartar_prospecto en
+   * campolib.php): elegir se puede en cualquier etapa, pero la unidad solo se
+   * aparta cuando el deal llega a RESERVA.
+   *
+   * Aquí lo único que hace falta es no dejar creer al asesor que ya la tiene.
+   */
+  function avisoEtapa(){
+    if (!CFG.deal) return;  // deal nuevo: no hay etapa que consultar todavía
+    if (typeof BX24 === 'undefined' || !BX24.callMethod) return;
     try {
       BX24.callMethod('crm.deal.get', {id: CFG.deal}, function(res){
         try {
-          if (!res || (res.error && res.error())) { bloquear('sin-verificar'); return; }
+          if (!res || (res.error && res.error())) return;
           var d = res.data() || {};
-          // fuera de Prospectos (o ya en RESERVA) el campo se usa normal
-          if (String(d.CATEGORY_ID) !== String(CFG.prospectos)) { desbloquear(); return; }
-          if (String(d.STAGE_ID) === String(CFG.reserva28))     { desbloquear(); return; }
-          bloquear();
-        } catch(e) { bloquear('sin-verificar'); }
+          if (String(d.CATEGORY_ID) !== String(CFG.prospectos)) return;   // no es Prospectos
+          if (String(d.STAGE_ID) === String(CFG.reserva28))     return;   // ya está en RESERVA
+          avisar('Se aparta al pasar a RESERVA · hasta entonces sigue disponible');
+        } catch(e) {}
       });
-    } catch(e) { bloquear('sin-verificar'); }
+    } catch(e) {}
+  }
+
+  /** Nota al lado del campo. No toca lo que se puede hacer, solo lo explica. */
+  function avisar(txt){
+    if (notaEl) notaEl.textContent = txt;
+    R.classList.toggle('gu-aviso', !!txt);
+    ajustarIframe();
   }
 
   /**
@@ -1014,6 +957,12 @@ foreach ($elegidos as $id) {
    * puede en cualquier etapa), lo que se apaga es elegir. `motivo` cambia el
    * mensaje: mentir con "se elige en RESERVA" cuando en realidad no pudimos
    * comprobar la etapa manda al asesor a buscar un problema que no existe.
+   *
+   * OJO: hoy NADIE la llama. El candado de etapa del 28 se retiró de aquí porque
+   * el campo es obligatorio para entrar a RESERVA y bloquearlo hacía imposible el
+   * cambio de etapa; la regla la garantiza el servidor en apartar_prospecto(). Se
+   * conserva el mecanismo entero (BLOQ + .gu-bloq) porque funciona y sirve para
+   * cualquier otro caso en que haya que dejar el campo de solo lectura.
    */
   function bloquear(motivo){
     BLOQ = true;
@@ -1050,7 +999,7 @@ foreach ($elegidos as $id) {
   }
 
   pintar(); pintarElegidas();
-  function iniciar(){ ajustarIframe(); candadoEtapa(); }
+  function iniciar(){ ajustarIframe(); avisoEtapa(); }
   if (typeof BX24 !== 'undefined') { try { BX24.init(iniciar); } catch(e) { iniciar(); } }
 
 

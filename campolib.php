@@ -292,6 +292,41 @@ function apartados_registro(): array {
     return is_array($j) ? $j : [];
 }
 
+/*
+ * PENDIENTES DEL 28 — deals de Prospectos que YA eligieron unidad pero todavía no
+ * están en RESERVA, así que la unidad NO está apartada.
+ *
+ * Existe para que hook.php sepa a quién vigilar sin gastar API: el hook recibe
+ * ONCRMDEALUPDATE de TODO el portal y descarta lo que no esté en su lista blanca
+ * (pipeline 44) sin una sola llamada. Meter los 89.302 deals del 28 en esa lista
+ * sería un crm.deal.get por cada edición de cualquier prospecto — el portal ya va
+ * al tope (~120 llamadas/min). Esta lista, en cambio, solo tiene los pocos deals
+ * que están negociando con una unidad ya elegida.
+ */
+function pendientes_28(): array {
+    global $DATA_DIR;
+    $j = json_decode((string)@file_get_contents($DATA_DIR . '/pendientes28.json'), true);
+    return is_array($j) ? $j : [];
+}
+function pendientes_28_marcar(int $dealId, bool $poner): void {
+    global $DATA_DIR;
+    $path = $DATA_DIR . '/pendientes28.json';
+    $fh = @fopen($path, 'c+');
+    if (!$fh) return;
+    @flock($fh, LOCK_EX);
+    $j = json_decode((string)stream_get_contents($fh), true);
+    $j = is_array($j) ? $j : [];
+    $k = (string)$dealId;
+    $antes = $j;
+    if ($poner) { $j[$k] = time(); } else { unset($j[$k]); }
+    if ($j !== $antes) {
+        ftruncate($fh, 0); rewind($fh);
+        fwrite($fh, json_encode($j));
+    }
+    @flock($fh, LOCK_UN);
+    fclose($fh);
+}
+
 /**
  * De una lista de IDs, devuelve las que SÍ se pueden atar a este deal.
  * Portero del servidor: la lista del campo pinta en gris lo ocupado, pero eso es
@@ -384,10 +419,54 @@ function apartar_prospecto(int $dealId, array $deal): array {
     $puestos = apartados_puestos();
     $movidas = 0;
 
+    /*
+     * LA REGLA DEL 28, en un solo sitio (ago-2026): la unidad se aparta SOLO si el
+     * deal está en RESERVA. Vive aquí y no en guardar.php a propósito, porque por
+     * aquí pasan los CUATRO caminos (guardar.php, hook.php, sync-campo.php y
+     * reconcile.php) y antes cada uno podía tener su propio criterio.
+     *
+     * Por qué se movió: antes la regla se aplicaba rechazando la ESCRITURA DEL CAMPO
+     * en guardar.php, y eso choca de frente con que el campo es OBLIGATORIO para
+     * entrar a RESERVA — Bitrix lo pide ANTES de mover, y en ese momento el deal
+     * todavía no está en RESERVA. Desde el servidor ese instante es indistinguible
+     * de abrir la ficha normal: verificado en el log real, MANDATORY siempre llega
+     * "N" y MODE "edit" también sale de /details/. Se intentó adivinarlo por el
+     * ancho del iframe (<560px) y el resultado fue que el candado quedó abierto en
+     * la vista de todos los días (la columna del campo mide ~435px): así se apartó
+     * la A-1-1 de Noral Apartments desde VOLVER A LLAMAR.
+     *
+     * Así que se separan las dos cosas que estaban pegadas:
+     *   ELEGIR  la unidad -> se puede en cualquier etapa. El campo obligatorio
+     *                        funciona igual si mueven desde el deal o desde el
+     *                        kanban. No hay nada que adivinar.
+     *   APARTAR la unidad -> solo en RESERVA. Mientras el deal no llegue, la unidad
+     *                        sigue DISPONIBLE para todos: elegirla no traba nada,
+     *                        que era exactamente el daño a evitar.
+     *
+     * Quien la aparta al llegar es hook.php, ya suscrito a ONCRMDEALUPDATE por
+     * webhook de salida (push, segundos). reconcile.php lo repite cada 15 min como
+     * red por si Bitrix pierde un evento. Si dos asesores eligieron la misma unidad,
+     * gana el primero que llegue a RESERVA y al segundo lo para unidades_asignables.
+     */
+    $enReserva = ((string)($deal['STAGE_ID'] ?? '')) === etapa_28_reserva();
+
+    // Se vigila solo lo que de verdad FALTA apartar. Si se marcara con "tiene
+    // unidad elegida" a secas, un deal que ya apartó en RESERVA y luego retrocedió
+    // de etapa quedaría pendiente para siempre, y el hook lo releería en cada
+    // edición sin nada que hacer. (Retroceder de etapa NO suelta la unidad: eso
+    // sería tirar una reserva real; la válvula para soltar sigue siendo vaciar el
+    // campo, que funciona en cualquier etapa.)
+    $yaApartadas = [];
+    foreach ($puestos as $uid => $dueno) {
+        if ((int)$dueno === $dealId) $yaApartadas[] = (int)$uid;
+    }
+    $faltanApartar = array_values(array_diff($quiere, $yaApartadas));
+    pendientes_28_marcar($dealId, !$enReserva && $faltanApartar !== []);
+
     // UNA lectura y UNA escritura por unidad. Antes eran tres crm.item.get y dos
     // crm.item.update de la MISMA unidad (~1,1 s medidos de puro trámite): uno por
     // el stage, otro por responsable/cliente, y un tercero para refrescar el caché.
-    foreach ($quiere as $uid) {
+    foreach (($enReserva ? $quiere : []) as $uid) {
         $uid = (int)$uid;
         $r = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $uid]);
         if (!$r['ok']) { logline("ERR get u=$uid: {$r['error']}"); continue; }
