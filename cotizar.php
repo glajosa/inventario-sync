@@ -264,15 +264,38 @@ $hoy  = new DateTimeImmutable('now');
   .imprimir{background:#fff !important;color:var(--accent-ink) !important;border-color:#fff !important}
   .imprimir:hover{background:oklch(93% 0.015 259) !important}
 
-  .envoltura{max-width:820px;margin:var(--space-xl) auto;padding:0 var(--space-md)}
+  /* Dos columnas: opciones a la izquierda, plan de pagos a la derecha — así se ve
+     todo a la vez sin subir y bajar. Mismo patrón (y mismo ancho de columna) que
+     el cotizador original. align-items:start para que el panel no se estire al
+     alto de la tabla. */
+  .envoltura{max-width:1240px;margin:var(--space-lg) auto;padding:0 var(--space-md);
+             display:grid;grid-template-columns:420px minmax(0,1fr);
+             gap:var(--space-lg);align-items:start}
+  /* Pantalla angosta: una sola columna, opciones arriba (como estaba antes). */
+  @media (max-width:1080px){
+    .envoltura{grid-template-columns:minmax(0,1fr)}
+    .tarjeta-opciones{position:static !important}
+  }
 
   /* ---------- Panel de opciones (tarjeta propia, separada de los resultados) ---------- */
+  /* Pegajoso bajo la barra (que mide ~53px): al recorrer una tabla de 56 cuotas
+     los controles siguen a la vista. max-height + overflow para que si el panel
+     llegara a ser más alto que la pantalla no queden campos inalcanzables. */
   .tarjeta-opciones{background:var(--paper);border:1px solid var(--border-2);border-radius:var(--radius-lg);
-                    padding:var(--space-lg);margin-bottom:var(--space-md);font-family:var(--font)}
-  .ajustes{display:flex;gap:var(--space-md);flex-wrap:wrap;align-items:flex-end}
+                    padding:var(--space-lg);font-family:var(--font);
+                    position:sticky;top:68px;max-height:calc(100vh - 88px);overflow-y:auto}
+  /* Rejilla de 2 columnas dentro del panel: los campos quedan alineados en vez de
+     ragged como los dejaba el flex-wrap. */
+  .ajustes{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-md) var(--space-sm);align-items:end}
+  .ajustes .col2{grid-column:1 / -1}
+  .ajustes .ir{grid-column:1 / -1;justify-self:start}
   .ajustes label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.07em;
                  color:var(--muted);margin-bottom:6px;font-weight:600}
-  .ajustes input,.ajustes select{padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+  /* width:100% para que cada campo llene su celda de la rejilla. Gana por
+     especificidad a las clases .w-* del marcado (clase+tipo vs clase sola), que
+     quedan sin efecto a propósito: en dos columnas los anchos fijos en px se
+     veían desalineados. */
+  .ajustes input,.ajustes select{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
                  font-size:14px;font-family:var(--font);color:var(--ink);background:#fff;
                  transition:border-color 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
   .ajustes input:hover,.ajustes select:hover{border-color:oklch(65% 0.03 259)}
@@ -280,7 +303,6 @@ $hoy  = new DateTimeImmutable('now');
                  box-shadow:0 0 0 3px oklch(45.4% 0.15 259 / .16)}
   .ajustes input:disabled{background:var(--paper-2);color:var(--muted);border-color:var(--border-2);cursor:not-allowed}
   .campo-fijo{font-size:11px;color:var(--muted);margin-top:4px;font-style:normal}
-  .w-xs{width:64px} .w-sm{width:84px} .w-md{width:104px} .w-lg{width:160px} .w-select{width:118px}
   /* Recalcular: azul marino de marca, no negro/tinta — el usuario lo pidió puntual
      junto con la franja de arriba. */
   .ajustes .ir{background:var(--chrome);color:#fff;border:0;border-radius:var(--radius-pill);
@@ -292,7 +314,7 @@ $hoy  = new DateTimeImmutable('now');
   /* Grupos de campos relacionados (firma diferida, extraordinaria): un rótulo que
      explica la idea en una frase, con sus campos justo debajo — para que no se lean
      como una fila suelta de labels sin conexión entre sí. */
-  .grupo{flex:1 1 100%;background:var(--paper-2);border:1px solid var(--border-2);border-radius:var(--radius-md);
+  .grupo{grid-column:1 / -1;background:var(--paper-2);border:1px solid var(--border-2);border-radius:var(--radius-md);
          padding:var(--space-md) var(--space-md);margin-top:var(--space-2xs)}
   .grupo-tit{font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:var(--space-sm);font-family:var(--font)}
   .grupo-campos{display:flex;gap:var(--space-md);flex-wrap:wrap;align-items:flex-end}
@@ -342,7 +364,9 @@ $hoy  = new DateTimeImmutable('now');
   @media print{
     body{background:#fff}
     .barra,.ajustes,.tarjeta-opciones,.noimp{display:none !important}
-    .envoltura{max-width:none;margin:0;padding:0}
+    /* display:block obligatorio: en pantalla .envoltura es una rejilla de 2
+       columnas, y al imprimir el documento tiene que ocupar la hoja completa. */
+    .envoltura{display:block;max-width:none;margin:0;padding:0}
     .tarjeta{box-shadow:none;border-radius:0;padding:0}
     thead th{background:var(--tinta) !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     tr.extra td,.precio,.legal{-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -363,16 +387,16 @@ $hoy  = new DateTimeImmutable('now');
     <input type="hidden" name="exp" value="<?= (int)$exp ?>">
     <input type="hidden" name="s" value="<?= h($sig) ?>">
     <?php if ($fusion): ?><input type="hidden" name="unif" value="0"><?php endif; ?>
-    <div><label>Cliente</label>
-      <input type="text" name="cliente" value="<?= h($cliente) ?>" placeholder="Nombre del cliente" class="w-lg"></div>
+    <div class="col2"><label>Cliente</label>
+      <input type="text" name="cliente" value="<?= h($cliente) ?>" placeholder="Nombre del cliente"></div>
     <div><label>Cuotas</label>
-      <input type="number" name="n" min="1" max="<?= (int)($plan['plazoMax'] ?? 120) ?>" value="<?= (int)$plan['cuotas'] ?>" class="w-sm"
+      <input type="number" name="n" min="1" max="<?= (int)($plan['plazoMax'] ?? 120) ?>" value="<?= (int)$plan['cuotas'] ?>"
              title="Se deshabilita si llenas 'o paga al mes' — el motor siempre prioriza el presupuesto sobre este número."></div>
     <!-- La otra forma de preguntar, y la que más se usa vendiendo: el cliente dice
          cuánto puede pagar al mes y salen las cuotas. Si se llena, MANDA sobre "Cuotas"
          (que por eso se deshabilita — ver script al final del formulario). -->
     <div><label>o paga al mes</label>
-      <input type="text" name="presu" inputmode="decimal" placeholder="$" class="w-md"
+      <input type="text" name="presu" inputmode="decimal" placeholder="$"
              value="<?= $presu > 0 ? h(number_format($presu, 0)) : '' ?>"></div>
     <div><label>Modalidad</label>
       <select name="mod">
@@ -384,11 +408,11 @@ $hoy  = new DateTimeImmutable('now');
     <!-- % a financiar antes de la entrega: 40 es lo común, piso de negocio 35
          (se topa DENTRO del motor, el min/max de aquí es solo guía visual). -->
     <div><label>Financia %</label>
-      <input type="number" name="financiar" min="35" max="100" step="1" class="w-xs"
+      <input type="number" name="financiar" min="35" max="100" step="1"
              value="<?= $vFinanciar !== '' ? h($vFinanciar) : round($plan['financiarPct']) ?>"
              title="% del precio que se paga antes de la entrega (separación + firma + cuotas + extraordinarias). Lo común es 40. El piso de negocio es 35 — no baja de ahí aunque se escriba menos."></div>
     <div><label>A la firma</label>
-      <input type="text" name="firma" inputmode="decimal" placeholder="auto" value="<?= h($vFirma) ?>" class="w-md"
+      <input type="text" name="firma" inputmode="decimal" placeholder="auto" value="<?= h($vFirma) ?>"
              title="Monto exacto que paga al firmar. Vacío = el que sale del reparto normal."></div>
 
     <!-- Grupo "firma diferida": los dos campos van juntos, con un rótulo arriba que
@@ -409,10 +433,10 @@ $hoy  = new DateTimeImmutable('now');
         <div><label>Meses</label>
           <input type="number" name="firmames" min="0" max="12" placeholder="0"
                  value="<?= (int)$plan['diferidoMeses'] > 0 ? (int)$plan['diferidoMeses'] : ($vFirmaMeses > 0 ? (int)$vFirmaMeses : '') ?>"
-                 class="w-xs" title="Sobre cuántos meses repartir la firma. Tope 12. Se calcula solo si llenas 'Cuota mensual de eso'."></div>
+                 title="Sobre cuántos meses repartir la firma. Tope 12. Se calcula solo si llenas 'Cuota mensual de eso'."></div>
         <div><label>Cuota mensual de eso</label>
           <input type="text" name="firmacuota" inputmode="decimal" placeholder="auto" value="<?= h($vFirmaCuota) ?>"
-                 class="w-md" title="Monto mensual editable de esa firma diferida. Si en 12 meses no alcanza a cubrirla, el resto se suma a las extraordinarias."></div>
+                 title="Monto mensual editable de esa firma diferida. Si en 12 meses no alcanza a cubrirla, el resto se suma a las extraordinarias."></div>
       </div>
     </div>
 
@@ -432,14 +456,14 @@ $hoy  = new DateTimeImmutable('now');
           Partir en 2 pagos
         </label>
         <div><label id="lbl-mes1"><?= $extraPartes === 2 ? 'Mes 1 de 2' : 'Mes de pago' ?></label>
-          <select name="extrames1" class="w-select">
+          <select name="extrames1">
             <?php for ($m = 1; $m <= 12; $m++): ?>
             <option value="<?= $m ?>" <?= (int)$plan['extraMes1'] === $m ? 'selected' : '' ?>><?= $mesesSel[$m] ?></option>
             <?php endfor; ?>
           </select></div>
         <div id="wrap-mes2" style="<?= $extraPartes === 2 ? '' : 'display:none' ?>">
           <label>Mes 2 de 2</label>
-          <select name="extrames2" class="w-select">
+          <select name="extrames2">
             <?php for ($m = 1; $m <= 12; $m++): ?>
             <option value="<?= $m ?>" <?= (int)$plan['extraMes2'] === $m ? 'selected' : '' ?>><?= $mesesSel[$m] ?></option>
             <?php endfor; ?>
@@ -448,7 +472,7 @@ $hoy  = new DateTimeImmutable('now');
     </div>
     <?php endif; ?>
     <?php if ($fusion): ?>
-    <div style="align-self:center">
+    <div class="col2" style="align-self:center">
       <label class="chk-linea" title="Unificado = un solo plan por el total. Separado = un plan por cada unidad.">
         <input type="checkbox" name="unif" value="1" <?= $unificar ? 'checked' : '' ?>>
         Unificar las <?= count($unidades) ?> en un solo plan
@@ -457,7 +481,7 @@ $hoy  = new DateTimeImmutable('now');
     <?php endif; ?>
     <?php if ($suites >= 2): ?>
     <!-- Solo aparece con 2+ suites de Noral Plaza: es el único caso donde la regla existe. -->
-    <div style="align-self:center">
+    <div class="col2" style="align-self:center">
       <label class="chk-linea">
         <input type="checkbox" name="sinparq" value="1" <?= $sinParqueo ? 'checked' : '' ?>>
         Una unidad sin parqueo <b>(−<?= h(cot_money((float)COT_PARQUEO)) ?>)</b>
