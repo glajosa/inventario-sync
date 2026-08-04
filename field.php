@@ -394,10 +394,16 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     firma: <?= json_encode($dealId > 0
         ? hash_hmac('sha256', (string)$dealId, (string)getenv('OUTBOUND_TOKEN'))
         : '') ?>,
-    // Para el aviso: en PROSPECTOS(28) fuera de RESERVA la unidad se puede elegir
-    // pero todavía no queda apartada, y el asesor tiene que saberlo.
     prospectos: 28,
-    reserva28: <?= json_encode(reserva28_cache()) ?>
+    reserva28: <?= json_encode(reserva28_cache()) ?>,
+    // MODO: la señal que distingue el modal de campos obligatorios de la ficha
+    // normal, y la manda Bitrix. Verificado con un caso real el 2026-08-04 (deal
+    // 402071): todos los renders de abrir y navegar el deal llegan con MODE=view,
+    // y el ÚNICO con MODE=edit es el del modal "Complete todos los campos
+    // requeridos para cambiar la etapa". No confundir con la vista de solo lectura
+    // de este mismo archivo: esa solo se usa si Bitrix manda `solo_lectura`, que
+    // no manda nunca, así que el desplegable se dibuja igual en los dos modos.
+    modo: <?= json_encode($mode) ?>
   };
 </script>
 
@@ -945,6 +951,25 @@ foreach ($elegidos as $id) {
    * Aquí lo único que hace falta es no dejar creer al asesor que ya la tiene.
    */
   function candadoEtapa(){
+    /*
+     * El modal "Complete todos los campos requeridos para cambiar la etapa" pide
+     * ESTE campo para poder pasar a RESERVA. Si ahí se bloquea, el candado se
+     * muerde la cola: no se puede elegir hasta estar en RESERVA y Bitrix no deja
+     * entrar a RESERVA sin haber elegido. Y da igual si el asesor mueve la etapa
+     * desde el deal o arrastrando en el kanban: el modal es el mismo.
+     *
+     * Se reconoce por MODE=edit, que lo manda Bitrix. Comprobado con un caso real
+     * (deal 402071, 2026-08-04): abrir y navegar el deal produce MODE=view en
+     * todos los renders, y el único MODE=edit es el del modal. Es una señal del
+     * servidor, no una medida del navegador — el intento anterior de adivinarlo por
+     * el ancho del iframe (<560px) daba positivo también en la ficha normal, y por
+     * ahí se apartó la A-1-1 de Noral Apartments desde VOLVER A LLAMAR.
+     *
+     * Queda un caso que también entra por aquí: pulsar "editar" en la sección del
+     * deal. Es un acto deliberado y poco común, y aun así no puede trabar nada — el
+     * servidor solo aparta en RESERVA (apartar_prospecto en campolib.php).
+     */
+    if (CFG.modo === 'edit') return;
     if (!CFG.deal) return;  // deal nuevo: no hay etapa que comprobar todavía
     // FAIL-CLOSED: cerrado hasta que se confirme que la etapa deja elegir. Si
     // arrancara abierto, entre el render y la respuesta del crm.deal.get hay una
