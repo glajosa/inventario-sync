@@ -266,6 +266,22 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?>.gu-bloq .gu-fila{cursor:default}
   #<?= $uid ?>.gu-bloq .gu-fila:hover{background:transparent}
   #<?= $uid ?>.gu-bloq .gu-quita{display:none}
+  /* Bloqueado, el campo se veía como un campo muerto en gris ("Ver inventario (se
+     elige en RESERVA)") y nadie adivinaba que igual se puede abrir para consultar y
+     cotizar. Ahora lo dice con un botón de verdad, y aparte la nota de por qué no
+     se puede apartar todavía. Dos acciones separadas en el mismo campo. */
+  #<?= $uid ?> .gu-vercot{display:none}
+  #<?= $uid ?>.gu-bloq .gu-vercot{display:inline-flex;align-items:center;gap:5px;
+      border:1px solid #c3d5e8;background:#f1f6fb;color:#0b62c4;border-radius:5px;
+      font:inherit;font-size:11.5px;font-weight:600;padding:3px 9px;cursor:pointer;
+      line-height:1.35}
+  #<?= $uid ?>.gu-bloq .gu-vercot:hover{background:#e4eef8;border-color:#a8c4e0}
+  #<?= $uid ?> .gu-nota{display:none}
+  #<?= $uid ?>.gu-bloq .gu-nota{display:inline-flex;align-items:center;color:#8b949e;
+      font-size:11px;line-height:1.35}
+  /* bloqueado el texto del campo ya no invita a clickear: el botón es el que invita */
+  #<?= $uid ?>.gu-bloq .gu-campo{cursor:default}
+  #<?= $uid ?>.gu-bloq .gu-caret{display:none}
   /* cerrado: texto plano, igual que los campos nativos del deal (sin chips ni ✕) */
   #<?= $uid ?> .gu-txt{display:inline-flex;align-items:center;height:20px;overflow:hidden;
       white-space:nowrap;text-overflow:ellipsis}
@@ -427,6 +443,12 @@ foreach ($elegidos as $id) {
   <span class="gu-txt" id="<?= $uid ?>_txt"><?= $piezas
       ? implode('<span class="gu-sep">&middot;</span>', $piezas)
       : '<span class="gu-ph">Elegir unidad&hellip;</span>' ?></span>
+  <!-- Solo se ven con .gu-bloq (ver CSS). El botón abre el MISMO panel, que estando
+       bloqueado ya es de consulta: filas sin clic y sin ✕. No hay un segundo iframe
+       porque el catálogo, el buscador y el cotizador son los de siempre; lo que
+       cambia es que ahora se entra por una puerta que se ve. -->
+  <button type="button" class="gu-vercot" id="<?= $uid ?>_vercot">Ver disponibles y cotizar</button>
+  <span class="gu-nota" id="<?= $uid ?>_nota"></span>
   <span class="gu-caret">&#9660;</span>
 </div>
 
@@ -536,6 +558,8 @@ foreach ($elegidos as $id) {
   var BLOQ = false;             // true = la etapa del deal no permite elegir unidad
   var val     = document.getElementById('<?= $uid ?>_val');
   var campo    = document.getElementById('<?= $uid ?>_campo');
+  var notaEl   = document.getElementById('<?= $uid ?>_nota');
+  var verCot   = document.getElementById('<?= $uid ?>_vercot');
   var txt      = document.getElementById('<?= $uid ?>_txt');
   var elegidas = document.getElementById('<?= $uid ?>_elegidas');
   var COT = <?= json_encode(cot_base($dealId), JSON_UNESCAPED_SLASHES) ?>;
@@ -867,6 +891,14 @@ foreach ($elegidos as $id) {
       abrirUnidad(ir.dataset.ir);
       return;
     }
+    // bloqueado, el campo entero deja de ser el interruptor: se entra por el botón
+    if (BLOQ && !(ev.target.closest && ev.target.closest('.gu-vercot'))) return;
+    abrir(!R.classList.contains('abierto'));
+  });
+  // "Ver disponibles y cotizar": la puerta visible al panel de consulta. Abre el
+  // mismo panel, que con .gu-bloq ya viene sin poder elegir (filas sin clic, sin ✕).
+  if (verCot) verCot.addEventListener('click', function(ev){
+    ev.stopPropagation();
     abrir(!R.classList.contains('abierto'));
   });
   listoBt.addEventListener('click', function(){ abrir(false); });
@@ -986,20 +1018,23 @@ foreach ($elegidos as $id) {
   function bloquear(motivo){
     BLOQ = true;
     R.classList.add('gu-bloq');
-    var txtPh, txtTitle;
+    // El texto del campo queda corto y neutro: el botón es el que dice qué SÍ se
+    // puede hacer, y la nota dice por qué lo otro todavía no.
+    var txtPh, nota, txtTitle;
     if (motivo === 'verificando') {
-      txtPh = 'Comprobando etapa…';
+      txtPh = '—';  nota = 'Comprobando etapa…';
       txtTitle = 'Comprobando la etapa del deal…';
     } else if (motivo === 'sin-verificar') {
-      txtPh = 'No pude comprobar la etapa · recarga el deal';
+      txtPh = '—';  nota = 'No pude comprobar la etapa · recarga el deal';
       txtTitle = 'No pude comprobar la etapa del deal. Puedes consultar y cotizar; para apartar, recarga el deal.';
     } else {
-      txtPh = 'Ver inventario (se elige en RESERVA)';
+      txtPh = '—';  nota = 'Apartar se habilita en RESERVA';
       txtTitle = 'Puedes consultar y cotizar el inventario; apartar la unidad se hace en la etapa RESERVA';
     }
     campo.title = txtTitle;
     var ph = campo.querySelector('.gu-ph');
     if (ph) ph.textContent = txtPh;
+    if (notaEl) notaEl.textContent = nota;
     ajustarIframe();
   }
 
@@ -1010,6 +1045,7 @@ foreach ($elegidos as $id) {
     campo.title = '';
     var ph = campo.querySelector('.gu-ph');
     if (ph) ph.textContent = 'Elegir unidad…';
+    if (notaEl) notaEl.textContent = '';
     ajustarIframe();
   }
 
