@@ -927,32 +927,70 @@ foreach ($elegidos as $id) {
    * verdad es guardar.php, que rechaza con el mismo criterio y sin depender del
    * navegador. Aquí solo se evita que el vendedor elija para que se lo tumben.
    */
+  /*
+   * FAIL-CLOSED (ago-2026). Antes esto arrancaba ABIERTO y solo cerraba cuando
+   * volvía el crm.deal.get. Ese viaje tarda, y en esa ventana el asesor alcanzaba
+   * a abrir el panel y elegir una unidad estando en cualquier etapa del 28. No es
+   * teórico: así quedó la A-1-1 de Noral Apartments en RESERVADO, apartada por un
+   * prospecto en VOLVER A LLAMAR (deal 401401), sin dueño y sin poder venderse.
+   * Ahora nace cerrado y solo se abre cuando se confirma que la etapa lo permite;
+   * si la comprobación falla, se queda cerrado y lo dice.
+   */
   function candadoEtapa(){
     // En el modal de obligatorios el campo se pide PARA pasar a RESERVA: si se
     // bloquea ahí, el cambio de etapa queda imposible. El servidor ya firmó el
     // permiso, así que guardar.php también lo va a aceptar.
     if (EN_MODAL) return;   // el modal PIDE la unidad para poder pasar a RESERVA
-    if (!CFG.deal || typeof BX24 === 'undefined' || !BX24.callMethod) return;
+    if (!CFG.deal) return;  // deal nuevo: no hay etapa que comprobar todavía
+    bloquear('verificando');
+    if (typeof BX24 === 'undefined' || !BX24.callMethod) { bloquear('sin-verificar'); return; }
     try {
       BX24.callMethod('crm.deal.get', {id: CFG.deal}, function(res){
         try {
-          if (!res || (res.error && res.error())) return;
+          if (!res || (res.error && res.error())) { bloquear('sin-verificar'); return; }
           var d = res.data() || {};
-          if (String(d.CATEGORY_ID) !== String(CFG.prospectos)) return;
-          if (String(d.STAGE_ID) === String(CFG.reserva28)) return;
+          // fuera de Prospectos (o ya en RESERVA) el campo se usa normal
+          if (String(d.CATEGORY_ID) !== String(CFG.prospectos)) { desbloquear(); return; }
+          if (String(d.STAGE_ID) === String(CFG.reserva28))     { desbloquear(); return; }
           bloquear();
-        } catch(e) {}
+        } catch(e) { bloquear('sin-verificar'); }
       });
-    } catch(e) {}
+    } catch(e) { bloquear('sin-verificar'); }
   }
 
-  /** Deja el campo de lectura: no abre el panel y avisa por qué. */
-  function bloquear(){
+  /**
+   * Deja el campo de lectura: el panel SIGUE abriendo (consultar y cotizar se
+   * puede en cualquier etapa), lo que se apaga es elegir. `motivo` cambia el
+   * mensaje: mentir con "se elige en RESERVA" cuando en realidad no pudimos
+   * comprobar la etapa manda al asesor a buscar un problema que no existe.
+   */
+  function bloquear(motivo){
     BLOQ = true;
     R.classList.add('gu-bloq');
-    campo.title = 'Puedes consultar y cotizar el inventario; apartar la unidad se hace en la etapa RESERVA';
+    var txtPh, txtTitle;
+    if (motivo === 'verificando') {
+      txtPh = 'Comprobando etapa…';
+      txtTitle = 'Comprobando la etapa del deal…';
+    } else if (motivo === 'sin-verificar') {
+      txtPh = 'No pude comprobar la etapa · recarga el deal';
+      txtTitle = 'No pude comprobar la etapa del deal. Puedes consultar y cotizar; para apartar, recarga el deal.';
+    } else {
+      txtPh = 'Ver inventario (se elige en RESERVA)';
+      txtTitle = 'Puedes consultar y cotizar el inventario; apartar la unidad se hace en la etapa RESERVA';
+    }
+    campo.title = txtTitle;
     var ph = campo.querySelector('.gu-ph');
-    if (ph) ph.textContent = 'Ver inventario (se elige en RESERVA)';
+    if (ph) ph.textContent = txtPh;
+    ajustarIframe();
+  }
+
+  /** La etapa SÍ permite elegir: se devuelve el campo a su estado normal. */
+  function desbloquear(){
+    BLOQ = false;
+    R.classList.remove('gu-bloq');
+    campo.title = '';
+    var ph = campo.querySelector('.gu-ph');
+    if (ph) ph.textContent = 'Elegir unidad…';
     ajustarIframe();
   }
 
