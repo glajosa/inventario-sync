@@ -624,7 +624,12 @@ foreach ($elegidos as $id) {
    * primer pintado no cambia nada. De ahí solo se mueve UNA vez, cuando se resuelve
    * la etapa: a "(se elige en RESERVA)" si toca candado, o a "Elegir unidad…" si no.
    */
-  var PH_TXT = (campo.querySelector('.gu-ph') || {}).textContent || 'Ver inventario…';
+  // Se lee por id y NO a través de `campo`: `campo` se declara más abajo, y usarlo
+  // aquí lo dejaba en undefined -> TypeError -> se moría el IIFE completo. El texto
+  // seguía saliendo bien porque lo manda el servidor, pero sin JS no corría
+  // ajustarIframe() y el iframe se quedaba en los 200px de Bitrix: el cuadro blanco.
+  var PH_TXT = (document.querySelector('#<?= $uid ?>_campo .gu-ph') || {}).textContent
+             || 'Ver inventario…';
   var BLOQ_INI = CFG.bloqIni || '?';
   /** Escribe el placeholder de una sola forma, desde PH_TXT. */
   function phTexto(t){
