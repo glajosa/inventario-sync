@@ -251,10 +251,22 @@ $hoy  = new DateTimeImmutable('now');
   .barra{position:sticky;top:0;z-index:20;background:var(--chrome);color:#fff;
          padding:var(--space-md) var(--space-lg);
          display:flex;align-items:center;gap:var(--space-md);flex-wrap:wrap;
-         border-bottom:1px solid oklch(45.4% 0.15 259 / .4);font-family:var(--font)}
+         border-bottom:1px solid oklch(45.4% 0.15 259 / .4);font-family:var(--font);
+         overflow:hidden}
+  /* Reflejo que recorre la franja, igual que la barra del generador de historias
+     (mismo gradiente, misma duración de 6.5s). overflow:hidden en .barra para que
+     no se asome por los lados. */
+  .barra::after{content:"";position:absolute;top:0;left:-65%;width:45%;height:100%;z-index:0;
+                pointer-events:none;
+                background:linear-gradient(100deg,transparent,rgba(255,255,255,.20),transparent);
+                animation:brillo 6.5s ease-in-out infinite}
+  @keyframes brillo{0%{left:-65%}55%,100%{left:135%}}
+  /* Quien de verdad no quiere animaciones no debería recibir una barra parpadeando. */
+  @media (prefers-reduced-motion:reduce){ .barra::after{animation:none;opacity:0} }
+  .barra .logo-barra{height:30px;width:auto;display:block;position:relative;z-index:1}
   .barra h1{font-size:13px;margin:0;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
-            color:oklch(78% 0.04 259)}
-  .barra .sp{margin-left:auto;display:flex;gap:var(--space-xs)}
+            color:oklch(78% 0.04 259);position:relative;z-index:1}
+  .barra .sp{margin-left:auto;display:flex;gap:var(--space-xs);position:relative;z-index:1}
   .barra button{border:1.5px solid oklch(100% 0 0 / .28);border-radius:var(--radius-pill);
                 padding:9px 20px;font-size:13.5px;font-weight:600;font-family:var(--font);
                 cursor:pointer;transition:background var(--dur-fast,140ms) var(--ease-out),
@@ -317,7 +329,14 @@ $hoy  = new DateTimeImmutable('now');
   .grupo{grid-column:1 / -1;background:var(--paper-2);border:1px solid var(--border-2);border-radius:var(--radius-md);
          padding:var(--space-md) var(--space-md);margin-top:var(--space-2xs)}
   .grupo-tit{font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:var(--space-sm);font-family:var(--font)}
-  .grupo-campos{display:flex;gap:var(--space-md);flex-wrap:wrap;align-items:flex-end}
+  /* Rejilla de 2 columnas, no flex-wrap: con flex, "Mes 2 de 2" no cabía al lado y
+     se iba a la línea siguiente pegado a la izquierda — debajo del checkbox en vez
+     de debajo de "Mes 1 de 2". */
+  .grupo-campos{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-sm) var(--space-md);
+                align-items:end}
+  /* El mes 2 se fija en la 2ª columna: por colocación automática caería en la 1ª
+     (fila 2), que es justo el desorden que había que arreglar. */
+  #wrap-mes2{grid-column:2}
   /* .ajustes .chk-linea (dos clases) para ganarle en especificidad a ".ajustes
      label" — si no, el checkbox hereda el text-transform:uppercase pensado
      para las etiquetas de los campos, no para texto de un checkbox. */
@@ -375,6 +394,8 @@ $hoy  = new DateTimeImmutable('now');
 </head><body>
 
 <div class="barra">
+  <img class="logo-barra" src="assets/logo_galjosa_transparente.png" alt="Galjosa"
+       onerror="this.style.display='none'">
   <h1><span style="color:#fff;font-weight:700;letter-spacing:.02em">GALJOSA</span> · Cotización</h1>
   <div class="sp"><button class="imprimir" onclick="window.print()">Descargar PDF</button></div>
 </div>
@@ -399,8 +420,11 @@ $hoy  = new DateTimeImmutable('now');
       <input type="text" name="presu" inputmode="decimal" placeholder="$"
              value="<?= $presu > 0 ? h(number_format($presu, 0)) : '' ?>"></div>
     <div><label>Modalidad</label>
-      <select name="mod">
-        <option value="estandar" <?= $modalidad === 'estandar' ? 'selected' : '' ?>>Estándar (con extraordinarias)</option>
+      <!-- Etiquetas cortas: "Estándar (con extraordinarias)" no cabía en la columna
+           de 420px y salía cortado a media palabra. El detalle completo va en el
+           title, y el grupo de abajo ya dice "Cuota extraordinaria (una por año)". -->
+      <select name="mod" title="Estándar = 20% en cuotas + 10% en extraordinarias · Iguales = 30% repartido en cuotas iguales, sin extraordinarias">
+        <option value="estandar" <?= $modalidad === 'estandar' ? 'selected' : '' ?>>Con extraordinarias</option>
         <option value="iguales"  <?= $modalidad === 'iguales'  ? 'selected' : '' ?>>Cuotas iguales</option>
       </select></div>
     <div><label>Primera cuota</label>
