@@ -422,7 +422,7 @@ foreach ($elegidos as $id) {
 <div class="gu-campo" id="<?= $uid ?>_campo">
   <span class="gu-txt" id="<?= $uid ?>_txt"><?= $piezas
       ? implode('<span class="gu-sep">&middot;</span>', $piezas)
-      : '<span class="gu-ph">Elegir unidad&hellip;</span>' ?></span>
+      : '<span class="gu-ph">Ver inventario&hellip;</span>' ?></span>
   <span class="gu-nota" id="<?= $uid ?>_nota"></span>
   <span class="gu-caret">&#9660;</span>
 </div>
@@ -533,6 +533,27 @@ foreach ($elegidos as $id) {
   } catch(e) {}
 
   var BLOQ = false;             // true = la etapa del deal no permite elegir unidad
+
+  /*
+   * Texto del campo vacío, en UNA sola variable.
+   *
+   * Lo escribían tres sitios a destiempo —el PHP, pintar() y el candado— y al abrir
+   * un deal el asesor veía el campo cambiar tres veces en menos de un segundo:
+   *   "Elegir unidad…"  ->  "Ver inventario…"  ->  "Ver inventario (se elige en RESERVA)"
+   * Parecía un bug, y era uno.
+   *
+   * Arranca en el texto NEUTRO, que es cierto en todos los casos (mirar el
+   * inventario siempre se puede) y es el mismo que ya imprime el PHP, así que el
+   * primer pintado no cambia nada. De ahí solo se mueve UNA vez, cuando se resuelve
+   * la etapa: a "(se elige en RESERVA)" si toca candado, o a "Elegir unidad…" si no.
+   */
+  var PH_TXT = 'Ver inventario…';
+  /** Escribe el placeholder de una sola forma, desde PH_TXT. */
+  function phTexto(t){
+    PH_TXT = t;
+    var ph = campo.querySelector('.gu-ph');
+    if (ph) ph.textContent = t;
+  }
   var val     = document.getElementById('<?= $uid ?>_val');
   var campo    = document.getElementById('<?= $uid ?>_campo');
   var notaEl   = document.getElementById('<?= $uid ?>_nota');
@@ -714,7 +735,10 @@ foreach ($elegidos as $id) {
     if (!sel.length) {
       var ph = document.createElement('span');
       ph.className = 'gu-ph';
-      ph.textContent = 'Elegir unidad\u2026';
+      // PH_TXT y no un texto fijo: pintar() corre al arrancar y cada vez que cambia
+      // la selecci\u00f3n, as\u00ed que si escribiera "Elegir unidad\u2026" a mano le pisar\u00eda el
+      // mensaje al candado y el campo parpadear\u00eda de vuelta al texto equivocado.
+      ph.textContent = PH_TXT;
       txt.appendChild(ph);
       return;
     }
@@ -1069,8 +1093,7 @@ foreach ($elegidos as $id) {
       txtTitle = 'Puedes consultar y cotizar el inventario; apartar la unidad se hace en la etapa RESERVA';
     }
     campo.title = txtTitle;
-    var ph = campo.querySelector('.gu-ph');
-    if (ph) ph.textContent = txtPh;
+    phTexto(txtPh);
     if (notaEl) notaEl.textContent = '';
     ajustarIframe();
   }
@@ -1080,8 +1103,7 @@ foreach ($elegidos as $id) {
     BLOQ = false;
     R.classList.remove('gu-bloq');
     campo.title = '';
-    var ph = campo.querySelector('.gu-ph');
-    if (ph) ph.textContent = 'Elegir unidad…';
+    phTexto('Elegir unidad…');
     if (notaEl) notaEl.textContent = '';
     ajustarIframe();
   }
