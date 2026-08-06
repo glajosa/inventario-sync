@@ -15,7 +15,8 @@
 declare(strict_types=1);
 require_once __DIR__ . '/appauth.php';
 
-const TIPO_CAMPO = 'galjosa_unidad';   // USER_TYPE_ID del campo propio
+const TIPO_CAMPO = 'galjosa_unidad';    // USER_TYPE_ID del campo propio (Inventario)
+const TIPO_LLAMADA = 'galjosa_llamada'; // USER_TYPE_ID del campo "Registrar llamada"
 
 $DATA_DIR = getenv('DATA_DIR') ?: '/data';
 
@@ -31,27 +32,39 @@ function base_url(): string {
     return 'https://' . $host;
 }
 
-/** Registra (o re-registra) el tipo de campo propio. */
-function registrar_tipo_campo(): array {
-    $handler = base_url() . '/field.php';
+/** Registra (o re-registra) un tipo de campo propio dado su USER_TYPE_ID/handler/título. */
+function registrar_tipo(string $tipo, string $handlerPath, string $titulo, string $desc): array {
+    $handler = base_url() . $handlerPath;
 
     // si ya existe, se borra para que tome el handler nuevo
     $lista = app_bx('userfieldtype.list');
     if ($lista['ok']) {
         foreach (($lista['result'] ?? []) as $t) {
-            if (($t['USER_TYPE_ID'] ?? '') === TIPO_CAMPO) {
-                app_bx('userfieldtype.delete', ['USER_TYPE_ID' => TIPO_CAMPO]);
+            if (($t['USER_TYPE_ID'] ?? '') === $tipo) {
+                app_bx('userfieldtype.delete', ['USER_TYPE_ID' => $tipo]);
                 break;
             }
         }
     }
 
     return app_bx('userfieldtype.add', [
-        'USER_TYPE_ID' => TIPO_CAMPO,
+        'USER_TYPE_ID' => $tipo,
         'HANDLER'      => $handler,
-        'TITLE'        => 'Unidad de Inventario',
-        'DESCRIPTION'  => 'Selector de unidades agrupado por proyecto, con las ocupadas bloqueadas',
+        'TITLE'        => $titulo,
+        'DESCRIPTION'  => $desc,
     ]);
+}
+
+/** Registra (o re-registra) el tipo de campo "Unidad de Inventario". */
+function registrar_tipo_campo(): array {
+    return registrar_tipo(TIPO_CAMPO, '/field.php', 'Unidad de Inventario',
+        'Selector de unidades agrupado por proyecto, con las ocupadas bloqueadas');
+}
+
+/** Registra (o re-registra) el tipo de campo "Registrar llamada". */
+function registrar_tipo_llamada(): array {
+    return registrar_tipo(TIPO_LLAMADA, '/llamada_campo.php', 'Registrar llamada',
+        'Calendario chico para planificar la proxima llamada y marcar si contesto');
 }
 
 // ---- Bitrix instalando la app -----------------------------------------------
@@ -67,8 +80,11 @@ if (!empty($_REQUEST['AUTH_ID']) || !empty($_REQUEST['auth']['access_token'])) {
     ]);
 
     $r = registrar_tipo_campo();
-    ilog('app instalada; userfieldtype.add ok=' . var_export($r['ok'], true)
-        . ' err=' . ($r['error'] ?? '-') . ' ' . ($r['desc'] ?? ''));
+    $r2 = registrar_tipo_llamada();
+    ilog('app instalada; userfieldtype.add(unidad) ok=' . var_export($r['ok'], true)
+        . ' err=' . ($r['error'] ?? '-') . ' ' . ($r['desc'] ?? '')
+        . ' | userfieldtype.add(llamada) ok=' . var_export($r2['ok'], true)
+        . ' err=' . ($r2['error'] ?? '-') . ' ' . ($r2['desc'] ?? ''));
 
     header('Content-Type: text/html; charset=utf-8');
     ?>
@@ -79,11 +95,18 @@ if (!empty($_REQUEST['AUTH_ID']) || !empty($_REQUEST['auth']['access_token'])) {
     <h2>Inventario Galjosa</h2>
     <?php if ($r['ok']): ?>
       <p class="ok"><b>Instalado.</b> Ya existe el tipo de campo <code>Unidad de Inventario</code>.</p>
-      <p>Ahora hay que crear un campo de ese tipo en Negociaciones y ponerlo en el formulario del deal.</p>
     <?php else: ?>
-      <p class="err"><b>La app quedó instalada, pero el tipo de campo NO se pudo registrar.</b></p>
+      <p class="err"><b>El tipo de campo Unidad de Inventario NO se pudo registrar.</b></p>
       <p>Error: <code><?= htmlspecialchars((string)($r['error'] ?? '?'), ENT_QUOTES) ?></code>
          <?= htmlspecialchars((string)($r['desc'] ?? ''), ENT_QUOTES) ?></p>
+    <?php endif; ?>
+    <?php if ($r2['ok']): ?>
+      <p class="ok"><b>Instalado.</b> Ya existe el tipo de campo <code>Registrar llamada</code>.</p>
+      <p>Ahora hay que crear un campo de cada tipo en Negociaciones y ponerlo en el formulario del deal.</p>
+    <?php else: ?>
+      <p class="err"><b>El tipo de campo Registrar llamada NO se pudo registrar.</b></p>
+      <p>Error: <code><?= htmlspecialchars((string)($r2['error'] ?? '?'), ENT_QUOTES) ?></code>
+         <?= htmlspecialchars((string)($r2['desc'] ?? ''), ENT_QUOTES) ?></p>
     <?php endif; ?>
     <script>if (typeof BX24 !== 'undefined') { BX24.init(function(){ BX24.installFinish(); }); }</script>
     <?php
@@ -98,9 +121,15 @@ if (isset($_GET['reinstalar'])) {
     }
     header('Content-Type: text/plain; charset=utf-8');
     $r = registrar_tipo_campo();
-    echo 'userfieldtype.add ok=' . var_export($r['ok'], true)
+    echo 'userfieldtype.add(unidad) ok=' . var_export($r['ok'], true)
        . ' err=' . ($r['error'] ?? '-') . ' ' . ($r['desc'] ?? '') . "\n";
     echo 'handler=' . base_url() . "/field.php\n";
+
+    $r2 = registrar_tipo_llamada();
+    echo 'userfieldtype.add(llamada) ok=' . var_export($r2['ok'], true)
+       . ' err=' . ($r2['error'] ?? '-') . ' ' . ($r2['desc'] ?? '') . "\n";
+    echo 'handler=' . base_url() . "/llamada_campo.php\n";
+
     $l = app_bx('userfieldtype.list');
     echo 'tipos registrados: ' . json_encode($l['result'] ?? $l['error'] ?? null) . "\n";
     exit;
