@@ -30,7 +30,7 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
     http_response_code(403); exit('forbidden');
 }
 
-const PLACEMENT = 'CRM_DEAL_ACTIVITY_TIMELINE_MENU';
+const PLACEMENT = 'CRM_DEAL_DETAIL_ACTIVITY';
 const HANDLER   = 'https://galjosa-inventario-sync.pwluu1.easypanel.host/llamada.php';
 const TITULO    = 'Registrar llamada';
 
