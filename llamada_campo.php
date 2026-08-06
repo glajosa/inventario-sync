@@ -59,6 +59,10 @@ $uid = 'gl' . substr(md5((string)$dealId . microtime()), 0, 8);
   #<?= $uid ?>_abierto {
     display: none; margin-top: 4px; border: 1px solid #d0d7de; border-radius: 8px;
     background: #fff; padding: 10px 12px 12px;
+    /* el iframe puede quedar tan ancho como la columna del formulario (Bitrix
+       no lo angosta) — este tope es lo que mantiene el calendario compacto en
+       vez de estirarse a lo que Bitrix le dé. */
+    max-width: 300px;
   }
   #<?= $uid ?>_abierto.on { display: block; }
 
@@ -183,10 +187,16 @@ $uid = 'gl' . substr(md5((string)$dealId . microtime()), 0, 8);
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
   function ajustarIframe(abierto) {
-    var ancho = 300;
+    // El ANCHO del iframe Bitrix lo decide por el contenedor del campo (todo
+    // el ancho de la columna del formulario) — pedirle 300 acá no lo angosta,
+    // solo estira mi contenido a como quede el iframe real (por eso el
+    // calendario salía enorme). El tope de ancho va en CSS (max-width en
+    // #_abierto), acá solo se pide la ALTURA, que sí respeta.
     var alto = abierto ? 480 : 30;
     try {
-      if (typeof BX24 !== 'undefined' && BX24.resizeWindow) BX24.resizeWindow(ancho, alto);
+      if (typeof BX24 !== 'undefined' && BX24.resizeWindow) {
+        BX24.resizeWindow(document.documentElement.scrollWidth || 320, alto);
+      }
     } catch (e) {}
   }
 
