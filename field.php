@@ -43,7 +43,10 @@ $DATA_DIR = getenv('DATA_DIR') ?: '/data';
     . ' value=' . substr((string)($_REQUEST['value'] ?? ''), 0, 40)
     . ' field_keys=[' . (is_array($_REQUEST['field'] ?? null) ? implode(',', array_keys($_REQUEST['field'])) : '-') . ']'
     . ' PLACEMENT=' . (string)($_REQUEST['PLACEMENT'] ?? '-')
-    . ' OPTIONS=' . substr((string)($_REQUEST['PLACEMENT_OPTIONS'] ?? '-'), 0, 400)
+    // 2000 y no 400: se está buscando qué distingue el render del modal "Complete
+    // los campos obligatorios" del de abrir el deal. Con 400 se cortaba justo
+    // después del URI, así que si Bitrix manda algo más ahí, nunca se vio.
+    . ' OPTIONS=' . substr((string)($_REQUEST['PLACEMENT_OPTIONS'] ?? '-'), 0, 2000)
     . "\n", FILE_APPEND | LOCK_EX);
 
 // Bitrix manda todo en PLACEMENT_OPTIONS (verificado en el log):
@@ -55,6 +58,21 @@ if (!empty($_REQUEST['PLACEMENT_OPTIONS'])) {
     if (is_array($tmp)) $opciones = $tmp;
 }
 
+/** Base firmada de la cotización, para este deal y por 12 horas.
+ *  La firma (HMAC con el secreto del servicio) evita poner el token en la URL,
+ *  que quedaría a la vista de cualquiera con quien se comparta el enlace.
+ *  Cubre el deal y el vencimiento, NO la lista de unidades: los activos
+ *  fusionados se arman eligiendo en el desplegable, y esa selección cambia sin
+ *  recargar la página, así que el servidor no puede firmar cada combinación.
+ *  Lo que queda expuesto a cambio es el precio de otra unidad del catálogo, que
+ *  el mismo asesor ya está viendo en la lista. */
+function cot_base(int $dealId): array {
+    $exp = time() + 12 * 3600;                    // dura la jornada del asesor
+    $sig = hash_hmac('sha256', "d{$dealId}|e{$exp}", (string)getenv('OUTBOUND_TOKEN'));
+    $host = (string)($_SERVER['HTTP_X_FORWARDED_HOST'] ?? $_SERVER['HTTP_HOST'] ?? '');
+    return ['url' => 'https://' . $host . '/cotizar.php', 'd' => $dealId, 'exp' => $exp, 's' => $sig];
+}
+
 $mode   = (string)($opciones['MODE'] ?? $_REQUEST['mode'] ?? 'edit');
 $dealId = (int)($opciones['ENTITY_VALUE_ID'] ?? 0);
 $name   = (string)($opciones['FIELD_NAME'] ?? ($_REQUEST['field']['NAME'] ?? $_REQUEST['name'] ?? 'UF_UNIDAD'));
@@ -62,28 +80,17 @@ $name   = (string)($opciones['FIELD_NAME'] ?? ($_REQUEST['field']['NAME'] ?? $_R
 $value = (string)($opciones['VALUE'] ?? $_REQUEST['value'] ?? '');
 if ($value === 'null') $value = '';
 
-// El modal "Complete los campos obligatorios para cambiar la etapa" se renderiza
-// con el URI del KANBAN, no con el del deal. Verificado en web.log: de 250+
-// renders, es el ÚNICO cuyo URI es /crm/deal/kanban/... (el resto son
-// /crm/deal/details/<id>/?IFRAME=Y). Ahí el campo se está pidiendo PARA pasar a
-// RESERVA, así que el candado de etapa tiene que abrirse: si no, el vendedor
-// queda trabado — no puede llenar el obligatorio hasta estar en RESERVA, y
-// Bitrix no lo deja entrar a RESERVA sin llenarlo.
-$enKanban = (bool)preg_match('#/crm/deal/kanban/#', (string)($opciones['URI'] ?? ''));
-
-// Permiso de un solo uso lógico para saltarse el candado de etapa. Lo firma el
-// SERVIDOR, al ver él mismo que el render viene del modal; el navegador no puede
-// fabricarlo (no tiene OUTBOUND_TOKEN), solo reenviarlo. Por eso guardar.php
-// puede confiar en él en vez de en un flag suelto tipo "?kanban=1".
-// Se firma en TODO render (antes solo en el del kanban). Motivo: el modal abierto
-// desde DENTRO del deal manda exactamente lo mismo que un render normal —
-// MODE=edit, URI de /details/, MANDATORY=N, y hasta las cabeceras HTTP idénticas
-// (comprobado generando los dos casos y comparándolos). Desde el servidor NO hay
-// forma de distinguirlo, así que el que lo detecta es el navegador (ver EN_MODAL)
-// y solo entonces reenvía este permiso. El token nunca sale de aquí.
-$permisoEtapa = ($dealId > 0)
-    ? hash_hmac('sha256', $dealId . '|kanban', (string)getenv('OUTBOUND_TOKEN'))
-    : '';
+// El campo es OBLIGATORIO para entrar a RESERVA, así que Bitrix lo pide ANTES de
+// mover el deal. Aquí hubo dos intentos de detectar ese momento para abrirle el
+// candado: la URI del kanban (solo cubre arrastrar en el tablero) y el ancho del
+// iframe (<560px, que resultó ser también el de la ficha normal, o sea el candado
+// quedaba abierto siempre). Ninguno servía, porque desde el servidor ese render es
+// idéntico al de abrir el deal: MANDATORY llega "N" y MODE "edit" también sale de
+// /details/, comprobado en el log real.
+//
+// Ya no hace falta detectarlo. La regla la garantiza apartar_prospecto() en
+// campolib.php: elegir la unidad se puede en cualquier etapa (así el obligatorio
+// funciona desde el deal y desde el kanban) y apartarla solo pasa en RESERVA.
 
 // Guardar NO puede depender del formulario del deal: el campo vive en un iframe
 // y su <input> nunca viaja en el submit. Se guarda por API desde el navegador,
@@ -131,6 +138,55 @@ function catalogo_cache(): array {
 }
 
 function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
+
+/**
+ * Categoría y etapa del deal, con caché en disco de 60 segundos.
+ *
+ * Existe para que el campo salga con el TEXTO FINAL desde el primer pixel. Antes
+ * el servidor no sabía la etapa, así que renderizaba un texto neutro y el navegador
+ * lo corregía cuando volvía el crm.deal.get: el asesor veía el campo cambiar solo,
+ * y con razón le parecía un bug.
+ *
+ * Se evitaba llamar al API justamente por costo: Bitrix renderiza este placement
+ * ~8 veces por apertura de deal (medido en web.log) y el portal ya va al tope
+ * (~120 llamadas/min entre todos los sistemas). El caché resuelve eso: la primera
+ * render de la ráfaga paga UNA llamada y las otras siete la leen del disco. O sea
+ * ~1 llamada por apertura de deal, no 8.
+ *
+ * Y en el modal (MODE=edit) no se llama nunca: ahí el campo va siempre abierto.
+ *
+ * Si el API falla o tarda, se devuelve el caché viejo, y si no hay, null — el
+ * navegador sigue resolviéndolo como antes. Nunca se deja al asesor esperando: 4s
+ * de techo y a dibujar.
+ */
+function deal_estado(int $dealId): ?array {
+    if ($dealId <= 0) return null;
+    $dir  = (getenv('DATA_DIR') ?: '/data') . '/dealcache';
+    $path = $dir . '/' . $dealId . '.json';
+    $viejo = json_decode((string)@file_get_contents($path), true);
+    if (is_array($viejo) && (time() - (int)($viejo['ts'] ?? 0)) < 60) return $viejo;
+
+    $wh = rtrim((string)getenv('BITRIX_WEBHOOK'), '/') . '/';
+    if ($wh === '/') return is_array($viejo) ? $viejo : null;
+
+    $ch = curl_init($wh . 'crm.deal.get');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => http_build_query(['id' => $dealId]),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 4,
+        CURLOPT_CONNECTTIMEOUT => 2,
+    ]);
+    $r = json_decode((string)curl_exec($ch), true);
+    $d = $r['result'] ?? null;
+    if (!is_array($d)) return is_array($viejo) ? $viejo : null;
+
+    $out = ['cat' => (int)($d['CATEGORY_ID'] ?? -1),
+            'stage' => (string)($d['STAGE_ID'] ?? ''), 'ts' => time()];
+    if (!is_dir($dir)) @mkdir($dir, 0775, true);
+    @file_put_contents($path, json_encode($out), LOCK_EX);
+    return $out;
+}
 
 /**
  * Etapa RESERVA del 28, leída del caché que deja stagelib.php (cero llamadas).
@@ -220,9 +276,32 @@ foreach ($porProyecto as &$l) usort($l, fn($a, $b) => strnatcasecmp($a['codigo']
 unset($l);
 
 $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios campos en el form
+
+/*
+ * Estado inicial del candado, resuelto AQUÍ para que no haya parpadeo.
+ *
+ *   $bloqIni = 'si'  -> Prospectos(28) fuera de RESERVA: cerrado, texto definitivo.
+ *   $bloqIni = 'no'  -> se puede elegir (otro pipeline, ya en RESERVA, o el modal).
+ *   $bloqIni = '?'   -> no se pudo averiguar: se cierra por precaución con el texto
+ *                       neutro y el navegador lo resuelve, como hacía antes.
+ *
+ * En el modal (MODE=edit) se responde 'no' sin preguntarle nada al API: ahí el campo
+ * va abierto siempre, porque es donde Bitrix pide la unidad para pasar a RESERVA.
+ */
+if ($mode === 'edit') {
+    $bloqIni = 'no';
+} else {
+    $est = deal_estado($dealId);
+    if ($est === null)                      $bloqIni = '?';
+    elseif ((int)$est['cat'] !== 28)        $bloqIni = 'no';
+    elseif ($est['stage'] === reserva28_cache()) $bloqIni = 'no';
+    else                                    $bloqIni = 'si';
+}
+$phIni = $bloqIni === 'si' ? 'Ver inventario (se elige en RESERVA)'
+       : ($bloqIni === '?' ? 'Ver inventario…' : 'Elegir unidad…');
 ?>
 <script src="//api.bitrix24.com/api/v1/"></script>
-<div class="gu" id="<?= $uid ?>">
+<div class="gu<?= $bloqIni !== 'no' ? ' gu-bloq' : '' ?>" id="<?= $uid ?>">
 <style>
   /* Bitrix dimensiona este iframe según el ALTO DEL DOCUMENTO que devolvemos.
      Por eso el alto debe ser natural: con height:100% + overflow:hidden el
@@ -247,6 +326,10 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?>.gu-bloq .gu-fila{cursor:default}
   #<?= $uid ?>.gu-bloq .gu-fila:hover{background:transparent}
   #<?= $uid ?>.gu-bloq .gu-quita{display:none}
+  /* El candado vuelve a ser UNA sola línea de texto, como estaba al principio.
+     La nota queda en el DOM sin usarse: el estado se dice en el propio placeholder
+     y meter un segundo texto al lado ensuciaba el campo. */
+  #<?= $uid ?> .gu-nota{display:none}
   /* cerrado: texto plano, igual que los campos nativos del deal (sin chips ni ✕) */
   #<?= $uid ?> .gu-txt{display:inline-flex;align-items:center;height:20px;overflow:hidden;
       white-space:nowrap;text-overflow:ellipsis}
@@ -345,6 +428,25 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
   #<?= $uid ?> .gu-tag.BLOQUEADO,#<?= $uid ?> .gu-tag.PERDIDO{background:#eaeef2;color:#57606a}
   #<?= $uid ?> .gu-meta{flex:0 1 auto;color:#8b949e;font-size:11px;white-space:nowrap;
       overflow:hidden;text-overflow:ellipsis}
+  /* Botón por unidad: abre NUESTRA cotización en otra pestaña. Va discreto y solo
+     se enciende al pasar por la fila, para no competir con el precio ni invitar a
+     pulsarlo por error cuando lo que se quiere es elegir la unidad. */
+  /* marcada para cotizar: azul suave y una ✓, distinto de "elegida" (que sí aparta) */
+  #<?= $uid ?> .gu-fila.gu-cotsel{background:#eaf4ff;box-shadow:inset 3px 0 0 #0969da}
+  /* Con unidades marcadas, la única acción válida es cotizarlas juntas: se oculta
+     el botón por fila para que no haya dos caminos y se elija el equivocado. */
+  #<?= $uid ?>.gu-marcando .gu-cot{display:none}
+  #<?= $uid ?> .gu-fila.gu-cotsel .gu-cod::before{content:'\2713\00a0';color:#0969da;font-weight:700}
+  #<?= $uid ?> .gu-cottodas{float:right;font-size:10.5px;font-weight:700;letter-spacing:.3px;
+     color:#fff;background:#0969da;border-radius:6px;padding:2px 9px;text-decoration:none;
+     margin-top:-2px}
+  #<?= $uid ?> .gu-cottodas:hover{background:#0757b3}
+  #<?= $uid ?> .gu-cot{flex:0 0 auto;margin-left:8px;font-size:11px;font-weight:600;
+     letter-spacing:.3px;color:#0c6c9c;border:1px solid #cfe2f0;border-radius:6px;
+     padding:2px 8px;text-decoration:none;background:#f2f8fc;opacity:.55;transition:opacity .12s;
+     cursor:pointer;user-select:none}
+  #<?= $uid ?> .gu-fila:hover .gu-cot{opacity:1}
+  #<?= $uid ?> .gu-cot:hover{background:#0c6c9c;color:#fff;border-color:#0c6c9c;opacity:1}
   #<?= $uid ?> .gu-precio{margin-left:auto;flex:0 0 auto;font-variant-numeric:tabular-nums;
       font-size:12px;color:#57606a}
   #<?= $uid ?> .gu-vacio{padding:16px 10px;text-align:center;color:#8b949e}
@@ -364,12 +466,19 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
     firma: <?= json_encode($dealId > 0
         ? hash_hmac('sha256', (string)$dealId, (string)getenv('OUTBOUND_TOKEN'))
         : '') ?>,
-    // candado visual: en PROSPECTOS(28) la unidad solo se elige en RESERVA
     prospectos: 28,
     reserva28: <?= json_encode(reserva28_cache()) ?>,
-    // modal de campos obligatorios del kanban: ahí el candado se abre
-    kanban:  <?= $enKanban ? 'true' : 'false' ?>,
-    permiso: <?= json_encode($permisoEtapa) ?>
+    // MODO: la señal que distingue el modal de campos obligatorios de la ficha
+    // normal, y la manda Bitrix. Verificado con un caso real el 2026-08-04 (deal
+    // 402071): todos los renders de abrir y navegar el deal llegan con MODE=view,
+    // y el ÚNICO con MODE=edit es el del modal "Complete todos los campos
+    // requeridos para cambiar la etapa". No confundir con la vista de solo lectura
+    // de este mismo archivo: esa solo se usa si Bitrix manda `solo_lectura`, que
+    // no manda nunca, así que el desplegable se dibuja igual en los dos modos.
+    modo: <?= json_encode($mode) ?>,
+    // Estado que ya resolvio el servidor: 'si' | 'no' | '?'. El JS solo
+    // CORRIGE si el cache estaba viejo, no vuelve a pintar lo mismo.
+    bloqIni: <?= json_encode($bloqIni) ?>
   };
 </script>
 
@@ -388,7 +497,8 @@ foreach ($elegidos as $id) {
 <div class="gu-campo" id="<?= $uid ?>_campo">
   <span class="gu-txt" id="<?= $uid ?>_txt"><?= $piezas
       ? implode('<span class="gu-sep">&middot;</span>', $piezas)
-      : '<span class="gu-ph">Elegir unidad&hellip;</span>' ?></span>
+      : '<span class="gu-ph">' . h($phIni) . '</span>' ?></span>
+  <span class="gu-nota" id="<?= $uid ?>_nota"></span>
   <span class="gu-caret">&#9660;</span>
 </div>
 
@@ -421,37 +531,54 @@ foreach ($elegidos as $id) {
 
   <div class="gu-elegidas" id="<?= $uid ?>_elegidas" style="display:none"></div>
 
+  <?php
+  /*
+   * La lista NO se imprime en HTML: viaja como JSON y la arma el navegador.
+   *
+   * Antes cada una de las 1.274 unidades era un <div> con 7 data-attributes, y el
+   * render pesaba 745 KB — el 94% eran esas filas. Bitrix crea el iframe con 200px
+   * y lo deja en blanco hasta que llega la respuesta, así que el asesor veía un
+   * cuadro blanco grande 1-2 segundos en CADA apertura de deal (medido: 0,6-1,1s
+   * de primer byte y hasta 7s de total en el peor caso). El gzip ya estaba puesto
+   * (49 KB por la red), o sea lo que costaba era parsear el HTML, no bajarlo.
+   *
+   * En JSON las mismas unidades ocupan ~9 veces menos y el navegador construye las
+   * filas de un solo golpe con innerHTML. El HTML resultante es IDÉNTICO al que se
+   * imprimía aquí — mismas clases y mismos data-*, para que filtrar() y el resto
+   * del JS sigan funcionando sin tocarse.
+   */
+  $datos = [];
+  foreach ($proys as $cid => $nom) {
+      $lst = $porProyecto[(string)$cid] ?? [];
+      if (!$lst) continue;
+      $us = [];
+      foreach ($lst as $u) {
+          $pvpNum = (float)str_replace(['|USD', ','], '', (string)$u['pvp']);
+          $us[] = [
+              (int)$u['id'],
+              (string)$u['codigo'],
+              (string)($u['stage'] ?: 'BLOQUEADO'),
+              ($u['stage'] === 'DISPONIBLE' && empty($u['dealId'])) ? 1 : 0,
+              trim(($u['torre'] !== '' ? 'T' . $u['torre'] : '')
+                 . ($u['piso']  !== '' ? ' · P' . $u['piso'] : '')),
+              $pvpNum,
+          ];
+      }
+      $datos[] = [(string)$cid, (string)$nom, $us];
+  }
+  ?>
   <div class="gu-lista" id="<?= $uid ?>_lista">
-    <?php foreach ($proys as $cid => $nom):
-          $lista = $porProyecto[(string)$cid] ?? [];
-          if (!$lista) continue; ?>
-      <div class="gu-grupo" data-cat="<?= h((string)$cid) ?>"><?= h($nom) ?></div>
-      <?php foreach ($lista as $u):
-            $libre = ($u['stage'] === 'DISPONIBLE' && empty($u['dealId']));
-            $yo    = in_array((int)$u['id'], $elegidos, true);
-            $meta  = trim(($u['torre'] !== '' ? 'T' . $u['torre'] : '')
-                        . ($u['piso']  !== '' ? ' · P' . $u['piso'] : ''));
-            $pvpNum = (float)str_replace(['|USD', ','], '', (string)$u['pvp']);
-            $pvp   = $u['pvp'] !== '' ? '$' . number_format($pvpNum, 0) : '';
-            $est   = $u['stage'] ?: 'BLOQUEADO';
-      ?>
-        <div class="gu-fila <?= $libre ? '' : 'gu-no' ?>"
-             data-cat="<?= h((string)$cid) ?>" data-cod="<?= h(strtoupper($u['codigo'])) ?>"
-             data-libre="<?= $libre ? 1 : 0 ?>" data-id="<?= (int)$u['id'] ?>"
-             data-pvp="<?= $pvpNum ?>"
-             data-cod-txt="<?= h($u['codigo']) ?>" data-proy="<?= h($nom) ?>">
-          <span class="gu-cod"><?= h($u['codigo']) ?></span>
-          <span class="gu-tag <?= h($est) ?>"><?= h($est) ?></span>
-          <?php if ($meta !== ''): ?><span class="gu-meta"><?= h($meta) ?></span><?php endif; ?>
-          <?php if ($pvp !== ''): ?><span class="gu-precio"><?= h($pvp) ?></span><?php endif; ?>
-        </div>
-      <?php endforeach; ?>
-    <?php endforeach; ?>
     <div class="gu-vacio" id="<?= $uid ?>_vacio" style="display:none">Sin resultados</div>
   </div>
+  <script>window['GU_DATOS_<?= $uid ?>'] = <?= json_encode($datos,
+      JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
 
   <div class="gu-pie">
     <span id="<?= $uid ?>_pie"></span>
+    <!-- Marcar para COTIZAR no es elegir: no toca el campo ni aparta nada. Por eso
+         existe también en las etapas donde la unidad todavía no se puede reservar. -->
+    <a class="gu-cottodas" id="<?= $uid ?>_cotsel" style="display:none;float:none;margin-left:auto"
+       target="_blank" rel="noopener"></a>
     <button type="button" class="gu-listo" id="<?= $uid ?>_listo">Listo</button>
   </div>
 </div>
@@ -464,23 +591,85 @@ foreach ($elegidos as $id) {
 
   var CFG = window['GU_CFG_<?= $uid ?>'] || {};
 
-  // ¿Estamos dentro del modal "Complete los campos obligatorios para cambiar la
-  // etapa"? Bitrix no lo dice por ningún lado, pero SÍ le da al iframe un ancho
-  // distinto: ~470px en ese modal contra ~645px en la ficha (medido en vivo con
-  // los dos casos abiertos a la vez). Se mide ANTES de llamar a resizeWindow,
-  // que cambiaría el ancho.
-  //
-  // Es una heurística, y por eso solo decide lo VISUAL (si el candado se abre).
-  // Lo que garantiza la regla de negocio no depende de esto: el apartado de la
-  // unidad y el portero anti doble-venta siguen viviendo en el servidor.
-  var ANCHO0   = window.innerWidth || 0;
-  var EN_MODAL = !!CFG.kanban || (ANCHO0 > 0 && ANCHO0 < 560);
+  /*
+   * Encoger el iframe LO PRIMERO de todo.
+   *
+   * Bitrix crea el app-frame con 200px fijos, y hasta que corría el ajuste se veía
+   * un cuadro blanco enorme donde debería haber una línea: el ajuste vivía dentro
+   * de BX24.init(), que espera a que cargue la librería, y ese salto era bien
+   * visible. Ahora se pide al parsear el script; si BX24 todavía no está, se
+   * reintenta en cuanto esté (iniciar() vuelve a llamar a ajustarIframe()).
+   */
+  try {
+    if (typeof BX24 !== 'undefined') {
+      if (BX24.resizeWindow) BX24.resizeWindow(document.documentElement.scrollWidth || 400, 28);
+      if (BX24.fitWindow)    BX24.fitWindow();
+    }
+  } catch(e) {}
 
-  var BLOQ = false;             // true = la etapa del deal no permite elegir unidad
+  // Arranca donde lo dejó el SERVIDOR (clase gu-bloq ya puesta en el HTML), no en
+  // false: si arrancara en false habría un instante en que el campo se cree abierto.
+  var BLOQ = (CFG.bloqIni || '?') !== 'no';
+
+  /*
+   * Texto del campo vacío, en UNA sola variable.
+   *
+   * Lo escribían tres sitios a destiempo —el PHP, pintar() y el candado— y al abrir
+   * un deal el asesor veía el campo cambiar tres veces en menos de un segundo:
+   *   "Elegir unidad…"  ->  "Ver inventario…"  ->  "Ver inventario (se elige en RESERVA)"
+   * Parecía un bug, y era uno.
+   *
+   * Arranca en el texto NEUTRO, que es cierto en todos los casos (mirar el
+   * inventario siempre se puede) y es el mismo que ya imprime el PHP, así que el
+   * primer pintado no cambia nada. De ahí solo se mueve UNA vez, cuando se resuelve
+   * la etapa: a "(se elige en RESERVA)" si toca candado, o a "Elegir unidad…" si no.
+   */
+  // Se lee por id y NO a través de `campo`: `campo` se declara más abajo, y usarlo
+  // aquí lo dejaba en undefined -> TypeError -> se moría el IIFE completo. El texto
+  // seguía saliendo bien porque lo manda el servidor, pero sin JS no corría
+  // ajustarIframe() y el iframe se quedaba en los 200px de Bitrix: el cuadro blanco.
+  var PH_TXT = (document.querySelector('#<?= $uid ?>_campo .gu-ph') || {}).textContent
+             || 'Ver inventario…';
+  var BLOQ_INI = CFG.bloqIni || '?';
+  /** Escribe el placeholder de una sola forma, desde PH_TXT. */
+  function phTexto(t){
+    PH_TXT = t;
+    var ph = campo.querySelector('.gu-ph');
+    if (ph) ph.textContent = t;
+  }
   var val     = document.getElementById('<?= $uid ?>_val');
   var campo    = document.getElementById('<?= $uid ?>_campo');
+  var notaEl   = document.getElementById('<?= $uid ?>_nota');
   var txt      = document.getElementById('<?= $uid ?>_txt');
   var elegidas = document.getElementById('<?= $uid ?>_elegidas');
+  var COT = <?= json_encode(cot_base($dealId), JSON_UNESCAPED_SLASHES) ?>;
+  // Unidades marcadas SOLO para cotizar. Es una lista aparte de `sel` a propósito:
+  // no se guarda, no cambia la etapa de la unidad y no ocupa nada. Así el asesor
+  // puede armar una fusión y cotizarla desde cualquier etapa, aunque todavía no
+  // pueda apartar (en Prospectos la unidad se elige solo en RESERVA).
+  var selCot = [];
+  var btnCot = document.getElementById('<?= $uid ?>_cotsel');
+  /** Cotización de TODAS las unidades elegidas: los activos fusionados se cotizan
+   *  como uno solo (precio y metros sumados, un único plan de pago). */
+  function pintarCotSel(){
+    if (!btnCot) return;
+    filas.forEach(function(f){ f.classList.toggle('gu-cotsel', selCot.indexOf(f.dataset.id) !== -1); });
+    R.classList.toggle('gu-marcando', selCot.length > 0);
+    if (!selCot.length) { btnCot.style.display = 'none'; return; }
+    btnCot.style.display = '';
+    btnCot.href = cotUrlDe(selCot);
+    btnCot.textContent = selCot.length > 1
+      ? ('Cotizar las ' + selCot.length + ' juntas')
+      : 'Cotizar la marcada';
+    btnCot.title = selCot.length > 1
+      ? 'Un solo plan: precio y metros sumados, una reserva y una serie de cuotas. No aparta nada.'
+      : 'Abre la cotización. No reserva ni aparta nada.';
+    // El pie dice qué se lleva marcado; sin esto, con la lista larga, no se ve.
+    if (pie) pie.textContent = selCot.length + (selCot.length > 1 ? ' marcadas para cotizar' : ' marcada para cotizar');
+  }
+  function cotUrlDe(ids){
+    return COT.url + '?u=' + ids.join(',') + '&d=' + COT.d + '&exp=' + COT.exp + '&s=' + COT.s;
+  }
   var q       = document.getElementById('<?= $uid ?>_q');
   var seg     = document.getElementById('<?= $uid ?>_seg');
   var dropbtn = document.getElementById('<?= $uid ?>_dropbtn');
@@ -490,6 +679,47 @@ foreach ($elegidos as $id) {
   var vacio   = document.getElementById('<?= $uid ?>_vacio');
   var pie     = document.getElementById('<?= $uid ?>_pie');
   var listoBt = document.getElementById('<?= $uid ?>_listo');
+
+  /*
+   * Se arman las filas desde el JSON, de un solo innerHTML.
+   *
+   * El HTML que sale de aquí es EL MISMO que antes imprimía PHP: mismas clases y
+   * mismos data-*, así que filtrar(), el clic de la fila y el marcado para cotizar
+   * siguen igual. Corre ANTES de capturar `filas`/`grupos`, que es lo único que
+   * pedía el orden anterior.
+   */
+  (function armarFilas(){
+    var D = window['GU_DATOS_<?= $uid ?>'] || [];
+    var esc = function(s){
+      return String(s).replace(/[&<>"]/g, function(c){
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+      });
+    };
+    // "$1.234.567" sin decimales, igual que el number_format del PHP que había
+    var money = function(n){ return '$' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); };
+    var h = [];
+    for (var i = 0; i < D.length; i++) {
+      var cid = esc(D[i][0]), nom = esc(D[i][1]), us = D[i][2];
+      if (!us || !us.length) continue;
+      h.push('<div class="gu-grupo" data-cat="', cid, '">', nom, '</div>');
+      for (var j = 0; j < us.length; j++) {
+        var u = us[j];                      // [id, codigo, estado, libre, meta, pvp]
+        var cod = esc(u[1]), est = esc(u[2]), libre = u[3] ? 1 : 0, meta = esc(u[4]), pvp = u[5] || 0;
+        h.push('<div class="gu-fila', (libre ? '' : ' gu-no'),
+               '" data-cat="', cid, '" data-cod="', esc(String(u[1]).toUpperCase()),
+               '" data-libre="', libre, '" data-id="', u[0], '" data-pvp="', pvp,
+               '" data-cod-txt="', cod, '" data-proy="', nom, '">',
+               '<span class="gu-cod">', cod, '</span>',
+               '<span class="gu-tag ', est, '">', est, '</span>');
+        if (meta) h.push('<span class="gu-meta">', meta, '</span>');
+        if (pvp)  h.push('<span class="gu-precio">', money(pvp), '</span>',
+                         '<a class="gu-cot">Cotizar</a>');
+        h.push('</div>');
+      }
+    }
+    // antes del "Sin resultados", que es lo único que ya vive en la lista
+    if (h.length && vacio) vacio.insertAdjacentHTML('beforebegin', h.join(''));
+  })();
 
   var filas  = Array.prototype.slice.call(R.querySelectorAll('.gu-fila'));
   var grupos = Array.prototype.slice.call(R.querySelectorAll('.gu-grupo'));
@@ -537,9 +767,6 @@ foreach ($elegidos as $id) {
     cuerpo.set('deal',  CFG.deal);
     cuerpo.set('valor', val.value);
     cuerpo.set('firma', CFG.firma);
-    // Solo desde el modal. Si se mandara siempre, el candado de etapa no serviría
-    // de nada: cualquier render podría saltárselo.
-    if (CFG.permiso && EN_MODAL) cuerpo.set('permiso', CFG.permiso);
 
     fetch('guardar.php', {method:'POST', body:cuerpo})
       .then(function(r){ return r.json(); })
@@ -579,7 +806,10 @@ foreach ($elegidos as $id) {
 
   function datos(id){
     var f = filas.filter(function(x){ return x.dataset.id === id; })[0];
-    return f ? {cod: f.dataset.codTxt, proy: f.dataset.proy} : {cod: '#' + id, proy: ''};
+    // pvp va incluido: el botón de cotizar el conjunto descarta las unidades sin
+    // precio, que no suman nada al total.
+    return f ? {cod: f.dataset.codTxt, proy: f.dataset.proy, pvp: f.dataset.pvp}
+             : {cod: '#' + id, proy: '', pvp: 0};
   }
 
   /** Cerrado: texto plano, igual que los campos nativos del deal. */
@@ -588,7 +818,10 @@ foreach ($elegidos as $id) {
     if (!sel.length) {
       var ph = document.createElement('span');
       ph.className = 'gu-ph';
-      ph.textContent = 'Elegir unidad\u2026';
+      // PH_TXT y no un texto fijo: pintar() corre al arrancar y cada vez que cambia
+      // la selecci\u00f3n, as\u00ed que si escribiera "Elegir unidad\u2026" a mano le pisar\u00eda el
+      // mensaje al candado y el campo parpadear\u00eda de vuelta al texto equivocado.
+      ph.textContent = PH_TXT;
       txt.appendChild(ph);
       return;
     }
@@ -619,6 +852,21 @@ foreach ($elegidos as $id) {
     var t = document.createElement('div');
     t.className = 'gu-eltit';
     t.textContent = 'Elegidas';
+    // Con más de una, lo que hay que cotizar es el CONJUNTO, no cada una suelta:
+    // así se cotiza una fusión (dos locales, oficina + parqueo…) en un solo plan.
+    var conPrecio = sel.filter(function(id){ return parseFloat((datos(id)||{}).pvp || 0) > 0; });
+    if (conPrecio.length) {
+      var a = document.createElement('a');
+      a.className = 'gu-cottodas';
+      a.target = '_blank'; a.rel = 'noopener';
+      a.href = cotUrlDe(conPrecio);
+      a.textContent = conPrecio.length > 1 ? ('Cotizar las ' + conPrecio.length + ' juntas') : 'Cotizar';
+      a.title = conPrecio.length > 1
+        ? 'Un solo plan de pago con el precio y los metros sumados'
+        : 'Cotizar la unidad elegida';
+      a.addEventListener('click', function(e){ e.stopPropagation(); });
+      t.appendChild(a);
+    }
     elegidas.appendChild(t);
     sel.forEach(function(id){
       var d = datos(id);
@@ -690,6 +938,9 @@ foreach ($elegidos as $id) {
     pie.textContent = n + (n === 1 ? ' unidad' : ' unidades')
                     + (monto ? ' · ' + plata(monto) : '')
                     + (sel.length ? ' · ' + sel.length + ' elegida' + (sel.length > 1 ? 's' : '') : '');
+    // DESPUÉS del pie: cuando hay unidades marcadas para cotizar, pintarCotSel lo
+    // reemplaza por ese conteo. Si se llamara antes, esta línea lo borraría.
+    pintarCotSel();
     lista.scrollTop = 0;
   }
 
@@ -790,9 +1041,32 @@ foreach ($elegidos as $id) {
   });
 
   lista.addEventListener('click', function(e){
+    // "Cotizar" va SIN href: la firma es la misma para todas las filas, así que
+    // repetir la URL entera en cada una engordaba el fragmento ~400 KB (1.418
+    // unidades × 286 bytes) y Bitrix llegó a cortar la conexión del iframe.
+    // Se arma aquí, en el momento del clic. Y se corta la propagación: si no,
+    // además de cotizar marcaría la unidad sin que nadie lo pida.
+    var bc = e.target.closest('.gu-cot');
+    if (bc) {
+      e.stopPropagation(); e.preventDefault();
+      var fc = bc.closest('.gu-fila');
+      if (fc) window.open(cotUrlDe([fc.dataset.id]), '_blank', 'noopener');
+      return;
+    }
     var f = e.target.closest('.gu-fila'); if (!f) return;
     var id = f.dataset.id;
-    if (BLOQ) return;                             // solo consulta: se ve, no se elige
+    if (BLOQ) {
+      // No se puede APARTAR en esta etapa, pero sí cotizar: el clic marca y
+      // desmarca para armar la fusión que se va a cotizar. Nada se guarda.
+      if ((parseFloat(f.dataset.pvp || 0) || 0) <= 0) return;   // sin precio no suma
+      var i = selCot.indexOf(id);
+      if (i === -1) selCot.push(id); else selCot.splice(i, 1);
+      // filtrar() y no pintarCotSel() a secas: filtrar reescribe el pie con el
+      // conteo normal y luego llama a pintarCotSel, así que al desmarcar la
+      // última el pie vuelve a su texto en vez de quedarse en "1 marcada".
+      filtrar();
+      return;
+    }
     if (f.dataset.libre !== '1') return;          // ocupada: no seleccionable
     if (sel.indexOf(id) !== -1) return;           // ya elegida (se quita desde "Elegidas")
     sel.push(id);
@@ -816,32 +1090,116 @@ foreach ($elegidos as $id) {
    * verdad es guardar.php, que rechaza con el mismo criterio y sin depender del
    * navegador. Aquí solo se evita que el vendedor elija para que se lo tumben.
    */
+  /*
+   * FAIL-CLOSED (ago-2026). Antes esto arrancaba ABIERTO y solo cerraba cuando
+   * volvía el crm.deal.get. Ese viaje tarda, y en esa ventana el asesor alcanzaba
+   * a abrir el panel y elegir una unidad estando en cualquier etapa del 28. No es
+   * teórico: así quedó la A-1-1 de Noral Apartments en RESERVADO, apartada por un
+   * prospecto en VOLVER A LLAMAR (deal 401401), sin dueño y sin poder venderse.
+   * Ahora nace cerrado y solo se abre cuando se confirma que la etapa lo permite;
+   * si la comprobación falla, se queda cerrado y lo dice.
+   */
+  /*
+   * Ya NO bloquea: AVISA.
+   *
+   * El campo es obligatorio para entrar a RESERVA, así que bloquearlo fuera de
+   * RESERVA hacía imposible cambiar de etapa — ni desde el deal ni desde el kanban.
+   * La regla ahora la garantiza el servidor de otra forma (apartar_prospecto en
+   * campolib.php): elegir se puede en cualquier etapa, pero la unidad solo se
+   * aparta cuando el deal llega a RESERVA.
+   *
+   * Aquí lo único que hace falta es no dejar creer al asesor que ya la tiene.
+   */
   function candadoEtapa(){
-    // En el modal de obligatorios el campo se pide PARA pasar a RESERVA: si se
-    // bloquea ahí, el cambio de etapa queda imposible. El servidor ya firmó el
-    // permiso, así que guardar.php también lo va a aceptar.
-    if (EN_MODAL) return;   // el modal PIDE la unidad para poder pasar a RESERVA
-    if (!CFG.deal || typeof BX24 === 'undefined' || !BX24.callMethod) return;
+    /*
+     * El modal "Complete todos los campos requeridos para cambiar la etapa" pide
+     * ESTE campo para poder pasar a RESERVA. Si ahí se bloquea, el candado se
+     * muerde la cola: no se puede elegir hasta estar en RESERVA y Bitrix no deja
+     * entrar a RESERVA sin haber elegido. Y da igual si el asesor mueve la etapa
+     * desde el deal o arrastrando en el kanban: el modal es el mismo.
+     *
+     * Se reconoce por MODE=edit, que lo manda Bitrix. Comprobado con un caso real
+     * (deal 402071, 2026-08-04): abrir y navegar el deal produce MODE=view en
+     * todos los renders, y el único MODE=edit es el del modal. Es una señal del
+     * servidor, no una medida del navegador — el intento anterior de adivinarlo por
+     * el ancho del iframe (<560px) daba positivo también en la ficha normal, y por
+     * ahí se apartó la A-1-1 de Noral Apartments desde VOLVER A LLAMAR.
+     *
+     * Queda un caso que también entra por aquí: pulsar "editar" en la sección del
+     * deal. Es un acto deliberado y poco común, y aun así no puede trabar nada — el
+     * servidor solo aparta en RESERVA (apartar_prospecto en campolib.php).
+     */
+    if (CFG.modo === 'edit') return;
+    if (!CFG.deal) return;  // deal nuevo: no hay etapa que comprobar todavía
+
+    /*
+     * El servidor ya dejó el campo en su estado final (CFG.bloqIni). Esto de aquí
+     * ya NO pinta: solo CORRIGE si el caché de 60s estaba viejo — por ejemplo si el
+     * deal acaba de pasar a RESERVA en otra pestaña. Si coincide, no se toca nada, y
+     * por eso se acabó el parpadeo: antes esta función repintaba siempre, dos veces.
+     *
+     * Cuando el servidor no pudo averiguarlo ('?') el campo está cerrado por
+     * precaución con el texto neutro, y esta comprobación es la que lo resuelve.
+     */
+    if (BLOQ_INI !== '?' && (typeof BX24 === 'undefined' || !BX24.callMethod)) return;
+    if (typeof BX24 === 'undefined' || !BX24.callMethod) { bloquear('sin-verificar'); return; }
     try {
       BX24.callMethod('crm.deal.get', {id: CFG.deal}, function(res){
         try {
-          if (!res || (res.error && res.error())) return;
+          if (!res || (res.error && res.error())) {
+            if (BLOQ_INI === '?') bloquear('sin-verificar');
+            return;
+          }
           var d = res.data() || {};
-          if (String(d.CATEGORY_ID) !== String(CFG.prospectos)) return;
-          if (String(d.STAGE_ID) === String(CFG.reserva28)) return;
-          bloquear();
-        } catch(e) {}
+          var toca = String(d.CATEGORY_ID) === String(CFG.prospectos)
+                  && String(d.STAGE_ID)    !== String(CFG.reserva28);
+          // solo se escribe si el servidor se equivocó (o no supo)
+          if (toca && !BLOQ)      bloquear();
+          else if (!toca && BLOQ) desbloquear();
+          else if (BLOQ_INI === '?') { toca ? bloquear() : desbloquear(); }
+        } catch(e) { if (BLOQ_INI === '?') bloquear('sin-verificar'); }
       });
-    } catch(e) {}
+    } catch(e) { if (BLOQ_INI === '?') bloquear('sin-verificar'); }
   }
 
-  /** Deja el campo de lectura: no abre el panel y avisa por qué. */
-  function bloquear(){
+  /**
+   * Deja el campo de lectura: el panel SIGUE abriendo (consultar y cotizar se
+   * puede en cualquier etapa), lo que se apaga es elegir. `motivo` cambia el
+   * mensaje: mentir con "se elige en RESERVA" cuando en realidad no pudimos
+   * comprobar la etapa manda al asesor a buscar un problema que no existe.
+   *
+   * Se mantiene en UNA línea de texto, como estaba al principio: el asesor abre el
+   * desplegable, mira disponibles, marca las que quiera y cotiza (esa selección es
+   * aparte, `selCot`, y no se guarda ni ocupa nada). Lo único apagado es elegir la
+   * unidad de verdad.
+   */
+  function bloquear(motivo){
     BLOQ = true;
     R.classList.add('gu-bloq');
-    campo.title = 'Puedes consultar el inventario; la unidad se elige en la etapa RESERVA';
-    var ph = campo.querySelector('.gu-ph');
-    if (ph) ph.textContent = 'Ver inventario (se elige en RESERVA)';
+    var txtPh, txtTitle;
+    if (motivo === 'verificando') {
+      txtPh = 'Ver inventario…';
+      txtTitle = 'Comprobando la etapa del deal…';
+    } else if (motivo === 'sin-verificar') {
+      txtPh = 'Ver inventario (no pude comprobar la etapa · recarga el deal)';
+      txtTitle = 'No pude comprobar la etapa del deal. Puedes consultar y cotizar; para apartar, recarga el deal.';
+    } else {
+      txtPh = 'Ver inventario (se elige en RESERVA)';
+      txtTitle = 'Puedes consultar y cotizar el inventario; apartar la unidad se hace en la etapa RESERVA';
+    }
+    campo.title = txtTitle;
+    phTexto(txtPh);
+    if (notaEl) notaEl.textContent = '';
+    ajustarIframe();
+  }
+
+  /** La etapa SÍ permite elegir: se devuelve el campo a su estado normal. */
+  function desbloquear(){
+    BLOQ = false;
+    R.classList.remove('gu-bloq');
+    campo.title = '';
+    phTexto('Elegir unidad…');
+    if (notaEl) notaEl.textContent = '';
     ajustarIframe();
   }
 

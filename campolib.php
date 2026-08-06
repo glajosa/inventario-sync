@@ -100,8 +100,66 @@ function logline(string $msg): void {
 // guardar.php lo pone en 0; reconcile y la migración lo dejan como está.
 $BX_FRENO_US = 200000;
 
+/**
+ * CANDADO DE BORRADO — nace del incidente del 2026-07-31.
+ * Un script de limpieza leyó mal un archivo, el filtro CONTACT_ID quedó vacío,
+ * Bitrix devolvió TODO en vez de nada y el bucle borró 50 ventas REALES de
+ * CLIENTES. Los warnings de PHP estaban en la misma salida y nadie los miró.
+ * Estas cuatro barreras cortan esa cadena en cuatro puntos distintos:
+ *   1. Borrar está PROHIBIDO salvo que se pida a propósito (BX_ALLOW_DELETE=1).
+ *   2. Hay que pasar un id explícito — nunca el resultado de una búsqueda suelta.
+ *   3. No se borra nada CON MONTO ni creado hace más de 24 h: un dato de prueba
+ *      vale 0 y nació hace minutos. Una venta real no.
+ *   4. Tope de 10 por proceso. El accidente fue un bucle de 50: con esto se
+ *      habría detenido en el 11.
+ * Para un caso legítimo que choque con 3 o 4: BX_ALLOW_DELETE=FORCE (y queda
+ * en el log igual).
+ */
+const BX_MAX_BORRADOS = 10;
+function bx_log_borrado(string $txt): void {
+    $f = ($d = getenv('DATA_DIR') ?: sys_get_temp_dir()) . '/borrados.log';
+    @file_put_contents($f, gmdate('c') . '  ' . $txt . "\n", FILE_APPEND | LOCK_EX);
+}
+function bx_guard_borrado(string $method, array $params): ?array {
+    if (!preg_match('/\.delete$/i', $method)) return null;      // no es un borrado: pasa
+    static $hechos = 0;
+    $permiso = strtoupper(trim((string)getenv('BX_ALLOW_DELETE')));
+    $id = (int)($params['id'] ?? 0);
+
+    if ($permiso === '') {
+        bx_log_borrado("BLOQUEADO $method id=$id (sin BX_ALLOW_DELETE)");
+        return ['ok'=>false,'error'=>'BORRADO BLOQUEADO: exporta BX_ALLOW_DELETE=1 para permitirlo'];
+    }
+    if ($id <= 0) {
+        bx_log_borrado("BLOQUEADO $method SIN ID — posible filtro vacío");
+        return ['ok'=>false,'error'=>'BORRADO BLOQUEADO: id vacío o no numérico (¿filtro sin valor?)'];
+    }
+    if ($hechos >= BX_MAX_BORRADOS && $permiso !== 'FORCE') {
+        bx_log_borrado("BLOQUEADO $method id=$id — tope de " . BX_MAX_BORRADOS . " alcanzado");
+        return ['ok'=>false,'error'=>'BORRADO BLOQUEADO: ya van '.BX_MAX_BORRADOS.' en este proceso. Si es correcto, BX_ALLOW_DELETE=FORCE'];
+    }
+    if (stripos($method, 'crm.deal.delete') === 0 && $permiso !== 'FORCE') {
+        $g = bx('crm.deal.get', ['id'=>$id]);                    // .get no entra al candado: no hay recursión
+        $d = $g['result'] ?? [];
+        if ($d) {
+            $monto = (float)($d['OPPORTUNITY'] ?? 0);
+            $creado = strtotime((string)($d['DATE_CREATE'] ?? ''));
+            $viejo = $creado && (time() - $creado) > 86400;
+            if ($monto > 0 || $viejo) {
+                $por = $monto > 0 ? ('monto ' . $monto) : 'creado hace más de 24 h';
+                bx_log_borrado("BLOQUEADO crm.deal.delete id=$id ($por) — \"" . substr((string)($d['TITLE'] ?? ''),0,60) . '"');
+                return ['ok'=>false,'error'=>"BORRADO BLOQUEADO: el deal $id parece REAL ($por). Si de verdad hay que borrarlo, BX_ALLOW_DELETE=FORCE"];
+            }
+        }
+    }
+    $hechos++;
+    bx_log_borrado("PERMITIDO $method id=$id (permiso=$permiso, #$hechos)");
+    return null;
+}
+
 function bx(string $method, array $params = []): array {
     global $WEBHOOK_IN, $BX_FRENO_US;
+    if ($bloqueo = bx_guard_borrado($method, $params)) return $bloqueo;
     if ($BX_FRENO_US > 0) usleep($BX_FRENO_US);
     for ($try = 0; $try < 4; $try++) {
         $ch = curl_init($WEBHOOK_IN . $method);
@@ -234,6 +292,41 @@ function apartados_registro(): array {
     return is_array($j) ? $j : [];
 }
 
+/*
+ * PENDIENTES DEL 28 — deals de Prospectos que YA eligieron unidad pero todavía no
+ * están en RESERVA, así que la unidad NO está apartada.
+ *
+ * Existe para que hook.php sepa a quién vigilar sin gastar API: el hook recibe
+ * ONCRMDEALUPDATE de TODO el portal y descarta lo que no esté en su lista blanca
+ * (pipeline 44) sin una sola llamada. Meter los 89.302 deals del 28 en esa lista
+ * sería un crm.deal.get por cada edición de cualquier prospecto — el portal ya va
+ * al tope (~120 llamadas/min). Esta lista, en cambio, solo tiene los pocos deals
+ * que están negociando con una unidad ya elegida.
+ */
+function pendientes_28(): array {
+    global $DATA_DIR;
+    $j = json_decode((string)@file_get_contents($DATA_DIR . '/pendientes28.json'), true);
+    return is_array($j) ? $j : [];
+}
+function pendientes_28_marcar(int $dealId, bool $poner): void {
+    global $DATA_DIR;
+    $path = $DATA_DIR . '/pendientes28.json';
+    $fh = @fopen($path, 'c+');
+    if (!$fh) return;
+    @flock($fh, LOCK_EX);
+    $j = json_decode((string)stream_get_contents($fh), true);
+    $j = is_array($j) ? $j : [];
+    $k = (string)$dealId;
+    $antes = $j;
+    if ($poner) { $j[$k] = time(); } else { unset($j[$k]); }
+    if ($j !== $antes) {
+        ftruncate($fh, 0); rewind($fh);
+        fwrite($fh, json_encode($j));
+    }
+    @flock($fh, LOCK_UN);
+    fclose($fh);
+}
+
 /**
  * De una lista de IDs, devuelve las que SÍ se pueden atar a este deal.
  * Portero del servidor: la lista del campo pinta en gris lo ocupado, pero eso es
@@ -326,10 +419,54 @@ function apartar_prospecto(int $dealId, array $deal): array {
     $puestos = apartados_puestos();
     $movidas = 0;
 
+    /*
+     * LA REGLA DEL 28, en un solo sitio (ago-2026): la unidad se aparta SOLO si el
+     * deal está en RESERVA. Vive aquí y no en guardar.php a propósito, porque por
+     * aquí pasan los CUATRO caminos (guardar.php, hook.php, sync-campo.php y
+     * reconcile.php) y antes cada uno podía tener su propio criterio.
+     *
+     * Por qué se movió: antes la regla se aplicaba rechazando la ESCRITURA DEL CAMPO
+     * en guardar.php, y eso choca de frente con que el campo es OBLIGATORIO para
+     * entrar a RESERVA — Bitrix lo pide ANTES de mover, y en ese momento el deal
+     * todavía no está en RESERVA. Desde el servidor ese instante es indistinguible
+     * de abrir la ficha normal: verificado en el log real, MANDATORY siempre llega
+     * "N" y MODE "edit" también sale de /details/. Se intentó adivinarlo por el
+     * ancho del iframe (<560px) y el resultado fue que el candado quedó abierto en
+     * la vista de todos los días (la columna del campo mide ~435px): así se apartó
+     * la A-1-1 de Noral Apartments desde VOLVER A LLAMAR.
+     *
+     * Así que se separan las dos cosas que estaban pegadas:
+     *   ELEGIR  la unidad -> se puede en cualquier etapa. El campo obligatorio
+     *                        funciona igual si mueven desde el deal o desde el
+     *                        kanban. No hay nada que adivinar.
+     *   APARTAR la unidad -> solo en RESERVA. Mientras el deal no llegue, la unidad
+     *                        sigue DISPONIBLE para todos: elegirla no traba nada,
+     *                        que era exactamente el daño a evitar.
+     *
+     * Quien la aparta al llegar es hook.php, ya suscrito a ONCRMDEALUPDATE por
+     * webhook de salida (push, segundos). reconcile.php lo repite cada 15 min como
+     * red por si Bitrix pierde un evento. Si dos asesores eligieron la misma unidad,
+     * gana el primero que llegue a RESERVA y al segundo lo para unidades_asignables.
+     */
+    $enReserva = ((string)($deal['STAGE_ID'] ?? '')) === etapa_28_reserva();
+
+    // Se vigila solo lo que de verdad FALTA apartar. Si se marcara con "tiene
+    // unidad elegida" a secas, un deal que ya apartó en RESERVA y luego retrocedió
+    // de etapa quedaría pendiente para siempre, y el hook lo releería en cada
+    // edición sin nada que hacer. (Retroceder de etapa NO suelta la unidad: eso
+    // sería tirar una reserva real; la válvula para soltar sigue siendo vaciar el
+    // campo, que funciona en cualquier etapa.)
+    $yaApartadas = [];
+    foreach ($puestos as $uid => $dueno) {
+        if ((int)$dueno === $dealId) $yaApartadas[] = (int)$uid;
+    }
+    $faltanApartar = array_values(array_diff($quiere, $yaApartadas));
+    pendientes_28_marcar($dealId, !$enReserva && $faltanApartar !== []);
+
     // UNA lectura y UNA escritura por unidad. Antes eran tres crm.item.get y dos
     // crm.item.update de la MISMA unidad (~1,1 s medidos de puro trámite): uno por
     // el stage, otro por responsable/cliente, y un tercero para refrescar el caché.
-    foreach ($quiere as $uid) {
+    foreach (($enReserva ? $quiere : []) as $uid) {
         $uid = (int)$uid;
         $r = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $uid]);
         if (!$r['ok']) { logline("ERR get u=$uid: {$r['error']}"); continue; }

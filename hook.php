@@ -204,8 +204,18 @@ if ($event === 'ONCRMDEALADD') {
 }
 
 // ---- 4) UPDATE (y ADD ya validado): filtro por lista blanca -----------------
-if (!isset($allow[$dealId])) {
-    // no es de P44 => CERO llamadas. Aquí se descarta el 99% del ruido del portal.
+// Además de P44, pasan los PENDIENTES DEL 28: prospectos que ya eligieron unidad
+// pero todavía no están en RESERVA, así que la unidad NO está apartada. Este hook
+// es justamente lo que los aparta en cuanto el deal entra a RESERVA — llega por
+// push (ONCRMDEALUPDATE), en segundos, sin que nadie tenga que abrir el deal.
+//
+// Sigue siendo baratísimo: la lista de pendientes tiene los pocos deals que están
+// negociando con una unidad elegida, no los 89.302 del pipeline. Lo demás se sigue
+// descartando con CERO llamadas.
+$pend28 = pendientes_28();
+if (!isset($allow[$dealId]) && !isset($pend28[$dealId])) {
+    // no es de P44 ni pendiente del 28 => CERO llamadas. Aquí se descarta el 99%
+    // del ruido del portal.
     echo 'skip-not-p44';
     exit;
 }
