@@ -47,77 +47,82 @@ $uid = 'gl' . substr(md5((string)$dealId . microtime()), 0, 8);
     font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     color: #1f2328;
   }
+  /* paleta calcada de field.php (Inventario): #0969da acento, #d0d7de borde,
+     #57606a texto secundario, #8b949e placeholder — nada de sombra ni color
+     fuerte, para que se sienta un campo más y no una app flotando encima. */
   #<?= $uid ?>_cerrado {
-    height: 30px; display: flex; align-items: center; gap: 6px;
-    padding: 0 8px; cursor: pointer; color: #444; white-space: nowrap;
+    height: 26px; display: flex; align-items: center;
+    padding: 0 2px; cursor: pointer; color: #0969da; white-space: nowrap; font-size: 13px;
   }
-  #<?= $uid ?>_cerrado:hover { color: #2f6fed; }
-  #<?= $uid ?>_cerrado svg { flex-shrink: 0; }
+  #<?= $uid ?>_cerrado:hover { text-decoration: underline; }
 
-  #<?= $uid ?>_abierto { display: none; padding: 10px 12px 12px; }
+  #<?= $uid ?>_abierto {
+    display: none; margin-top: 4px; border: 1px solid #d0d7de; border-radius: 8px;
+    background: #fff; padding: 10px 12px 12px;
+  }
   #<?= $uid ?>_abierto.on { display: block; }
 
-  h3 { margin: 0 0 10px; font-size: 13px; font-weight: 600; text-align: center; }
+  h3 { margin: 0 0 10px; font-size: 12.5px; font-weight: 600; color: #1f2328; text-align: left; }
 
   .mes-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-  .mes-nav span { font-size: 12px; font-weight: 600; text-transform: capitalize; }
+  .mes-nav span { font-size: 12px; font-weight: 600; color: #1f2328; text-transform: capitalize; }
   .mes-nav button {
-    border: none; background: #f0f2f5; width: 24px; height: 24px; border-radius: 6px;
-    cursor: pointer; font-size: 13px; color: #444; line-height: 1;
+    border: 1px solid #d0d7de; background: #fff; width: 22px; height: 22px; border-radius: 6px;
+    cursor: pointer; font-size: 12px; color: #57606a; line-height: 1;
   }
-  .mes-nav button:hover { background: #e1e4e8; }
+  .mes-nav button:hover { border-color: #0969da; color: #0969da; }
 
   .dow { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; margin-bottom: 3px; }
-  .dow span { font-size: 9px; color: #8a919c; font-weight: 600; }
+  .dow span { font-size: 9px; color: #8b949e; font-weight: 600; }
 
   .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 10px; }
   .dia {
     aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
-    border-radius: 6px; cursor: pointer; font-size: 11px; user-select: none;
+    border-radius: 6px; cursor: pointer; font-size: 11px; color: #1f2328; user-select: none;
   }
-  .dia:hover { background: #eef1f4; }
+  .dia:hover { background: #f6f8fa; }
   .dia.fuera { visibility: hidden; cursor: default; }
-  .dia.hoy { border: 1.5px solid #2f6fed; color: #2f6fed; font-weight: 600; }
+  .dia.hoy { border: 1px solid #0969da; color: #0969da; font-weight: 600; }
   .dia.pasado { color: #c4c9d0; cursor: default; }
   .dia.pasado:hover { background: none; }
-  .dia.sel { background: #2f6fed; color: #fff; font-weight: 600; }
-  .dia.sel.hoy { border-color: #2f6fed; }
+  .dia.sel { background: #0969da; color: #fff; font-weight: 600; }
+  .dia.sel.hoy { border-color: #0969da; }
 
   .hora-fila { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
   .hora-fila label { font-size: 10px; color: #57606a; white-space: nowrap; }
   .hora-fila input[type="time"] {
-    flex: 1; padding: 5px 6px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 12px;
+    flex: 1; padding: 4px 6px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 12px; color: #1f2328;
   }
   .chips-hora { display: flex; gap: 5px; margin-bottom: 10px; }
   .chip-hora {
     flex: 1; text-align: center; padding: 4px 3px; border: 1px solid #d0d7de; border-radius: 6px;
-    background: #f6f8fa; cursor: pointer; font-size: 10px; color: #444;
+    background: #fff; cursor: pointer; font-size: 10px; color: #57606a;
   }
-  .chip-hora:hover { background: #eef1f4; }
+  .chip-hora:hover { border-color: #0969da; color: #0969da; }
 
   #<?= $uid ?>_accion { display: none; }
   #<?= $uid ?>_accion.on { display: block; }
   .fecha-elegida {
-    text-align: center; font-size: 10px; color: #57606a; margin-bottom: 8px;
-    padding-top: 8px; border-top: 1px solid #eef1f4;
+    font-size: 11px; color: #57606a; margin-bottom: 8px;
+    padding-top: 8px; border-top: 1px solid #eaeef2;
   }
   .fecha-elegida b { color: #1f2328; }
   .botones { display: flex; gap: 6px; }
   .btn {
-    flex: 1; padding: 9px; border: none; border-radius: 6px; font-size: 12px;
-    font-weight: 600; cursor: pointer; color: #fff;
+    flex: 1; padding: 7px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 12px;
+    font-weight: 500; cursor: pointer; background: #fff;
   }
-  .btn.no { background: #cf222e; }
-  .btn.no:hover { background: #a40e26; }
-  .btn.si { background: #1a7f37; }
-  .btn.si:hover { background: #116329; }
-  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.no { color: #cf222e; }
+  .btn.no:hover { background: #fff5f5; border-color: #cf222e; }
+  .btn.si { color: #1a7f37; }
+  .btn.si:hover { background: #f1fbf4; border-color: #1a7f37; }
+  .btn:disabled { opacity: .4; cursor: default; }
 
-  .pista { text-align: center; font-size: 10px; color: #8a919c; padding: 2px 0 0; }
+  .pista { font-size: 10px; color: #8b949e; padding: 2px 0 0; }
   #<?= $uid ?>_cerrar {
-    text-align: center; font-size: 10px; color: #8a919c; cursor: pointer; padding-top: 8px;
+    font-size: 11px; color: #8b949e; cursor: pointer; padding-top: 8px;
   }
-  #<?= $uid ?>_cerrar:hover { color: #57606a; }
+  #<?= $uid ?>_cerrar:hover { color: #0969da; }
   #<?= $uid ?>_estado { margin-top: 8px; font-size: 11px; text-align: center; min-height: 14px; }
   #<?= $uid ?>_estado.ok { color: #1a7f37; font-weight: 600; }
   #<?= $uid ?>_estado.err { color: #cf222e; font-weight: 600; }
@@ -125,12 +130,7 @@ $uid = 'gl' . substr(md5((string)$dealId . microtime()), 0, 8);
 </head>
 <body>
 
-<div id="<?= $uid ?>_cerrado">
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="2">
-    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
-  </svg>
-  <span>Registrar llamada</span>
-</div>
+<div id="<?= $uid ?>_cerrado">Registrar llamada</div>
 
 <div id="<?= $uid ?>_abierto">
 
