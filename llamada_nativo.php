@@ -215,7 +215,8 @@ declare(strict_types=1);
     if (aviso) blocks.ok = { type:'text', properties:{ value: aviso, bold:true } };
 
     // ── encabezado: ◀  agosto 2026  ▶
-    blocks.nav = { type:'lineOfBlocks', properties:{ blocks:{
+    var cal = {};
+    cal.nav = { type:'lineOfBlocks', properties:{ blocks:{
       ant: { type:'link', properties:{ text:'◀', action:{ type:'layoutEvent', value:'mes:-1' } } },
       tit: { type:'text', properties:{
         value: EC + RELLENO[MESES[m]][0] + MESES[m] + ' ' + y + RELLENO[MESES[m]][1] + EC,
@@ -226,7 +227,7 @@ declare(strict_types=1);
     // ── fila de días de la semana (2 caracteres, igual que los números)
     var cab = {};
     for (var i = 0; i < 7; i++) cab['h'+i] = { type:'text', properties:{ value: DOW[i] + SEP } };
-    blocks.dow = { type:'lineOfBlocks', properties:{ blocks: cab } };
+    cal.dow = { type:'lineOfBlocks', properties:{ blocks: cab } };
 
     // ── celdas del mes, lunes primero.
     // La grilla se rellena con los días del mes anterior y del siguiente, en
@@ -264,13 +265,19 @@ declare(strict_types=1);
           }};
         }
       }
-      blocks['sem'+s] = { type:'lineOfBlocks', properties:{ blocks: fila } };
+      cal['sem'+s] = { type:'lineOfBlocks', properties:{ blocks: fila } };
     }
 
     // ── hora: dos ruedas, hora y minuto, como el control nativo de Bitrix.
     // Reemplaza al campo de texto: se va el rectángulo de ancho completo y de
     // paso todos los enredos de teclear. El minuto va de 5 en 5 porque así lo
     // hacen: de 400 llamadas leídas, TODOS los minutos son múltiplo de 5.
+    // El calendario va en su propia caja: antes quedaba pegado al borde
+    // izquierdo mientras la hora arrancaba 16 px mas adentro (el padding del
+    // section). Dos cajas iguales = todo a plomo, y de paso cada cosa queda
+    // agrupada en vez de ser una lista larga de numeros sueltos.
+    blocks.cal = { type:'section', properties:{ type:'withBorder', blocks: cal } };
+
     var hh = hhmm.slice(0,2), mi = hhmm.slice(3);
 
     // ── hora, dentro de una caja (section withBorder: borde de 0,75 px y
@@ -304,8 +311,8 @@ declare(strict_types=1);
       var f = {};
       for (var q = desde; q <= hasta; q += paso) {
         f[pre+q] = (pad(q) === actual)
-          ? { type:'text', properties:{ value: celda(q) + SEP, bold:true } }
-          : { type:'link', properties:{ text: celda(q) + SEP,
+          ? { type:'text', properties:{ value: celda(q) + SEP, bold:true, size:'sm' } }
+          : { type:'link', properties:{ text: celda(q) + SEP, size:'sm',
                 action:{ type:'layoutEvent', value: evento + pad(q) } } };
       }
       return { type:'lineOfBlocks', properties:{ blocks: f } };
@@ -314,7 +321,7 @@ declare(strict_types=1);
     blocks.caja = { type:'section', properties:{ type:'withBorder', blocks:{
       ruedas:  ruedas,
       horas:   filaAtajos('h', 8, 20, 1, hh, 'hora:'),
-      minutos: filaAtajos('m', 0, 55, 5, mi, 'min:')
+      minutos: filaAtajos('m', 0, 45, 15, mi, 'min:')
     }}};
 
     // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
