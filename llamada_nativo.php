@@ -75,25 +75,27 @@ declare(strict_types=1);
    * números de las dos filas arranquen en la misma vertical.
    * El eje es la fila de horas con su rótulo: 424 px.
    */
-  // Los tres rótulos se emparejan al más ancho para que formen columna.
-  // Medido en 13 px: Tiempo 45,221 · Minuto 41,596 · Hora 29,148.
+  // Los tres rótulos van en NEGRITA, como el nombre del mes, y se emparejan
+  // al más ancho para que hagan columna. Ojo: la negrita mide distinto, así
+  // que estos anchos son los de negrita 13 px -- Tiempo 48,128 · Minuto
+  // 44,748 · Hora 31,129 -- y el relleno usa los espacios de esa misma
+  // negrita: U+2007 8,652 · U+2006 2,082 · U+200A 0,762.
   var ROTULO = {
     tiempo: 'Tiempo',
-    hora:   'Hora\u2007\u2006\u2006\u2006\u200A\u200A',
+    hora:   'Hora\u2007\u2006\u2006\u2006\u2006',
     minuto: 'Minuto\u2006\u200A\u200A'
   };
   var HUECO = '\u2007\u2007';   // entre el rótulo y lo que sigue
 
   var RAYA = '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500';
 
-  // Dentro de la caja de la hora ya no se centra fila por fila: las tres
-  // arrancan pegadas a la izquierda y los rótulos hacen la columna. Antes la
-  // de minutos llevaba sangría de centrado y por eso "Hora" y "Minuto" no
-  // coincidían -- medido, 126 px de diferencia. Lo único que se centra es el
-  // calendario, sobre el ancho de la fila de horas (431,6 px).
+  // Dentro de la caja de la hora no se centra fila por fila: las tres
+  // arrancan pegadas a la izquierda y los rótulos hacen la columna. Lo único
+  // que se centra es el calendario, sobre el ancho de la fila de horas, que
+  // con el rótulo en negrita queda en 434,6 px.
   var SANGRIA = {
-    celda: '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u200A\u200A',
-    raya:  '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A\u200A'
+    celda: '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A',
+    raya:  '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u200A'
   };
 
   /**
@@ -329,7 +331,7 @@ declare(strict_types=1);
     // El rango 08-20 sale de los datos: de 400 llamadas leídas en Bitrix, no
     // hay ninguna fuera de esa franja salvo tres sueltas.
     var ruedas = { type:'lineOfBlocks', properties:{ blocks:{
-      rot:  { type:'text', properties:{ value: ROTULO.tiempo + HUECO, size:'sm', color:'base_50' } },
+      rot:  { type:'text', properties:{ value: ROTULO.tiempo + HUECO, size:'sm', bold:true } },
       hmen: { type:'link', properties:{ text: EC+'\u2212'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h-1' } } },
       hval: { type:'text', properties:{ value: EC + hh + EC, bold:true, size:'xl' } },
       hmas: { type:'link', properties:{ text: EC+'+'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h+1' } } },
@@ -350,7 +352,7 @@ declare(strict_types=1);
     function filaAtajos(pre, desde, hasta, paso, actual, evento, sangria, rotulo) {
       var f = {};
       f.rot = { type:'text', properties:{
-        value: (sangria || '') + rotulo + HUECO, size:'sm', color:'base_50' } };
+        value: (sangria || '') + rotulo + HUECO, size:'sm', bold:true } };
       for (var q = desde; q <= hasta; q += paso) {
         f[pre+q] = (pad(q) === actual)
           ? { type:'text', properties:{ value: celda(q) + AIRE, bold:true, size:'sm' } }
