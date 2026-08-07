@@ -31,8 +31,12 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
 }
 
 const PLACEMENT = 'CRM_DEAL_DETAIL_ACTIVITY';
-const HANDLER   = 'https://galjosa-inventario-sync.pwluu1.easypanel.host/llamada.php';
+const HANDLER   = 'https://galjosa-inventario-sync.pwluu1.easypanel.host/llamada_nativo.php';
 const TITULO    = 'Registrar llamada';
+
+// Handler viejo (HTML propio dentro del panel deslizante de Bitrix). Se
+// desenlaza junto con el nuevo para que no queden los dos botones.
+const HANDLER_VIEJO = 'https://galjosa-inventario-sync.pwluu1.easypanel.host/llamada.php';
 
 $accion = (string)($_GET['accion'] ?? 'ver');
 
@@ -56,18 +60,27 @@ echo "Antes:\n"; mostrar();
 if ($accion === 'poner') {
     // Desenlazar primero: re-correr esto actualiza el handler en vez de duplicar
     // el botón (bind sobre el mismo placement da ERROR_PLACEMENT_EXISTS).
+    // Se quita también el handler viejo, si quedó de la versión anterior.
     app_bx('placement.unbind', ['PLACEMENT' => PLACEMENT, 'HANDLER' => HANDLER]);
+    app_bx('placement.unbind', ['PLACEMENT' => PLACEMENT, 'HANDLER' => HANDLER_VIEJO]);
 
+    // ⭐ useBuiltInInterface = Y: la interfaz la dibuja BITRIX a partir del
+    // LayoutDto que manda el handler (setLayout), dentro de la barra de
+    // actividades. Sin esto, Bitrix abre el HTML de la app en su panel
+    // deslizante grande, que NO se puede achicar desde adentro.
     $r = app_bx('placement.bind', [
         'PLACEMENT'   => PLACEMENT,
         'HANDLER'     => HANDLER,
         'TITLE'       => TITULO,
         'DESCRIPTION' => 'Registra la llamada (contesto / no contesto) y planifica la siguiente',
+        'OPTIONS'     => ['useBuiltInInterface' => 'Y'],
     ]);
     echo "\nbind: " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
 } elseif ($accion === 'quitar') {
-    $r = app_bx('placement.unbind', ['PLACEMENT' => PLACEMENT, 'HANDLER' => HANDLER]);
-    echo "\nunbind: " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
+    $r  = app_bx('placement.unbind', ['PLACEMENT' => PLACEMENT, 'HANDLER' => HANDLER]);
+    $r2 = app_bx('placement.unbind', ['PLACEMENT' => PLACEMENT, 'HANDLER' => HANDLER_VIEJO]);
+    echo "\nunbind: " . json_encode($r, JSON_UNESCAPED_UNICODE)
+       . " | viejo: " . json_encode($r2, JSON_UNESCAPED_UNICODE) . "\n";
 }
 
 if ($accion !== 'ver') { echo "\nDespués:\n"; mostrar(); }
