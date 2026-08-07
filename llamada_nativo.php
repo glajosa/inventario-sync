@@ -96,28 +96,33 @@ declare(strict_types=1);
     return (y<h.y) || (y===h.y && m<h.m) || (y===h.y && m===h.m && d<h.d);
   }
 
-  /** Horas en punto, 8 a.m. a 8 p.m. — 13 opciones en vez de 30. */
+  /**
+   * Horas de 7:00 a 21:00 cada media hora (29 opciones).
+   *
+   * Historial: arranco con media hora (30 opciones), se bajo a horas en punto
+   * (13) cuando el usuario pidio "mas sencillo", y quedo demasiado rigida --
+   * no se podia agendar 9:30. La media hora es el punto medio: da control real
+   * sin volver la lista interminable, y sin sumar un campo aparte.
+   */
   function opcionesHora() {
     var out = {};
-    for (var h = 8; h <= 20; h++) {
-      var h12 = h % 12 === 0 ? 12 : h % 12;
-      out[pad(h)+':00'] = h12 + ':00 ' + (h < 12 ? 'a.m.' : 'p.m.');
+    for (var h = 7; h <= 21; h++) {
+      for (var mm = 0; mm < 60; mm += 30) {
+        if (h === 21 && mm > 0) break;
+        var h12 = h % 12 === 0 ? 12 : h % 12;
+        out[pad(h)+':'+pad(mm)] = h12 + ':' + pad(mm) + ' ' + (h < 12 ? 'a.m.' : 'p.m.');
+      }
     }
     return out;
   }
+  /** Proxima media hora redonda. */
   function horaPorDefecto() {
-    var h = new Date().getHours() + 1;
-    if (h < 8)  h = 9;
-    if (h > 20) h = 20;
-    return pad(h) + ':00';
-  }
-
-  /** Los botones se arman en un solo lugar: nunca falta ninguno. */
-  function botones(activos) {
-    return {
-      primaryButton:   { title:'Sí, contestó', state: activos ? 'normal' : 'disabled' },
-      secondaryButton: { title:'No contestó',  state: activos ? 'normal' : 'disabled' }
-    };
+    var d = new Date();
+    d.setMinutes(d.getMinutes() + 30);
+    var h = d.getHours(), mm = d.getMinutes() < 30 ? 0 : 30;
+    if (h < 7)  { h = 8;  mm = 0; }
+    if (h > 21) { h = 21; mm = 0; }
+    return pad(h) + ':' + pad(mm);
   }
 
   function layout() {
@@ -185,11 +190,11 @@ declare(strict_types=1);
     var txt = 'Elegí un día arriba';
     if (sel) {
       var f = new Date(sel.y, sel.m, sel.d);
-      var hh = parseInt(hora.slice(0,2), 10);
+      var hh = parseInt(hora.slice(0,2), 10), mi = hora.slice(3,5);
       var h12 = hh % 12 === 0 ? 12 : hh % 12;
       txt = 'Vuelvo a llamar el ' + DIAN[f.getDay()] + ' ' + sel.d + ' de ' + MESES[sel.m]
           + (esHoy(sel.y,sel.m,sel.d) ? ' (hoy)' : '')
-          + ', ' + h12 + ':00 ' + (hh < 12 ? 'a.m.' : 'p.m.');
+          + ', ' + h12 + ':' + mi + ' ' + (hh < 12 ? 'a.m.' : 'p.m.');
     }
     blocks.resumen = { type:'text', properties:{ value: txt, bold: !!sel } };
     blocks.cerrar  = { type:'link', properties:{
@@ -238,10 +243,10 @@ declare(strict_types=1);
           BX24.placement.call('unlock');
           if (ra.error()) { aviso = 'No se pudo guardar: ' + ra.error(); redibujar(); return; }
           var f = new Date(sel.y, sel.m, sel.d);
-          var hh = parseInt(hora.slice(0,2), 10);
+          var hh = parseInt(hora.slice(0,2), 10), mi = hora.slice(3,5);
           aviso = 'Guardado \u2713  ' + (contesto ? 'contest\u00f3' : 'no contest\u00f3')
                 + ', vuelvo a llamar el ' + DIAN[f.getDay()] + ' ' + sel.d + ' de ' + MESES[sel.m]
-                + ' a las ' + (hh % 12 === 0 ? 12 : hh % 12) + ':00 ' + (hh < 12 ? 'a.m.' : 'p.m.');
+                + ' a las ' + (hh % 12 === 0 ? 12 : hh % 12) + ':' + mi + ' ' + (hh < 12 ? 'a.m.' : 'p.m.');
           abierto = false; sel = null;
           redibujar();
         });
