@@ -234,12 +234,7 @@ declare(strict_types=1);
       for (var c = 0; c < 7; c++) {
         var dia = celdas[s*7 + c], key = 'c' + c;
         if (dia === null) {
-          // Celda vacía como LINK muerto, no como text: medido en el DOM, una
-          // fila de puros text mide 3 px menos que una con links, y eso movía
-          // los botones al saltar de mes. El link no se ve (solo espacios) y
-          // su evento se ignora.
-          fila[key] = { type:'link', properties:{
-            text: VACIA, action:{ type:'layoutEvent', value:'nada' } } };
+          fila[key] = { type:'text', properties:{ value: VACIA } };
         } else if (esPasado(y, m, dia)) {
           fila[key] = { type:'text', properties:{ value: celda(dia) } };
         } else if (sel && sel.y===y && sel.m===m && sel.d===dia) {
