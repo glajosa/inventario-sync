@@ -30,20 +30,6 @@
  */
 declare(strict_types=1);
 
-// El iframe de este placement va OCULTO (useBuiltInInterface), asi que no hay
-// consola donde mirar. Esta traza deja constancia en /data/web.log de que
-// evento llego y que devolvio finish(). Se lee con:
-//   index.php?log=1&token=OUTBOUND_TOKEN
-if (isset($_GET['ev'])) {
-    $dir = getenv('DATA_DIR') ?: '/data';
-    @file_put_contents($dir . '/web.log',
-        gmdate('Y-m-d\TH:i:s\Z') . '  LLAMADA ' . substr((string)$_GET['ev'], 0, 200) . "\n",
-        FILE_APPEND | LOCK_EX);
-    header('Content-Type: image/gif');
-    header('Cache-Control: no-store');
-    echo base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
-    exit;
-}
 ?>
 <!doctype html>
 <html>
@@ -92,11 +78,11 @@ if (isset($_GET['ev'])) {
   var vista  = new Date();
   var sel    = null;
   var hora   = '';
-
-  // traza al servidor (Image evita lios de CORS)
-  function traza(t) {
-    try { (new Image()).src = 'llamada_nativo.php?ev=' + encodeURIComponent(t) + '&_=' + (+new Date()); } catch (e) {}
-  }
+  // La pestana no se puede cerrar por API (probado: finish/close/cancel/
+  // closeApplication/reload/refresh no responden ninguno). Se colapsa el
+  // CONTENIDO en su lugar: mismo efecto para el vendedor, sin recargar.
+  var modo   = 'cerrado';      // cerrado | abierto | guardado
+  var aviso  = '';
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
   function hoy() { var d = new Date(); return { y:d.getFullYear(), m:d.getMonth(), d:d.getDate() }; }
@@ -123,6 +109,16 @@ if (isset($_GET['ev'])) {
   }
 
   function layout() {
+    if (modo === 'cerrado') {
+      return { blocks: { abrir: { type:'link', properties:{
+        text:'Registrar llamada', action:{ type:'layoutEvent', value:'abrir' } } } } };
+    }
+    if (modo === 'guardado') {
+      return { blocks: {
+        ok:   { type:'text', properties:{ value: aviso, bold:true } },
+        otra: { type:'link', properties:{ text:'Registrar otra', action:{ type:'layoutEvent', value:'abrir' } } }
+      }};
+    }
     var y = vista.getFullYear(), m = vista.getMonth();
     var blocks = {};
 
@@ -198,30 +194,6 @@ if (isset($_GET['ev'])) {
     };
   }
 
-  /**
-   * Cierra el panel. `finish` no responde nunca en este portal (comprobado en
-   * la traza: se pide y jamas vuelve el callback), asi que se prueban varios
-   * comandos y se deja constancia de cual contesta.
-   */
-  function cerrarPanel(origen) {
-    var cands = ['finish', 'close', 'cancel', 'closeApplication', 'reload', 'refresh'];
-    cands.forEach(function (c) {
-      try {
-        BX24.placement.call(c, {}, function (r) {
-          traza(origen + ': ' + c + ' RESPONDIO ' + JSON.stringify(r));
-        });
-        traza(origen + ': ' + c + ' pedido-ok');
-      } catch (e) {
-        traza(origen + ': ' + c + ' LANZO ' + e.message);
-      }
-    });
-    // fuera del placement API: cerrar la app / recargar el timeline
-    try { if (BX24.closeApplication) { BX24.closeApplication(); traza(origen + ': BX24.closeApplication llamado'); } }
-    catch (e) { traza(origen + ': BX24.closeApplication LANZO ' + e.message); }
-    try { if (BX24.reloadWindow) { BX24.reloadWindow(); traza(origen + ': BX24.reloadWindow llamado'); } }
-    catch (e) {}
-  }
-
   function redibujar() { BX24.placement.call('setLayout', layout(), function(){}); }
 
   function inicioIso() {
@@ -258,9 +230,13 @@ if (isset($_GET['ev'])) {
         }
         BX24.callMethod('crm.activity.add', { fields: fields }, function (ra) {
           BX24.placement.call('unlock');
-          if (ra.error()) { traza('guardar: ERROR ' + ra.error()); return; }
-          traza('guardar: creada id=' + ra.data());
-          cerrarPanel('guardar');
+          if (ra.error()) { aviso = 'No se pudo guardar: ' + ra.error(); modo = 'guardado'; redibujar(); return; }
+          var f = new Date(sel.y, sel.m, sel.d);
+          var hh = parseInt(hora.slice(0,2), 10);
+          aviso = 'Guardado \u2713 \u2014 ' + (contesto ? 'contest\u00f3' : 'no contest\u00f3')
+                + ', vuelvo a llamar el ' + DIAN[f.getDay()] + ' ' + sel.d + ' de ' + MESES[sel.m]
+                + ' a las ' + (hh % 12 === 0 ? 12 : hh % 12) + ':00 ' + (hh < 12 ? 'a.m.' : 'p.m.');
+          modo = 'guardado'; redibujar();
         });
       }
 
@@ -282,16 +258,18 @@ if (isset($_GET['ev'])) {
     try { opt = BX24.placement.info().options || {}; } catch (e) {}
     dealId = parseInt(opt.ENTITY_ID || opt.entityId || opt.ID || 0, 10);
 
-    traza('handler cargado, deal=' + dealId);
     hora = horaPorDefecto();
-    var h = hoy();
-    sel = { y:h.y, m:h.m, d:h.d };   // arranca en hoy, como el calendario HTML
-    redibujar();
+    redibujar();                     // arranca COLAPSADO: una sola linea
 
     BX24.placement.call('bindLayoutEventCallback', null, function (ev) {
       var v = (ev && ev.value) || '';
-      if (v === 'cerrar') {
-        cerrarPanel('boton');
+      if (v === 'abrir') {
+        modo = 'abierto';
+        var h0 = hoy(); sel = { y:h0.y, m:h0.m, d:h0.d };
+        vista = new Date(); hora = horaPorDefecto();
+        redibujar();
+      } else if (v === 'cerrar') {
+        modo = 'cerrado'; redibujar();
       } else if (v.indexOf('mes:') === 0) {
         vista.setMonth(vista.getMonth() + parseInt(v.slice(4), 10));
         redibujar();
