@@ -73,16 +73,20 @@ declare(strict_types=1);
     return out;
   }
 
-  var aviso  = '';
-  var resp   = '';      // '' | 'si' | 'no'
   var dealId = 0;
   var vista  = new Date();
   var sel    = null;
   var hora   = '';
-  // Confirmacion tras guardar. Reutiliza la MISMA linea de resumen en vez de
-  // agregar bloques: los botones no se pueden ocultar (ButtonDto solo acepta
-  // title y state), asi que todo elemento extra que se agregue queda ahi
-  // colgando y ensucia. Cero bloques nuevos.
+  var aviso  = '';
+  // La pestaña NO se puede cerrar por API. Probado: finish/close/cancel/
+  // closeApplication (sin respuesta), y dejar el boton secundario sin enlazar
+  // tampoco cierra. Lo unico que si controlo es MI contenido, asi que "Cerrar"
+  // lo colapsa a una linea. Para el vendedor el efecto es el mismo.
+  //
+  // CLAVE: los dos botones van SIEMPRE en el diseño, en todos los estados.
+  // Cuando los omiti, Bitrix dejo los anteriores colgando y pinto uno vacio
+  // (el punto azul suelto). ButtonDto solo acepta title y state: no se ocultan.
+  var abierto = false;
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
   function hoy() { var d = new Date(); return { y:d.getFullYear(), m:d.getMonth(), d:d.getDate() }; }
@@ -108,7 +112,25 @@ declare(strict_types=1);
     return pad(h) + ':00';
   }
 
+  /** Los botones se arman en un solo lugar: nunca falta ninguno. */
+  function botones(activos) {
+    return {
+      primaryButton:   { title:'Sí, contestó', state: activos ? 'normal' : 'disabled' },
+      secondaryButton: { title:'No contestó',  state: activos ? 'normal' : 'disabled' }
+    };
+  }
+
   function layout() {
+    if (!abierto) {
+      var b = botones(false);
+      b.blocks = {
+        abrir: { type:'link', properties:{
+          text: aviso ? 'Registrar otra llamada' : 'Registrar llamada',
+          action:{ type:'layoutEvent', value:'abrir' } } }
+      };
+      if (aviso) b.blocks.ok = { type:'text', properties:{ value: aviso, bold:true } };
+      return b;
+    }
     var y = vista.getFullYear(), m = vista.getMonth();
     var blocks = {};
 
@@ -159,17 +181,9 @@ declare(strict_types=1);
       title:'Hora', selectedValue: hora, values: opcionesHora()
     }};
 
-    // ── ¿contestó?  va como campo del formulario para dejar los DOS botones
-    // de abajo libres: en el panel nativo de Bitrix esos botones son
-    // Guardar / Cancelar, y el secundario es el unico "cancelar" que existe.
-    blocks.resp = { type:'select', properties:{
-      title:'¿Contestó?', selectedValue: resp,
-      values: { si:'Sí, contestó', no:'No contestó' }
-    }};
-
     // ── resumen: la confirmación en palabras, que es lo que de verdad se lee
-    var txt = aviso || 'Elegí un día arriba';
-    if (!aviso && sel) {
+    var txt = 'Elegí un día arriba';
+    if (sel) {
       var f = new Date(sel.y, sel.m, sel.d);
       var hh = parseInt(hora.slice(0,2), 10);
       var h12 = hh % 12 === 0 ? 12 : hh % 12;
@@ -177,15 +191,13 @@ declare(strict_types=1);
           + (esHoy(sel.y,sel.m,sel.d) ? ' (hoy)' : '')
           + ', ' + h12 + ':00 ' + (hh < 12 ? 'a.m.' : 'p.m.');
     }
-    blocks.resumen = { type:'text', properties:{ value: txt, bold: !!(sel || aviso) } };
+    blocks.resumen = { type:'text', properties:{ value: txt, bold: !!sel } };
+    blocks.cerrar  = { type:'link', properties:{
+      text:'Cerrar', action:{ type:'layoutEvent', value:'cerrar' } } };
 
-    return {
-      blocks: blocks,
-      primaryButton:   { title:'Guardar',  state: (sel && resp) ? 'normal' : 'disabled' },
-      // Cancelar NO se enlaza a proposito: se deja que Bitrix haga lo suyo con
-      // el boton secundario, que es como cierra su propio panel de Llamada.
-      secondaryButton: { title:'Cancelar', state:'normal' }
-    };
+    var out = botones(!!sel);
+    out.blocks = blocks;
+    return out;
   }
 
   function redibujar() { BX24.placement.call('setLayout', layout(), function(){}); }
@@ -201,7 +213,7 @@ declare(strict_types=1);
   }
 
   function registrar(contesto) {
-    if (!dealId || !sel || !hora || !resp) return;
+    if (!dealId || !sel || !hora) return;
     BX24.placement.call('lock');
     var inicio = inicioIso();
 
@@ -230,7 +242,7 @@ declare(strict_types=1);
           aviso = 'Guardado \u2713  ' + (contesto ? 'contest\u00f3' : 'no contest\u00f3')
                 + ', vuelvo a llamar el ' + DIAN[f.getDay()] + ' ' + sel.d + ' de ' + MESES[sel.m]
                 + ' a las ' + (hh % 12 === 0 ? 12 : hh % 12) + ':00 ' + (hh < 12 ? 'a.m.' : 'p.m.');
-          sel = null; resp = '';   // apaga Guardar: evita crear dos veces
+          abierto = false; sel = null;
           redibujar();
         });
       }
@@ -254,18 +266,22 @@ declare(strict_types=1);
     dealId = parseInt(opt.ENTITY_ID || opt.entityId || opt.ID || 0, 10);
 
     hora = horaPorDefecto();
-    var h = hoy();
-    sel = { y:h.y, m:h.m, d:h.d };   // arranca en hoy, como el calendario HTML
-    redibujar();
+    redibujar();                     // nace COLAPSADO: una sola linea
 
     BX24.placement.call('bindLayoutEventCallback', null, function (ev) {
       var v = (ev && ev.value) || '';
-      if (v.indexOf('mes:') === 0) {
+      if (v === 'abrir') {
+        abierto = true; aviso = '';
+        var h0 = hoy(); sel = { y:h0.y, m:h0.m, d:h0.d };
+        vista = new Date(); hora = horaPorDefecto();
+        redibujar();
+      } else if (v === 'cerrar') {
+        abierto = false; aviso = ''; redibujar();
+      } else if (v.indexOf('mes:') === 0) {
         vista.setMonth(vista.getMonth() + parseInt(v.slice(4), 10));
         redibujar();
       } else if (v.indexOf('dia:') === 0) {
         var p = v.slice(4).split('-');
-        aviso = '';
         sel = { y:parseInt(p[0],10), m:parseInt(p[1],10)-1, d:parseInt(p[2],10) };
         redibujar();
       }
@@ -273,12 +289,11 @@ declare(strict_types=1);
 
     // al cambiar la hora se redibuja para que el resumen la refleje
     BX24.placement.call('bindValueChangeCallback', null, function (ev) {
-      if (!ev || !ev.id) return;
-      if (ev.id === 'hora') { hora = ev.value; aviso = ''; redibujar(); }
-      if (ev.id === 'resp') { resp = ev.value; aviso = ''; redibujar(); }
+      if (ev && ev.id === 'hora') { hora = ev.value; redibujar(); }
     });
 
-    BX24.placement.call('bindPrimaryButtonClickCallback', null, function(){ registrar(resp === 'si'); });
+    BX24.placement.call('bindPrimaryButtonClickCallback',   null, function(){ registrar(true);  });
+    BX24.placement.call('bindSecondaryButtonClickCallback', null, function(){ registrar(false); });
   });
 })();
 </script>
