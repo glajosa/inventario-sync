@@ -80,11 +80,12 @@ declare(strict_types=1);
   var horaManual = false;      // ¿el vendedor tocó la hora?
   var diaManual  = false;      // ¿eligió un día distinto de hoy?
   var aviso  = '';
-  // Abrir y cerrar los maneja BITRIX: la pestaña "Registrar llamada" de la
-  // barra muestra esto, y cualquier otra pestaña lo tapa. Por eso acá no hay
-  // enlaces propios de abrir/cerrar -- serían el mismo botón dos veces.
-  // (Cerrar por API no existe: probado finish/close/cancel/closeApplication,
-  // ninguno responde.)
+  // CERRAR: `finish` devuelve el foco a la pestaña por defecto de la línea de
+  // tiempo -- o sea, cierra esto de verdad. (Antes lo di por imposible con una
+  // prueba mal hecha; está documentado en la referencia del placement.)
+  // Se llama al guardar y desde el enlace "Cerrar". `colapsado` es el respaldo
+  // por si finish no cerrara: deja una sola línea en vez del calendario suelto.
+  var colapsado = false;
   //
   // CLAVE: los dos botones van SIEMPRE en el diseño. Cuando los omití, Bitrix
   // dejó los anteriores colgando y pintó uno vacío (el punto azul suelto).
@@ -118,20 +119,21 @@ declare(strict_types=1);
    * Los dos puntos los pone esto, no el vendedor, y de ahí sale el a.m./p.m.
    *
    * Devuelve tres cosas distintas a propósito:
-   *   undefined → todavía va escribiendo (1, 12, 124): NO se toca nada. Si se
-   *               redibuja a medio teclear, el campo le mueve el cursor y se
-   *               arma el enredo que se veía antes ("040:00"). Por eso espera
-   *               a los cuatro dígitos completos.
-   *   null      → cuatro dígitos que no son una hora (2575): se descarta.
-   *   "HH:MM"   → hora buena.
+   * Devuelve las tres cosas que hacen falta:
+   *   texto → cómo debe quedar el campo ("12", "124", "12:40")
+   *   hora  → "HH:MM" bueno, o null si todavía no lo es
+   *   error → mensaje bajo el campo cuando los 4 dígitos no son una hora
+   *
+   * Se cortan a los CUATRO PRIMEROS dígitos: teclear de más no hace nada, que
+   * es justo lo que se pidió. El input de Bitrix no tiene maxLength, así que
+   * el tope lo pone esto reescribiendo el campo.
    */
   function normHora(txt) {
-    var d = String(txt == null ? '' : txt).replace(/\D/g, '');
-    if (d.length > 4) d = d.slice(-4);   // se quedan los últimos tecleados
-    if (d.length < 4) return undefined;
+    var d = String(txt == null ? '' : txt).replace(/\D/g, '').slice(0, 4);
+    if (d.length < 4) return { texto:d, hora:null, error:'' };
     var h = parseInt(d.slice(0,2),10), mi = parseInt(d.slice(2),10);
-    if (h > 23 || mi > 59) return null;
-    return pad(h) + ':' + pad(mi);
+    if (h > 23 || mi > 59) return { texto:d, hora:null, error:'Esa hora no existe' };
+    return { texto: d.slice(0,2) + ':' + d.slice(2), hora: pad(h) + ':' + pad(mi), error:'' };
   }
 
   /** "16:25" -> "4:25 p.m.", solo para el texto de confirmación. */
@@ -158,6 +160,17 @@ declare(strict_types=1);
     // sobraba: la pestaña "Registrar llamada" de la barra YA es el botón que
     // abre esto. Sin enlaces propios de abrir/cerrar no se repite ningún
     // rótulo y no sobra ni una línea en blanco.
+    // Respaldo: solo se ve si `finish` no llegara a cerrar. Con finish andando
+    // esto es invisible, porque Bitrix ya cambió de pestaña.
+    if (colapsado) {
+      var b = botones(false);
+      b.blocks = {};
+      if (aviso) b.blocks.ok = { type:'text', properties:{ value: aviso, bold:true } };
+      b.blocks.abrir = { type:'link', properties:{
+        text:'Registrar llamada', action:{ type:'layoutEvent', value:'abrir' } } };
+      return b;
+    }
+
     var y = vista.getFullYear(), m = vista.getMonth();
     var blocks = {};
     if (aviso) blocks.ok = { type:'text', properties:{ value: aviso, bold:true } };
@@ -209,6 +222,8 @@ declare(strict_types=1);
 
     // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
     blocks.resumen = { type:'text', properties:{ value: resumenTxt(), bold:true } };
+    blocks.cerrar  = { type:'link', properties:{
+      text:'Cerrar', size:'sm', action:{ type:'layoutEvent', value:'cerrar' } } };
 
     var out = botones(true);
     out.blocks = blocks;
@@ -216,6 +231,23 @@ declare(strict_types=1);
   }
 
   function redibujar() { BX24.placement.call('setLayout', layout(), function(){}); }
+
+  /** Retoca UN bloque sin redibujar todo: así el campo no pierde el foco. */
+  function retocar(id, props) {
+    BX24.placement.call('setLayoutItemState', { id:id, properties:props }, function(){});
+  }
+
+  /**
+   * Cierra. Primero se deja el respaldo colapsado y recién ahí se llama a
+   * `finish` -- si finish cierra, ese respaldo nunca se ve; si no cerrara,
+   * queda una línea en vez del calendario abierto para siempre.
+   */
+  function cerrar() {
+    colapsado = true;
+    BX24.placement.call('setLayout', layout(), function () {
+      BX24.placement.call('finish');
+    });
+  }
 
   function inicioIso() {
     return sel.y + '-' + pad(sel.m+1) + '-' + pad(sel.d) + 'T' + hhmm + ':00-05:00';
@@ -258,9 +290,10 @@ declare(strict_types=1);
           aviso = 'Guardado \u2713  ' + (contesto ? 'contest\u00f3' : 'no contest\u00f3')
                 + ', vuelvo a llamar el ' + DIAN[f.getDay()] + ' ' + sel.d + ' de ' + MESES[sel.m]
                 + ' a las ' + horaTxt();
-          // vuelve al estado de arranque: hoy, ahora, listo para la siguiente
+          // creada la actividad, se cierra solo: eso era lo que se pedía.
+          // Queda en el estado de arranque (hoy, ahora) para la siguiente.
           horaManual = false; diaManual = false;
-          redibujar();
+          cerrar();
         });
       }
 
@@ -286,7 +319,11 @@ declare(strict_types=1);
 
     BX24.placement.call('bindLayoutEventCallback', null, function (ev) {
       var v = (ev && ev.value) || '';
-      if (v.indexOf('mes:') === 0) {
+      if (v === 'cerrar') {
+        cerrar();
+      } else if (v === 'abrir') {
+        colapsado = false; aviso = ''; redibujar();
+      } else if (v.indexOf('mes:') === 0) {
         vista.setMonth(vista.getMonth() + parseInt(v.slice(4), 10));
         redibujar();
       } else if (v.indexOf('dia:') === 0) {
@@ -297,15 +334,18 @@ declare(strict_types=1);
       }
     });
 
-    // Hora tecleada. Mientras va a medias no se redibuja (si no, el redibujo
-    // le mueve el cursor). Al completarla se pinta ya con los dos puntos; si
-    // no es una hora posible se borra sola y vuelve la anterior.
+    // Hora tecleada. Acá NO se redibuja todo -- se retoca solo el campo y solo
+    // cuando lo que hay escrito no coincide con lo que debería quedar. Así el
+    // cursor se queda quieto mientras teclea, y a partir del quinto dígito el
+    // campo simplemente no cambia: quedan los 4 y nada más.
     BX24.placement.call('bindValueChangeCallback', null, function (ev) {
       if (!ev || ev.id !== 'hora') return;
-      var v = normHora(ev.value);
-      if (v === undefined) return;
-      if (v) { hhmm = v; horaManual = true; aviso = ''; }
-      redibujar();
+      var r = normHora(ev.value);
+      if (r.hora) { hhmm = r.hora; horaManual = true; aviso = ''; }
+      if (r.texto !== String(ev.value == null ? '' : ev.value) || r.error) {
+        retocar('hora', { title:'Hora', value:r.texto, errorText:r.error });
+      }
+      retocar('resumen', { value: resumenTxt(), bold:true });
     });
 
     BX24.placement.call('bindPrimaryButtonClickCallback',   null, function(){ registrar(true);  });
