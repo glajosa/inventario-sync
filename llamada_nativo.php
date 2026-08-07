@@ -74,6 +74,7 @@ declare(strict_types=1);
   }
 
   var aviso  = '';
+  var resp   = '';      // '' | 'si' | 'no'
   var dealId = 0;
   var vista  = new Date();
   var sel    = null;
@@ -158,6 +159,14 @@ declare(strict_types=1);
       title:'Hora', selectedValue: hora, values: opcionesHora()
     }};
 
+    // ── ¿contestó?  va como campo del formulario para dejar los DOS botones
+    // de abajo libres: en el panel nativo de Bitrix esos botones son
+    // Guardar / Cancelar, y el secundario es el unico "cancelar" que existe.
+    blocks.resp = { type:'select', properties:{
+      title:'¿Contestó?', selectedValue: resp,
+      values: { si:'Sí, contestó', no:'No contestó' }
+    }};
+
     // ── resumen: la confirmación en palabras, que es lo que de verdad se lee
     var txt = aviso || 'Elegí un día arriba';
     if (!aviso && sel) {
@@ -172,8 +181,10 @@ declare(strict_types=1);
 
     return {
       blocks: blocks,
-      primaryButton:   { title:'Sí, contestó', state: sel ? 'normal' : 'disabled' },
-      secondaryButton: { title:'No contestó',  state: sel ? 'normal' : 'disabled' }
+      primaryButton:   { title:'Guardar',  state: (sel && resp) ? 'normal' : 'disabled' },
+      // Cancelar NO se enlaza a proposito: se deja que Bitrix haga lo suyo con
+      // el boton secundario, que es como cierra su propio panel de Llamada.
+      secondaryButton: { title:'Cancelar', state:'normal' }
     };
   }
 
@@ -190,7 +201,7 @@ declare(strict_types=1);
   }
 
   function registrar(contesto) {
-    if (!dealId || !sel || !hora) return;
+    if (!dealId || !sel || !hora || !resp) return;
     BX24.placement.call('lock');
     var inicio = inicioIso();
 
@@ -219,7 +230,7 @@ declare(strict_types=1);
           aviso = 'Guardado \u2713  ' + (contesto ? 'contest\u00f3' : 'no contest\u00f3')
                 + ', vuelvo a llamar el ' + DIAN[f.getDay()] + ' ' + sel.d + ' de ' + MESES[sel.m]
                 + ' a las ' + (hh % 12 === 0 ? 12 : hh % 12) + ':00 ' + (hh < 12 ? 'a.m.' : 'p.m.');
-          sel = null;          // apaga los botones: evita crear dos veces
+          sel = null; resp = '';   // apaga Guardar: evita crear dos veces
           redibujar();
         });
       }
@@ -262,11 +273,12 @@ declare(strict_types=1);
 
     // al cambiar la hora se redibuja para que el resumen la refleje
     BX24.placement.call('bindValueChangeCallback', null, function (ev) {
-      if (ev && ev.id === 'hora') { hora = ev.value; redibujar(); }
+      if (!ev || !ev.id) return;
+      if (ev.id === 'hora') { hora = ev.value; aviso = ''; redibujar(); }
+      if (ev.id === 'resp') { resp = ev.value; aviso = ''; redibujar(); }
     });
 
-    BX24.placement.call('bindPrimaryButtonClickCallback',   null, function(){ registrar(true);  });
-    BX24.placement.call('bindSecondaryButtonClickCallback', null, function(){ registrar(false); });
+    BX24.placement.call('bindPrimaryButtonClickCallback', null, function(){ registrar(resp === 'si'); });
   });
 })();
 </script>
