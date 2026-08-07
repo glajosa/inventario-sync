@@ -165,6 +165,12 @@ declare(strict_types=1);
     }
     blocks.resumen = { type:'text', properties:{ value: txt, bold: !!sel } };
 
+    // salida sin guardar: sin esto el panel solo se cierra al crear la
+    // actividad, y no habia forma de arrepentirse.
+    blocks.cerrar = { type:'link', properties:{
+      text:'Cerrar', action:{ type:'layoutEvent', value:'cerrar' }
+    }};
+
     return {
       blocks: blocks,
       primaryButton:   { title:'Sí, contestó', state: sel ? 'normal' : 'disabled' },
@@ -237,7 +243,9 @@ declare(strict_types=1);
 
     BX24.placement.call('bindLayoutEventCallback', null, function (ev) {
       var v = (ev && ev.value) || '';
-      if (v.indexOf('mes:') === 0) {
+      if (v === 'cerrar') {
+        BX24.placement.call('finish');
+      } else if (v.indexOf('mes:') === 0) {
         vista.setMonth(vista.getMonth() + parseInt(v.slice(4), 10));
         redibujar();
       } else if (v.indexOf('dia:') === 0) {
