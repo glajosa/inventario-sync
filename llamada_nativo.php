@@ -275,6 +275,43 @@ declare(strict_types=1);
     return m[1] + 'T' + pad((parseInt(m[2],10)+1)%24) + ':' + m[3] + ':00' + m[4];
   }
 
+  // ── Precarga ──────────────────────────────────────────────────────────
+  // Antes cada click disparaba TRES viajes al servidor en fila:
+  //   crm.deal.get  ->  crm.contact.get  ->  crm.activity.add
+  // Los dos primeros no dependen de nada que el vendedor elija, así que se
+  // piden apenas se abre el panel, mientras mira el calendario. Al momento de
+  // apretar ya están y solo queda el tercero: de 3 viajes a 1.
+  var ctx = null;          // { resp, contactId, nombre, tel }
+  var ctxCargando = false;
+  var ctxCola = [];        // lo que quedó esperando la precarga
+
+  function precargar() {
+    if (ctx || ctxCargando || !dealId) return;
+    ctxCargando = true;
+
+    function listo(v) {
+      ctxCargando = false; ctx = v;
+      var cola = ctxCola; ctxCola = [];
+      for (var i = 0; i < cola.length; i++) cola[i]();
+    }
+
+    BX24.callMethod('crm.deal.get', { id: dealId }, function (rd) {
+      if (rd.error()) { listo(null); return; }
+      var deal = rd.data();
+      var cid  = parseInt(deal.CONTACT_ID || 0, 10);
+      var base = { resp: deal.ASSIGNED_BY_ID, contactId: cid > 0 ? cid : 0, nombre:null, tel:null };
+      if (!base.contactId) { listo(base); return; }
+      BX24.callMethod('crm.contact.get', { id: base.contactId }, function (rc) {
+        if (!rc.error()) {
+          var c = rc.data();
+          base.nombre = [c.NAME, c.LAST_NAME].filter(Boolean).join(' ').trim() || null;
+          base.tel = (c.PHONE && c.PHONE[0] && c.PHONE[0].VALUE) || null;
+        }
+        listo(base);
+      });
+    });
+  }
+
   function registrar(contesto) {
     if (!dealId || !sel) return;
     BX24.placement.call('lock');
@@ -282,48 +319,38 @@ declare(strict_types=1);
     if (!horaManual) hhmm = ahoraHHMM();
     var inicio = inicioIso();
 
-    BX24.callMethod('crm.deal.get', { id: dealId }, function (rd) {
-      if (rd.error()) { BX24.placement.call('unlock'); return; }
-      var deal = rd.data(), contactId = deal.CONTACT_ID, resp = deal.ASSIGNED_BY_ID;
-
-      function crear(nombre, tel) {
-        var fields = {
-          OWNER_TYPE_ID:2, OWNER_ID:dealId,
-          TYPE_ID:2, DIRECTION:2,
-          PROVIDER_ID:'VOXIMPLANT_CALL', PROVIDER_TYPE_ID:'CALL',
-          SUBJECT: contesto ? '1234' : ('Llamada saliente ' + (nombre || 'cliente')),
-          COMPLETED:'N', RESPONSIBLE_ID:resp,
-          START_TIME:inicio, END_TIME:masUnaHora(inicio), DEADLINE:inicio,
-          PRIORITY:2, NOTIFY_TYPE:1, NOTIFY_VALUE:15, DESCRIPTION_TYPE:1
-        };
-        if (contactId && tel) {
-          fields.COMMUNICATIONS = [{ VALUE:tel, ENTITY_ID:contactId, ENTITY_TYPE_ID:3, TYPE:'PHONE' }];
-        }
-        BX24.callMethod('crm.activity.add', { fields: fields }, function (ra) {
-          BX24.placement.call('unlock');
-          if (ra.error()) { aviso = 'No se pudo guardar: ' + ra.error(); redibujar(); return; }
-          // Sin texto de "Guardado": la actividad recien creada YA sale ahi
-          // abajo en la linea de tiempo con su fecha limite. Repetirlo era una
-          // linea de mas justo donde se pidio menos ruido.
-          aviso = '';
-          // creada la actividad, se cierra solo: eso era lo que se pedía.
-          // Queda en el estado de arranque (hoy, ahora) para la siguiente.
-          horaManual = false; diaManual = false;
-          cerrar();
-        });
+    function guardar() {
+      if (!ctx) {
+        BX24.placement.call('unlock');
+        aviso = 'No se pudo leer la negociación'; redibujar(); return;
       }
-
-      if (!contactId || parseInt(contactId,10) <= 0) { crear(null,null); return; }
-      BX24.callMethod('crm.contact.get', { id: contactId }, function (rc) {
-        var nombre = null, tel = null;
-        if (!rc.error()) {
-          var c = rc.data();
-          nombre = [c.NAME, c.LAST_NAME].filter(Boolean).join(' ').trim() || null;
-          tel = (c.PHONE && c.PHONE[0] && c.PHONE[0].VALUE) || null;
-        }
-        crear(nombre, tel);
+      var fields = {
+        OWNER_TYPE_ID:2, OWNER_ID:dealId,
+        TYPE_ID:2, DIRECTION:2,
+        PROVIDER_ID:'VOXIMPLANT_CALL', PROVIDER_TYPE_ID:'CALL',
+        SUBJECT: contesto ? '1234' : ('Llamada saliente ' + (ctx.nombre || 'cliente')),
+        COMPLETED:'N', RESPONSIBLE_ID:ctx.resp,
+        START_TIME:inicio, END_TIME:masUnaHora(inicio), DEADLINE:inicio,
+        PRIORITY:2, NOTIFY_TYPE:1, NOTIFY_VALUE:15, DESCRIPTION_TYPE:1
+      };
+      if (ctx.contactId && ctx.tel) {
+        fields.COMMUNICATIONS = [{ VALUE:ctx.tel, ENTITY_ID:ctx.contactId, ENTITY_TYPE_ID:3, TYPE:'PHONE' }];
+      }
+      BX24.callMethod('crm.activity.add', { fields: fields }, function (ra) {
+        BX24.placement.call('unlock');
+        if (ra.error()) { aviso = 'No se pudo guardar: ' + ra.error(); redibujar(); return; }
+        // Sin texto de "Guardado": la actividad recien creada YA sale ahi
+        // abajo en la linea de tiempo con su fecha limite.
+        aviso = '';
+        horaManual = false; diaManual = false;
+        cerrar();
       });
-    });
+    }
+
+    // Caso normal: ya está precargado y sale directo. Si el vendedor fue más
+    // rápido que la precarga, se encola y arranca sola en cuanto llegue.
+    if (ctx) guardar();
+    else { ctxCola.push(guardar); precargar(); }
   }
 
   BX24.init(function () {
@@ -331,6 +358,7 @@ declare(strict_types=1);
     try { opt = BX24.placement.info().options || {}; } catch (e) {}
     dealId = parseInt(opt.ENTITY_ID || opt.entityId || opt.ID || 0, 10);
 
+    precargar();                     // adelanta deal+contacto
     redibujar();                     // nace COLAPSADO: frase + los dos botones
 
     BX24.placement.call('bindLayoutEventCallback', null, function (ev) {
@@ -338,7 +366,7 @@ declare(strict_types=1);
       if (v === 'cerrar') {
         cerrar();
       } else if (v === 'abrir') {
-        colapsado = false; aviso = ''; redibujar();
+        colapsado = false; aviso = ''; precargar(); redibujar();
       } else if (v.indexOf('mes:') === 0) {
         vista.setMonth(vista.getMonth() + parseInt(v.slice(4), 10));
         redibujar();
@@ -367,7 +395,7 @@ declare(strict_types=1);
     // Cerrado, el principal abre; abierto, guarda. Es el mismo boton con dos
     // trabajos porque esa franja de 56 px esta siempre, se use o no.
     BX24.placement.call('bindPrimaryButtonClickCallback',   null, function(){
-      if (colapsado) { colapsado = false; aviso = ''; redibujar(); return; }
+      if (colapsado) { colapsado = false; aviso = ''; precargar(); redibujar(); return; }
       registrar(true);
     });
     BX24.placement.call('bindSecondaryButtonClickCallback', null, function(){
