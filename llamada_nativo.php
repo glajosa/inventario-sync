@@ -160,17 +160,18 @@ declare(strict_types=1);
     // sobraba: la pestaña "Registrar llamada" de la barra YA es el botón que
     // abre esto. Sin enlaces propios de abrir/cerrar no se repite ningún
     // rótulo y no sobra ni una línea en blanco.
-    // Respaldo: solo se ve si `finish` no llegara a cerrar. Con finish andando
-    // es invisible, porque Bitrix ya cambió de pestaña.
+    // CERRADO: una sola línea y SIN botones.
     //
-    // El enlace NO puede decir "Registrar llamada": la pestaña de la barra ya
-    // se llama así y quedaban dos rótulos iguales, uno arriba del otro.
+    // Los botones se omiten a propósito: viven en su propio contenedor
+    // (crm-entity-stream-restapp-btn-container, 56 px medidos en el DOM) y
+    // ahí abajo, grises, no hacen más que ocupar. Bitrix los pinta solo si el
+    // diseño trae primaryButton/secondaryButton, así que no mandarlos es la
+    // única forma de que no estén.
     if (colapsado) {
-      var b = botones(false);
-      b.blocks = {};
+      var b = { blocks: {} };
       if (aviso) b.blocks.ok = { type:'text', properties:{ value: aviso, bold:true } };
       b.blocks.abrir = { type:'link', properties:{
-        text:'Abrir de nuevo', size:'sm',
+        text:'Registrar llamada',
         action:{ type:'layoutEvent', value:'abrir' } } };
       return b;
     }
