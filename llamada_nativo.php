@@ -198,6 +198,30 @@ if (isset($_GET['ev'])) {
     };
   }
 
+  /**
+   * Cierra el panel. `finish` no responde nunca en este portal (comprobado en
+   * la traza: se pide y jamas vuelve el callback), asi que se prueban varios
+   * comandos y se deja constancia de cual contesta.
+   */
+  function cerrarPanel(origen) {
+    var cands = ['finish', 'close', 'cancel', 'closeApplication', 'reload', 'refresh'];
+    cands.forEach(function (c) {
+      try {
+        BX24.placement.call(c, {}, function (r) {
+          traza(origen + ': ' + c + ' RESPONDIO ' + JSON.stringify(r));
+        });
+        traza(origen + ': ' + c + ' pedido-ok');
+      } catch (e) {
+        traza(origen + ': ' + c + ' LANZO ' + e.message);
+      }
+    });
+    // fuera del placement API: cerrar la app / recargar el timeline
+    try { if (BX24.closeApplication) { BX24.closeApplication(); traza(origen + ': BX24.closeApplication llamado'); } }
+    catch (e) { traza(origen + ': BX24.closeApplication LANZO ' + e.message); }
+    try { if (BX24.reloadWindow) { BX24.reloadWindow(); traza(origen + ': BX24.reloadWindow llamado'); } }
+    catch (e) {}
+  }
+
   function redibujar() { BX24.placement.call('setLayout', layout(), function(){}); }
 
   function inicioIso() {
@@ -236,9 +260,7 @@ if (isset($_GET['ev'])) {
           BX24.placement.call('unlock');
           if (ra.error()) { traza('guardar: ERROR ' + ra.error()); return; }
           traza('guardar: creada id=' + ra.data());
-          BX24.placement.call('finish', {}, function (r) {
-            traza('guardar: finish devolvio ' + JSON.stringify(r));
-          });
+          cerrarPanel('guardar');
         });
       }
 
@@ -269,12 +291,7 @@ if (isset($_GET['ev'])) {
     BX24.placement.call('bindLayoutEventCallback', null, function (ev) {
       var v = (ev && ev.value) || '';
       if (v === 'cerrar') {
-        traza('cerrar: pedido');
-        try {
-          BX24.placement.call('finish', {}, function (r) {
-            traza('cerrar: finish devolvio ' + JSON.stringify(r));
-          });
-        } catch (e) { traza('cerrar: finish LANZO ' + e.message); }
+        cerrarPanel('boton');
       } else if (v.indexOf('mes:') === 0) {
         vista.setMonth(vista.getMonth() + parseInt(v.slice(4), 10));
         redibujar();
