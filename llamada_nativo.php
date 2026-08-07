@@ -43,12 +43,35 @@ declare(strict_types=1);
   var MESES = ['enero','febrero','marzo','abril','mayo','junio',
                'julio','agosto','septiembre','octubre','noviembre','diciembre'];
   var DIAN  = ['dom','lun','mar','mié','jue','vie','sáb'];
-  var DOW   = ['lu','ma','mi','ju','vi','sá','do'];
+  // MAYUSCULA a proposito: medido en el render real, el encabezado en
+  // minuscula suma 99,8 px contra 120,6 px de la fila de numeros -- 21 px de
+  // menos, que es lo que hacia que los dias "se pasaran" del domingo.
+  // En mayuscula suma 123,9 px y el desfase baja a 3,3 px.
+  var DOW   = ['LU','MA','MI','JU','VI','SA','DO'];
 
-  // U+2007 (espacio de cifra): mismo ancho que un dígito y NO lo colapsa el
-  // HTML. Es lo que mantiene las columnas alineadas.
-  var EC = ' ';
+  // U+2007 = espacio de cifra = 8,672 px = exactamente el ancho de un "0".
+  // Dos de estos = una celda de 2 digitos. NO lo colapsa el HTML: CSS solo
+  // colapsa espacio/tab/salto ASCII, no los espacios Unicode tipograficos.
+  var EC = '\u2007';
   var VACIA = EC + EC;
+
+  /**
+   * Rellena los digitos angostos para que toda celda mida lo mismo.
+   *
+   * Medido en el render: el "1" mide 6,344 px contra 8,672 del "0" (le faltan
+   * 2,328) y el "7" mide 7,820 (le faltan 0,852). El resto va de 8,3 a 8,9.
+   * U+2006 mide 2,180 y U+200A mide 0,836 -- casi clavados a lo que falta.
+   * Con esto la variacion por celda pasa de 4,84 px a 0,83 px.
+   */
+  function celda(n) {
+    var t = pad(n), out = '';
+    for (var i = 0; i < t.length; i++) {
+      out += t.charAt(i);
+      if      (t.charAt(i) === '1') out += '\u2006';
+      else if (t.charAt(i) === '7') out += '\u200A';
+    }
+    return out;
+  }
 
   var dealId = 0;
   var vista  = new Date();
@@ -110,12 +133,14 @@ declare(strict_types=1);
         if (dia === null) {
           fila[key] = { type:'text', properties:{ value: VACIA } };
         } else if (esPasado(y, m, dia)) {
-          fila[key] = { type:'text', properties:{ value: pad(dia) } };
+          fila[key] = { type:'text', properties:{ value: celda(dia) } };
+        } else if (sel && sel.y===y && sel.m===m && sel.d===dia) {
+          // el elegido va como TEXTO (oscuro) y en negrita: contra el azul de
+          // los links se distingue de un vistazo, que era el reclamo.
+          fila[key] = { type:'text', properties:{ value: celda(dia), bold:true } };
         } else {
-          var elegido = !!(sel && sel.y===y && sel.m===m && sel.d===dia);
           fila[key] = { type:'link', properties:{
-            text: pad(dia),                 // SIEMPRE 2 caracteres: no corre la fila
-            bold: elegido,
+            text: celda(dia),
             action:{ type:'layoutEvent', value:'dia:'+y+'-'+pad(m+1)+'-'+pad(dia) }
           }};
         }
