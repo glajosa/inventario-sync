@@ -126,16 +126,35 @@ declare(strict_types=1);
    *   hora  → "HH:MM" bueno, o null si todavía no lo es
    *   error → mensaje bajo el campo cuando los 4 dígitos no son una hora
    *
-   * Se cortan a los CUATRO PRIMEROS dígitos: teclear de más no hace nada, que
-   * es justo lo que se pidió. El input de Bitrix no tiene maxLength, así que
-   * el tope lo pone esto reescribiendo el campo.
+   * Se lee APENAS se puede, sin esperar los cuatro dígitos: tecleás "13" y ya
+   * dice 1:00 p.m. Esperar a los cuatro obligaba a poner "1300" para ver el
+   * p.m., y eso es tiempo en cada llamada.
+   *
+   * Se cortan a los CUATRO PRIMEROS dígitos: teclear de más no hace nada. El
+   * input de Bitrix no tiene maxLength, así que el tope lo pone esto.
    */
   function normHora(txt) {
     var d = String(txt == null ? '' : txt).replace(/\D/g, '').slice(0, 4);
-    if (d.length < 4) return { texto:d, hora:null, error:'' };
-    var h = parseInt(d.slice(0,2),10), mi = parseInt(d.slice(2),10);
+    if (!d) return { texto:'', hora:null, error:'' };
+
+    var h, mi;
+    if (d.length === 1) { h = +d; mi = 0; }
+    else if (d.length === 2) {
+      h = +d; mi = 0;
+      if (h > 23) { h = +d.charAt(0); mi = +d.charAt(1) * 10; }   // "45" -> 4:50
+    } else if (d.length === 3) {
+      h = +d.slice(0,2); mi = +d.charAt(2) * 10;                   // "133" -> 13:30
+      if (h > 23) { h = +d.charAt(0); mi = +d.slice(1); }          // "935" -> 9:35
+    } else {
+      h = +d.slice(0,2); mi = +d.slice(2);
+    }
     if (h > 23 || mi > 59) return { texto:d, hora:null, error:'Esa hora no existe' };
-    return { texto: d.slice(0,2) + ':' + d.slice(2), hora: pad(h) + ':' + pad(mi), error:'' };
+
+    // El texto del campo SOLO se fuerza con los 4 dígitos (para meter los dos
+    // puntos). Mientras va a medias se deja tal cual escribió: reescribirlo le
+    // movería el cursor. La hora igual ya quedó leída y el resumen la muestra.
+    return { texto: (d.length === 4 ? d.slice(0,2) + ':' + d.slice(2) : d),
+             hora: pad(h) + ':' + pad(mi), error:'' };
   }
 
   /** "16:25" -> "4:25 p.m.", solo para el texto de confirmación. */
@@ -205,7 +224,10 @@ declare(strict_types=1);
     var celdas = [];
     for (var o = 0; o < offset; o++) celdas.push(null);
     for (var d = 1; d <= total; d++) celdas.push(d);
-    while (celdas.length % 7 !== 0) celdas.push(null);
+    // Siempre 42 celdas = 6 filas, aunque el mes entre en 5. Si la altura
+    // cambia de mes a mes, las flechas ◀ ▶ se mueven y hay que volver a
+    // apuntar el mouse en cada salto: eso es tiempo perdido en cada llamada.
+    while (celdas.length < 42) celdas.push(null);
 
     for (var s = 0; s < celdas.length / 7; s++) {
       var fila = {};
