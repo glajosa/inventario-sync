@@ -160,20 +160,25 @@ declare(strict_types=1);
     // sobraba: la pestaña "Registrar llamada" de la barra YA es el botón que
     // abre esto. Sin enlaces propios de abrir/cerrar no se repite ningún
     // rótulo y no sobra ni una línea en blanco.
-    // CERRADO: una sola línea y SIN botones.
+    // CERRADO: nada más que el botón que abre.
     //
-    // Los botones se omiten a propósito: viven en su propio contenedor
-    // (crm-entity-stream-restapp-btn-container, 56 px medidos en el DOM) y
-    // ahí abajo, grises, no hacen más que ocupar. Bitrix los pinta solo si el
-    // diseño trae primaryButton/secondaryButton, así que no mandarlos es la
-    // única forma de que no estén.
+    // Los 56 px del contenedor de botones (crm-entity-stream-restapp-btn-
+    // container) NO se pueden quitar: medido en el DOM, omitirlos del diseño
+    // deja los anteriores colgando, y `visible:false` Bitrix lo escupe tal
+    // cual como atributo HTML sin hacer nada. Si esa franja va a estar sí o
+    // sí, que sirva: el botón principal ES el que abre. Así desaparecen de un
+    // saque el enlace repetido y los dos botones grises muertos.
+    //
+    // El secundario va con título vacío: es de estilo link (sin fondo), así
+    // que vacío no se ve. El principal vacío sí se veía -- era el "punto azul".
     if (colapsado) {
-      var b = { blocks: {} };
-      if (aviso) b.blocks.ok = { type:'text', properties:{ value: aviso, bold:true } };
-      b.blocks.abrir = { type:'link', properties:{
-        text:'Registrar llamada',
-        action:{ type:'layoutEvent', value:'abrir' } } };
-      return b;
+      return {
+        blocks: aviso
+          ? { ok: { type:'text', properties:{ value: aviso, bold:true } } }
+          : { nada: { type:'text', properties:{ value:'' } } },
+        primaryButton:   { title:'Registrar llamada', state:'normal' },
+        secondaryButton: { title:'', state:'disabled' }
+      };
     }
 
     var y = vista.getFullYear(), m = vista.getMonth();
@@ -254,26 +259,9 @@ declare(strict_types=1);
     BX24.placement.call('finish');
     colapsado = true;
     BX24.placement.call('setLayout', layout(), function(){});
-    verBotones(false);
   }
 
-  /**
-   * Muestra u oculta los dos botones de abajo.
-   *
-   * Omitirlos del LayoutDto NO sirve: medido en el DOM, Bitrix conserva los
-   * anteriores y el contenedor sigue ocupando sus 56 px. `visible` no está
-   * documentado para estos comandos, pero sí lo está para setLayoutItemState,
-   * así que se prueba; si no lo entiende, al menos quedan deshabilitados y
-   * con el título vacío, que es lo menos ruidoso que se puede pedir.
-   */
-  function verBotones(mostrar) {
-    BX24.placement.call('setPrimaryButtonState',
-      mostrar ? { visible:true, title:'Sí, contestó', state:'normal' }
-              : { visible:false, title:'', state:'disabled' }, function(){});
-    BX24.placement.call('setSecondaryButtonState',
-      mostrar ? { visible:true, title:'No contestó', state:'normal' }
-              : { visible:false, title:'', state:'disabled' }, function(){});
-  }
+
 
   function inicioIso() {
     return sel.y + '-' + pad(sel.m+1) + '-' + pad(sel.d) + 'T' + hhmm + ':00-05:00';
@@ -348,7 +336,7 @@ declare(strict_types=1);
       if (v === 'cerrar') {
         cerrar();
       } else if (v === 'abrir') {
-        colapsado = false; aviso = ''; redibujar(); verBotones(true);
+        colapsado = false; aviso = ''; redibujar();
       } else if (v.indexOf('mes:') === 0) {
         vista.setMonth(vista.getMonth() + parseInt(v.slice(4), 10));
         redibujar();
@@ -374,8 +362,16 @@ declare(strict_types=1);
       retocar('resumen', { value: resumenTxt(), bold:true });
     });
 
-    BX24.placement.call('bindPrimaryButtonClickCallback',   null, function(){ registrar(true);  });
-    BX24.placement.call('bindSecondaryButtonClickCallback', null, function(){ registrar(false); });
+    // Cerrado, el principal abre; abierto, guarda. Es el mismo boton con dos
+    // trabajos porque esa franja de 56 px esta siempre, se use o no.
+    BX24.placement.call('bindPrimaryButtonClickCallback',   null, function(){
+      if (colapsado) { colapsado = false; aviso = ''; redibujar(); return; }
+      registrar(true);
+    });
+    BX24.placement.call('bindSecondaryButtonClickCallback', null, function(){
+      if (colapsado) return;              // vacio y deshabilitado: no hace nada
+      registrar(false);
+    });
   });
 })();
 </script>
