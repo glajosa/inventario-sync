@@ -75,19 +75,25 @@ declare(strict_types=1);
    * números de las dos filas arranquen en la misma vertical.
    * El eje es la fila de horas con su rótulo: 424 px.
    */
+  // Los tres rótulos se emparejan al más ancho para que formen columna.
+  // Medido en 13 px: Tiempo 45,221 · Minuto 41,596 · Hora 29,148.
   var ROTULO = {
-    hora:   'Hora\u2007\u2006\u2006',
-    minuto: 'Minuto'
+    tiempo: 'Tiempo',
+    hora:   'Hora\u2007\u2006\u2006\u2006\u200A\u200A',
+    minuto: 'Minuto\u2006\u200A\u200A'
   };
-  var HUECO = '\u2007\u2007';   // entre el rótulo y el primer número
+  var HUECO = '\u2007\u2007';   // entre el rótulo y lo que sigue
 
   var RAYA = '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500';
 
+  // Dentro de la caja de la hora ya no se centra fila por fila: las tres
+  // arrancan pegadas a la izquierda y los rótulos hacen la columna. Antes la
+  // de minutos llevaba sangría de centrado y por eso "Hora" y "Minuto" no
+  // coincidían -- medido, 126 px de diferencia. Lo único que se centra es el
+  // calendario, sobre el ancho de la fila de horas (431,6 px).
   var SANGRIA = {
-    celda:   '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006',
-    raya:    '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A\u200A',
-    rueda:   '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u200A',
-    minutos: '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006'
+    celda: '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u200A\u200A',
+    raya:  '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A\u200A'
   };
 
   /**
@@ -323,7 +329,8 @@ declare(strict_types=1);
     // El rango 08-20 sale de los datos: de 400 llamadas leídas en Bitrix, no
     // hay ninguna fuera de esa franja salvo tres sueltas.
     var ruedas = { type:'lineOfBlocks', properties:{ blocks:{
-      hmen: { type:'link', properties:{ text: SANGRIA.rueda+EC+'\u2212'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h-1' } } },
+      rot:  { type:'text', properties:{ value: ROTULO.tiempo + HUECO, size:'sm', color:'base_50' } },
+      hmen: { type:'link', properties:{ text: EC+'\u2212'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h-1' } } },
       hval: { type:'text', properties:{ value: EC + hh + EC, bold:true, size:'xl' } },
       hmas: { type:'link', properties:{ text: EC+'+'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h+1' } } },
       dos:  { type:'text', properties:{ value: EC + ':' + EC, bold:true, size:'xl' } },
@@ -356,7 +363,7 @@ declare(strict_types=1);
     blocks.caja = { type:'section', properties:{ type:'withBorder', blocks:{
       ruedas:  ruedas,
       horas:   filaAtajos('h', 8, 20, 1, hh, 'hora:', '', ROTULO.hora),
-      minutos: filaAtajos('m', 0, 45, 15, mi, 'min:', SANGRIA.minutos, ROTULO.minuto)
+      minutos: filaAtajos('m', 0, 45, 15, mi, 'min:', '', ROTULO.minuto)
     }}};
 
     // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
