@@ -62,6 +62,22 @@ declare(strict_types=1);
   var SEP = '\u2006\u2006';
 
   /**
+   * Sangrías para que TODO quede centrado sobre el mismo eje.
+   *
+   * Cada fila mide distinto -- medido en el render: la semana 177 px, la
+   * rueda 253, los atajos de hora 315 y los de minuto 98 -- y como todas
+   * arrancan pegadas a la izquierda, el calendario se veía corrido. Se centra
+   * todo sobre los 315 px del más ancho. Los espacios valen distinto en cada
+   * tamaño de letra (la celda va en 14 px, los atajos en 13, la rueda en 16),
+   * así que cada sangría está calculada con SUS anchos. Error < 0,3 px.
+   */
+  var SANGRIA = {
+    celda:   '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A\u200A',
+    rueda:   '\u2007\u2007\u2007\u200A',
+    minutos: '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A'
+  };
+
+  /**
    * Rellena los digitos angostos para que toda celda mida lo mismo.
    *
    * Medido en el render: el "1" mide 6,344 px contra 8,672 del "0" (le faltan
@@ -217,7 +233,7 @@ declare(strict_types=1);
     // ── encabezado: ◀  agosto 2026  ▶
     var cal = {};
     cal.nav = { type:'lineOfBlocks', properties:{ blocks:{
-      ant: { type:'link', properties:{ text:'◀', action:{ type:'layoutEvent', value:'mes:-1' } } },
+      ant: { type:'link', properties:{ text: SANGRIA.celda + '◀', action:{ type:'layoutEvent', value:'mes:-1' } } },
       tit: { type:'text', properties:{
         value: EC + RELLENO[MESES[m]][0] + MESES[m] + ' ' + y + RELLENO[MESES[m]][1] + EC,
         bold:true } },
@@ -226,7 +242,8 @@ declare(strict_types=1);
 
     // ── fila de días de la semana (2 caracteres, igual que los números)
     var cab = {};
-    for (var i = 0; i < 7; i++) cab['h'+i] = { type:'text', properties:{ value: DOW[i] + SEP } };
+    for (var i = 0; i < 7; i++) cab['h'+i] = { type:'text', properties:{
+      value: (i === 0 ? SANGRIA.celda : '') + DOW[i] + SEP } };
     cal.dow = { type:'lineOfBlocks', properties:{ blocks: cab } };
 
     // ── celdas del mes, lunes primero.
@@ -247,20 +264,21 @@ declare(strict_types=1);
       var fila = {};
       for (var c = 0; c < 7; c++) {
         var cel = celdas[s*7 + c], key = 'c' + c, dia = cel.d;
+        var sang = (c === 0 ? SANGRIA.celda : '');
         if (cel.otro || esPasado(y, m, dia)) {
           // gris: ni de este mes, o ya pasó. No se puede planificar ahí.
-          fila[key] = { type:'text', properties:{ value: celda(dia) + SEP, color:'base_50' } };
+          fila[key] = { type:'text', properties:{ value: sang + celda(dia) + SEP, color:'base_50' } };
         } else if (sel && sel.y===y && sel.m===m && sel.d===dia) {
           // el elegido va como TEXTO oscuro y en negrita: contra el azul de
           // los links se distingue de un vistazo, sin cambiar de ancho.
-          fila[key] = { type:'text', properties:{ value: celda(dia) + SEP, bold:true } };
+          fila[key] = { type:'text', properties:{ value: sang + celda(dia) + SEP, bold:true } };
         } else {
           // Sábado y domingo NO se pueden pintar de rojo: `color` solo existe
           // en el bloque `text`, y ahí el día deja de ser clickeable. Probado
           // en el DOM: mandando color:'danger' en el link, el sábado sale con
           // el mismo rgb(32,102,176) que el viernes, sin clase ni atributo.
           fila[key] = { type:'link', properties:{
-            text: celda(dia) + SEP,
+            text: sang + celda(dia) + SEP,
             action:{ type:'layoutEvent', value:'dia:'+y+'-'+pad(m+1)+'-'+pad(dia) }
           }};
         }
@@ -290,7 +308,7 @@ declare(strict_types=1);
     // El rango 08-20 sale de los datos: de 400 llamadas leídas en Bitrix, no
     // hay ninguna fuera de esa franja salvo tres sueltas.
     var ruedas = { type:'lineOfBlocks', properties:{ blocks:{
-      hmen: { type:'link', properties:{ text: EC+'\u2212'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h-1' } } },
+      hmen: { type:'link', properties:{ text: SANGRIA.rueda+EC+'\u2212'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h-1' } } },
       hval: { type:'text', properties:{ value: EC + hh + EC, bold:true, size:'xl' } },
       hmas: { type:'link', properties:{ text: EC+'+'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h+1' } } },
       dos:  { type:'text', properties:{ value: EC + ':' + EC, bold:true, size:'xl' } },
@@ -307,12 +325,13 @@ declare(strict_types=1);
     // `pre` va en la clave de cada bloque: las dos filas comparten valores
     // (10, 15, 20) y con la misma clave quedaban ids duplicados en el mismo
     // diseño -- verificado en el DOM: q10, q15 y q20 aparecían dos veces.
-    function filaAtajos(pre, desde, hasta, paso, actual, evento) {
-      var f = {};
+    function filaAtajos(pre, desde, hasta, paso, actual, evento, sangria) {
+      var f = {}, primero = true;
       for (var q = desde; q <= hasta; q += paso) {
+        var sg = primero ? (sangria || '') : ''; primero = false;
         f[pre+q] = (pad(q) === actual)
-          ? { type:'text', properties:{ value: celda(q) + SEP, bold:true, size:'sm' } }
-          : { type:'link', properties:{ text: celda(q) + SEP, size:'sm',
+          ? { type:'text', properties:{ value: sg + celda(q) + SEP, bold:true, size:'sm' } }
+          : { type:'link', properties:{ text: sg + celda(q) + SEP, size:'sm',
                 action:{ type:'layoutEvent', value: evento + pad(q) } } };
       }
       return { type:'lineOfBlocks', properties:{ blocks: f } };
@@ -321,7 +340,7 @@ declare(strict_types=1);
     blocks.caja = { type:'section', properties:{ type:'withBorder', blocks:{
       ruedas:  ruedas,
       horas:   filaAtajos('h', 8, 20, 1, hh, 'hora:'),
-      minutos: filaAtajos('m', 0, 45, 15, mi, 'min:')
+      minutos: filaAtajos('m', 0, 45, 15, mi, 'min:', SANGRIA.minutos)
     }}};
 
     // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
