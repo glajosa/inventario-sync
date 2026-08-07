@@ -86,7 +86,6 @@ declare(strict_types=1);
   var horaManual = false;      // ¿el vendedor tocó la hora?
   var diaManual  = false;      // ¿eligió un día distinto de hoy?
   var importante = false;      // el fuego de Bitrix = PRIORITY 3 (high)
-  var ultimoTexto = '';        // lo último que ESTE código dejó en el campo
   var aviso  = '';
   // CERRAR: `finish` devuelve el foco a la pestaña por defecto de la línea de
   // tiempo -- o sea, cierra esto de verdad. (Antes lo di por imposible con una
@@ -128,18 +127,6 @@ declare(strict_types=1);
     'diciembre':   ['\u2006\u2006\u200A', '\u2006\u2006\u200A'],
   };
 
-  /**
-   * Lo que se agregó entre `viejo` y `nuevo`, caiga donde caiga el cursor.
-   * Se recorta el prefijo y el sufijo comunes; lo del medio es lo tecleado.
-   */
-  function insertado(viejo, nuevo) {
-    var i = 0;
-    while (i < viejo.length && i < nuevo.length && viejo.charAt(i) === nuevo.charAt(i)) i++;
-    var j = 0;
-    while (j < viejo.length - i && j < nuevo.length - i &&
-           viejo.charAt(viejo.length-1-j) === nuevo.charAt(nuevo.length-1-j)) j++;
-    return nuevo.slice(i, nuevo.length - j);
-  }
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
   function hoy() { var d = new Date(); return { y:d.getFullYear(), m:d.getMonth(), d:d.getDate() }; }
@@ -162,48 +149,21 @@ declare(strict_types=1);
    * usa en sus propias actividades. Antes fueron tres listas (hora/minuto/
    * am-pm) y sobraban campos.
    */
-  function ahoraHHMM() { var d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
-
-  /**
-   * Se teclean SOLO dígitos y el campo se acomoda solo: 1245 -> 12:45.
-   * Los dos puntos los pone esto, no el vendedor, y de ahí sale el a.m./p.m.
-   *
-   * Devuelve tres cosas distintas a propósito:
-   * Devuelve las tres cosas que hacen falta:
-   *   texto → cómo debe quedar el campo ("12", "124", "12:40")
-   *   hora  → "HH:MM" bueno, o null si todavía no lo es
-   *   error → mensaje bajo el campo cuando los 4 dígitos no son una hora
-   *
-   * Se lee APENAS se puede, sin esperar los cuatro dígitos: tecleás "13" y ya
-   * dice 1:00 p.m. Esperar a los cuatro obligaba a poner "1300" para ver el
-   * p.m., y eso es tiempo en cada llamada.
-   *
-   * Se cortan a los CUATRO PRIMEROS dígitos: teclear de más no hace nada. El
-   * input de Bitrix no tiene maxLength, así que el tope lo pone esto.
-   */
-  function normHora(txt) {
-    var d = String(txt == null ? '' : txt).replace(/\D/g, '').slice(0, 4);
-    if (!d) return { texto:'', hora:null, error:'' };
-
-    var h, mi;
-    if (d.length === 1) { h = +d; mi = 0; }
-    else if (d.length === 2) {
-      h = +d; mi = 0;
-      if (h > 23) { h = +d.charAt(0); mi = +d.charAt(1) * 10; }   // "45" -> 4:50
-    } else if (d.length === 3) {
-      h = +d.slice(0,2); mi = +d.charAt(2) * 10;                   // "133" -> 13:30
-      if (h > 23) { h = +d.charAt(0); mi = +d.slice(1); }          // "935" -> 9:35
-    } else {
-      h = +d.slice(0,2); mi = +d.slice(2);
-    }
-    if (h > 23 || mi > 59) return { texto:d, hora:null, error:'Esa hora no existe' };
-
-    // El texto del campo SOLO se fuerza con los 4 dígitos (para meter los dos
-    // puntos). Mientras va a medias se deja tal cual escribió: reescribirlo le
-    // movería el cursor. La hora igual ya quedó leída y el resumen la muestra.
-    return { texto: (d.length === 4 ? d.slice(0,2) + ':' + d.slice(2) : d),
-             hora: pad(h) + ':' + pad(mi), error:'' };
+  /** Hora actual redondeada al múltiplo de 5 más cercano. */
+  function ahoraHHMM() {
+    var d = new Date(), t = d.getHours()*60 + Math.round(d.getMinutes()/5)*5;
+    t = ((t % 1440) + 1440) % 1440;
+    return pad(Math.floor(t/60)) + ':' + pad(t % 60);
   }
+
+  /** Corre la hora N minutos, con acarreo y dando la vuelta en medianoche. */
+  function mover(min) {
+    var t = parseInt(hhmm.slice(0,2),10)*60 + parseInt(hhmm.slice(3),10) + min;
+    t = ((t % 1440) + 1440) % 1440;
+    hhmm = pad(Math.floor(t/60)) + ':' + pad(t % 60);
+    horaManual = true; aviso = '';
+  }
+
 
   /** "16:25" -> "4:25 p.m.", solo para el texto de confirmación. */
   function horaTxt() {
@@ -294,8 +254,12 @@ declare(strict_types=1);
           // los links se distingue de un vistazo, sin cambiar de ancho.
           fila[key] = { type:'text', properties:{ value: celda(dia) + SEP, bold:true } };
         } else {
+          // c=5 sabado, c=6 domingo. `color` no figura en la referencia para
+          // `link` (solo text/action/size/bold); se manda igual para ver si lo
+          // toma -- si no, Bitrix lo escupe como atributo y no pasa nada.
           fila[key] = { type:'link', properties:{
             text: celda(dia) + SEP,
+            color: (c >= 5 ? 'danger' : undefined),
             action:{ type:'layoutEvent', value:'dia:'+y+'-'+pad(m+1)+'-'+pad(dia) }
           }};
         }
@@ -303,9 +267,22 @@ declare(strict_types=1);
       blocks['sem'+s] = { type:'lineOfBlocks', properties:{ blocks: fila } };
     }
 
-    // ── hora: se teclean 4 dígitos y solo se acomoda a HH:MM
-    blocks.hora = { type:'input', properties:{ title:'Hora', value:hhmm } };
-    ultimoTexto = hhmm;
+    // ── hora: dos ruedas, hora y minuto, como el control nativo de Bitrix.
+    // Reemplaza al campo de texto: se va el rectángulo de ancho completo y de
+    // paso todos los enredos de teclear. El minuto va de 5 en 5 porque así lo
+    // hacen: de 400 llamadas leídas, TODOS los minutos son múltiplo de 5.
+    var hh = hhmm.slice(0,2), mi = hhmm.slice(3);
+    blocks.hora = { type:'withTitle', properties:{
+      title:'Hora', inline:true, titleWidth:'sm',
+      block:{ type:'lineOfBlocks', properties:{ blocks:{
+        hmen: { type:'link', properties:{ text:'\u2212', action:{ type:'layoutEvent', value:'h-1' } } },
+        hval: { type:'text', properties:{ value: EC + hh + EC, bold:true } },
+        hmas: { type:'link', properties:{ text:'+', action:{ type:'layoutEvent', value:'h+1' } } },
+        dos:  { type:'text', properties:{ value: EC + ':' + EC } },
+        mmen: { type:'link', properties:{ text:'\u2212', action:{ type:'layoutEvent', value:'m-5' } } },
+        mval: { type:'text', properties:{ value: EC + mi + EC, bold:true } },
+        mmas: { type:'link', properties:{ text:'+', action:{ type:'layoutEvent', value:'m+5' } } }
+      }}}}};
 
     // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
     blocks.resumen = { type:'text', properties:{ value: resumenTxt(), bold:true } };
@@ -327,11 +304,6 @@ declare(strict_types=1);
   }
 
   function redibujar() { BX24.placement.call('setLayout', layout(), function(){}); }
-
-  /** Retoca UN bloque sin redibujar todo: así el campo no pierde el foco. */
-  function retocar(id, props) {
-    BX24.placement.call('setLayoutItemState', { id:id, properties:props }, function(){});
-  }
 
   /**
    * Cierra.
@@ -448,7 +420,11 @@ declare(strict_types=1);
 
     BX24.placement.call('bindLayoutEventCallback', null, function (ev) {
       var v = (ev && ev.value) || '';
-      if (v === 'imp') {
+      if (v === 'h-1') { mover(-60); redibujar();
+      } else if (v === 'h+1') { mover(60);  redibujar();
+      } else if (v === 'm-5') { mover(-5);  redibujar();
+      } else if (v === 'm+5') { mover(5);   redibujar();
+      } else if (v === 'imp') {
         importante = !importante; redibujar();
       } else if (v === 'cerrar') {
         cerrar();
@@ -469,27 +445,6 @@ declare(strict_types=1);
     // cuando lo que hay escrito no coincide con lo que debería quedar. Así el
     // cursor se queda quieto mientras teclea, y a partir del quinto dígito el
     // campo simplemente no cambia: quedan los 4 y nada más.
-    // Tecleo. Si la hora anterior ya estaba completa y escriben encima, se
-    // arranca de cero con lo tecleado: antes había que borrar todo el campo
-    // primero. El cursor puede caer donde sea -- insertado() saca lo nuevo
-    // recortando prefijo y sufijo comunes.
-    BX24.placement.call('bindValueChangeCallback', null, function (ev) {
-      if (!ev || ev.id !== 'hora') return;
-      var crudo = String(ev.value == null ? '' : ev.value);
-      var base  = crudo;
-      if (ultimoTexto.indexOf(':') >= 0 && crudo.length > ultimoTexto.length) {
-        var ins = insertado(ultimoTexto, crudo);
-        if (ins && /^\d+$/.test(ins)) base = ins;
-      }
-      var r = normHora(base);
-      if (r.hora) { hhmm = r.hora; horaManual = true; aviso = ''; }
-      if (r.texto !== crudo || r.error) {
-        retocar('hora', { title:'Hora', value:r.texto, errorText:r.error });
-      }
-      ultimoTexto = r.texto;
-      retocar('resumen', { value: resumenTxt(), bold:true });
-    });
-
     BX24.placement.call('bindPrimaryButtonClickCallback',   null, function(){
       if (colapsado) { colapsado = false; aviso = ''; precargar(); redibujar(); return; }
       registrar(true);
