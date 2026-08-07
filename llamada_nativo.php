@@ -254,6 +254,25 @@ declare(strict_types=1);
     BX24.placement.call('finish');
     colapsado = true;
     BX24.placement.call('setLayout', layout(), function(){});
+    verBotones(false);
+  }
+
+  /**
+   * Muestra u oculta los dos botones de abajo.
+   *
+   * Omitirlos del LayoutDto NO sirve: medido en el DOM, Bitrix conserva los
+   * anteriores y el contenedor sigue ocupando sus 56 px. `visible` no está
+   * documentado para estos comandos, pero sí lo está para setLayoutItemState,
+   * así que se prueba; si no lo entiende, al menos quedan deshabilitados y
+   * con el título vacío, que es lo menos ruidoso que se puede pedir.
+   */
+  function verBotones(mostrar) {
+    BX24.placement.call('setPrimaryButtonState',
+      mostrar ? { visible:true, title:'Sí, contestó', state:'normal' }
+              : { visible:false, title:'', state:'disabled' }, function(){});
+    BX24.placement.call('setSecondaryButtonState',
+      mostrar ? { visible:true, title:'No contestó', state:'normal' }
+              : { visible:false, title:'', state:'disabled' }, function(){});
   }
 
   function inicioIso() {
@@ -329,7 +348,7 @@ declare(strict_types=1);
       if (v === 'cerrar') {
         cerrar();
       } else if (v === 'abrir') {
-        colapsado = false; aviso = ''; redibujar();
+        colapsado = false; aviso = ''; redibujar(); verBotones(true);
       } else if (v.indexOf('mes:') === 0) {
         vista.setMonth(vista.getMonth() + parseInt(v.slice(4), 10));
         redibujar();
