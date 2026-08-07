@@ -292,17 +292,26 @@ declare(strict_types=1);
       mmas: { type:'link', properties:{ text: EC+'+'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'m+5' } } }
     }}};
 
-    var atajos = {};
-    for (var q = 8; q <= 20; q++) {
-      atajos['q'+q] = (pad(q) === hh)
-        ? { type:'text', properties:{ value: celda(q) + SEP, bold:true } }
-        : { type:'link', properties:{ text: celda(q) + SEP,
-              action:{ type:'layoutEvent', value:'hora:'+pad(q) } } };
+    // Fila de atajos: un click y queda. Va una para la hora y otra para el
+    // minuto -- no se puede "aplastar y escribir" sobre el número, porque
+    // dentro de un lineOfBlocks solo entran `text` y `link`: el `input` es de
+    // ancho completo y el `dropdownMenu` se va a su propio renglón (medido).
+    // El valor activo va en negrita y sin enlace, igual que el día elegido.
+    function filaAtajos(desde, hasta, paso, actual, evento) {
+      var f = {};
+      for (var q = desde; q <= hasta; q += paso) {
+        f['q'+q] = (pad(q) === actual)
+          ? { type:'text', properties:{ value: celda(q) + SEP, bold:true } }
+          : { type:'link', properties:{ text: celda(q) + SEP,
+                action:{ type:'layoutEvent', value: evento + pad(q) } } };
+      }
+      return { type:'lineOfBlocks', properties:{ blocks: f } };
     }
 
     blocks.caja = { type:'section', properties:{ type:'withBorder', blocks:{
-      ruedas: ruedas,
-      atajos: { type:'lineOfBlocks', properties:{ blocks: atajos } }
+      ruedas:  ruedas,
+      horas:   filaAtajos(8, 20, 1, hh, 'hora:'),
+      minutos: filaAtajos(0, 55, 5, mi, 'min:')
     }}};
 
     // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
@@ -443,6 +452,9 @@ declare(strict_types=1);
       var v = (ev && ev.value) || '';
       if (v.indexOf('hora:') === 0) {
         hhmm = v.slice(5) + ':' + hhmm.slice(3);
+        horaManual = true; aviso = ''; redibujar();
+      } else if (v.indexOf('min:') === 0) {
+        hhmm = hhmm.slice(0,2) + ':' + v.slice(4);
         horaManual = true; aviso = ''; redibujar();
       } else if (v === 'h-1') { mover(-60); redibujar();
       } else if (v === 'h+1') { mover(60);  redibujar();
