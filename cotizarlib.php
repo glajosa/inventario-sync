@@ -164,6 +164,13 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     $cargaCuotas   = $porc * $v;
 
     // --- número de cuotas: por HASTA, por PRESUPUESTO o por plazo ---
+    // PLAZO FIJO: si el proyecto tiene fecha de entrega es un proyecto en planos, y
+    // el plazo NO se acorta — el cliente paga hasta que se entregue, punto. Por eso
+    // "puedo pagar $X al mes" ya no recorta meses: sube la cuota y lo que sobra se
+    // descuenta de las EXTRAORDINARIAS (y si no alcanzan, de la contraentrega, que
+    // ya se avisa aparte). Sin fecha de entrega no hay horizonte que respetar, así
+    // que ahí se conserva el comportamiento viejo de calcular los meses.
+    $plazoFijo = ($entrega !== null);
     $recortado = false;
     $insuficiente = false;
     $cuotaMinima = 0.0;
@@ -175,7 +182,7 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
            + ((int)$mh[2] - (int)$primera->format('n')) + 1;
         $n = max(1, $n);
         if ($plazoMax !== null && $n > $plazoMax) { $n = $plazoMax; $recortado = true; }
-    } elseif ($presupuesto > 0 && $v > 0) {
+    } elseif ($presupuesto > 0 && $v > 0 && !$plazoFijo) {
         // Con presupuesto se invierte la pregunta: el cliente dice cuánto puede pagar
         // al mes y salen las cuotas necesarias. Es la forma en que se vende de verdad.
         $n = max(1, (int)ceil($cargaCuotas / $presupuesto));
@@ -189,6 +196,11 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         if ($plazoMax !== null && $n > $plazoMax) { $n = $plazoMax; $recortado = true; }
     }
     $n = max(1, $n);
+
+    // Cuota mensual objetivo cuando el plazo es fijo: manda sobre el reparto y las
+    // extraordinarias absorben la diferencia (arriba y abajo: pagar MENOS al mes las
+    // engorda, pagar MÁS las adelgaza).
+    $mensualObjetivo = ($plazoFijo && $presupuesto > 0 && $v > 0) ? $presupuesto : 0.0;
 
     // --- fechas de las cuotas (el 16 de cada mes) ---
     $fechas = [];
@@ -239,12 +251,21 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     // Cuánto va en extraordinarias: monto por extraordinaria, total explícito, o el
     // 10% de siempre. Poner más acá alivia la cuota mensual, que es una de las
     // variantes que se venden.
+    $firmaFijada   = isset($opts['firma'])   && $opts['firma'] !== '';
+    $extraAbsorbio = false;
     if ($iguales) {
         $extraTotal = 0.0;
     } elseif (isset($opts['extraCada']) && (float)$opts['extraCada'] > 0) {
         $extraTotal = (float)$opts['extraCada'] * $nExtra;
     } elseif (isset($opts['extraTotal']) && (float)$opts['extraTotal'] > 0) {
         $extraTotal = (float)$opts['extraTotal'];
+    } elseif ($mensualObjetivo > 0 && $nExtra > 0) {
+        // Plazo fijo + cuota pedida: las extraordinarias son el amortiguador. Se
+        // quedan con lo que NO cubren la separación, la firma y las N cuotas.
+        $firmaPrev  = $firmaFijada ? max(0.0, (float)$opts['firma'])
+                                   : max(0.0, $reserva10 - $separacion);
+        $extraTotal = max(0.0, $v - $separacion - $contraentrega - $firmaPrev - $mensualObjetivo * $n);
+        $extraAbsorbio = true;
     } else {
         $extraTotal = 0.10 * $v;
     }
@@ -255,13 +276,18 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     // calcula al FINAL, sumando la tabla real de cuotas (no mensual × n — con la
     // firma diferida cada mes puede traer un monto distinto, así que hace falta la
     // tabla ya construida para que el cierre sea exacto).
-    $firmaFijada   = isset($opts['firma'])   && $opts['firma'] !== '';
     $mensualFijada = isset($opts['mensual']) && (float)$opts['mensual'] > 0;
     $porRepartir   = $v - $separacion - $contraentrega - $extraTotal;
     $bajaContraentrega = false;
     $sobrepago = false;
 
-    if ($mensualFijada) {
+    if ($mensualObjetivo > 0) {
+        // Plazo fijo: manda la cuota pedida y la firma se queda en su valor normal
+        // (el ajuste ya se hizo en las extraordinarias, arriba).
+        $mensual   = $mensualObjetivo;
+        $firmaBase = $firmaFijada ? max(0.0, (float)$opts['firma'])
+                                  : max(0.0, min($reserva10 - $separacion, $porRepartir));
+    } elseif ($mensualFijada) {
         // "Puedo pagar $700 al mes". Manda la cuota. Si además pidió firma (típico:
         // "y nada a la firma"), se respetan LAS DOS y lo que sobra sale de la
         // contraentrega — que es exactamente lo que pide ese cliente.
@@ -365,6 +391,10 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         // Banderas para que la pantalla avise en vez de mentir en silencio.
         'bajaContraentrega' => $bajaContraentrega,
         'sobrepago'     => $sobrepago,
+        // Plazo fijo por fecha de entrega: el asesor no puede acortar el plan, y si
+        // pidió una cuota mensual fueron las extraordinarias las que se movieron.
+        'plazoFijo'     => $plazoFijo,
+        'extraAbsorbio' => $extraAbsorbio,
         'hasta'         => $n > 0 ? $fechas[$n - 1]->format('Y-m') : '',
         'hastaTxt'      => $n > 0 ? cot_mes_es((int)$fechas[$n - 1]->format('n')) . ' ' . $fechas[$n - 1]->format('Y') : '',
         'cuotas'        => $n,

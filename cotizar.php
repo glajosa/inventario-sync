@@ -115,6 +115,26 @@ $unidad   = $unidades[0];
 $proyecto = implode(' · ', array_keys($proyectosSet));
 $fusion   = count($unidades) > 1;
 
+// PRECIO EDITABLE: el PVP del SPA es el punto de partida, no una condena — se
+// negocia. Si el asesor escribe un precio, MANDA sobre el del inventario. En una
+// fusión el monto escrito es el TOTAL y se reparte entre las unidades en la misma
+// proporción que traían, para que la vista "separado" siga sumando lo mismo.
+$pvpInventario = $pvp;
+$vPrecio = str_replace([',', '$', ' '], '', (string)($_GET['precio'] ?? ''));
+$precioEditado = false;
+if (preg_match('/^\d+(\.\d+)?$/', $vPrecio) && (float)$vPrecio > 0 && $pvpInventario > 0) {
+    $nuevo  = (float)$vPrecio;
+    if (abs($nuevo - $pvpInventario) > 0.005) {
+        $factor = $nuevo / $pvpInventario;
+        foreach ($unidades as $k => $u) {
+            $p = (float)str_replace(['|USD', ','], '', (string)$u['pvp']);
+            $unidades[$k]['pvp'] = (string)($p * $factor);
+        }
+        $pvp = $nuevo;
+        $precioEditado = true;
+    }
+}
+
 // ---------- cliente ----------
 $cliente = '';
 if ($dealId > 0) {
@@ -410,9 +430,19 @@ $hoy  = new DateTimeImmutable('now');
     <?php if ($fusion): ?><input type="hidden" name="unif" value="0"><?php endif; ?>
     <div class="col2"><label>Cliente</label>
       <input type="text" name="cliente" value="<?= h($cliente) ?>" placeholder="Nombre del cliente"></div>
-    <div><label>Cuotas</label>
+    <!-- Precio negociable: arranca en el PVP del inventario y el asesor lo puede
+         cambiar. Vacío = vuelve al del inventario. En una fusión es el TOTAL. -->
+    <div class="col2"><label>Precio del activo<?= $precioEditado ? ' · editado' : '' ?></label>
+      <input type="text" name="precio" inputmode="decimal"
+             value="<?= $precioEditado ? h(number_format($pvp, 2, '.', '')) : '' ?>"
+             placeholder="<?= h(number_format($pvpInventario, 2, '.', '')) ?> (del inventario)"
+             title="Precio de venta de la unidad. Si lo dejas vacío se usa el del inventario (<?= h(cot_money($pvpInventario)) ?>). Todo el plan se recalcula sobre este número."></div>
+    <div><label>Cuotas<?= !empty($plan['plazoFijo']) ? ' · fijas' : '' ?></label>
       <input type="number" name="n" min="1" max="<?= (int)($plan['plazoMax'] ?? 120) ?>" value="<?= (int)$plan['cuotas'] ?>"
-             title="Se deshabilita si llenas 'o paga al mes' — el motor siempre prioriza el presupuesto sobre este número."></div>
+             <?= !empty($plan['plazoFijo']) ? 'readonly' : '' ?>
+             title="<?= !empty($plan['plazoFijo'])
+               ? 'Proyecto en planos: el plazo lo fija la fecha de entrega y no se acorta. Si el cliente puede pagar más al mes, se reducen las extraordinarias.'
+               : 'Se deshabilita si llenas \'o paga al mes\' — el motor siempre prioriza el presupuesto sobre este número.' ?>"></div>
     <!-- La otra forma de preguntar, y la que más se usa vendiendo: el cliente dice
          cuánto puede pagar al mes y salen las cuotas. Si se llena, MANDA sobre "Cuotas"
          (que por eso se deshabilita — ver script al final del formulario). -->
@@ -539,7 +569,12 @@ $hoy  = new DateTimeImmutable('now');
     secundario.addEventListener('input', sync);
     sync();
   }
-  exclusivo(cuotasEl, presuEl,  'Se calcula solo a partir de "o paga al mes"');
+  // Con PLAZO FIJO (proyecto en planos) ya no compiten: el plazo lo manda la fecha
+  // de entrega y "o paga al mes" solo mueve las extraordinarias. Deshabilitar
+  // Cuotas ahí sería mentir — está fijo por otra razón, y readonly ya lo dice.
+  if (!cuotasEl.hasAttribute('readonly')) {
+    exclusivo(cuotasEl, presuEl, 'Se calcula solo a partir de "o paga al mes"');
+  }
   exclusivo(mesesEl,  cuotaFEl, 'Se calcula solo a partir de "cuota mensual de eso"');
 
   // "Todo debe estar relacionado", sin refrescar la página: escribir cuánto
@@ -616,10 +651,28 @@ $hoy  = new DateTimeImmutable('now');
     <div class="aviso">Con <b><?= h(cot_money($plan['presupuesto'])) ?>/mes</b> no alcanza ni pagando hasta la entrega.
       La cuota mínima posible para esta unidad es <b><?= h(cot_money($plan['cuotaMinima'])) ?>/mes</b>
       (a <?= (int)$plan['cuotas'] ?> cuotas). Es lo que se muestra abajo.</div>
+  <?php elseif ($plan['presupuesto'] > 0 && !empty($plan['extraAbsorbio'])): ?>
+    <div class="aviso" style="background:#eaf6ff;border-color:#b9ddf5;color:#0c4a6e">
+      El plazo no se toca: <b><?= (int)$plan['cuotas'] ?> cuotas</b> hasta la entrega
+      (<?= h(cot_mes_es((int)$entrega['m']) . ' ' . $entrega['y']) ?>).
+      Pagando <b><?= h(cot_money($plan['presupuesto'])) ?>/mes</b>
+      <?php if ((float)$plan['extraTotal'] > 0.01): ?>
+        la extraordinaria queda en <b><?= h(cot_money($plan['valorExtra'])) ?></b>
+        (<?= (int)$plan['nExtra'] ?> en total, <?= h(cot_money($plan['extraTotal'])) ?>).
+      <?php else: ?>
+        <b>ya no quedan extraordinarias</b>: la cuota cubre todo lo que iba en ellas.
+      <?php endif; ?>
+    </div>
   <?php elseif ($plan['presupuesto'] > 0): ?>
     <div class="aviso" style="background:#eaf6ff;border-color:#b9ddf5;color:#0c4a6e">
       Con <b><?= h(cot_money($plan['presupuesto'])) ?>/mes</b> son
       <b><?= (int)$plan['cuotas'] ?> cuotas</b> de <b><?= h(cot_money($plan['mensual'])) ?></b>.</div>
+  <?php endif; ?>
+  <?php if ($precioEditado): ?>
+    <div class="aviso" style="background:#fff7e6;border-color:#f0d090;color:#7a4b00">
+      Precio <b>editado a mano</b>: <?= h(cot_money($pvp)) ?>.
+      En el inventario esta unidad está en <b><?= h(cot_money($pvpInventario)) ?></b>.
+      Todo el plan de abajo se calculó sobre el precio editado.</div>
   <?php endif; ?>
   <?php if ($plan['recortado']): ?>
     <div class="aviso">Se ajustó a <b><?= (int)$plan['cuotas'] ?> cuotas</b>: es el máximo que cabe antes de la
