@@ -80,15 +80,15 @@ declare(strict_types=1);
   var horaManual = false;      // ¿el vendedor tocó la hora?
   var diaManual  = false;      // ¿eligió un día distinto de hoy?
   var aviso  = '';
-  // La pestaña NO se puede cerrar por API. Probado: finish/close/cancel/
-  // closeApplication (sin respuesta), y dejar el boton secundario sin enlazar
-  // tampoco cierra. Lo unico que si controlo es MI contenido, asi que "Cerrar"
-  // lo colapsa a una linea. Para el vendedor el efecto es el mismo.
+  // Abrir y cerrar los maneja BITRIX: la pestaña "Registrar llamada" de la
+  // barra muestra esto, y cualquier otra pestaña lo tapa. Por eso acá no hay
+  // enlaces propios de abrir/cerrar -- serían el mismo botón dos veces.
+  // (Cerrar por API no existe: probado finish/close/cancel/closeApplication,
+  // ninguno responde.)
   //
-  // CLAVE: los dos botones van SIEMPRE en el diseño, en todos los estados.
-  // Cuando los omiti, Bitrix dejo los anteriores colgando y pinto uno vacio
-  // (el punto azul suelto). ButtonDto solo acepta title y state: no se ocultan.
-  var abierto = false;
+  // CLAVE: los dos botones van SIEMPRE en el diseño. Cuando los omití, Bitrix
+  // dejó los anteriores colgando y pintó uno vacío (el punto azul suelto).
+  // ButtonDto solo acepta title y state: no se pueden ocultar.
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
   function hoy() { var d = new Date(); return { y:d.getFullYear(), m:d.getMonth(), d:d.getDate() }; }
@@ -114,21 +114,22 @@ declare(strict_types=1);
   function ahoraHHMM() { var d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
 
   /**
-   * Lee lo que sea que escriban. Aguanta 16:25 · 1625 · 16.25 · 4:25pm · 4pm · 9.
-   * Devuelve "HH:MM" o null si no se entiende (y entonces se deja la anterior).
+   * Se teclean SOLO dígitos y el campo se acomoda solo: 1245 -> 12:45.
+   * Los dos puntos los pone esto, no el vendedor, y de ahí sale el a.m./p.m.
+   *
+   * Devuelve tres cosas distintas a propósito:
+   *   undefined → todavía va escribiendo (1, 12, 124): NO se toca nada. Si se
+   *               redibuja a medio teclear, el campo le mueve el cursor y se
+   *               arma el enredo que se veía antes ("040:00"). Por eso espera
+   *               a los cuatro dígitos completos.
+   *   null      → cuatro dígitos que no son una hora (2575): se descarta.
+   *   "HH:MM"   → hora buena.
    */
-  function leerHora(txt) {
-    var s = String(txt == null ? '' : txt).toLowerCase().replace(/\s+/g, '');
-    var pm = /p\.?m\.?/.test(s), am = /a\.?m\.?/.test(s);
-    s = s.replace(/[ap]\.?m\.?/g, '');
-    // con separador el minuto puede ir de un dígito ("9:5"); sin separador
-    // tiene que ir de dos, si no "165" sería ambiguo.
-    var m = s.match(/^(\d{1,2})(?:[:.h](\d{1,2})|(\d{2}))?$/);
-    if (!m) return null;
-    var mm = m[2] || m[3];
-    var h = parseInt(m[1], 10), mi = mm ? parseInt(mm, 10) : 0;
-    if (pm && h < 12)  h += 12;
-    if (am && h === 12) h = 0;
+  function normHora(txt) {
+    var d = String(txt == null ? '' : txt).replace(/\D/g, '');
+    if (d.length > 4) d = d.slice(-4);   // se quedan los últimos tecleados
+    if (d.length < 4) return undefined;
+    var h = parseInt(d.slice(0,2),10), mi = parseInt(d.slice(2),10);
     if (h > 23 || mi > 59) return null;
     return pad(h) + ':' + pad(mi);
   }
@@ -153,21 +154,13 @@ declare(strict_types=1);
     if (!horaManual) hhmm = ahoraHHMM();
     if (!diaManual)  { var hy = hoy(); sel = { y:hy.y, m:hy.m, d:hy.d }; }
 
-    // COLAPSADO = lo que se ve al entrar al deal. El botón de la barra ya se
-    // llama "Registrar llamada", así que acá NO se repite ese rótulo: va
-    // directo la frase de qué se va a guardar y los dos botones listos. El
-    // caso normal (hoy, ahora mismo) se resuelve en UN click, sin abrir nada.
-    if (!abierto) {
-      var b = botones(true);
-      b.blocks = {};
-      if (aviso) b.blocks.ok = { type:'text', properties:{ value: aviso, bold:true } };
-      b.blocks.info    = { type:'text', properties:{ value: resumenTxt() } };
-      b.blocks.cambiar = { type:'link', properties:{
-        text:'Cambiar día u hora', action:{ type:'layoutEvent', value:'abrir' } } };
-      return b;
-    }
+    // UN SOLO ESTADO. Antes había un paso previo con un enlace para abrir, y
+    // sobraba: la pestaña "Registrar llamada" de la barra YA es el botón que
+    // abre esto. Sin enlaces propios de abrir/cerrar no se repite ningún
+    // rótulo y no sobra ni una línea en blanco.
     var y = vista.getFullYear(), m = vista.getMonth();
     var blocks = {};
+    if (aviso) blocks.ok = { type:'text', properties:{ value: aviso, bold:true } };
 
     // ── encabezado: ◀  agosto 2026  ▶
     blocks.nav = { type:'lineOfBlocks', properties:{ blocks:{
@@ -211,14 +204,11 @@ declare(strict_types=1);
       blocks['sem'+s] = { type:'lineOfBlocks', properties:{ blocks: fila } };
     }
 
-    // ── hora: un campo, se escribe. Aguanta 16:25, 1625, 4:25pm o solo 9.
-    blocks.hora = { type:'input', properties:{
-      title:'Hora', value:hhmm, placeholder:'16:25' } };
+    // ── hora: se teclean 4 dígitos y solo se acomoda a HH:MM
+    blocks.hora = { type:'input', properties:{ title:'Hora', value:hhmm } };
 
-    // ── resumen: la confirmación en palabras, que es lo que de verdad se lee
+    // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
     blocks.resumen = { type:'text', properties:{ value: resumenTxt(), bold:true } };
-    blocks.cerrar  = { type:'link', properties:{
-      text:'Listo', action:{ type:'layoutEvent', value:'cerrar' } } };
 
     var out = botones(true);
     out.blocks = blocks;
@@ -269,7 +259,7 @@ declare(strict_types=1);
                 + ', vuelvo a llamar el ' + DIAN[f.getDay()] + ' ' + sel.d + ' de ' + MESES[sel.m]
                 + ' a las ' + horaTxt();
           // vuelve al estado de arranque: hoy, ahora, listo para la siguiente
-          abierto = false; horaManual = false; diaManual = false;
+          horaManual = false; diaManual = false;
           redibujar();
         });
       }
@@ -296,27 +286,25 @@ declare(strict_types=1);
 
     BX24.placement.call('bindLayoutEventCallback', null, function (ev) {
       var v = (ev && ev.value) || '';
-      if (v === 'abrir') {
-        abierto = true; aviso = ''; vista = new Date(); redibujar();
-      } else if (v === 'cerrar') {
-        abierto = false; aviso = ''; redibujar();
-      } else if (v.indexOf('mes:') === 0) {
+      if (v.indexOf('mes:') === 0) {
         vista.setMonth(vista.getMonth() + parseInt(v.slice(4), 10));
         redibujar();
       } else if (v.indexOf('dia:') === 0) {
         var p = v.slice(4).split('-');
         sel = { y:parseInt(p[0],10), m:parseInt(p[1],10)-1, d:parseInt(p[2],10) };
-        diaManual = true;
+        diaManual = true; aviso = '';
         redibujar();
       }
     });
 
-    // Hora escrita a mano. Si no se entiende, se ignora y el redibujo la deja
-    // como estaba -- nunca queda un valor basura camino a Bitrix.
+    // Hora tecleada. Mientras va a medias no se redibuja (si no, el redibujo
+    // le mueve el cursor). Al completarla se pinta ya con los dos puntos; si
+    // no es una hora posible se borra sola y vuelve la anterior.
     BX24.placement.call('bindValueChangeCallback', null, function (ev) {
       if (!ev || ev.id !== 'hora') return;
-      var v = leerHora(ev.value);
-      if (v) { hhmm = v; horaManual = true; }
+      var v = normHora(ev.value);
+      if (v === undefined) return;
+      if (v) { hhmm = v; horaManual = true; aviso = ''; }
       redibujar();
     });
 
