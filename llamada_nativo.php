@@ -79,6 +79,8 @@ declare(strict_types=1);
   var hhmm = '09:00';          // 24 h, tal cual viaja a Bitrix
   var horaManual = false;      // ¿el vendedor tocó la hora?
   var diaManual  = false;      // ¿eligió un día distinto de hoy?
+  var importante = false;      // el fuego de Bitrix = PRIORITY 3 (high)
+  var ultimoTexto = '';        // lo último que ESTE código dejó en el campo
   var aviso  = '';
   // CERRAR: `finish` devuelve el foco a la pestaña por defecto de la línea de
   // tiempo -- o sea, cierra esto de verdad. (Antes lo di por imposible con una
@@ -119,6 +121,19 @@ declare(strict_types=1);
     'noviembre':   ['\u2006\u200A', '\u2006\u200A'],
     'diciembre':   ['\u2006\u2006\u200A', '\u2006\u2006\u200A'],
   };
+
+  /**
+   * Lo que se agregó entre `viejo` y `nuevo`, caiga donde caiga el cursor.
+   * Se recorta el prefijo y el sufijo comunes; lo del medio es lo tecleado.
+   */
+  function insertado(viejo, nuevo) {
+    var i = 0;
+    while (i < viejo.length && i < nuevo.length && viejo.charAt(i) === nuevo.charAt(i)) i++;
+    var j = 0;
+    while (j < viejo.length - i && j < nuevo.length - i &&
+           viejo.charAt(viejo.length-1-j) === nuevo.charAt(nuevo.length-1-j)) j++;
+    return nuevo.slice(i, nuevo.length - j);
+  }
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
   function hoy() { var d = new Date(); return { y:d.getFullYear(), m:d.getMonth(), d:d.getDate() }; }
@@ -282,11 +297,21 @@ declare(strict_types=1);
 
     // ── hora: se teclean 4 dígitos y solo se acomoda a HH:MM
     blocks.hora = { type:'input', properties:{ title:'Hora', value:hhmm } };
+    ultimoTexto = hhmm;
 
     // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
     blocks.resumen = { type:'text', properties:{ value: resumenTxt(), bold:true } };
-    blocks.cerrar  = { type:'link', properties:{
-      text:'Cerrar', size:'sm', action:{ type:'layoutEvent', value:'cerrar' } } };
+    // Importante y Cerrar comparten fila: el fuego de Bitrix es PRIORITY 3
+    // ("high", confirmado con crm.enum.activitypriority) y algunos vendedores
+    // lo usan -- de 400 llamadas leídas, 5 venían marcadas.
+    blocks.pie = { type:'lineOfBlocks', properties:{ blocks:{
+      imp: { type:'link', properties:{
+        text: (importante ? '\u2611' : '\u2610') + ' Importante', size:'sm',
+        action:{ type:'layoutEvent', value:'imp' } } },
+      sep: { type:'text', properties:{ value: EC + EC + EC } },
+      cer: { type:'link', properties:{
+        text:'Cerrar', size:'sm', action:{ type:'layoutEvent', value:'cerrar' } } }
+    }}};
 
     var out = botones(true);
     out.blocks = blocks;
@@ -382,7 +407,8 @@ declare(strict_types=1);
         SUBJECT: contesto ? '1234' : ('Llamada saliente ' + (ctx.nombre || 'cliente')),
         COMPLETED:'N', RESPONSIBLE_ID:ctx.resp,
         START_TIME:inicio, END_TIME:masUnaHora(inicio), DEADLINE:inicio,
-        PRIORITY:2, NOTIFY_TYPE:1, NOTIFY_VALUE:15, DESCRIPTION_TYPE:1
+        PRIORITY: importante ? 3 : 2,      // 3 = high = el fuego
+        NOTIFY_TYPE:1, NOTIFY_VALUE:15, DESCRIPTION_TYPE:1
       };
       if (ctx.contactId && ctx.tel) {
         fields.COMMUNICATIONS = [{ VALUE:ctx.tel, ENTITY_ID:ctx.contactId, ENTITY_TYPE_ID:3, TYPE:'PHONE' }];
@@ -393,7 +419,7 @@ declare(strict_types=1);
         // Sin texto de "Guardado": la actividad recien creada YA sale ahi
         // abajo en la linea de tiempo con su fecha limite.
         aviso = '';
-        horaManual = false; diaManual = false;
+        horaManual = false; diaManual = false; importante = false;
         cerrar();
       });
     }
@@ -414,7 +440,9 @@ declare(strict_types=1);
 
     BX24.placement.call('bindLayoutEventCallback', null, function (ev) {
       var v = (ev && ev.value) || '';
-      if (v === 'cerrar') {
+      if (v === 'imp') {
+        importante = !importante; redibujar();
+      } else if (v === 'cerrar') {
         cerrar();
       } else if (v === 'abrir') {
         colapsado = false; aviso = ''; precargar(); redibujar();
@@ -433,18 +461,27 @@ declare(strict_types=1);
     // cuando lo que hay escrito no coincide con lo que debería quedar. Así el
     // cursor se queda quieto mientras teclea, y a partir del quinto dígito el
     // campo simplemente no cambia: quedan los 4 y nada más.
+    // Tecleo. Si la hora anterior ya estaba completa y escriben encima, se
+    // arranca de cero con lo tecleado: antes había que borrar todo el campo
+    // primero. El cursor puede caer donde sea -- insertado() saca lo nuevo
+    // recortando prefijo y sufijo comunes.
     BX24.placement.call('bindValueChangeCallback', null, function (ev) {
       if (!ev || ev.id !== 'hora') return;
-      var r = normHora(ev.value);
+      var crudo = String(ev.value == null ? '' : ev.value);
+      var base  = crudo;
+      if (ultimoTexto.indexOf(':') >= 0 && crudo.length > ultimoTexto.length) {
+        var ins = insertado(ultimoTexto, crudo);
+        if (ins && /^\d+$/.test(ins)) base = ins;
+      }
+      var r = normHora(base);
       if (r.hora) { hhmm = r.hora; horaManual = true; aviso = ''; }
-      if (r.texto !== String(ev.value == null ? '' : ev.value) || r.error) {
+      if (r.texto !== crudo || r.error) {
         retocar('hora', { title:'Hora', value:r.texto, errorText:r.error });
       }
+      ultimoTexto = r.texto;
       retocar('resumen', { value: resumenTxt(), bold:true });
     });
 
-    // Cerrado, el principal abre; abierto, guarda. Es el mismo boton con dos
-    // trabajos porque esa franja de 56 px esta siempre, se use o no.
     BX24.placement.call('bindPrimaryButtonClickCallback',   null, function(){
       if (colapsado) { colapsado = false; aviso = ''; precargar(); redibujar(); return; }
       registrar(true);
