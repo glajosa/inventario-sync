@@ -275,18 +275,21 @@ declare(strict_types=1);
 
     // ── hora, dentro de una caja (section withBorder: borde de 0,75 px y
     // esquinas de 10 px, medido en el DOM). Dos filas que se complementan:
-    //   arriba  − 11 +  :  − 00 +   para afinar
+    //   arriba  − 11 +  :  − 00 +   para afinar (el area clickeable ES el
+    //                                texto, por eso los signos van con un
+    //                                espacio de cifra a cada lado: de 9 px
+    //                                de ancho pasan a ~27)
     //   abajo   08 … 20             para saltar directo a la hora
     // El rango 08-20 sale de los datos: de 400 llamadas leídas en Bitrix, no
     // hay ninguna fuera de esa franja salvo tres sueltas.
     var ruedas = { type:'lineOfBlocks', properties:{ blocks:{
-      hmen: { type:'link', properties:{ text:'\u2212', size:'lg', bold:true, action:{ type:'layoutEvent', value:'h-1' } } },
-      hval: { type:'text', properties:{ value: EC + hh + EC, bold:true, size:'lg' } },
-      hmas: { type:'link', properties:{ text:'+', size:'lg', bold:true, action:{ type:'layoutEvent', value:'h+1' } } },
-      dos:  { type:'text', properties:{ value: EC + ':' + EC, bold:true, size:'lg' } },
-      mmen: { type:'link', properties:{ text:'\u2212', size:'lg', bold:true, action:{ type:'layoutEvent', value:'m-5' } } },
-      mval: { type:'text', properties:{ value: EC + mi + EC, bold:true, size:'lg' } },
-      mmas: { type:'link', properties:{ text:'+', size:'lg', bold:true, action:{ type:'layoutEvent', value:'m+5' } } }
+      hmen: { type:'link', properties:{ text: EC+'\u2212'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h-1' } } },
+      hval: { type:'text', properties:{ value: EC + hh + EC, bold:true, size:'xl' } },
+      hmas: { type:'link', properties:{ text: EC+'+'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h+1' } } },
+      dos:  { type:'text', properties:{ value: EC + ':' + EC, bold:true, size:'xl' } },
+      mmen: { type:'link', properties:{ text: EC+'\u2212'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'m-5' } } },
+      mval: { type:'text', properties:{ value: EC + mi + EC, bold:true, size:'xl' } },
+      mmas: { type:'link', properties:{ text: EC+'+'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'m+5' } } }
     }}};
 
     var atajos = {};
