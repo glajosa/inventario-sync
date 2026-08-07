@@ -85,7 +85,9 @@ declare(strict_types=1);
   // prueba mal hecha; está documentado en la referencia del placement.)
   // Se llama al guardar y desde el enlace "Cerrar". `colapsado` es el respaldo
   // por si finish no cerrara: deja una sola línea en vez del calendario suelto.
-  var colapsado = false;
+  // Nace CERRADO: al entrar al deal Bitrix deja seleccionada esta pestana,
+  // asi que si arrancara abierto el calendario aparece sin que nadie lo pida.
+  var colapsado = true;
   //
   // CLAVE: los dos botones van SIEMPRE en el diseño. Cuando los omití, Bitrix
   // dejó los anteriores colgando y pintó uno vacío (el punto azul suelto).
@@ -173,9 +175,9 @@ declare(strict_types=1);
     // que vacío no se ve. El principal vacío sí se veía -- era el "punto azul".
     if (colapsado) {
       return {
-        blocks: aviso
-          ? { ok: { type:'text', properties:{ value: aviso, bold:true } } }
-          : { nada: { type:'text', properties:{ value:'' } } },
+        // Sin bloques cuando no hay error: el bloque vacio de antes pintaba
+        // 12 px de aire justo encima del boton.
+        blocks: aviso ? { ok: { type:'text', properties:{ value: aviso, bold:true } } } : {},
         primaryButton:   { title:'Registrar llamada', state:'normal' },
         secondaryButton: { title:'', state:'disabled' }
       };
