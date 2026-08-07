@@ -273,31 +273,34 @@ declare(strict_types=1);
     // hacen: de 400 llamadas leídas, TODOS los minutos son múltiplo de 5.
     var hh = hhmm.slice(0,2), mi = hhmm.slice(3);
 
-    function opc(desde, hasta, paso) {
-      var o = {};
-      for (var v = desde; v <= hasta; v += paso) o[pad(v)] = pad(v);
-      return o;
-    }
-
-    // PRUEBA: section withBorder = el "cuadrito", y dropdownMenu para poder
-    // elegir directo sin el campo de ancho completo. Ninguno de los dos se usó
-    // antes acá; se comprueban en el DOM y se deja el que sirva.
-    blocks.caja = { type:'section', properties:{ type:'withBorder', blocks:{
-      fila: { type:'lineOfBlocks', properties:{ blocks:{
-        hmen: { type:'link', properties:{ text:'\u2212', size:'lg', bold:true, action:{ type:'layoutEvent', value:'h-1' } } },
-        hval: { type:'text', properties:{ value: EC + hh + EC, bold:true, size:'lg' } },
-        hmas: { type:'link', properties:{ text:'+', size:'lg', bold:true, action:{ type:'layoutEvent', value:'h+1' } } },
-        dos:  { type:'text', properties:{ value: EC + ':' + EC, size:'lg' } },
-        mmen: { type:'link', properties:{ text:'\u2212', size:'lg', bold:true, action:{ type:'layoutEvent', value:'m-5' } } },
-        mval: { type:'text', properties:{ value: EC + mi + EC, bold:true, size:'lg' } },
-        mmas: { type:'link', properties:{ text:'+', size:'lg', bold:true, action:{ type:'layoutEvent', value:'m+5' } } }
-      }}}
+    // ── hora, dentro de una caja (section withBorder: borde de 0,75 px y
+    // esquinas de 10 px, medido en el DOM). Dos filas que se complementan:
+    //   arriba  − 11 +  :  − 00 +   para afinar
+    //   abajo   08 … 20             para saltar directo a la hora
+    // El rango 08-20 sale de los datos: de 400 llamadas leídas en Bitrix, no
+    // hay ninguna fuera de esa franja salvo tres sueltas.
+    var ruedas = { type:'lineOfBlocks', properties:{ blocks:{
+      hmen: { type:'link', properties:{ text:'\u2212', size:'lg', bold:true, action:{ type:'layoutEvent', value:'h-1' } } },
+      hval: { type:'text', properties:{ value: EC + hh + EC, bold:true, size:'lg' } },
+      hmas: { type:'link', properties:{ text:'+', size:'lg', bold:true, action:{ type:'layoutEvent', value:'h+1' } } },
+      dos:  { type:'text', properties:{ value: EC + ':' + EC, bold:true, size:'lg' } },
+      mmen: { type:'link', properties:{ text:'\u2212', size:'lg', bold:true, action:{ type:'layoutEvent', value:'m-5' } } },
+      mval: { type:'text', properties:{ value: EC + mi + EC, bold:true, size:'lg' } },
+      mmas: { type:'link', properties:{ text:'+', size:'lg', bold:true, action:{ type:'layoutEvent', value:'m+5' } } }
     }}};
 
-    blocks.probaHora = { type:'dropdownMenu', properties:{
-      selectedValue: hh, values: opc(0, 23, 1) } };
-    blocks.probaMin  = { type:'dropdownMenu', properties:{
-      selectedValue: mi, values: opc(0, 55, 5) } };
+    var atajos = {};
+    for (var q = 8; q <= 20; q++) {
+      atajos['q'+q] = (pad(q) === hh)
+        ? { type:'text', properties:{ value: celda(q) + SEP, bold:true } }
+        : { type:'link', properties:{ text: celda(q) + SEP,
+              action:{ type:'layoutEvent', value:'hora:'+pad(q) } } };
+    }
+
+    blocks.caja = { type:'section', properties:{ type:'withBorder', blocks:{
+      ruedas: ruedas,
+      atajos: { type:'lineOfBlocks', properties:{ blocks: atajos } }
+    }}};
 
     // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
     blocks.resumen = { type:'text', properties:{ value: resumenTxt(), bold:true } };
@@ -435,7 +438,10 @@ declare(strict_types=1);
 
     BX24.placement.call('bindLayoutEventCallback', null, function (ev) {
       var v = (ev && ev.value) || '';
-      if (v === 'h-1') { mover(-60); redibujar();
+      if (v.indexOf('hora:') === 0) {
+        hhmm = v.slice(5) + ':' + hhmm.slice(3);
+        horaManual = true; aviso = ''; redibujar();
+      } else if (v === 'h-1') { mover(-60); redibujar();
       } else if (v === 'h+1') { mover(60);  redibujar();
       } else if (v === 'm-5') { mover(-5);  redibujar();
       } else if (v === 'm+5') { mover(5);   redibujar();
