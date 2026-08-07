@@ -76,7 +76,7 @@ declare(strict_types=1);
   var dealId = 0;
   var vista  = new Date();
   var sel    = null;
-  var hora   = '';
+  var h12 = 9, min = '00', ap = 'am';
   var aviso  = '';
   // La pestaña NO se puede cerrar por API. Probado: finish/close/cancel/
   // closeApplication (sin respuesta), y dejar el boton secundario sin enlazar
@@ -96,34 +96,43 @@ declare(strict_types=1);
     return (y<h.y) || (y===h.y && m<h.m) || (y===h.y && m===h.m && d<h.d);
   }
 
+  /** Los botones se arman en un solo lugar: nunca falta ninguno. */
+  function botones(activos) {
+    return {
+      primaryButton:   { title:'Sí, contestó', state: activos ? 'normal' : 'disabled' },
+      secondaryButton: { title:'No contestó',  state: activos ? 'normal' : 'disabled' }
+    };
+  }
+
   /**
-   * Horas de 7:00 a 21:00 cada media hora (29 opciones).
+   * Hora en TRES campos cortos: hora (1-12), minuto y a.m./p.m.
    *
-   * Historial: arranco con media hora (30 opciones), se bajo a horas en punto
-   * (13) cuando el usuario pidio "mas sencillo", y quedo demasiado rigida --
-   * no se podia agendar 9:30. La media hora es el punto medio: da control real
-   * sin volver la lista interminable, y sin sumar un campo aparte.
+   * Antes era una sola lista larga (llego a 29 opciones) y el usuario la
+   * encontro complicada. Asi cada lista es corta y se lee como en el reloj.
+   * Arranca en la hora ACTUAL redondeada al cuarto mas cercano: si son las
+   * 4 p.m., ya dice 4 · 00 · p.m. y de ahi se corrige lo que haga falta.
    */
-  function opcionesHora() {
-    var out = {};
-    for (var h = 7; h <= 21; h++) {
-      for (var mm = 0; mm < 60; mm += 30) {
-        if (h === 21 && mm > 0) break;
-        var h12 = h % 12 === 0 ? 12 : h % 12;
-        out[pad(h)+':'+pad(mm)] = h12 + ':' + pad(mm) + ' ' + (h < 12 ? 'a.m.' : 'p.m.');
-      }
-    }
-    return out;
-  }
-  /** Proxima media hora redonda. */
-  function horaPorDefecto() {
+  function opcHora()  { var o={}; for (var i=1;i<=12;i++) o[i]=''+i; return o; }
+  function opcMin()   { return { '00':'00', '15':'15', '30':'30', '45':'45' }; }
+  function opcAmPm()  { return { am:'a.m.', pm:'p.m.' }; }
+
+  /** Hora actual redondeada al cuarto mas cercano. */
+  function ahoraPartes() {
     var d = new Date();
-    d.setMinutes(d.getMinutes() + 30);
-    var h = d.getHours(), mm = d.getMinutes() < 30 ? 0 : 30;
-    if (h < 7)  { h = 8;  mm = 0; }
-    if (h > 21) { h = 21; mm = 0; }
-    return pad(h) + ':' + pad(mm);
+    var m = Math.round(d.getMinutes() / 15) * 15;
+    var h = d.getHours();
+    if (m === 60) { m = 0; h = (h + 1) % 24; }
+    return { h12: (h % 12 === 0 ? 12 : h % 12), min: pad(m), ap: (h < 12 ? 'am' : 'pm') };
   }
+
+  /** Las tres partes a "HH:MM" de 24 horas, que es lo que viaja a Bitrix. */
+  function hora24() {
+    var h = h12 % 12;
+    if (ap === 'pm') h += 12;
+    return pad(h) + ':' + min;
+  }
+  /** Texto legible: "4:30 p.m." */
+  function horaTxt() { return h12 + ':' + min + ' ' + (ap === 'am' ? 'a.m.' : 'p.m.'); }
 
   function layout() {
     if (!abierto) {
@@ -182,19 +191,16 @@ declare(strict_types=1);
     }
 
     // ── hora
-    blocks.hora = { type:'select', properties:{
-      title:'Hora', selectedValue: hora, values: opcionesHora()
-    }};
+    blocks.hh = { type:'select', properties:{ title:'Hora',   selectedValue:String(h12), values:opcHora() } };
+    blocks.mm = { type:'select', properties:{ title:'Minuto', selectedValue:min,          values:opcMin()  } };
+    blocks.ap = { type:'select', properties:{ title:'a.m./p.m.', selectedValue:ap,        values:opcAmPm() } };
 
     // ── resumen: la confirmación en palabras, que es lo que de verdad se lee
     var txt = 'Elegí un día arriba';
     if (sel) {
       var f = new Date(sel.y, sel.m, sel.d);
-      var hh = parseInt(hora.slice(0,2), 10), mi = hora.slice(3,5);
-      var h12 = hh % 12 === 0 ? 12 : hh % 12;
       txt = 'Vuelvo a llamar el ' + DIAN[f.getDay()] + ' ' + sel.d + ' de ' + MESES[sel.m]
-          + (esHoy(sel.y,sel.m,sel.d) ? ' (hoy)' : '')
-          + ', ' + h12 + ':' + mi + ' ' + (hh < 12 ? 'a.m.' : 'p.m.');
+          + (esHoy(sel.y,sel.m,sel.d) ? ' (hoy)' : '') + ', ' + horaTxt();
     }
     blocks.resumen = { type:'text', properties:{ value: txt, bold: !!sel } };
     blocks.cerrar  = { type:'link', properties:{
@@ -208,7 +214,7 @@ declare(strict_types=1);
   function redibujar() { BX24.placement.call('setLayout', layout(), function(){}); }
 
   function inicioIso() {
-    return sel.y + '-' + pad(sel.m+1) + '-' + pad(sel.d) + 'T' + hora + ':00-05:00';
+    return sel.y + '-' + pad(sel.m+1) + '-' + pad(sel.d) + 'T' + hora24() + ':00-05:00';
   }
   /** +1h a mano: Date() rompería el offset fijo -05:00. */
   function masUnaHora(iso) {
@@ -218,7 +224,7 @@ declare(strict_types=1);
   }
 
   function registrar(contesto) {
-    if (!dealId || !sel || !hora) return;
+    if (!dealId || !sel) return;
     BX24.placement.call('lock');
     var inicio = inicioIso();
 
@@ -243,10 +249,9 @@ declare(strict_types=1);
           BX24.placement.call('unlock');
           if (ra.error()) { aviso = 'No se pudo guardar: ' + ra.error(); redibujar(); return; }
           var f = new Date(sel.y, sel.m, sel.d);
-          var hh = parseInt(hora.slice(0,2), 10), mi = hora.slice(3,5);
           aviso = 'Guardado \u2713  ' + (contesto ? 'contest\u00f3' : 'no contest\u00f3')
                 + ', vuelvo a llamar el ' + DIAN[f.getDay()] + ' ' + sel.d + ' de ' + MESES[sel.m]
-                + ' a las ' + (hh % 12 === 0 ? 12 : hh % 12) + ':' + mi + ' ' + (hh < 12 ? 'a.m.' : 'p.m.');
+                + ' a las ' + horaTxt();
           abierto = false; sel = null;
           redibujar();
         });
@@ -270,7 +275,7 @@ declare(strict_types=1);
     try { opt = BX24.placement.info().options || {}; } catch (e) {}
     dealId = parseInt(opt.ENTITY_ID || opt.entityId || opt.ID || 0, 10);
 
-    hora = horaPorDefecto();
+    var t0 = ahoraPartes(); h12 = t0.h12; min = t0.min; ap = t0.ap;
     redibujar();                     // nace COLAPSADO: una sola linea
 
     BX24.placement.call('bindLayoutEventCallback', null, function (ev) {
@@ -278,7 +283,8 @@ declare(strict_types=1);
       if (v === 'abrir') {
         abierto = true; aviso = '';
         var h0 = hoy(); sel = { y:h0.y, m:h0.m, d:h0.d };
-        vista = new Date(); hora = horaPorDefecto();
+        vista = new Date();
+        var t = ahoraPartes(); h12 = t.h12; min = t.min; ap = t.ap;
         redibujar();
       } else if (v === 'cerrar') {
         abierto = false; aviso = ''; redibujar();
@@ -294,7 +300,11 @@ declare(strict_types=1);
 
     // al cambiar la hora se redibuja para que el resumen la refleje
     BX24.placement.call('bindValueChangeCallback', null, function (ev) {
-      if (ev && ev.id === 'hora') { hora = ev.value; redibujar(); }
+      if (!ev || !ev.id) return;
+      if (ev.id === 'hh') h12 = parseInt(ev.value, 10);
+      if (ev.id === 'mm') min = ev.value;
+      if (ev.id === 'ap') ap  = ev.value;
+      redibujar();
     });
 
     BX24.placement.call('bindPrimaryButtonClickCallback',   null, function(){ registrar(true);  });
