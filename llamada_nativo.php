@@ -161,13 +161,17 @@ declare(strict_types=1);
     // abre esto. Sin enlaces propios de abrir/cerrar no se repite ningún
     // rótulo y no sobra ni una línea en blanco.
     // Respaldo: solo se ve si `finish` no llegara a cerrar. Con finish andando
-    // esto es invisible, porque Bitrix ya cambió de pestaña.
+    // es invisible, porque Bitrix ya cambió de pestaña.
+    //
+    // El enlace NO puede decir "Registrar llamada": la pestaña de la barra ya
+    // se llama así y quedaban dos rótulos iguales, uno arriba del otro.
     if (colapsado) {
       var b = botones(false);
       b.blocks = {};
       if (aviso) b.blocks.ok = { type:'text', properties:{ value: aviso, bold:true } };
       b.blocks.abrir = { type:'link', properties:{
-        text:'Registrar llamada', action:{ type:'layoutEvent', value:'abrir' } } };
+        text:'Abrir de nuevo', size:'sm',
+        action:{ type:'layoutEvent', value:'abrir' } } };
       return b;
     }
 
@@ -238,15 +242,17 @@ declare(strict_types=1);
   }
 
   /**
-   * Cierra. Primero se deja el respaldo colapsado y recién ahí se llama a
-   * `finish` -- si finish cierra, ese respaldo nunca se ve; si no cerrara,
-   * queda una línea en vez del calendario abierto para siempre.
+   * Cierra.
+   *
+   * `finish` va SUELTO, no dentro del callback de setLayout: así lo tenía y
+   * por eso no cerraba nunca -- si Bitrix no invoca ese callback, la orden no
+   * llega a salir. Primero cerrar, después dejar el respaldo colapsado por si
+   * finish no hiciera efecto (mejor una línea que el calendario colgado).
    */
   function cerrar() {
+    BX24.placement.call('finish');
     colapsado = true;
-    BX24.placement.call('setLayout', layout(), function () {
-      BX24.placement.call('finish');
-    });
+    BX24.placement.call('setLayout', layout(), function(){});
   }
 
   function inicioIso() {
