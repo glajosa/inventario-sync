@@ -60,21 +60,34 @@ declare(strict_types=1);
   // U+2006 = 4,35 px, y como va en TODAS las celdas (numeros y encabezado)
   // no corre el aplome.
   var SEP = '\u2006\u2006';
+  var AIRE = '\u2007';          // separación de los atajos: más suelto que SEP
 
   /**
-   * Sangrías para que TODO quede centrado sobre el mismo eje.
+   * Rótulos y sangrías, todo calculado con anchos MEDIDOS en el render real.
    *
-   * Cada fila mide distinto -- medido en el render: la semana 177 px, la
-   * rueda 253, los atajos de hora 315 y los de minuto 98 -- y como todas
-   * arrancan pegadas a la izquierda, el calendario se veía corrido. Se centra
-   * todo sobre los 315 px del más ancho. Los espacios valen distinto en cada
-   * tamaño de letra (la celda va en 14 px, los atajos en 13, la rueda en 16),
-   * así que cada sangría está calculada con SUS anchos. Error < 0,3 px.
+   * Los espacios no valen lo mismo en cada fila porque cada una va en otro
+   * tamaño: la celda del calendario en 14 px, los atajos en 13, la rueda en
+   * 16. Por eso cada sangría se arma con SUS anchos:
+   *     14 px → U+2007 8,668 · U+2006 2,174 · U+200A 0,834
+   *     13 px → U+2007 8,112 · U+2006 2,082 · U+200A 0,838
+   *     16 px → U+2007 9,984 · U+2006 2,344 · U+200A 0,781
+   * "Hora" mide 29,148 y "Minuto" 41,596: se empareja el corto para que los
+   * números de las dos filas arranquen en la misma vertical.
+   * El eje es la fila de horas con su rótulo: 424 px.
    */
+  var ROTULO = {
+    hora:   'Hora\u2007\u2006\u2006',
+    minuto: 'Minuto'
+  };
+  var HUECO = '\u2007\u2007';   // entre el rótulo y el primer número
+
+  var RAYA = '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500';
+
   var SANGRIA = {
-    celda:   '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A\u200A',
-    rueda:   '\u2007\u2007\u2007\u200A',
-    minutos: '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A'
+    celda:   '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006',
+    raya:    '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A\u200A',
+    rueda:   '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u200A',
+    minutos: '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006'
   };
 
   /**
@@ -245,6 +258,8 @@ declare(strict_types=1);
     for (var i = 0; i < 7; i++) cab['h'+i] = { type:'text', properties:{
       value: (i === 0 ? SANGRIA.celda : '') + DOW[i] + SEP } };
     cal.dow = { type:'lineOfBlocks', properties:{ blocks: cab } };
+    // raya bajo los días, como el selector nativo
+    cal.raya = { type:'text', properties:{ value: SANGRIA.raya + RAYA, color:'base_50' } };
 
     // ── celdas del mes, lunes primero.
     // La grilla se rellena con los días del mes anterior y del siguiente, en
@@ -325,13 +340,14 @@ declare(strict_types=1);
     // `pre` va en la clave de cada bloque: las dos filas comparten valores
     // (10, 15, 20) y con la misma clave quedaban ids duplicados en el mismo
     // diseño -- verificado en el DOM: q10, q15 y q20 aparecían dos veces.
-    function filaAtajos(pre, desde, hasta, paso, actual, evento, sangria) {
-      var f = {}, primero = true;
+    function filaAtajos(pre, desde, hasta, paso, actual, evento, sangria, rotulo) {
+      var f = {};
+      f.rot = { type:'text', properties:{
+        value: (sangria || '') + rotulo + HUECO, size:'sm', color:'base_50' } };
       for (var q = desde; q <= hasta; q += paso) {
-        var sg = primero ? (sangria || '') : ''; primero = false;
         f[pre+q] = (pad(q) === actual)
-          ? { type:'text', properties:{ value: sg + celda(q) + SEP, bold:true, size:'sm' } }
-          : { type:'link', properties:{ text: sg + celda(q) + SEP, size:'sm',
+          ? { type:'text', properties:{ value: celda(q) + AIRE, bold:true, size:'sm' } }
+          : { type:'link', properties:{ text: celda(q) + AIRE, size:'sm',
                 action:{ type:'layoutEvent', value: evento + pad(q) } } };
       }
       return { type:'lineOfBlocks', properties:{ blocks: f } };
@@ -339,8 +355,8 @@ declare(strict_types=1);
 
     blocks.caja = { type:'section', properties:{ type:'withBorder', blocks:{
       ruedas:  ruedas,
-      horas:   filaAtajos('h', 8, 20, 1, hh, 'hora:'),
-      minutos: filaAtajos('m', 0, 45, 15, mi, 'min:', SANGRIA.minutos)
+      horas:   filaAtajos('h', 8, 20, 1, hh, 'hora:', '', ROTULO.hora),
+      minutos: filaAtajos('m', 0, 45, 15, mi, 'min:', SANGRIA.minutos, ROTULO.minuto)
     }}};
 
     // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
