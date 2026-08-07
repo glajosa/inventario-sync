@@ -254,12 +254,12 @@ declare(strict_types=1);
           // los links se distingue de un vistazo, sin cambiar de ancho.
           fila[key] = { type:'text', properties:{ value: celda(dia) + SEP, bold:true } };
         } else {
-          // c=5 sabado, c=6 domingo. `color` no figura en la referencia para
-          // `link` (solo text/action/size/bold); se manda igual para ver si lo
-          // toma -- si no, Bitrix lo escupe como atributo y no pasa nada.
+          // Sábado y domingo NO se pueden pintar de rojo: `color` solo existe
+          // en el bloque `text`, y ahí el día deja de ser clickeable. Probado
+          // en el DOM: mandando color:'danger' en el link, el sábado sale con
+          // el mismo rgb(32,102,176) que el viernes, sin clase ni atributo.
           fila[key] = { type:'link', properties:{
             text: celda(dia) + SEP,
-            color: (c >= 5 ? 'danger' : undefined),
             action:{ type:'layoutEvent', value:'dia:'+y+'-'+pad(m+1)+'-'+pad(dia) }
           }};
         }
