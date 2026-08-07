@@ -292,10 +292,10 @@ declare(strict_types=1);
         BX24.callMethod('crm.activity.add', { fields: fields }, function (ra) {
           BX24.placement.call('unlock');
           if (ra.error()) { aviso = 'No se pudo guardar: ' + ra.error(); redibujar(); return; }
-          var f = new Date(sel.y, sel.m, sel.d);
-          aviso = 'Guardado \u2713  ' + (contesto ? 'contest\u00f3' : 'no contest\u00f3')
-                + ', vuelvo a llamar el ' + DIAN[f.getDay()] + ' ' + sel.d + ' de ' + MESES[sel.m]
-                + ' a las ' + horaTxt();
+          // Sin texto de "Guardado": la actividad recien creada YA sale ahi
+          // abajo en la linea de tiempo con su fecha limite. Repetirlo era una
+          // linea de mas justo donde se pidio menos ruido.
+          aviso = '';
           // creada la actividad, se cierra solo: eso era lo que se pedía.
           // Queda en el estado de arranque (hoy, ahora) para la siguiente.
           horaManual = false; diaManual = false;
