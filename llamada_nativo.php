@@ -29,6 +29,21 @@
  * ---------------------------------------------------------------------------
  */
 declare(strict_types=1);
+
+// El iframe de este placement va OCULTO (useBuiltInInterface), asi que no hay
+// consola donde mirar. Esta traza deja constancia en /data/web.log de que
+// evento llego y que devolvio finish(). Se lee con:
+//   index.php?log=1&token=OUTBOUND_TOKEN
+if (isset($_GET['ev'])) {
+    $dir = getenv('DATA_DIR') ?: '/data';
+    @file_put_contents($dir . '/web.log',
+        gmdate('Y-m-d\TH:i:s\Z') . '  LLAMADA ' . substr((string)$_GET['ev'], 0, 200) . "\n",
+        FILE_APPEND | LOCK_EX);
+    header('Content-Type: image/gif');
+    header('Cache-Control: no-store');
+    echo base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+    exit;
+}
 ?>
 <!doctype html>
 <html>
@@ -77,6 +92,11 @@ declare(strict_types=1);
   var vista  = new Date();
   var sel    = null;
   var hora   = '';
+
+  // traza al servidor (Image evita lios de CORS)
+  function traza(t) {
+    try { (new Image()).src = 'llamada_nativo.php?ev=' + encodeURIComponent(t) + '&_=' + (+new Date()); } catch (e) {}
+  }
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
   function hoy() { var d = new Date(); return { y:d.getFullYear(), m:d.getMonth(), d:d.getDate() }; }
@@ -214,7 +234,11 @@ declare(strict_types=1);
         }
         BX24.callMethod('crm.activity.add', { fields: fields }, function (ra) {
           BX24.placement.call('unlock');
-          if (!ra.error()) BX24.placement.call('finish');
+          if (ra.error()) { traza('guardar: ERROR ' + ra.error()); return; }
+          traza('guardar: creada id=' + ra.data());
+          BX24.placement.call('finish', {}, function (r) {
+            traza('guardar: finish devolvio ' + JSON.stringify(r));
+          });
         });
       }
 
@@ -236,6 +260,7 @@ declare(strict_types=1);
     try { opt = BX24.placement.info().options || {}; } catch (e) {}
     dealId = parseInt(opt.ENTITY_ID || opt.entityId || opt.ID || 0, 10);
 
+    traza('handler cargado, deal=' + dealId);
     hora = horaPorDefecto();
     var h = hoy();
     sel = { y:h.y, m:h.m, d:h.d };   // arranca en hoy, como el calendario HTML
@@ -244,7 +269,12 @@ declare(strict_types=1);
     BX24.placement.call('bindLayoutEventCallback', null, function (ev) {
       var v = (ev && ev.value) || '';
       if (v === 'cerrar') {
-        BX24.placement.call('finish');
+        traza('cerrar: pedido');
+        try {
+          BX24.placement.call('finish', {}, function (r) {
+            traza('cerrar: finish devolvio ' + JSON.stringify(r));
+          });
+        } catch (e) { traza('cerrar: finish LANZO ' + e.message); }
       } else if (v.indexOf('mes:') === 0) {
         vista.setMonth(vista.getMonth() + parseInt(v.slice(4), 10));
         redibujar();
