@@ -55,6 +55,12 @@ declare(strict_types=1);
   var EC = '\u2007';
   var VACIA = EC + EC;
 
+  // Aire entre columnas. Medido: sin esto el paso es 21 px y el del selector
+  // nativo de Bitrix es ~25 px -- por eso el suyo se lee mas suelto. Dos
+  // U+2006 = 4,35 px, y como va en TODAS las celdas (numeros y encabezado)
+  // no corre el aplome.
+  var SEP = '\u2006\u2006';
+
   /**
    * Rellena los digitos angostos para que toda celda mida lo mismo.
    *
@@ -259,7 +265,7 @@ declare(strict_types=1);
 
     // ── fila de días de la semana (2 caracteres, igual que los números)
     var cab = {};
-    for (var i = 0; i < 7; i++) cab['h'+i] = { type:'text', properties:{ value: DOW[i] } };
+    for (var i = 0; i < 7; i++) cab['h'+i] = { type:'text', properties:{ value: DOW[i] + SEP } };
     blocks.dow = { type:'lineOfBlocks', properties:{ blocks: cab } };
 
     // ── celdas del mes, lunes primero.
@@ -282,14 +288,14 @@ declare(strict_types=1);
         var cel = celdas[s*7 + c], key = 'c' + c, dia = cel.d;
         if (cel.otro || esPasado(y, m, dia)) {
           // gris: ni de este mes, o ya pasó. No se puede planificar ahí.
-          fila[key] = { type:'text', properties:{ value: celda(dia), color:'base_50' } };
+          fila[key] = { type:'text', properties:{ value: celda(dia) + SEP, color:'base_50' } };
         } else if (sel && sel.y===y && sel.m===m && sel.d===dia) {
           // el elegido va como TEXTO oscuro y en negrita: contra el azul de
           // los links se distingue de un vistazo, sin cambiar de ancho.
-          fila[key] = { type:'text', properties:{ value: celda(dia), bold:true } };
+          fila[key] = { type:'text', properties:{ value: celda(dia) + SEP, bold:true } };
         } else {
           fila[key] = { type:'link', properties:{
-            text: celda(dia),
+            text: celda(dia) + SEP,
             action:{ type:'layoutEvent', value:'dia:'+y+'-'+pad(m+1)+'-'+pad(dia) }
           }};
         }
