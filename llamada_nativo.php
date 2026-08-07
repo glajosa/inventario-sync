@@ -272,17 +272,32 @@ declare(strict_types=1);
     // paso todos los enredos de teclear. El minuto va de 5 en 5 porque así lo
     // hacen: de 400 llamadas leídas, TODOS los minutos son múltiplo de 5.
     var hh = hhmm.slice(0,2), mi = hhmm.slice(3);
-    blocks.hora = { type:'withTitle', properties:{
-      title:'Hora', inline:true, titleWidth:'sm',
-      block:{ type:'lineOfBlocks', properties:{ blocks:{
-        hmen: { type:'link', properties:{ text:'\u2212', action:{ type:'layoutEvent', value:'h-1' } } },
-        hval: { type:'text', properties:{ value: EC + hh + EC, bold:true } },
-        hmas: { type:'link', properties:{ text:'+', action:{ type:'layoutEvent', value:'h+1' } } },
-        dos:  { type:'text', properties:{ value: EC + ':' + EC } },
-        mmen: { type:'link', properties:{ text:'\u2212', action:{ type:'layoutEvent', value:'m-5' } } },
-        mval: { type:'text', properties:{ value: EC + mi + EC, bold:true } },
-        mmas: { type:'link', properties:{ text:'+', action:{ type:'layoutEvent', value:'m+5' } } }
-      }}}}};
+
+    function opc(desde, hasta, paso) {
+      var o = {};
+      for (var v = desde; v <= hasta; v += paso) o[pad(v)] = pad(v);
+      return o;
+    }
+
+    // PRUEBA: section withBorder = el "cuadrito", y dropdownMenu para poder
+    // elegir directo sin el campo de ancho completo. Ninguno de los dos se usó
+    // antes acá; se comprueban en el DOM y se deja el que sirva.
+    blocks.caja = { type:'section', properties:{ type:'withBorder', blocks:{
+      fila: { type:'lineOfBlocks', properties:{ blocks:{
+        hmen: { type:'link', properties:{ text:'\u2212', size:'lg', bold:true, action:{ type:'layoutEvent', value:'h-1' } } },
+        hval: { type:'text', properties:{ value: EC + hh + EC, bold:true, size:'lg' } },
+        hmas: { type:'link', properties:{ text:'+', size:'lg', bold:true, action:{ type:'layoutEvent', value:'h+1' } } },
+        dos:  { type:'text', properties:{ value: EC + ':' + EC, size:'lg' } },
+        mmen: { type:'link', properties:{ text:'\u2212', size:'lg', bold:true, action:{ type:'layoutEvent', value:'m-5' } } },
+        mval: { type:'text', properties:{ value: EC + mi + EC, bold:true, size:'lg' } },
+        mmas: { type:'link', properties:{ text:'+', size:'lg', bold:true, action:{ type:'layoutEvent', value:'m+5' } } }
+      }}}
+    }}};
+
+    blocks.probaHora = { type:'dropdownMenu', properties:{
+      selectedValue: hh, values: opc(0, 23, 1) } };
+    blocks.probaMin  = { type:'dropdownMenu', properties:{
+      selectedValue: mi, values: opc(0, 55, 5) } };
 
     // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
     blocks.resumen = { type:'text', properties:{ value: resumenTxt(), bold:true } };
