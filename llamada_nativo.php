@@ -76,7 +76,9 @@ declare(strict_types=1);
   var dealId = 0;
   var vista  = new Date();
   var sel    = null;
-  var h12 = 9, min = '00', ap = 'am';
+  var hhmm = '09:00';          // 24 h, tal cual viaja a Bitrix
+  var horaManual = false;      // ¿el vendedor tocó la hora?
+  var diaManual  = false;      // ¿eligió un día distinto de hoy?
   var aviso  = '';
   // La pestaña NO se puede cerrar por API. Probado: finish/close/cancel/
   // closeApplication (sin respuesta), y dejar el boton secundario sin enlazar
@@ -105,44 +107,63 @@ declare(strict_types=1);
   }
 
   /**
-   * Hora en TRES campos cortos: hora (1-12), minuto y a.m./p.m.
-   *
-   * Antes era una sola lista larga (llego a 29 opciones) y el usuario la
-   * encontro complicada. Asi cada lista es corta y se lee como en el reloj.
-   * Arranca en la hora ACTUAL redondeada al cuarto mas cercano: si son las
-   * 4 p.m., ya dice 4 · 00 · p.m. y de ahi se corrige lo que haga falta.
+   * Hora en UN SOLO campo, 24 h — el mismo formato del reloj que Bitrix ya
+   * usa en sus propias actividades. Antes fueron tres listas (hora/minuto/
+   * am-pm) y sobraban campos.
    */
-  function opcHora()  { var o={}; for (var i=1;i<=12;i++) o[i]=''+i; return o; }
-  function opcMin()   { return { '00':'00', '15':'15', '30':'30', '45':'45' }; }
-  function opcAmPm()  { return { am:'a.m.', pm:'p.m.' }; }
+  function ahoraHHMM() { var d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
 
-  /** Hora actual redondeada al cuarto mas cercano. */
-  function ahoraPartes() {
-    var d = new Date();
-    var m = Math.round(d.getMinutes() / 15) * 15;
-    var h = d.getHours();
-    if (m === 60) { m = 0; h = (h + 1) % 24; }
-    return { h12: (h % 12 === 0 ? 12 : h % 12), min: pad(m), ap: (h < 12 ? 'am' : 'pm') };
+  /**
+   * Lee lo que sea que escriban. Aguanta 16:25 · 1625 · 16.25 · 4:25pm · 4pm · 9.
+   * Devuelve "HH:MM" o null si no se entiende (y entonces se deja la anterior).
+   */
+  function leerHora(txt) {
+    var s = String(txt == null ? '' : txt).toLowerCase().replace(/\s+/g, '');
+    var pm = /p\.?m\.?/.test(s), am = /a\.?m\.?/.test(s);
+    s = s.replace(/[ap]\.?m\.?/g, '');
+    // con separador el minuto puede ir de un dígito ("9:5"); sin separador
+    // tiene que ir de dos, si no "165" sería ambiguo.
+    var m = s.match(/^(\d{1,2})(?:[:.h](\d{1,2})|(\d{2}))?$/);
+    if (!m) return null;
+    var mm = m[2] || m[3];
+    var h = parseInt(m[1], 10), mi = mm ? parseInt(mm, 10) : 0;
+    if (pm && h < 12)  h += 12;
+    if (am && h === 12) h = 0;
+    if (h > 23 || mi > 59) return null;
+    return pad(h) + ':' + pad(mi);
   }
 
-  /** Las tres partes a "HH:MM" de 24 horas, que es lo que viaja a Bitrix. */
-  function hora24() {
-    var h = h12 % 12;
-    if (ap === 'pm') h += 12;
-    return pad(h) + ':' + min;
+  /** "16:25" -> "4:25 p.m.", solo para el texto de confirmación. */
+  function horaTxt() {
+    var h = parseInt(hhmm.slice(0, 2), 10);
+    var h12 = h % 12; if (h12 === 0) h12 = 12;
+    return h12 + ':' + hhmm.slice(3) + ' ' + (h < 12 ? 'a.m.' : 'p.m.');
   }
-  /** Texto legible: "4:30 p.m." */
-  function horaTxt() { return h12 + ':' + min + ' ' + (ap === 'am' ? 'a.m.' : 'p.m.'); }
+
+  /** La frase que se lee en los dos estados: siempre la misma, sin repetir rótulos. */
+  function resumenTxt() {
+    var f = new Date(sel.y, sel.m, sel.d);
+    return 'Vuelvo a llamar el ' + DIAN[f.getDay()] + ' ' + sel.d + ' de ' + MESES[sel.m]
+         + (esHoy(sel.y, sel.m, sel.d) ? ' (hoy)' : '') + ', ' + horaTxt();
+  }
 
   function layout() {
+    // Mientras el vendedor no toque nada, día y hora se mantienen al día solos:
+    // si deja la pestaña abierta media hora, no registra con la hora vieja.
+    if (!horaManual) hhmm = ahoraHHMM();
+    if (!diaManual)  { var hy = hoy(); sel = { y:hy.y, m:hy.m, d:hy.d }; }
+
+    // COLAPSADO = lo que se ve al entrar al deal. El botón de la barra ya se
+    // llama "Registrar llamada", así que acá NO se repite ese rótulo: va
+    // directo la frase de qué se va a guardar y los dos botones listos. El
+    // caso normal (hoy, ahora mismo) se resuelve en UN click, sin abrir nada.
     if (!abierto) {
-      var b = botones(false);
-      b.blocks = {
-        abrir: { type:'link', properties:{
-          text: aviso ? 'Registrar otra llamada' : 'Registrar llamada',
-          action:{ type:'layoutEvent', value:'abrir' } } }
-      };
+      var b = botones(true);
+      b.blocks = {};
       if (aviso) b.blocks.ok = { type:'text', properties:{ value: aviso, bold:true } };
+      b.blocks.info    = { type:'text', properties:{ value: resumenTxt() } };
+      b.blocks.cambiar = { type:'link', properties:{
+        text:'Cambiar día u hora', action:{ type:'layoutEvent', value:'abrir' } } };
       return b;
     }
     var y = vista.getFullYear(), m = vista.getMonth();
@@ -190,23 +211,16 @@ declare(strict_types=1);
       blocks['sem'+s] = { type:'lineOfBlocks', properties:{ blocks: fila } };
     }
 
-    // ── hora
-    blocks.hh = { type:'select', properties:{ title:'Hora',   selectedValue:String(h12), values:opcHora() } };
-    blocks.mm = { type:'select', properties:{ title:'Minuto', selectedValue:min,          values:opcMin()  } };
-    blocks.ap = { type:'select', properties:{ title:'a.m./p.m.', selectedValue:ap,        values:opcAmPm() } };
+    // ── hora: un campo, se escribe. Aguanta 16:25, 1625, 4:25pm o solo 9.
+    blocks.hora = { type:'input', properties:{
+      title:'Hora', value:hhmm, placeholder:'16:25' } };
 
     // ── resumen: la confirmación en palabras, que es lo que de verdad se lee
-    var txt = 'Elegí un día arriba';
-    if (sel) {
-      var f = new Date(sel.y, sel.m, sel.d);
-      txt = 'Vuelvo a llamar el ' + DIAN[f.getDay()] + ' ' + sel.d + ' de ' + MESES[sel.m]
-          + (esHoy(sel.y,sel.m,sel.d) ? ' (hoy)' : '') + ', ' + horaTxt();
-    }
-    blocks.resumen = { type:'text', properties:{ value: txt, bold: !!sel } };
+    blocks.resumen = { type:'text', properties:{ value: resumenTxt(), bold:true } };
     blocks.cerrar  = { type:'link', properties:{
-      text:'Cerrar', action:{ type:'layoutEvent', value:'cerrar' } } };
+      text:'Listo', action:{ type:'layoutEvent', value:'cerrar' } } };
 
-    var out = botones(!!sel);
+    var out = botones(true);
     out.blocks = blocks;
     return out;
   }
@@ -214,7 +228,7 @@ declare(strict_types=1);
   function redibujar() { BX24.placement.call('setLayout', layout(), function(){}); }
 
   function inicioIso() {
-    return sel.y + '-' + pad(sel.m+1) + '-' + pad(sel.d) + 'T' + hora24() + ':00-05:00';
+    return sel.y + '-' + pad(sel.m+1) + '-' + pad(sel.d) + 'T' + hhmm + ':00-05:00';
   }
   /** +1h a mano: Date() rompería el offset fijo -05:00. */
   function masUnaHora(iso) {
@@ -226,6 +240,8 @@ declare(strict_types=1);
   function registrar(contesto) {
     if (!dealId || !sel) return;
     BX24.placement.call('lock');
+    // Si nunca tocó la hora, se sella la de ESTE momento, no la del render.
+    if (!horaManual) hhmm = ahoraHHMM();
     var inicio = inicioIso();
 
     BX24.callMethod('crm.deal.get', { id: dealId }, function (rd) {
@@ -252,7 +268,8 @@ declare(strict_types=1);
           aviso = 'Guardado \u2713  ' + (contesto ? 'contest\u00f3' : 'no contest\u00f3')
                 + ', vuelvo a llamar el ' + DIAN[f.getDay()] + ' ' + sel.d + ' de ' + MESES[sel.m]
                 + ' a las ' + horaTxt();
-          abierto = false; sel = null;
+          // vuelve al estado de arranque: hoy, ahora, listo para la siguiente
+          abierto = false; horaManual = false; diaManual = false;
           redibujar();
         });
       }
@@ -275,17 +292,12 @@ declare(strict_types=1);
     try { opt = BX24.placement.info().options || {}; } catch (e) {}
     dealId = parseInt(opt.ENTITY_ID || opt.entityId || opt.ID || 0, 10);
 
-    var t0 = ahoraPartes(); h12 = t0.h12; min = t0.min; ap = t0.ap;
-    redibujar();                     // nace COLAPSADO: una sola linea
+    redibujar();                     // nace COLAPSADO: frase + los dos botones
 
     BX24.placement.call('bindLayoutEventCallback', null, function (ev) {
       var v = (ev && ev.value) || '';
       if (v === 'abrir') {
-        abierto = true; aviso = '';
-        var h0 = hoy(); sel = { y:h0.y, m:h0.m, d:h0.d };
-        vista = new Date();
-        var t = ahoraPartes(); h12 = t.h12; min = t.min; ap = t.ap;
-        redibujar();
+        abierto = true; aviso = ''; vista = new Date(); redibujar();
       } else if (v === 'cerrar') {
         abierto = false; aviso = ''; redibujar();
       } else if (v.indexOf('mes:') === 0) {
@@ -294,16 +306,17 @@ declare(strict_types=1);
       } else if (v.indexOf('dia:') === 0) {
         var p = v.slice(4).split('-');
         sel = { y:parseInt(p[0],10), m:parseInt(p[1],10)-1, d:parseInt(p[2],10) };
+        diaManual = true;
         redibujar();
       }
     });
 
-    // al cambiar la hora se redibuja para que el resumen la refleje
+    // Hora escrita a mano. Si no se entiende, se ignora y el redibujo la deja
+    // como estaba -- nunca queda un valor basura camino a Bitrix.
     BX24.placement.call('bindValueChangeCallback', null, function (ev) {
-      if (!ev || !ev.id) return;
-      if (ev.id === 'hh') h12 = parseInt(ev.value, 10);
-      if (ev.id === 'mm') min = ev.value;
-      if (ev.id === 'ap') ap  = ev.value;
+      if (!ev || ev.id !== 'hora') return;
+      var v = leerHora(ev.value);
+      if (v) { hhmm = v; horaManual = true; }
       redibujar();
     });
 
