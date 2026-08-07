@@ -12,12 +12,15 @@
  * El calendario: la lista de bloques nativos no trae uno de calendario, PERO
  * `link` acepta `action:{type:'layoutEvent'}` (o sea es clickeable y avisa por
  * callback) y `lineOfBlocks` pone varios bloques EN UNA FILA. Entonces una
- * fila de 7 links = una semana, y 6 filas = el mes. Es un calendario de
- * verdad, hecho con piezas nativas.
+ * fila de 7 links = una semana, y 6 filas = el mes.
  *
- * Limitación heredada de los bloques nativos: los días son enlaces de texto,
- * no celdas con fondo. El día elegido se marca en negrita y además se escribe
- * abajo ("Vuelvo a llamar el 15 de agosto") para que no quede duda.
+ * ⭐ ALINEACIÓN — el detalle que costó una vuelta:
+ * los bloques se renderizan como HTML, y HTML COLAPSA los espacios seguidos.
+ * Con espacios normales las celdas vacías desaparecían y las columnas salían
+ * corridas. Se usa ESPACIO DE CIFRA (U+2007), que no colapsa y mide
+ * exactamente lo que un dígito: así toda celda ocupa 2 caracteres de ancho y
+ * las columnas quedan a plomo. Por lo mismo el día elegido se marca con
+ * `bold` y NO con corchetes: cualquier caracter extra corre la fila entera.
  *
  * La actividad creada conserva la forma exacta ya verificada campo por campo
  * (ver memoria reference_galjosa_actividad_llamada_shape). Lo único que cambia
@@ -39,11 +42,17 @@ declare(strict_types=1);
 (function () {
   var MESES = ['enero','febrero','marzo','abril','mayo','junio',
                'julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  var DOW = ['L','M','M','J','V','S','D'];
+  var DIAN  = ['dom','lun','mar','mié','jue','vie','sáb'];
+  var DOW   = ['lu','ma','mi','ju','vi','sá','do'];
+
+  // U+2007 (espacio de cifra): mismo ancho que un dígito y NO lo colapsa el
+  // HTML. Es lo que mantiene las columnas alineadas.
+  var EC = ' ';
+  var VACIA = EC + EC;
 
   var dealId = 0;
-  var vista  = new Date();     // mes que se muestra
-  var sel    = null;           // {y,m,d} elegido
+  var vista  = new Date();
+  var sel    = null;
   var hora   = '';
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -54,45 +63,39 @@ declare(strict_types=1);
     return (y<h.y) || (y===h.y && m<h.m) || (y===h.y && m===h.m && d<h.d);
   }
 
-  /** Opciones de hora: 07:00 a 21:00 cada 30 min. */
+  /** Horas en punto, 8 a.m. a 8 p.m. — 13 opciones en vez de 30. */
   function opcionesHora() {
     var out = {};
-    for (var h = 7; h <= 21; h++) {
-      for (var m = 0; m < 60; m += 30) {
-        if (h === 21 && m > 0) break;
-        var h12 = h % 12 === 0 ? 12 : h % 12;
-        out[pad(h)+':'+pad(m)] = h12 + ':' + pad(m) + ' ' + (h < 12 ? 'a.m.' : 'p.m.');
-      }
+    for (var h = 8; h <= 20; h++) {
+      var h12 = h % 12 === 0 ? 12 : h % 12;
+      out[pad(h)+':00'] = h12 + ':00 ' + (h < 12 ? 'a.m.' : 'p.m.');
     }
     return out;
   }
   function horaPorDefecto() {
-    var d = new Date();
-    d.setMinutes(d.getMinutes() + 30);
-    var h = d.getHours(), m = d.getMinutes() < 30 ? 0 : 30;
-    if (h < 7)  { h = 8;  m = 0; }
-    if (h > 21) { h = 21; m = 0; }
-    return pad(h)+':'+pad(m);
+    var h = new Date().getHours() + 1;
+    if (h < 8)  h = 9;
+    if (h > 20) h = 20;
+    return pad(h) + ':00';
   }
 
-  /** Arma el LayoutDto completo (calendario + hora + resumen). */
   function layout() {
     var y = vista.getFullYear(), m = vista.getMonth();
     var blocks = {};
 
-    // fila de navegación: ‹  agosto 2026  ›
+    // ── encabezado: ◀  agosto 2026  ▶
     blocks.nav = { type:'lineOfBlocks', properties:{ blocks:{
       ant: { type:'link', properties:{ text:'◀', action:{ type:'layoutEvent', value:'mes:-1' } } },
-      tit: { type:'text', properties:{ value:'  ' + MESES[m] + ' ' + y + '  ', bold:true } },
+      tit: { type:'text', properties:{ value: EC + MESES[m] + ' ' + y + EC, bold:true } },
       sig: { type:'link', properties:{ text:'▶', action:{ type:'layoutEvent', value:'mes:1' } } }
     }}};
 
-    // encabezado L M M J V S D
+    // ── fila de días de la semana (2 caracteres, igual que los números)
     var cab = {};
     for (var i = 0; i < 7; i++) cab['h'+i] = { type:'text', properties:{ value: DOW[i] } };
     blocks.dow = { type:'lineOfBlocks', properties:{ blocks: cab } };
 
-    // celdas del mes, lunes primero
+    // ── celdas del mes, lunes primero
     var offset = (new Date(y, m, 1).getDay() + 6) % 7;
     var total  = new Date(y, m + 1, 0).getDate();
     var celdas = [];
@@ -103,18 +106,16 @@ declare(strict_types=1);
     for (var s = 0; s < celdas.length / 7; s++) {
       var fila = {};
       for (var c = 0; c < 7; c++) {
-        var dia = celdas[s*7 + c];
-        var key = 'c' + c;
+        var dia = celdas[s*7 + c], key = 'c' + c;
         if (dia === null) {
-          fila[key] = { type:'text', properties:{ value:'    ' } };
+          fila[key] = { type:'text', properties:{ value: VACIA } };
         } else if (esPasado(y, m, dia)) {
-          // los días pasados no son clickeables: quedan como texto plano
           fila[key] = { type:'text', properties:{ value: pad(dia) } };
         } else {
-          var elegido = sel && sel.y===y && sel.m===m && sel.d===dia;
+          var elegido = !!(sel && sel.y===y && sel.m===m && sel.d===dia);
           fila[key] = { type:'link', properties:{
-            text: (elegido ? '▸'+pad(dia)+'◂' : (esHoy(y,m,dia) ? '['+pad(dia)+']' : pad(dia))),
-            bold: !!elegido,
+            text: pad(dia),                 // SIEMPRE 2 caracteres: no corre la fila
+            bold: elegido,
             action:{ type:'layoutEvent', value:'dia:'+y+'-'+pad(m+1)+'-'+pad(dia) }
           }};
         }
@@ -122,16 +123,22 @@ declare(strict_types=1);
       blocks['sem'+s] = { type:'lineOfBlocks', properties:{ blocks: fila } };
     }
 
+    // ── hora
     blocks.hora = { type:'select', properties:{
       title:'Hora', selectedValue: hora, values: opcionesHora()
     }};
 
-    blocks.resumen = { type:'text', properties:{
-      value: sel
-        ? ('Vuelvo a llamar el ' + sel.d + ' de ' + MESES[sel.m] + (esHoy(sel.y,sel.m,sel.d) ? ' (hoy)' : ''))
-        : 'Elegí un día arriba',
-      bold: !!sel
-    }};
+    // ── resumen: la confirmación en palabras, que es lo que de verdad se lee
+    var txt = 'Elegí un día arriba';
+    if (sel) {
+      var f = new Date(sel.y, sel.m, sel.d);
+      var hh = parseInt(hora.slice(0,2), 10);
+      var h12 = hh % 12 === 0 ? 12 : hh % 12;
+      txt = 'Vuelvo a llamar el ' + DIAN[f.getDay()] + ' ' + sel.d + ' de ' + MESES[sel.m]
+          + (esHoy(sel.y,sel.m,sel.d) ? ' (hoy)' : '')
+          + ', ' + h12 + ':00 ' + (hh < 12 ? 'a.m.' : 'p.m.');
+    }
+    blocks.resumen = { type:'text', properties:{ value: txt, bold: !!sel } };
 
     return {
       blocks: blocks,
@@ -142,7 +149,6 @@ declare(strict_types=1);
 
   function redibujar() { BX24.placement.call('setLayout', layout(), function(){}); }
 
-  /** "2026-08-15T10:00:00-05:00" (hora Ecuador). */
   function inicioIso() {
     return sel.y + '-' + pad(sel.m+1) + '-' + pad(sel.d) + 'T' + hora + ':00-05:00';
   }
@@ -198,11 +204,12 @@ declare(strict_types=1);
     var opt = {};
     try { opt = BX24.placement.info().options || {}; } catch (e) {}
     dealId = parseInt(opt.ENTITY_ID || opt.entityId || opt.ID || 0, 10);
-    hora = horaPorDefecto();
 
+    hora = horaPorDefecto();
+    var h = hoy();
+    sel = { y:h.y, m:h.m, d:h.d };   // arranca en hoy, como el calendario HTML
     redibujar();
 
-    // clicks en los días y en las flechas de mes
     BX24.placement.call('bindLayoutEventCallback', null, function (ev) {
       var v = (ev && ev.value) || '';
       if (v.indexOf('mes:') === 0) {
@@ -215,8 +222,9 @@ declare(strict_types=1);
       }
     });
 
+    // al cambiar la hora se redibuja para que el resumen la refleje
     BX24.placement.call('bindValueChangeCallback', null, function (ev) {
-      if (ev && ev.id === 'hora') hora = ev.value;
+      if (ev && ev.id === 'hora') { hora = ev.value; redibujar(); }
     });
 
     BX24.placement.call('bindPrimaryButtonClickCallback',   null, function(){ registrar(true);  });
