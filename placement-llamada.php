@@ -31,12 +31,12 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
 }
 
 const PLACEMENT = 'CRM_DEAL_DETAIL_ACTIVITY';
-const HANDLER   = 'https://galjosa-inventario-sync.pwluu1.easypanel.host/llamada_nativo.php';
+const HANDLER   = 'https://galjosa-inventario-sync.pwluu1.easypanel.host/llamada.php';
 const TITULO    = 'Registrar llamada';
 
 // Handler viejo (HTML propio dentro del panel deslizante de Bitrix). Se
 // desenlaza junto con el nuevo para que no queden los dos botones.
-const HANDLER_VIEJO = 'https://galjosa-inventario-sync.pwluu1.easypanel.host/llamada.php';
+const HANDLER_VIEJO = 'https://galjosa-inventario-sync.pwluu1.easypanel.host/llamada_nativo.php';
 
 $accion = (string)($_GET['accion'] ?? 'ver');
 
@@ -73,7 +73,6 @@ if ($accion === 'poner') {
         'HANDLER'     => HANDLER,
         'TITLE'       => TITULO,
         'DESCRIPTION' => 'Registra la llamada (contesto / no contesto) y planifica la siguiente',
-        'OPTIONS'     => ['useBuiltInInterface' => 'Y'],
     ]);
     echo "\nbind: " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
 } elseif ($accion === 'quitar') {

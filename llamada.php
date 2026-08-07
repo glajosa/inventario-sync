@@ -40,10 +40,12 @@ declare(strict_types=1);
     font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     margin: 0; padding: 0; color: #1f2328; background: #f6f8fa;
   }
-  #wrap { display: flex; justify-content: center; padding: 22px 14px; }
+  /* nada de centrar ni sombra: el panel se encoge con BX24.resizeWindow al
+     alto real de la tarjeta, así que la tarjeta ES el panel. */
+  #wrap { padding: 8px; }
   .card {
-    width: 100%; max-width: 320px; background: #fff; border: 1px solid #e1e4e8;
-    border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.08); padding: 16px;
+    width: 300px; background: #fff; border: 1px solid #d0d7de;
+    border-radius: 8px; padding: 12px;
   }
   h3 { margin: 0 0 12px; font-size: 14px; font-weight: 600; text-align: center; }
 
@@ -195,15 +197,32 @@ function pintarMes() {
   }
 }
 
+/**
+ * Encoge el panel de Bitrix al alto real de la tarjeta.
+ *
+ * Es lo único que faltaba probar: cuando la app dibuja su propio HTML, Bitrix
+ * abre un área grande — pero resizeWindow sí la achica. fitWindow solo no
+ * alcanzaba (dejaba el bloque blanco enorme alrededor del contenido).
+ */
+function ajustar() {
+  try {
+    if (typeof BX24 === 'undefined') return;
+    var c = document.querySelector('.card');
+    var alto = (c ? c.offsetHeight : 400) + 22;
+    if (BX24.resizeWindow) BX24.resizeWindow(330, alto);
+    if (BX24.fitWindow) BX24.fitWindow();
+  } catch (e) {}
+}
+
 function elegirDia(y, m, d) {
   seleccionada = { y: y, m: m, d: d };
   pintarMes();
-  var dt = new Date(y, m, d);
   document.getElementById('fechaTxt').textContent = d + ' de ' + MESES[m] + (esHoy(y, m, d) ? ' (hoy)' : '');
   document.getElementById('accion').classList.add('on');
   document.getElementById('pista').style.display = 'none';
   document.getElementById('btnSi').disabled = false;
   document.getElementById('btnNo').disabled = false;
+  ajustar();   // al revelarse los botones la tarjeta crece
 }
 
 document.getElementById('mesAnt').addEventListener('click', function () {
@@ -309,11 +328,13 @@ pintarMes();
 horaActual();
 
 BX24.init(function () {
-  var opt = BX24.placement.info().options || {};
-  dealId = opt.ID || opt.ENTITY_ID;
+  var opt = {};
+  try { opt = BX24.placement.info().options || {}; } catch (e) {}
+  // el nombre de la clave cambia según el placement: cubrir las tres formas
+  dealId = parseInt(opt.ID || opt.ENTITY_ID || opt.entityId || 0, 10);
   if (!dealId) { estado('No se encontró el deal.', 'err'); return; }
   elegirDia(hoy().y, hoy().m, hoy().d);
-  BX24.fitWindow();
+  ajustar();
 });
 </script>
 
