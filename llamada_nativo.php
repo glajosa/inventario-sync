@@ -297,10 +297,13 @@ declare(strict_types=1);
     // dentro de un lineOfBlocks solo entran `text` y `link`: el `input` es de
     // ancho completo y el `dropdownMenu` se va a su propio renglón (medido).
     // El valor activo va en negrita y sin enlace, igual que el día elegido.
-    function filaAtajos(desde, hasta, paso, actual, evento) {
+    // `pre` va en la clave de cada bloque: las dos filas comparten valores
+    // (10, 15, 20) y con la misma clave quedaban ids duplicados en el mismo
+    // diseño -- verificado en el DOM: q10, q15 y q20 aparecían dos veces.
+    function filaAtajos(pre, desde, hasta, paso, actual, evento) {
       var f = {};
       for (var q = desde; q <= hasta; q += paso) {
-        f['q'+q] = (pad(q) === actual)
+        f[pre+q] = (pad(q) === actual)
           ? { type:'text', properties:{ value: celda(q) + SEP, bold:true } }
           : { type:'link', properties:{ text: celda(q) + SEP,
                 action:{ type:'layoutEvent', value: evento + pad(q) } } };
@@ -310,8 +313,8 @@ declare(strict_types=1);
 
     blocks.caja = { type:'section', properties:{ type:'withBorder', blocks:{
       ruedas:  ruedas,
-      horas:   filaAtajos(8, 20, 1, hh, 'hora:'),
-      minutos: filaAtajos(0, 55, 5, mi, 'min:')
+      horas:   filaAtajos('h', 8, 20, 1, hh, 'hora:'),
+      minutos: filaAtajos('m', 0, 55, 5, mi, 'min:')
     }}};
 
     // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
