@@ -262,28 +262,30 @@ declare(strict_types=1);
     for (var i = 0; i < 7; i++) cab['h'+i] = { type:'text', properties:{ value: DOW[i] } };
     blocks.dow = { type:'lineOfBlocks', properties:{ blocks: cab } };
 
-    // ── celdas del mes, lunes primero
-    var offset = (new Date(y, m, 1).getDay() + 6) % 7;
-    var total  = new Date(y, m + 1, 0).getDate();
-    var celdas = [];
-    for (var o = 0; o < offset; o++) celdas.push(null);
-    for (var d = 1; d <= total; d++) celdas.push(d);
-    // Siempre 42 celdas = 6 filas, aunque el mes entre en 5. Si la altura
-    // cambia de mes a mes, las flechas ◀ ▶ se mueven y hay que volver a
-    // apuntar el mouse en cada salto: eso es tiempo perdido en cada llamada.
-    while (celdas.length < 42) celdas.push(null);
+    // ── celdas del mes, lunes primero.
+    // La grilla se rellena con los días del mes anterior y del siguiente, en
+    // gris, igual que el selector nativo de Bitrix: un bloque completo se lee
+    // mucho mejor que uno con huecos. Además así toda fila tiene 7 números.
+    var offset   = (new Date(y, m, 1).getDay() + 6) % 7;
+    var total    = new Date(y, m + 1, 0).getDate();
+    var totalAnt = new Date(y, m, 0).getDate();
 
-    for (var s = 0; s < celdas.length / 7; s++) {
+    var celdas = [];
+    for (var o = offset; o > 0; o--) celdas.push({ d: totalAnt - o + 1, otro:true });
+    for (var d = 1; d <= total; d++)  celdas.push({ d: d, otro:false });
+    var sig = 1;
+    while (celdas.length < 42) celdas.push({ d: sig++, otro:true });
+
+    for (var s = 0; s < 6; s++) {
       var fila = {};
       for (var c = 0; c < 7; c++) {
-        var dia = celdas[s*7 + c], key = 'c' + c;
-        if (dia === null) {
-          fila[key] = { type:'text', properties:{ value: VACIA } };
-        } else if (esPasado(y, m, dia)) {
-          fila[key] = { type:'text', properties:{ value: celda(dia) } };
+        var cel = celdas[s*7 + c], key = 'c' + c, dia = cel.d;
+        if (cel.otro || esPasado(y, m, dia)) {
+          // gris: ni de este mes, o ya pasó. No se puede planificar ahí.
+          fila[key] = { type:'text', properties:{ value: celda(dia), color:'base_50' } };
         } else if (sel && sel.y===y && sel.m===m && sel.d===dia) {
-          // el elegido va como TEXTO (oscuro) y en negrita: contra el azul de
-          // los links se distingue de un vistazo, que era el reclamo.
+          // el elegido va como TEXTO oscuro y en negrita: contra el azul de
+          // los links se distingue de un vistazo, sin cambiar de ancho.
           fila[key] = { type:'text', properties:{ value: celda(dia), bold:true } };
         } else {
           fila[key] = { type:'link', properties:{
