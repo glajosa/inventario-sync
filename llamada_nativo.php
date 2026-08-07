@@ -93,6 +93,33 @@ declare(strict_types=1);
   // dejó los anteriores colgando y pintó uno vacío (el punto azul suelto).
   // ButtonDto solo acepta title y state: no se pueden ocultar.
 
+  /**
+   * Relleno para que TODOS los meses midan lo mismo y la flecha ▶ no se mueva.
+   *
+   * Medido en el render real (bold 14px system-ui): el mes más angosto es
+   * julio con 28,9 px y el más ancho septiembre con 78,6 px. Sin compensar, la
+   * flecha se corre casi 50 px de un mes a otro y hay que volver a apuntar el
+   * mouse en cada salto -- justo lo que impide pasar varios meses seguidos.
+   *
+   * Cada entrada es [izquierda, derecha], con los mismos espacios de ancho
+   * conocido que usan las celdas: U+2007 = 9,249 px · U+2006 = 2,174 ·
+   * U+200A = 0,752. Peor desfase que queda: 0,73 px.
+   */
+  var RELLENO = {
+    'enero':       ['\u2007\u2007\u200A', '\u2007\u2007\u200A'],
+    'febrero':     ['\u2007\u2006\u2006', '\u2007\u2006\u2006'],
+    'marzo':       ['\u2007\u2006\u2006\u2006\u200A\u200A\u200A', '\u2007\u2006\u2006\u2006\u200A\u200A\u200A'],
+    'abril':       ['\u2007\u2007\u2006\u2006\u200A', '\u2007\u2007\u2006\u2006\u200A'],
+    'mayo':        ['\u2007\u2007\u2006', '\u2007\u2007\u2006'],
+    'junio':       ['\u2007\u2007\u2006\u200A\u200A', '\u2007\u2007\u2006\u200A\u200A'],
+    'julio':       ['\u2007\u2007\u2006\u2006\u200A\u200A\u200A', '\u2007\u2007\u2006\u2006\u200A\u200A\u200A'],
+    'agosto':      ['\u2007\u2006\u2006\u200A\u200A\u200A', '\u2007\u2006\u2006\u200A\u200A\u200A'],
+    'septiembre':  ['', ''],
+    'octubre':     ['\u2007\u2006\u200A', '\u2007\u2006\u200A'],
+    'noviembre':   ['\u2006\u200A', '\u2006\u200A'],
+    'diciembre':   ['\u2006\u2006\u200A', '\u2006\u2006\u200A'],
+  };
+
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
   function hoy() { var d = new Date(); return { y:d.getFullYear(), m:d.getMonth(), d:d.getDate() }; }
   function esHoy(y,m,d) { var h = hoy(); return y===h.y && m===h.m && d===h.d; }
@@ -209,7 +236,9 @@ declare(strict_types=1);
     // ── encabezado: ◀  agosto 2026  ▶
     blocks.nav = { type:'lineOfBlocks', properties:{ blocks:{
       ant: { type:'link', properties:{ text:'◀', action:{ type:'layoutEvent', value:'mes:-1' } } },
-      tit: { type:'text', properties:{ value: EC + MESES[m] + ' ' + y + EC, bold:true } },
+      tit: { type:'text', properties:{
+        value: EC + RELLENO[MESES[m]][0] + MESES[m] + ' ' + y + RELLENO[MESES[m]][1] + EC,
+        bold:true } },
       sig: { type:'link', properties:{ text:'▶', action:{ type:'layoutEvent', value:'mes:1' } } }
     }}};
 
