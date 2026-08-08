@@ -117,7 +117,7 @@ declare(strict_types=1);
   }
 
   var dealId = 0;
-  var vista  = (function(){ var d = new Date(); d.setDate(d.getDate()+1); return d; })();
+  var vista  = new Date();
   var sel    = null;
   var hhmm = '09:00';          // 24 h, tal cual viaja a Bitrix
   var horaManual = false;      // ¿el vendedor tocó la hora?
@@ -168,17 +168,6 @@ declare(strict_types=1);
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
   function hoy() { var d = new Date(); return { y:d.getFullYear(), m:d.getMonth(), d:d.getDate() }; }
 
-  /**
-   * Día que viene preseleccionado: MAÑANA, no hoy.
-   *
-   * Lo que se registra acá es una llamada a futuro, así que arrancar en hoy
-   * obligaba a mover el día en casi todos los casos. setDate() se encarga solo
-   * del salto de mes y de año.
-   */
-  function manana() {
-    var d = new Date(); d.setDate(d.getDate() + 1);
-    return { y:d.getFullYear(), m:d.getMonth(), d:d.getDate() };
-  }
   function esHoy(y,m,d) { var h = hoy(); return y===h.y && m===h.m && d===h.d; }
   function esPasado(y,m,d) {
     var h = hoy();
@@ -232,7 +221,7 @@ declare(strict_types=1);
     // Mientras el vendedor no toque nada, día y hora se mantienen al día solos:
     // si deja la pestaña abierta media hora, no registra con la hora vieja.
     if (!horaManual) hhmm = ahoraHHMM();
-    if (!diaManual)  { var hy = manana(); sel = { y:hy.y, m:hy.m, d:hy.d }; }
+    if (!diaManual)  { var hy = hoy(); sel = { y:hy.y, m:hy.m, d:hy.d }; }
 
     // UN SOLO ESTADO. Antes había un paso previo con un enlace para abrir, y
     // sobraba: la pestaña "Registrar llamada" de la barra YA es el botón que
