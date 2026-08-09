@@ -95,16 +95,19 @@ declare(strict_types=1);
   // clavado -- por eso las columnas se veían corridas. Acá cada rótulo se
   // rellena por separado hasta esos 25,3 px, con los espacios de SU tamaño.
   // Anchos medidos a 12 px: LU 15,369 · MA 18,574 · MI 13,699 · JU 15,305 ·
-  // VI 11,297 · SA 15,732 · DO 17,977. Peor error: 0,40 px.
+  // VI 11,297 · SA 15,732 · DO 17,977. Ojo: Bitrix mete un &nbsp; entre
+  // bloques que suma 3,9 px, así que el relleno apunta a 21,40 y no a 25,30.
+  // Peor error: 0,29 px.
   var SEPCAB = {
-    LU: '\u2007\u2006',
-    MA: '\u2006\u2006\u2006\u200A',
-    MI: '\u2007\u2006\u2006',
-    JU: '\u2007\u2006\u200A',
-    VI: '\u2007\u2006\u2006\u2006\u200A',
-    SA: '\u2007\u2006',
-    DO: '\u2006\u2006\u2006\u200A\u200A'
+    LU: '\u2006\u2006\u2006',
+    MA: '\u2006\u200A',
+    MI: '\u2007',
+    JU: '\u2006\u2006\u2006',
+    VI: '\u2007\u2006\u200A',
+    SA: '\u2006\u2006\u200A\u200A',
+    DO: '\u2006\u200A\u200A'
   };
+
   // misma sangría que los números (127,37 px) pero con espacios de 12 px
   var SANG_CAB = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A';
 
