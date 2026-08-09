@@ -91,14 +91,19 @@ declare(strict_types=1);
   // calendario --mucho más angosto-- se veía corrido. Cada sangría va armada
   // con los espacios del tamaño de SU fila: calendario 14 px, encabezado 12,
   // rueda 16, minutos 13. Peor error: 0,35 px.
-  var SANG_CAL  = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u200A';
-  var SANG_CAB  = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u200A\u200A';
+  // Como la sangría es ahora un bloque propio, Bitrix le agrega su &nbsp;
+  // (3,9 px), así que lleva un U+2007 menos que antes.
+  var SANG_FILA = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u200A';
+  var SANG_FILA_CAB = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u200A\u200A';
   var SANG_RUE  = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A';
   var SANG_MIN  = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A\u200A';
   // El encabezado del mes es más angosto que la rejilla, así que con la misma
   // sangría quedaba corrido: medido, su centro caía en 1136,6 contra 1159,0 de
   // los números. Se le suman 22,4 px para que caiga en el mismo eje.
-  var SANG_NAV = SANG_CAL + '\u2007\u2007\u2006\u2006\u200A';
+  // El nav y la raya sí llevan la sangría adentro (no son filas de 7 celdas),
+  // así que usan la versión con el U+2007 que las filas ya no necesitan.
+  var SANG_SUELTA = SANG_FILA + '\u2007';
+  var SANG_NAV = SANG_SUELTA + '\u2007\u2007\u2006\u2006\u200A';
   // 15 guiones = 210 px, el ancho de la rejilla (211,7)
   var RAYA = '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500';
 
@@ -116,7 +121,12 @@ declare(strict_types=1);
   // parchear a mano los dígitos angostos. Peor error: 0,41 px.
   var DIG = {'0':8.668,'1':6.344,'2':8.299,'3':8.627,'4':8.859,
              '5':8.504,'6':8.764,'7':7.820,'8':8.791,'9':8.764};
+  // Los mismos dígitos en NEGRITA: el día elegido va en peso 700 y ahí todo
+  // mide más. Sin esto, su celda queda ~1,4 px más ancha y corre las de al lado.
+  var DIG_B = {'0':9.434,'1':7.014,'2':8.853,'3':9.215,'4':9.468,
+               '5':9.140,'6':9.420,'7':8.313,'8':9.563,'9':9.420};
   var E14 = [8.668, 2.174, 0.834];      // U+2007 · U+2006 · U+200A a 14 px
+  var E14B = [9.434, 2.365, 0.907];     // los mismos, en negrita
   var E12 = [7.559, 1.992, 0.844];      // los mismos a 12 px
   var CELDA = 26.30;
 
@@ -145,10 +155,10 @@ declare(strict_types=1);
     return relleno(falta / 2, esp) + txt + relleno(falta - falta / 2, esp);
   }
 
-  function celda(n) {
-    var t = '' + n, ancho = 0;
-    for (var i = 0; i < t.length; i++) ancho += DIG[t.charAt(i)];
-    return centrar(t, ancho, E14);
+  function celda(n, negrita) {
+    var t = '' + n, tabla = negrita ? DIG_B : DIG, ancho = 0;
+    for (var i = 0; i < t.length; i++) ancho += tabla[t.charAt(i)];
+    return centrar(t, ancho, negrita ? E14B : E14);
   }
 
 
@@ -288,12 +298,13 @@ declare(strict_types=1);
     // encabezado es `text` -- medido: color danger = rgb(255,87,82). En los
     // días no se puede: ahí son `link`, y `link` ignora color (probado en el
     // DOM: el sábado salía con el mismo azul que el viernes).
+    cab.sang = { type:'text', properties:{ value: SANG_FILA_CAB, size:'xs' } };
     for (var i = 0; i < 7; i++) cab['h'+i] = { type:'text', properties:{
-      value: (i === 0 ? SANG_CAB : '') + centrar(DOW[i], ANCHO_DOW[DOW[i]], E12),
+      value: centrar(DOW[i], ANCHO_DOW[DOW[i]], E12),
       size:'xs', color: (i >= 5 ? 'danger' : 'base_50') } };
     cal.dow = { type:'lineOfBlocks', properties:{ blocks: cab } };
     // raya bajo los días, como el selector nativo
-    cal.raya = { type:'text', properties:{ value: SANG_CAL + RAYA, color:'base_50' } };
+    cal.raya = { type:'text', properties:{ value: SANG_SUELTA + RAYA, color:'base_50' } };
 
     // ── celdas del mes, lunes primero.
     // La grilla se rellena con los días del mes anterior y del siguiente, en
@@ -310,24 +321,26 @@ declare(strict_types=1);
     while (celdas.length < 42) celdas.push({ d: sig++, otro:true });
 
     for (var s = 0; s < 6; s++) {
-      var fila = {};
+      // La sangría de centrado va en su PROPIO bloque, no dentro de la primera
+      // celda: si esa celda cae en negrita (el día elegido), sus espacios
+      // también engordan y la fila entera se corre. Medido: +17 px.
+      var fila = { sang: { type:'text', properties:{ value: SANG_FILA } } };
       for (var c = 0; c < 7; c++) {
         var cel = celdas[s*7 + c], key = 'c' + c, dia = cel.d;
-        var sang = (c === 0 ? SANG_CAL : '');
         if (cel.otro || esPasado(y, m, dia)) {
           // gris: ni de este mes, o ya pasó. No se puede planificar ahí.
-          fila[key] = { type:'text', properties:{ value: sang + celda(dia), color:'base_50' } };
+          fila[key] = { type:'text', properties:{ value: celda(dia), color:'base_50' } };
         } else if (sel && sel.y===y && sel.m===m && sel.d===dia) {
           // el elegido va como TEXTO oscuro y en negrita: contra el azul de
           // los links se distingue de un vistazo, sin cambiar de ancho.
-          fila[key] = { type:'text', properties:{ value: sang + celda(dia), bold:true } };
+          fila[key] = { type:'text', properties:{ value: celda(dia, true), bold:true } };
         } else {
           // Sábado y domingo NO se pueden pintar de rojo: `color` solo existe
           // en el bloque `text`, y ahí el día deja de ser clickeable. Probado
           // en el DOM: mandando color:'danger' en el link, el sábado sale con
           // el mismo rgb(32,102,176) que el viernes, sin clase ni atributo.
           fila[key] = { type:'link', properties:{
-            text: sang + celda(dia),
+            text: celda(dia),
             action:{ type:'layoutEvent', value:'dia:'+y+'-'+pad(m+1)+'-'+pad(dia) }
           }};
         }
