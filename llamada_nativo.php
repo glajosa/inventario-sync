@@ -105,7 +105,7 @@ declare(strict_types=1);
   var SANG_RAYA     = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006';
   var SANG_NAV      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007';
   var SANG_RUE      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A\u200A';
-  var SANG_HOR      = '\u2007\u2007\u2007\u2007\u2007\u2007\u200A\u200A';
+  var SANG_HOR      = '\u2007\u2007\u2007\u2007\u2007\u2006\u200A';
   var SANG_MIN      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A\u200A';
   var SANG_PIE      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u200A';
   var RAYA = '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500';
@@ -137,18 +137,18 @@ declare(strict_types=1);
   // "8 … 20" obliga a traducir mentalmente; con el sufijo se lee directo.
   // La más ancha es 12pm: 32,817 px normal y 35,236 en negrita (la activa va
   // en negrita), así que la celda va a 36,50 y la fila queda en 525,2 px.
-  // AM y PM en MAYÚSCULA: en minúscula quedaban muy chicos al lado del número.
-  // La más ancha pasa a ser 10AM: 33,909 px normal y 36,366 en negrita, así
-  // que la celda sube de 36,50 a 37,60.
-  var HORA_TXT = {8:'8AM', 9:'9AM', 10:'10AM', 11:'11AM', 12:'12PM', 13:'1PM', 14:'2PM',
-                  15:'3PM', 16:'4PM', 17:'5PM', 18:'6PM', 19:'7PM', 20:'8PM'};
-  var HORA_W  = {'8AM':28.069,'9AM':28.044,'10AM':33.909,'11AM':31.878,'12PM':33.192,
-                 '1PM':25.422,'2PM':27.238,'3PM':27.542,'4PM':27.758,'5PM':27.428,
-                 '6PM':27.669,'7PM':26.793,'8PM':27.695};
-  var HORA_WB = {'8AM':29.910,'9AM':29.777,'10AM':36.366,'11AM':34.309,'12PM':35.255,
-                 '1PM':26.971,'2PM':28.679,'3PM':29.015,'4PM':29.250,'5PM':28.945,
-                 '6PM':29.206,'7PM':28.177,'8PM':29.339};
-  var CELDA_H = 37.60;
+  // Solo la inicial en mayúscula -- "8Am", "12Pm": resalta sin gritar. La más
+  // ancha es 10Am: 33,858 px normal y 36,696 en negrita (la activa va en
+  // negrita), así que la celda queda en 37,90.
+  var HORA_TXT = {8:'8Am', 9:'9Am', 10:'10Am', 11:'11Am', 12:'12Pm', 13:'1Pm', 14:'2Pm',
+                  15:'3Pm', 16:'4Pm', 17:'5Pm', 18:'6Pm', 19:'7Pm', 20:'8Pm'};
+  var HORA_W  = {'8Am':28.019,'9Am':27.993,'10Am':33.858,'11Am':31.827,'12Pm':33.141,
+                 '1Pm':25.372,'2Pm':27.187,'3Pm':27.492,'4Pm':27.708,'5Pm':27.377,
+                 '6Pm':27.619,'7Pm':26.743,'8Pm':27.644};
+  var HORA_WB = {'8Am':30.240,'9Am':30.107,'10Am':36.696,'11Am':34.639,'12Pm':35.585,
+                 '1Pm':27.301,'2Pm':29.009,'3Pm':29.345,'4Pm':29.580,'5Pm':29.275,
+                 '6Pm':29.536,'7Pm':28.507,'8Pm':29.669};
+  var CELDA_H = 37.90;
   var E13B = [8.830, 2.265, 0.912];     // espacios a 13 px en negrita
 
 
