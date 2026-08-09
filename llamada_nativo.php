@@ -366,10 +366,13 @@ declare(strict_types=1);
     // diseño -- verificado en el DOM: q10, q15 y q20 aparecían dos veces.
     function filaAtajos(pre, desde, hasta, paso, actual, evento, sangria) {
       var f = {};
+      var primero = true;
       for (var q = desde; q <= hasta; q += paso) {
+        // la sangría de centrado va pegada a la PRIMERA celda de la fila
+        var sg = primero ? (sangria || '') : ''; primero = false;
         f[pre+q] = (pad(q) === actual)
-          ? { type:'text', properties:{ value: celda(q) + AIRE, bold:true, size:'sm' } }
-          : { type:'link', properties:{ text: celda(q) + AIRE, size:'sm',
+          ? { type:'text', properties:{ value: sg + celda(q) + AIRE, bold:true, size:'sm' } }
+          : { type:'link', properties:{ text: sg + celda(q) + AIRE, size:'sm',
                 action:{ type:'layoutEvent', value: evento + pad(q) } } };
       }
       return { type:'lineOfBlocks', properties:{ blocks: f } };
