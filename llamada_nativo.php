@@ -91,20 +91,23 @@ declare(strict_types=1);
   // calendario --mucho más angosto-- se veía corrido. Cada sangría va armada
   // con los espacios del tamaño de SU fila: calendario 14 px, encabezado 12,
   // rueda 16, minutos 13. Peor error: 0,35 px.
-  // Como la sangría es ahora un bloque propio, Bitrix le agrega su &nbsp;
-  // (3,9 px), así que lleva un U+2007 menos que antes.
-  var SANG_FILA = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u200A';
-  var SANG_FILA_CAB = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u200A\u200A';
-  var SANG_RUE  = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A';
-  var SANG_MIN  = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A\u200A';
-  // El encabezado del mes es más angosto que la rejilla, así que con la misma
-  // sangría quedaba corrido: medido, su centro caía en 1136,6 contra 1159,0 de
-  // los números. Se le suman 22,4 px para que caiga en el mismo eje.
-  // El nav y la raya sí llevan la sangría adentro (no son filas de 7 celdas),
-  // así que usan la versión con el U+2007 que las filas ya no necesitan.
-  var SANG_SUELTA = SANG_FILA + '\u2007';
-  var SANG_NAV = SANG_SUELTA + '\u2007\u2007\u2006\u2006\u200A';
-  // 15 guiones = 210 px, el ancho de la rejilla (211,7)
+  // ── Centrado sobre el CENTRO DE LA TARJETA ──────────────────────────────
+  // Medido: las tres tarjetas tienen su contenido de 808,8 a 1669,5, o sea
+  // centro 1239,2. Antes yo centraba todo sobre el eje de la fila de horas
+  // (1157), que no es el centro de la caja -- por eso se veía corrido a la
+  // izquierda aunque las filas coincidieran entre sí.
+  //
+  // Cada sangría se arma con los espacios del tamaño de SU fila: calendario
+  // 14 px, encabezado 12, rueda 16, horas y minutos 13, pie 13.
+  // Peor error: 0,39 px.
+  var SANG_FILA     = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A\u200A';
+  var SANG_FILA_CAB = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A';
+  var SANG_RAYA     = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006';
+  var SANG_NAV      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007';
+  var SANG_RUE      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A\u200A';
+  var SANG_HOR      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A\u200A';
+  var SANG_MIN      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A\u200A';
+  var SANG_PIE      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u200A';
   var RAYA = '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500';
 
 
@@ -304,7 +307,7 @@ declare(strict_types=1);
       size:'xs', color: (i >= 5 ? 'danger' : 'base_50') } };
     cal.dow = { type:'lineOfBlocks', properties:{ blocks: cab } };
     // raya bajo los días, como el selector nativo
-    cal.raya = { type:'text', properties:{ value: SANG_SUELTA + RAYA, color:'base_50' } };
+    cal.raya = { type:'text', properties:{ value: SANG_RAYA + RAYA, color:'base_50' } };
 
     // ── celdas del mes, lunes primero.
     // La grilla se rellena con los días del mes anterior y del siguiente, en
@@ -421,7 +424,7 @@ declare(strict_types=1);
 
     blocks.caja = { type:'section', properties:{ type:'withBorder', blocks:{
       ruedas:  conRotulo('Tiempo', ruedas),
-      horas:   conRotulo('Hora',   filaAtajos('h', 8, 20, 1, hh, 'hora:', '')),
+      horas:   conRotulo('Hora',   filaAtajos('h', 8, 20, 1, hh, 'hora:', SANG_HOR)),
       minutos: conRotulo('Minuto', filaAtajos('m', 0, 45, 15, mi, 'min:', SANG_MIN))
     }}};
 
@@ -446,7 +449,7 @@ declare(strict_types=1);
     // lo usan -- de 400 llamadas leídas, 5 venían marcadas.
     blocks.pie = { type:'lineOfBlocks', properties:{ blocks:{
       imp: { type:'link', properties:{
-        text: importante ? '\u2611 Importante \ud83d\udd25' : '\u2610 Importante', size:'sm',
+        text: SANG_PIE + (importante ? '\u2611 Importante \ud83d\udd25' : '\u2610 Importante'), size:'sm',
         action:{ type:'layoutEvent', value:'imp' } } },
     }}};
 
