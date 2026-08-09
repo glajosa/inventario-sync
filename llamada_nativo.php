@@ -95,6 +95,10 @@ declare(strict_types=1);
   var SANG_CAB  = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u200A\u200A';
   var SANG_RUE  = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A';
   var SANG_MIN  = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A\u200A';
+  // El encabezado del mes es más angosto que la rejilla, así que con la misma
+  // sangría quedaba corrido: medido, su centro caía en 1136,6 contra 1159,0 de
+  // los números. Se le suman 22,4 px para que caiga en el mismo eje.
+  var SANG_NAV = SANG_CAL + '\u2007\u2007\u2006\u2006\u200A';
   // 15 guiones = 210 px, el ancho de la rejilla (211,7)
   var RAYA = '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500';
 
@@ -256,7 +260,7 @@ declare(strict_types=1);
     // ── encabezado: ◀  agosto 2026  ▶
     var cal = {};
     cal.nav = { type:'lineOfBlocks', properties:{ blocks:{
-      ant: { type:'link', properties:{ text: SANG_CAL + '\u25c0', action:{ type:'layoutEvent', value:'mes:-1' } } },
+      ant: { type:'link', properties:{ text: SANG_NAV + '\u25c0', action:{ type:'layoutEvent', value:'mes:-1' } } },
       tit: { type:'text', properties:{
         value: EC + RELLENO[MESES[m]][0] + MESES[m] + ' ' + y + RELLENO[MESES[m]][1] + EC,
         bold:true } },
