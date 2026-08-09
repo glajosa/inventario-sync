@@ -105,8 +105,9 @@ declare(strict_types=1);
   var SANG_RAYA     = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006';
   var SANG_NAV      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007';
   var SANG_RUE      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A\u200A';
-  var SANG_HOR      = '\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A\u200A';
-  var SANG_MIN      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A\u200A';
+  var SANG_MANANA = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A\u200A';
+  var SANG_TARDE  = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u200A\u200A';
+  var SANG_MIN = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A\u200A';
   var SANG_PIE      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u200A';
   var RAYA = '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500';
 
@@ -137,18 +138,17 @@ declare(strict_types=1);
   // "8 … 20" obliga a traducir mentalmente; con el sufijo se lee directo.
   // La más ancha es 12pm: 32,817 px normal y 35,236 en negrita (la activa va
   // en negrita), así que la celda va a 36,50 y la fila queda en 525,2 px.
-  // Solo la inicial en mayúscula -- "8Am", "12Pm": resalta sin gritar. La más
-  // ancha es 10Am: 33,858 px normal y 36,696 en negrita (la activa va en
-  // negrita), así que la celda queda en 37,90.
-  var HORA_TXT = {8:'8Am', 9:'9Am', 10:'10Am', 11:'11Am', 12:'12Pm', 13:'1Pm', 14:'2Pm',
-                  15:'3Pm', 16:'4Pm', 17:'5Pm', 18:'6Pm', 19:'7Pm', 20:'8Pm'};
-  var HORA_W  = {'8Am':28.019,'9Am':27.993,'10Am':33.858,'11Am':31.827,'12Pm':33.141,
-                 '1Pm':25.372,'2Pm':27.187,'3Pm':27.492,'4Pm':27.708,'5Pm':27.377,
-                 '6Pm':27.619,'7Pm':26.743,'8Pm':27.644};
-  var HORA_WB = {'8Am':30.240,'9Am':30.107,'10Am':36.696,'11Am':34.639,'12Pm':35.585,
-                 '1Pm':27.301,'2Pm':29.009,'3Pm':29.345,'4Pm':29.580,'5Pm':29.275,
-                 '6Pm':29.536,'7Pm':28.507,'8Pm':29.669};
-  var CELDA_H = 37.90;
+  // Los atajos van en DOS filas agrupadas, con el número solo.
+  //
+  // Con "8Am 9Am 10Am ... 8Pm" en una sola línea eran 13 etiquetas de cuatro
+  // caracteres: cincuenta caracteres seguidos, y se leía como un bloque de
+  // texto. El sufijo estaba para saber si el 3 era de la mañana o de la tarde
+  // -- y eso lo dice mejor el rótulo de la fila. Así el número queda solo, con
+  // la misma celda de 26,30 px que el calendario.
+  var MINUTOS = [[0,'0'],[15,'15'],[30,'30'],[45,'45']];
+  var MANANA  = [[8,'8'],[9,'9'],[10,'10'],[11,'11']];
+  var TARDE   = [[12,'12'],[13,'1'],[14,'2'],[15,'3'],[16,'4'],
+                 [17,'5'],[18,'6'],[19,'7'],[20,'8']];
   var E13B = [8.830, 2.265, 0.912];     // espacios a 13 px en negrita
 
 
@@ -418,42 +418,33 @@ declare(strict_types=1);
     // `pre` va en la clave de cada bloque: las dos filas comparten valores
     // (10, 15, 20) y con la misma clave quedaban ids duplicados en el mismo
     // diseño -- verificado en el DOM: q10, q15 y q20 aparecían dos veces.
-    function filaAtajos(pre, desde, hasta, paso, actual, evento, sangria) {
-      var f = {};
-      var primero = true;
-      for (var q = desde; q <= hasta; q += paso) {
-        // la sangría de centrado va pegada a la PRIMERA celda de la fila
-        var sg = primero ? (sangria || '') : ''; primero = false;
-        var activo = (pad(q) === actual);
-        var txt;
-        if (pre === 'h') {                     // la fila de horas va con a.m./p.m.
-          var e = HORA_TXT[q];
-          txt = centrar(e, (activo ? HORA_WB : HORA_W)[e],
-                        activo ? E13B : [8.112, 2.082, 0.838], CELDA_H);
-        } else {
-          txt = celda(q, activo) + AIRE;
-        }
-        f[pre+q] = activo
-          ? { type:'text', properties:{ value: sg + txt, bold:true, size:'sm' } }
-          : { type:'link', properties:{ text: sg + txt, size:'sm',
-                action:{ type:'layoutEvent', value: evento + pad(q) } } };
-      }
-      return { type:'lineOfBlocks', properties:{ blocks: f } };
-    }
-
     // withTitle con inline: la columna del rótulo la arma Bitrix (titleWidth
-    // 'sm' = 100 px medidos). Antes esos rótulos se emparejaban a mano con
-    // espacios de ancho medido y había que rehacer las cuentas cada vez que
-    // cambiaba el tamaño o la negrita.
+    // 'sm' = 100 px medidos), sin rellenos a mano.
     function conRotulo(titulo, bloque) {
       return { type:'withTitle', properties:{
         title: titulo, inline:true, titleWidth:'sm', block: bloque } };
     }
 
+    function filaAtajos(pre, pares, actual, evento, sangria) {
+      var f = {}, primero = true;
+      for (var i = 0; i < pares.length; i++) {
+        var val = pares[i][0], txt = pares[i][1];
+        var activo = (pad(val) === actual);
+        var sg = primero ? (sangria || '') : ''; primero = false;
+        var cel = celda(txt, activo);
+        f[pre+val] = activo
+          ? { type:'text', properties:{ value: sg + cel, bold:true, size:'sm' } }
+          : { type:'link', properties:{ text: sg + cel, size:'sm',
+                action:{ type:'layoutEvent', value: evento + pad(val) } } };
+      }
+      return { type:'lineOfBlocks', properties:{ blocks: f } };
+    }
+
     blocks.caja = { type:'section', properties:{ type:'withBorder', blocks:{
       ruedas:  conRotulo('Tiempo', ruedas),
-      horas:   conRotulo('Hora',   filaAtajos('h', 8, 20, 1, hh, 'hora:', SANG_HOR)),
-      minutos: conRotulo('Minuto', filaAtajos('m', 0, 45, 15, mi, 'min:', SANG_MIN))
+      manana:  conRotulo('Ma\u00f1ana', filaAtajos('h', MANANA, hh, 'hora:', SANG_MANANA)),
+      tarde:   conRotulo('Tarde',   filaAtajos('t', TARDE,  hh, 'hora:', SANG_TARDE)),
+      minutos: conRotulo('Minuto',  filaAtajos('m', MINUTOS, mi, 'min:', SANG_MIN))
     }}};
 
     // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
