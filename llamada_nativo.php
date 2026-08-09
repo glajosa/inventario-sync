@@ -105,7 +105,7 @@ declare(strict_types=1);
   var SANG_RAYA     = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006';
   var SANG_NAV      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007';
   var SANG_RUE      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A\u200A';
-  var SANG_HOR      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A\u200A';
+  var SANG_HOR      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007';
   var SANG_MIN      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A\u200A';
   var SANG_PIE      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u200A';
   var RAYA = '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500';
@@ -133,6 +133,22 @@ declare(strict_types=1);
   var E12 = [7.559, 1.992, 0.844];      // los mismos a 12 px
   var CELDA = 26.30;
 
+  // ── Fila de horas con a.m./p.m. ─────────────────────────────────────────
+  // "8 … 20" obliga a traducir mentalmente; con el sufijo se lee directo.
+  // La más ancha es 12pm: 32,817 px normal y 35,236 en negrita (la activa va
+  // en negrita), así que la celda va a 36,50 y la fila queda en 525,2 px.
+  var HORA_TXT = {8:'8am', 9:'9am', 10:'10am', 11:'11am', 12:'12pm', 13:'1pm', 14:'2pm',
+                  15:'3pm', 16:'4pm', 17:'5pm', 18:'6pm', 19:'7pm', 20:'8pm'};
+  var HORA_W  = {'8am':26.559,'9am':26.533,'10am':32.398,'11am':30.240,'12pm':32.817,
+                 '1pm':25.048,'2pm':26.863,'3pm':27.168,'4pm':27.384,'5pm':27.054,
+                 '6pm':27.295,'7pm':26.419,'8pm':27.320};
+  var HORA_WB = {'8am':28.577,'9am':28.444,'10am':35.033,'11am':32.786,'12pm':35.236,
+                 '1pm':26.952,'2pm':28.660,'3pm':28.996,'4pm':29.231,'5pm':28.926,
+                 '6pm':29.187,'7pm':28.158,'8pm':29.320};
+  var CELDA_H = 36.50;
+  var E13B = [8.830, 2.265, 0.912];     // espacios a 13 px en negrita
+
+
   /** Arma un relleno de `faltan` px con los espacios de ancho conocido. */
   function relleno(faltan, esp) {
     if (faltan <= 0) return '';
@@ -152,8 +168,8 @@ declare(strict_types=1);
    * mostraban, porque las CELDAS sí estaban alineadas -- lo que estaba mal era
    * dónde caía el número adentro.
    */
-  function centrar(txt, ancho, esp) {
-    var falta = CELDA - ancho;
+  function centrar(txt, ancho, esp, celda) {
+    var falta = (celda || CELDA) - ancho;
     if (falta <= 0) return txt;
     return relleno(falta / 2, esp) + txt + relleno(falta - falta / 2, esp);
   }
@@ -405,9 +421,18 @@ declare(strict_types=1);
       for (var q = desde; q <= hasta; q += paso) {
         // la sangría de centrado va pegada a la PRIMERA celda de la fila
         var sg = primero ? (sangria || '') : ''; primero = false;
-        f[pre+q] = (pad(q) === actual)
-          ? { type:'text', properties:{ value: sg + celda(q) + AIRE, bold:true, size:'sm' } }
-          : { type:'link', properties:{ text: sg + celda(q) + AIRE, size:'sm',
+        var activo = (pad(q) === actual);
+        var txt;
+        if (pre === 'h') {                     // la fila de horas va con a.m./p.m.
+          var e = HORA_TXT[q];
+          txt = centrar(e, (activo ? HORA_WB : HORA_W)[e],
+                        activo ? E13B : [8.112, 2.082, 0.838], CELDA_H);
+        } else {
+          txt = celda(q, activo) + AIRE;
+        }
+        f[pre+q] = activo
+          ? { type:'text', properties:{ value: sg + txt, bold:true, size:'sm' } }
+          : { type:'link', properties:{ text: sg + txt, size:'sm',
                 action:{ type:'layoutEvent', value: evento + pad(q) } } };
       }
       return { type:'lineOfBlocks', properties:{ blocks: f } };
