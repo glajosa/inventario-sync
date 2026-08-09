@@ -80,12 +80,7 @@ declare(strict_types=1);
   // que estos anchos son los de negrita 13 px -- Tiempo 48,128 · Minuto
   // 44,748 · Hora 31,129 -- y el relleno usa los espacios de esa misma
   // negrita: U+2007 8,652 · U+2006 2,082 · U+200A 0,762.
-  var ROTULO = {
-    tiempo: 'Tiempo',
-    hora:   'Hora\u2007\u2006\u2006\u2006\u2006',
-    minuto: 'Minuto\u2006\u200A\u200A'
-  };
-  var HUECO = '\u2007\u2007';   // entre el rótulo y lo que sigue
+
 
   var RAYA = '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500';
 
@@ -215,67 +210,7 @@ declare(strict_types=1);
   }
 
 
-  /**
-   * LABORATORIO — solo en el deal de prueba 401173.
-   *
-   * La referencia lista bloques y propiedades que nunca usamos: `list`,
-   * `section` con type e imageSrc, los ocho colores de `text`, los cinco
-   * tamaños, `withTitle` con inline y titleWidth, y `dropdownMenu`. Antes de
-   * rediseñar a ojo conviene ver QUÉ pinta Bitrix con cada uno y medirlo en el
-   * DOM. Esto no se le muestra a nadie más.
-   */
-  var LAB = 401173;
-  function layoutLab() {
-    var b = {};
-    var COLORES = ['base_50','base_60','base_70','base_90','primary','warning','danger','success'];
-    var TAMANOS = ['xs','sm','md','lg','xl'];
-
-    COLORES.forEach(function (c, i) {
-      b['col'+i] = { type:'text', properties:{ value:'color '+c+' 08 15 22', color:c } };
-    });
-    TAMANOS.forEach(function (t, i) {
-      b['tam'+i] = { type:'text', properties:{ value:'size '+t+' 08 15 22', size:t } };
-    });
-    TAMANOS.forEach(function (t, i) {
-      b['lnk'+i] = { type:'link', properties:{ text:'link '+t+' 08 15 22', size:t, bold:(i%2===0),
-        action:{ type:'layoutEvent', value:'nada' } } };
-    });
-
-    ['default','primary','warning','danger','success','withBorder'].forEach(function (t, i) {
-      b['sec'+i] = { type:'section', properties:{ type:t, blocks:{
-        x:{ type:'text', properties:{ value:'section type='+t } } } } };
-    });
-
-    b.secImg = { type:'section', properties:{ type:'withBorder', imageSrc:'https://galjosa-inventario-sync.pwluu1.easypanel.host/cal.svg', imageSize:'md',
-      blocks:{ x:{ type:'text', properties:{ value:'section con imageSrc' } } } } };
-
-    b.lista = { type:'list', properties:{ blocks:{
-      a:{ type:'text', properties:{ value:'list · fila de texto' } },
-      c:{ type:'link', properties:{ text:'list · fila de enlace', action:{ type:'layoutEvent', value:'nada' } } },
-      e:{ type:'lineOfBlocks', properties:{ blocks:{
-            p:{ type:'text', properties:{ value:'08' } },
-            q:{ type:'link', properties:{ text:'15', action:{ type:'layoutEvent', value:'nada' } } } } } }
-    } } };
-
-    ['sm','md','lg'].forEach(function (w, i) {
-      b['wt'+i] = { type:'withTitle', properties:{ title:'ancho '+w, inline:true, titleWidth:w,
-        block:{ type:'lineOfBlocks', properties:{ blocks:{
-          a:{ type:'text', properties:{ value:'08' } },
-          c:{ type:'link', properties:{ text:'15', action:{ type:'layoutEvent', value:'nada' } } } } } } } };
-    });
-    b.wtno = { type:'withTitle', properties:{ title:'sin inline', inline:false,
-      block:{ type:'text', properties:{ value:'08 15 22' } } } };
-
-    b.drop = { type:'dropdownMenu', properties:{ selectedValue:'agosto',
-      values:{ julio:'julio', agosto:'agosto', septiembre:'septiembre' } } };
-
-    return { blocks:b,
-      primaryButton:{ title:'lab', state:'disabled' },
-      secondaryButton:{ title:'', state:'disabled' } };
-  }
-
   function layout() {
-    if (dealId === LAB) return layoutLab();
     // Mientras el vendedor no toque nada, día y hora se mantienen al día solos:
     // si deja la pestaña abierta media hora, no registra con la hora vieja.
     if (!horaManual) hhmm = ahoraHHMM();
@@ -301,8 +236,13 @@ declare(strict_types=1);
 
     // ── fila de días de la semana (2 caracteres, igual que los números)
     var cab = {};
+    // Sáb y Dom en rojo, como el selector nativo. Acá SÍ se puede porque el
+    // encabezado es `text` -- medido: color danger = rgb(255,87,82). En los
+    // días no se puede: ahí son `link`, y `link` ignora color (probado en el
+    // DOM: el sábado salía con el mismo azul que el viernes).
     for (var i = 0; i < 7; i++) cab['h'+i] = { type:'text', properties:{
-      value: (i === 0 ? SANGRIA.celda : '') + DOW[i] + SEP, color:'base_50' } };
+      value: (i === 0 ? SANGRIA.celda : '') + DOW[i] + SEP,
+      size:'xs', color: (i >= 5 ? 'danger' : 'base_50') } };
     cal.dow = { type:'lineOfBlocks', properties:{ blocks: cab } };
     // raya bajo los días, como el selector nativo
     cal.raya = { type:'text', properties:{ value: SANGRIA.raya + RAYA, color:'base_50' } };
@@ -378,7 +318,6 @@ declare(strict_types=1);
     // El rango 08-20 sale de los datos: de 400 llamadas leídas en Bitrix, no
     // hay ninguna fuera de esa franja salvo tres sueltas.
     var ruedas = { type:'lineOfBlocks', properties:{ blocks:{
-      rot:  { type:'text', properties:{ value: ROTULO.tiempo + HUECO, size:'sm', bold:true } },
       hmen: { type:'link', properties:{ text: EC+'\u2212'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h-1' } } },
       hval: { type:'text', properties:{ value: EC + hh + EC, bold:true, size:'xl' } },
       hmas: { type:'link', properties:{ text: EC+'+'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h+1' } } },
@@ -396,10 +335,8 @@ declare(strict_types=1);
     // `pre` va en la clave de cada bloque: las dos filas comparten valores
     // (10, 15, 20) y con la misma clave quedaban ids duplicados en el mismo
     // diseño -- verificado en el DOM: q10, q15 y q20 aparecían dos veces.
-    function filaAtajos(pre, desde, hasta, paso, actual, evento, sangria, rotulo) {
+    function filaAtajos(pre, desde, hasta, paso, actual, evento, sangria) {
       var f = {};
-      f.rot = { type:'text', properties:{
-        value: (sangria || '') + rotulo + HUECO, size:'sm', bold:true } };
       for (var q = desde; q <= hasta; q += paso) {
         f[pre+q] = (pad(q) === actual)
           ? { type:'text', properties:{ value: celda(q) + AIRE, bold:true, size:'sm' } }
@@ -409,14 +346,28 @@ declare(strict_types=1);
       return { type:'lineOfBlocks', properties:{ blocks: f } };
     }
 
+    // withTitle con inline: la columna del rótulo la arma Bitrix (titleWidth
+    // 'sm' = 100 px medidos). Antes esos rótulos se emparejaban a mano con
+    // espacios de ancho medido y había que rehacer las cuentas cada vez que
+    // cambiaba el tamaño o la negrita.
+    function conRotulo(titulo, bloque) {
+      return { type:'withTitle', properties:{
+        title: titulo, inline:true, titleWidth:'sm', block: bloque } };
+    }
+
     blocks.caja = { type:'section', properties:{ type:'withBorder', blocks:{
-      ruedas:  ruedas,
-      horas:   filaAtajos('h', 8, 20, 1, hh, 'hora:', '', ROTULO.hora),
-      minutos: filaAtajos('m', 0, 45, 15, mi, 'min:', '', ROTULO.minuto)
+      ruedas:  conRotulo('Tiempo', ruedas),
+      horas:   conRotulo('Hora',   filaAtajos('h', 8, 20, 1, hh, 'hora:', '')),
+      minutos: conRotulo('Minuto', filaAtajos('m', 0, 45, 15, mi, 'min:', ''))
     }}};
 
     // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
-    blocks.resumen = { type:'text', properties:{ value: resumenTxt(), bold:true } };
+    // Confirmación en tarjeta celeste (#E5F9FF medido): es el bloque de aviso
+    // que usa Bitrix en sus propias pantallas, y separa lo que se va a guardar
+    // de los controles de arriba.
+    blocks.resumen = { type:'section', properties:{ type:'primary', blocks:{
+      t: { type:'text', properties:{ value: resumenTxt(), bold:true } }
+    }}};
     // Importante y Cerrar comparten fila: el fuego de Bitrix es PRIORITY 3
     // ("high", confirmado con crm.enum.activitypriority) y algunos vendedores
     // lo usan -- de 400 llamadas leídas, 5 venían marcadas.
