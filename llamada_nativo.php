@@ -85,31 +85,18 @@ declare(strict_types=1);
   // negrita: U+2007 8,652 · U+2006 2,082 · U+200A 0,762.
 
 
-  var RAYA = '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500';
-
-  // Dentro de la caja de la hora no se centra fila por fila: las tres
-  // arrancan pegadas a la izquierda y los rótulos hacen la columna. Lo único
-  // que se centra es el calendario, sobre el ancho de la fila de horas, que
-  // con el rótulo en negrita queda en 434,6 px.
-
-  // El encabezado va a 12 px y los números a 14, así que sus espacios NO miden
-  // lo mismo (U+2007 vale 7,559 contra 8,668). Con un relleno fijo el paso del
-  // encabezado se iba de 19,1 a 26,4 px mientras el de los números es 25,3
-  // clavado -- por eso las columnas se veían corridas. Acá cada rótulo se
-  // rellena por separado hasta esos 25,3 px, con los espacios de SU tamaño.
-  // Anchos medidos a 12 px: LU 15,369 · MA 18,574 · MI 13,699 · JU 15,305 ·
-  // VI 11,297 · SA 15,732 · DO 17,977. Ojo: Bitrix mete un &nbsp; entre
-  // bloques que suma 3,9 px, así que el relleno apunta a 21,40 y no a 25,30.
-  // Peor error: 0,29 px.
-
-  // misma sangría que los números (127,37 px) pero con espacios de 12 px
-  // 110,22 px: conserva el centro que tenía la grilla angosta
-  var SANG_CAB = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006';
-
-  var SANGRIA = {
-    celda: '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u200A\u200A',
-    raya:  '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u200A'
-  };
+  // ── Centrado ────────────────────────────────────────────────────────────
+  // Todo se centra sobre UN eje: el de la fila más ancha, que es la de horas
+  // (478,3 px medidos). Antes cada fila arrancaba pegada a la izquierda y el
+  // calendario --mucho más angosto-- se veía corrido. Cada sangría va armada
+  // con los espacios del tamaño de SU fila: calendario 14 px, encabezado 12,
+  // rueda 16, minutos 13. Peor error: 0,35 px.
+  var SANG_CAL  = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u200A';
+  var SANG_CAB  = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u200A\u200A';
+  var SANG_RUE  = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A';
+  var SANG_MIN  = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A\u200A';
+  // 15 guiones = 210 px, el ancho de la rejilla (211,7)
+  var RAYA = '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500';
 
 
   // ── Grilla del calendario ────────────────────────────────────────────────
@@ -269,7 +256,7 @@ declare(strict_types=1);
     // ── encabezado: ◀  agosto 2026  ▶
     var cal = {};
     cal.nav = { type:'lineOfBlocks', properties:{ blocks:{
-      ant: { type:'link', properties:{ text: SANGRIA.celda + '◀', action:{ type:'layoutEvent', value:'mes:-1' } } },
+      ant: { type:'link', properties:{ text: SANG_CAL + '\u25c0', action:{ type:'layoutEvent', value:'mes:-1' } } },
       tit: { type:'text', properties:{
         value: EC + RELLENO[MESES[m]][0] + MESES[m] + ' ' + y + RELLENO[MESES[m]][1] + EC,
         bold:true } },
@@ -287,7 +274,7 @@ declare(strict_types=1);
       size:'xs', color: (i >= 5 ? 'danger' : 'base_50') } };
     cal.dow = { type:'lineOfBlocks', properties:{ blocks: cab } };
     // raya bajo los días, como el selector nativo
-    cal.raya = { type:'text', properties:{ value: SANGRIA.raya + RAYA, color:'base_50' } };
+    cal.raya = { type:'text', properties:{ value: SANG_CAL + RAYA, color:'base_50' } };
 
     // ── celdas del mes, lunes primero.
     // La grilla se rellena con los días del mes anterior y del siguiente, en
@@ -307,7 +294,7 @@ declare(strict_types=1);
       var fila = {};
       for (var c = 0; c < 7; c++) {
         var cel = celdas[s*7 + c], key = 'c' + c, dia = cel.d;
-        var sang = (c === 0 ? SANGRIA.celda : '');
+        var sang = (c === 0 ? SANG_CAL : '');
         if (cel.otro || esPasado(y, m, dia)) {
           // gris: ni de este mes, o ya pasó. No se puede planificar ahí.
           fila[key] = { type:'text', properties:{ value: sang + celda(dia), color:'base_50' } };
@@ -360,7 +347,7 @@ declare(strict_types=1);
     // El rango 08-20 sale de los datos: de 400 llamadas leídas en Bitrix, no
     // hay ninguna fuera de esa franja salvo tres sueltas.
     var ruedas = { type:'lineOfBlocks', properties:{ blocks:{
-      hmen: { type:'link', properties:{ text: EC+'\u2212'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h-1' } } },
+      hmen: { type:'link', properties:{ text: SANG_RUE+EC+'\u2212'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h-1' } } },
       hval: { type:'text', properties:{ value: EC + hh + EC, bold:true, size:'xl' } },
       hmas: { type:'link', properties:{ text: EC+'+'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h+1' } } },
       dos:  { type:'text', properties:{ value: EC + ':' + EC, bold:true, size:'xl' } },
@@ -400,7 +387,7 @@ declare(strict_types=1);
     blocks.caja = { type:'section', properties:{ type:'withBorder', blocks:{
       ruedas:  conRotulo('Tiempo', ruedas),
       horas:   conRotulo('Hora',   filaAtajos('h', 8, 20, 1, hh, 'hora:', '')),
-      minutos: conRotulo('Minuto', filaAtajos('m', 0, 45, 15, mi, 'min:', ''))
+      minutos: conRotulo('Minuto', filaAtajos('m', 0, 45, 15, mi, 'min:', SANG_MIN))
     }}};
 
     // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
