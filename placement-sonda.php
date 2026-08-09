@@ -1,6 +1,6 @@
 <?php
 /**
- * placement-sonda.php — enlaza y desenlaza la SONDA probe_iframe.php.
+ * placement-sonda.php — enlaza y desenlaza la SONDA llamada_app.php.
  *
  * Va aparte de placement-llamada.php a propósito: la sonda es un SEGUNDO
  * handler sobre el mismo placement, así el botón que ya usan los vendedores
@@ -22,7 +22,7 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
 }
 
 const PLACEMENT = 'CRM_DEAL_DETAIL_ACTIVITY';
-const HANDLER   = 'https://galjosa-inventario-sync.pwluu1.easypanel.host/probe_iframe.php';
+const HANDLER   = 'https://galjosa-inventario-sync.pwluu1.easypanel.host/llamada_app.php';
 
 function mostrar(): void {
     $r = app_bx('placement.get');
@@ -42,8 +42,8 @@ if ($accion === 'poner') {
     $r = app_bx('placement.bind', [
         'PLACEMENT'   => PLACEMENT,
         'HANDLER'     => HANDLER,
-        'TITLE'       => 'Sonda (borrar)',
-        'DESCRIPTION' => 'Prueba temporal de tamaño de iframe',
+        'TITLE'       => 'Llamada NUEVA',
+        'DESCRIPTION' => 'Interfaz propia — en prueba junto a la actual',
     ]);
     echo "\nbind: " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
 } elseif ($accion === 'quitar') {
