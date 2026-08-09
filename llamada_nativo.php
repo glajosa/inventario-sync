@@ -246,7 +246,7 @@ declare(strict_types=1);
         x:{ type:'text', properties:{ value:'section type='+t } } } } };
     });
 
-    b.secImg = { type:'section', properties:{ type:'withBorder', imageSrc:'/cal.svg', imageSize:'md',
+    b.secImg = { type:'section', properties:{ type:'withBorder', imageSrc:'https://galjosa-inventario-sync.pwluu1.easypanel.host/cal.svg', imageSize:'md',
       blocks:{ x:{ type:'text', properties:{ value:'section con imageSrc' } } } } };
 
     b.lista = { type:'list', properties:{ blocks:{
