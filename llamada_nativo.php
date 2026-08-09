@@ -193,7 +193,7 @@ declare(strict_types=1);
   function botones(activos) {
     return {
       primaryButton:   { title:'Sí, contestó', state: activos ? 'normal' : 'disabled' },
-      secondaryButton: { title:'No contestó',  state: activos ? 'normal' : 'disabled' }
+      secondaryButton: { title:'No contestó',  state: activos ? 'danger' : 'disabled' }
     };
   }
 
