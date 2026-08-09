@@ -123,6 +123,7 @@ declare(strict_types=1);
   var horaManual = false;      // ¿el vendedor tocó la hora?
   var diaManual  = false;      // ¿eligió un día distinto de hoy?
   var importante = false;      // el fuego de Bitrix = PRIORITY 3 (high)
+  var comentario = '';         // el mismo comentario de la pestaña Comentario
   var aviso  = '';
   // CERRAR: `finish` devuelve el foco a la pestaña por defecto de la línea de
   // tiempo -- o sea, cierra esto de verdad. (Antes lo di por imposible con una
@@ -265,7 +266,7 @@ declare(strict_types=1);
     // ── fila de días de la semana (2 caracteres, igual que los números)
     var cab = {};
     for (var i = 0; i < 7; i++) cab['h'+i] = { type:'text', properties:{
-      value: (i === 0 ? SANGRIA.celda : '') + DOW[i] + SEP } };
+      value: (i === 0 ? SANGRIA.celda : '') + DOW[i] + SEP, color:'base_50' } };
     cal.dow = { type:'lineOfBlocks', properties:{ blocks: cab } };
     // raya bajo los días, como el selector nativo
     cal.raya = { type:'text', properties:{ value: SANGRIA.raya + RAYA, color:'base_50' } };
@@ -314,6 +315,15 @@ declare(strict_types=1);
     // Reemplaza al campo de texto: se va el rectángulo de ancho completo y de
     // paso todos los enredos de teclear. El minuto va de 5 en 5 porque así lo
     // hacen: de 400 llamadas leídas, TODOS los minutos son múltiplo de 5.
+    // ── comentario. Antes tenian que saltar a la pestana "Comentario" para
+    // esto; ahora va en el mismo panel y se manda solo o junto con la llamada.
+    blocks.coment = { type:'textarea', properties:{
+      title:'Comentario', value: comentario, placeholder:'Qué pasó en la llamada' } };
+    if (comentario.replace(/\s/g,'')) {
+      blocks.enviar = { type:'link', properties:{ text:'Enviar comentario', size:'sm',
+        action:{ type:'layoutEvent', value:'coment' } } };
+    }
+
     // El calendario va en su propia caja: antes quedaba pegado al borde
     // izquierdo mientras la hora arrancaba 16 px mas adentro (el padding del
     // section). Dos cajas iguales = todo a plomo, y de paso cada cosa queda
@@ -453,6 +463,20 @@ declare(strict_types=1);
     });
   }
 
+  /** Publica el comentario en la línea de tiempo, igual que la pestaña nativa. */
+  function mandarComentario(luego) {
+    var txt = comentario.replace(/^\s+|\s+$/g, '');
+    if (!dealId || !txt) { if (luego) luego(); return; }
+    BX24.placement.call('lock');
+    BX24.callMethod('crm.timeline.comment.add', {
+      fields: { ENTITY_ID: dealId, ENTITY_TYPE: 'deal', COMMENT: txt }
+    }, function (r) {
+      BX24.placement.call('unlock');
+      if (r.error()) { aviso = 'No se pudo comentar: ' + r.error(); redibujar(); return; }
+      if (luego) luego();
+    });
+  }
+
   function registrar(contesto) {
     if (!dealId || !sel) return;
     BX24.placement.call('lock');
@@ -485,7 +509,8 @@ declare(strict_types=1);
         // abajo en la linea de tiempo con su fecha limite.
         aviso = '';
         horaManual = false; diaManual = false; importante = false;
-        cerrar();
+        // si escribió algo, se publica junto con la llamada: un solo paso
+        mandarComentario(function(){ comentario = ''; cerrar(); });
       });
     }
 
@@ -536,6 +561,15 @@ declare(strict_types=1);
     // cuando lo que hay escrito no coincide con lo que debería quedar. Así el
     // cursor se queda quieto mientras teclea, y a partir del quinto dígito el
     // campo simplemente no cambia: quedan los 4 y nada más.
+    BX24.placement.call('bindValueChangeCallback', null, function (ev) {
+      if (!ev || ev.id !== 'coment') return;
+      var antes = !!comentario.replace(/\s/g,'');
+      comentario = String(ev.value == null ? '' : ev.value);
+      // solo se redibuja cuando aparece o desaparece el enlace de enviar: si
+      // no, cada tecla redibujaria el textarea y le movería el cursor.
+      if (antes !== !!comentario.replace(/\s/g,'')) redibujar();
+    });
+
     BX24.placement.call('bindPrimaryButtonClickCallback',   null, function(){
       if (colapsado) { colapsado = false; aviso = ''; precargar(); redibujar(); return; }
       registrar(true);
