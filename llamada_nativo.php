@@ -47,7 +47,10 @@ declare(strict_types=1);
   // minuscula suma 99,8 px contra 120,6 px de la fila de numeros -- 21 px de
   // menos, que es lo que hacia que los dias "se pasaran" del domingo.
   // En mayuscula suma 123,9 px y el desfase baja a 3,3 px.
-  var DOW   = ['LU','MA','MI','JU','VI','SA','DO'];
+  // Tres letras como el nativo: "Lun Mar Mié" se lee mucho mejor que "LU MA MI".
+  var DOW   = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+  var ANCHO_DOW = { 'Lun':20.818, 'Mar':21.680, 'Mié':20.309, 'Jue':20.314,
+                    'Vie':17.906, 'Sáb':21.639, 'Dom':26.250 };
 
   // U+2007 = espacio de cifra = 8,672 px = exactamente el ancho de un "0".
   // Dos de estos = una celda de 2 digitos. NO lo colapsa el HTML: CSS solo
@@ -98,41 +101,50 @@ declare(strict_types=1);
   // VI 11,297 · SA 15,732 · DO 17,977. Ojo: Bitrix mete un &nbsp; entre
   // bloques que suma 3,9 px, así que el relleno apunta a 21,40 y no a 25,30.
   // Peor error: 0,29 px.
-  var SEPCAB = {
-    LU: '\u2006\u2006\u2006',
-    MA: '\u2006\u200A',
-    MI: '\u2007',
-    JU: '\u2006\u2006\u2006',
-    VI: '\u2007\u2006\u200A',
-    SA: '\u2006\u2006\u200A\u200A',
-    DO: '\u2006\u200A\u200A'
-  };
 
   // misma sangría que los números (127,37 px) pero con espacios de 12 px
-  var SANG_CAB = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A';
+  // 110,22 px: conserva el centro que tenía la grilla angosta
+  var SANG_CAB = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006';
 
   var SANGRIA = {
-    celda: '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A',
+    celda: '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u200A\u200A',
     raya:  '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u200A'
   };
 
-  /**
-   * Rellena los digitos angostos para que toda celda mida lo mismo.
-   *
-   * Medido en el render: el "1" mide 6,344 px contra 8,672 del "0" (le faltan
-   * 2,328) y el "7" mide 7,820 (le faltan 0,852). El resto va de 8,3 a 8,9.
-   * U+2006 mide 2,180 y U+200A mide 0,836 -- casi clavados a lo que falta.
-   * Con esto la variacion por celda pasa de 4,84 px a 0,83 px.
-   */
-  function celda(n) {
-    var t = pad(n), out = '';
-    for (var i = 0; i < t.length; i++) {
-      out += t.charAt(i);
-      if      (t.charAt(i) === '1') out += '\u2006';
-      else if (t.charAt(i) === '7') out += '\u200A';
-    }
-    return out;
+
+  // ── Grilla del calendario ────────────────────────────────────────────────
+  // El selector nativo se lee mejor por dos razones concretas, y las dos se
+  // pueden copiar:
+  //   1. NO lleva cero adelante: dice 3 4 5, no 03 04 05. La mitad de los
+  //      dígitos desaparece de la pantalla.
+  //   2. Las columnas son más anchas. El nombre más largo, "Dom", mide 26,25
+  //      px a 12 px de letra, así que la celda pasa de 21,4 a 26,3.
+  //
+  // Para que igual queden a plomo se calcula el relleno de CADA celda con el
+  // ancho real de sus dígitos (medidos en el render, no supuestos) en vez de
+  // parchear a mano los dígitos angostos. Peor error: 0,41 px.
+  var DIG = {'0':8.668,'1':6.344,'2':8.299,'3':8.627,'4':8.859,
+             '5':8.504,'6':8.764,'7':7.820,'8':8.791,'9':8.764};
+  var E14 = [8.668, 2.174, 0.834];      // U+2007 · U+2006 · U+200A a 14 px
+  var E12 = [7.559, 1.992, 0.844];      // los mismos a 12 px
+  var CELDA = 26.30;
+
+  /** Arma un relleno de `faltan` px con los espacios de ancho conocido. */
+  function relleno(faltan, esp) {
+    if (faltan <= 0) return '';
+    var n7 = Math.floor(faltan / esp[0]); var r = faltan - n7 * esp[0];
+    var n6 = Math.floor(r / esp[1]);      r -= n6 * esp[1];
+    var nA = Math.round(r / esp[2]);
+    return Array(n7+1).join('\u2007') + Array(n6+1).join('\u2006') + Array(nA+1).join('\u200A');
   }
+
+  /** Un día tal cual se ve: sin cero adelante, y rellenado a CELDA px. */
+  function celda(n) {
+    var t = '' + n, ancho = 0;
+    for (var i = 0; i < t.length; i++) ancho += DIG[t.charAt(i)];
+    return t + relleno(CELDA - ancho, E14);
+  }
+
 
   var dealId = 0;
   var vista  = new Date();
@@ -271,7 +283,7 @@ declare(strict_types=1);
     // días no se puede: ahí son `link`, y `link` ignora color (probado en el
     // DOM: el sábado salía con el mismo azul que el viernes).
     for (var i = 0; i < 7; i++) cab['h'+i] = { type:'text', properties:{
-      value: (i === 0 ? SANG_CAB : '') + DOW[i] + SEPCAB[DOW[i]],
+      value: (i === 0 ? SANG_CAB : '') + DOW[i] + relleno(CELDA - ANCHO_DOW[DOW[i]], E12),
       size:'xs', color: (i >= 5 ? 'danger' : 'base_50') } };
     cal.dow = { type:'lineOfBlocks', properties:{ blocks: cab } };
     // raya bajo los días, como el selector nativo
@@ -298,18 +310,18 @@ declare(strict_types=1);
         var sang = (c === 0 ? SANGRIA.celda : '');
         if (cel.otro || esPasado(y, m, dia)) {
           // gris: ni de este mes, o ya pasó. No se puede planificar ahí.
-          fila[key] = { type:'text', properties:{ value: sang + celda(dia) + SEP, color:'base_50' } };
+          fila[key] = { type:'text', properties:{ value: sang + celda(dia), color:'base_50' } };
         } else if (sel && sel.y===y && sel.m===m && sel.d===dia) {
           // el elegido va como TEXTO oscuro y en negrita: contra el azul de
           // los links se distingue de un vistazo, sin cambiar de ancho.
-          fila[key] = { type:'text', properties:{ value: sang + celda(dia) + SEP, bold:true } };
+          fila[key] = { type:'text', properties:{ value: sang + celda(dia), bold:true } };
         } else {
           // Sábado y domingo NO se pueden pintar de rojo: `color` solo existe
           // en el bloque `text`, y ahí el día deja de ser clickeable. Probado
           // en el DOM: mandando color:'danger' en el link, el sábado sale con
           // el mismo rgb(32,102,176) que el viernes, sin clase ni atributo.
           fila[key] = { type:'link', properties:{
-            text: sang + celda(dia) + SEP,
+            text: sang + celda(dia),
             action:{ type:'layoutEvent', value:'dia:'+y+'-'+pad(m+1)+'-'+pad(dia) }
           }};
         }
