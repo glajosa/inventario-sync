@@ -245,7 +245,6 @@ declare(strict_types=1);
     // rótulo y no sobra ni una línea en blanco.
     var y = vista.getFullYear(), m = vista.getMonth();
     var blocks = {};
-    if (aviso) blocks.ok = { type:'text', properties:{ value: aviso, bold:true } };
 
     // ── encabezado: ◀  agosto 2026  ▶
     var cal = {};
@@ -388,15 +387,24 @@ declare(strict_types=1);
     // Confirmación en tarjeta celeste (#E5F9FF medido): es el bloque de aviso
     // que usa Bitrix en sus propias pantallas, y separa lo que se va a guardar
     // de los controles de arriba.
-    blocks.resumen = { type:'section', properties:{ type:'primary', blocks:{
-      t: { type:'text', properties:{ value: resumenTxt(), bold:true } }
+    // La tarjeta cambia de color según el estado: celeste mientras se decide,
+    // verde al guardar, roja si algo falló. Colores medidos: primary #E5F9FF,
+    // success #F1FBD0, danger #FFE8E8.
+    var tipo = 'primary', linea = resumenTxt();
+    if (aviso) {
+      var malo = /no se pudo/i.test(aviso);
+      tipo  = malo ? 'danger' : 'success';
+      linea = aviso;
+    }
+    blocks.resumen = { type:'section', properties:{ type:tipo, blocks:{
+      t: { type:'text', properties:{ value: linea, bold:true } }
     }}};
     // Importante y Cerrar comparten fila: el fuego de Bitrix es PRIORITY 3
     // ("high", confirmado con crm.enum.activitypriority) y algunos vendedores
     // lo usan -- de 400 llamadas leídas, 5 venían marcadas.
     blocks.pie = { type:'lineOfBlocks', properties:{ blocks:{
       imp: { type:'link', properties:{
-        text: (importante ? '\u2611' : '\u2610') + ' Importante', size:'sm',
+        text: importante ? '\u2611 Importante \ud83d\udd25' : '\u2610 Importante', size:'sm',
         action:{ type:'layoutEvent', value:'imp' } } },
     }}};
 
