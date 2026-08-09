@@ -129,11 +129,26 @@ declare(strict_types=1);
     return Array(n7+1).join('\u2007') + Array(n6+1).join('\u2006') + Array(nA+1).join('\u200A');
   }
 
-  /** Un día tal cual se ve: sin cero adelante, y rellenado a CELDA px. */
+  /**
+   * Un día tal cual se ve: sin cero adelante y CENTRADO en su celda.
+   *
+   * El relleno va MITAD Y MITAD, no todo al final. Poniéndolo solo al final
+   * cada número quedaba pegado a la izquierda de su celda: con dos cifras casi
+   * no se nota, pero la fila "3 4 5 6 7 8 9" se veía corrida contra la
+   * "10 11 12 13...". Eso era el desorden que se veía y que las mediciones no
+   * mostraban, porque las CELDAS sí estaban alineadas -- lo que estaba mal era
+   * dónde caía el número adentro.
+   */
+  function centrar(txt, ancho, esp) {
+    var falta = CELDA - ancho;
+    if (falta <= 0) return txt;
+    return relleno(falta / 2, esp) + txt + relleno(falta - falta / 2, esp);
+  }
+
   function celda(n) {
     var t = '' + n, ancho = 0;
     for (var i = 0; i < t.length; i++) ancho += DIG[t.charAt(i)];
-    return t + relleno(CELDA - ancho, E14);
+    return centrar(t, ancho, E14);
   }
 
 
@@ -274,7 +289,7 @@ declare(strict_types=1);
     // días no se puede: ahí son `link`, y `link` ignora color (probado en el
     // DOM: el sábado salía con el mismo azul que el viernes).
     for (var i = 0; i < 7; i++) cab['h'+i] = { type:'text', properties:{
-      value: (i === 0 ? SANG_CAB : '') + DOW[i] + relleno(CELDA - ANCHO_DOW[DOW[i]], E12),
+      value: (i === 0 ? SANG_CAB : '') + centrar(DOW[i], ANCHO_DOW[DOW[i]], E12),
       size:'xs', color: (i >= 5 ? 'danger' : 'base_50') } };
     cal.dow = { type:'lineOfBlocks', properties:{ blocks: cab } };
     // raya bajo los días, como el selector nativo
