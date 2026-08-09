@@ -125,14 +125,10 @@ declare(strict_types=1);
   var importante = false;      // el fuego de Bitrix = PRIORITY 3 (high)
   var comentario = '';         // el mismo comentario de la pestaña Comentario
   var aviso  = '';
-  // CERRAR: `finish` devuelve el foco a la pestaña por defecto de la línea de
-  // tiempo -- o sea, cierra esto de verdad. (Antes lo di por imposible con una
-  // prueba mal hecha; está documentado en la referencia del placement.)
-  // Se llama al guardar y desde el enlace "Cerrar". `colapsado` es el respaldo
-  // por si finish no cerrara: deja una sola línea en vez del calendario suelto.
-  // Nace CERRADO: al entrar al deal Bitrix deja seleccionada esta pestana,
-  // asi que si arrancara abierto el calendario aparece sin que nadie lo pida.
-  var colapsado = true;
+  // Sin estado colapsado. Antes había uno que pintaba un botón azul
+  // "REGISTRAR LLAMADA", y sobraba: la pestaña "Seguimiento" de la barra ya es
+  // el botón que abre esto, y mientras esté elegida otra pestaña Bitrix no
+  // muestra nada de la app. El botón era un segundo clic para nada.
   //
   // CLAVE: los dos botones van SIEMPRE en el diseño. Cuando los omití, Bitrix
   // dejó los anteriores colgando y pintó uno vacío (el punto azul suelto).
@@ -228,27 +224,6 @@ declare(strict_types=1);
     // sobraba: la pestaña "Registrar llamada" de la barra YA es el botón que
     // abre esto. Sin enlaces propios de abrir/cerrar no se repite ningún
     // rótulo y no sobra ni una línea en blanco.
-    // CERRADO: nada más que el botón que abre.
-    //
-    // Los 56 px del contenedor de botones (crm-entity-stream-restapp-btn-
-    // container) NO se pueden quitar: medido en el DOM, omitirlos del diseño
-    // deja los anteriores colgando, y `visible:false` Bitrix lo escupe tal
-    // cual como atributo HTML sin hacer nada. Si esa franja va a estar sí o
-    // sí, que sirva: el botón principal ES el que abre. Así desaparecen de un
-    // saque el enlace repetido y los dos botones grises muertos.
-    //
-    // El secundario va con título vacío: es de estilo link (sin fondo), así
-    // que vacío no se ve. El principal vacío sí se veía -- era el "punto azul".
-    if (colapsado) {
-      return {
-        // Sin bloques cuando no hay error: el bloque vacio de antes pintaba
-        // 12 px de aire justo encima del boton.
-        blocks: aviso ? { ok: { type:'text', properties:{ value: aviso, bold:true } } } : {},
-        primaryButton:   { title:'Registrar llamada', state:'normal' },
-        secondaryButton: { title:'', state:'disabled' }
-      };
-    }
-
     var y = vista.getFullYear(), m = vista.getMonth();
     var blocks = {};
     if (aviso) blocks.ok = { type:'text', properties:{ value: aviso, bold:true } };
@@ -388,9 +363,6 @@ declare(strict_types=1);
       imp: { type:'link', properties:{
         text: (importante ? '\u2611' : '\u2610') + ' Importante', size:'sm',
         action:{ type:'layoutEvent', value:'imp' } } },
-      sep: { type:'text', properties:{ value: EC + EC + EC } },
-      cer: { type:'link', properties:{
-        text:'Cerrar', size:'sm', action:{ type:'layoutEvent', value:'cerrar' } } }
     }}};
 
     var out = botones(true);
@@ -400,19 +372,7 @@ declare(strict_types=1);
 
   function redibujar() { BX24.placement.call('setLayout', layout(), function(){}); }
 
-  /**
-   * Cierra.
-   *
-   * `finish` va SUELTO, no dentro del callback de setLayout: así lo tenía y
-   * por eso no cerraba nunca -- si Bitrix no invoca ese callback, la orden no
-   * llega a salir. Primero cerrar, después dejar el respaldo colapsado por si
-   * finish no hiciera efecto (mejor una línea que el calendario colgado).
-   */
-  function cerrar() {
-    BX24.placement.call('finish');
-    colapsado = true;
-    BX24.placement.call('setLayout', layout(), function(){});
-  }
+
 
 
 
@@ -510,7 +470,11 @@ declare(strict_types=1);
         aviso = '';
         horaManual = false; diaManual = false; importante = false;
         // si escribió algo, se publica junto con la llamada: un solo paso
-        mandarComentario(function(){ comentario = ''; cerrar(); });
+        mandarComentario(function(){
+          comentario = '';
+          aviso = 'Guardado \u2713';
+          redibujar();
+        });
       });
     }
 
@@ -542,10 +506,6 @@ declare(strict_types=1);
       } else if (v === 'm+5') { mover(5);   redibujar();
       } else if (v === 'imp') {
         importante = !importante; redibujar();
-      } else if (v === 'cerrar') {
-        cerrar();
-      } else if (v === 'abrir') {
-        colapsado = false; aviso = ''; precargar(); redibujar();
       } else if (v.indexOf('mes:') === 0) {
         vista.setMonth(vista.getMonth() + parseInt(v.slice(4), 10));
         redibujar();
@@ -571,11 +531,9 @@ declare(strict_types=1);
     });
 
     BX24.placement.call('bindPrimaryButtonClickCallback',   null, function(){
-      if (colapsado) { colapsado = false; aviso = ''; precargar(); redibujar(); return; }
       registrar(true);
     });
     BX24.placement.call('bindSecondaryButtonClickCallback', null, function(){
-      if (colapsado) return;              // vacio y deshabilitado: no hace nada
       registrar(false);
     });
   });
