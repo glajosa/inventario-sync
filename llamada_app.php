@@ -43,18 +43,20 @@ declare(strict_types=1);
 
   /* La app se centra: el panel de Bitrix es ancho, pero el trabajo no debe
      quedar desparramado de punta a punta. */
-  .marco{max-width:940px;margin:0 auto;padding:22px 24px 28px}
+  /* Una sola columna, angosta y centrada: el panel de Bitrix es ancho pero
+     el trabajo se lee mejor en una columna. Comentario arriba, calendario
+     abajo -- el orden que ya tenían. */
+  .marco{max-width:520px;margin:0 auto;padding:22px 24px 28px}
 
   h1{font-size:19px;font-weight:600;margin:0 0 18px;letter-spacing:-.2px}
 
-  .cols{display:grid;grid-template-columns:1fr 340px;gap:24px;align-items:start}
-  @media (max-width:820px){ .cols{grid-template-columns:1fr} }
+  .cols{display:flex;flex-direction:column;gap:18px}
 
   .tarjeta{background:var(--fondo);border:1px solid var(--borde);border-radius:12px;padding:16px}
   .rotulo{font-size:12px;font-weight:600;color:var(--tinta-suave);
     text-transform:uppercase;letter-spacing:.04em;margin:0 0 8px}
 
-  textarea{width:100%;min-height:190px;resize:vertical;padding:12px 14px;
+  textarea{width:100%;min-height:104px;resize:vertical;padding:12px 14px;
     border:1px solid var(--borde);border-radius:10px;font:inherit;color:var(--tinta);
     background:#fff;outline:none;transition:border-color .12s,box-shadow .12s}
   textarea:focus{border-color:var(--azul);box-shadow:0 0 0 3px rgba(32,102,176,.12)}
@@ -104,7 +106,7 @@ declare(strict_types=1);
   .chip.on{background:var(--azul);border-color:var(--azul);color:#fff}
 
   /* ── pie ────────────────────────────────────────────────────── */
-  .resumen{margin:18px 0 14px;font-size:14px;color:var(--tinta)}
+  .resumen{margin:0 0 14px;font-size:14px;color:var(--tinta)}
   .resumen b{font-weight:600}
   .acciones{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .btn{border:0;border-radius:9px;padding:11px 20px;font:600 14px/1 inherit;
@@ -134,20 +136,13 @@ declare(strict_types=1);
   <h1>Registrar llamada</h1>
 
   <div class="cols">
-    <!-- izquierda: comentario -->
+    <!-- comentario -->
     <div>
       <p class="rotulo">Comentario</p>
       <textarea id="coment" placeholder="Qué pasó en la llamada…"></textarea>
-      <div class="resumen" id="resumen"></div>
-      <div class="acciones">
-        <button class="btn btn-si" id="si">Sí, contestó</button>
-        <button class="btn btn-no" id="no">No contestó</button>
-        <label class="fuego"><input type="checkbox" id="imp"> Importante 🔥</label>
-      </div>
-      <div id="aviso"></div>
     </div>
 
-    <!-- derecha: calendario y hora -->
+    <!-- calendario y hora -->
     <div class="tarjeta">
       <div class="cal-cab">
         <button class="flecha" id="ant" title="Mes anterior">◀</button>
@@ -174,6 +169,17 @@ declare(strict_types=1);
         </div>
       </div>
       <div class="atajos" id="atajos"></div>
+    </div>
+
+    <!-- cierre -->
+    <div>
+      <div class="resumen" id="resumen"></div>
+      <div class="acciones">
+        <button class="btn btn-si" id="si">Sí, contestó</button>
+        <button class="btn btn-no" id="no">No contestó</button>
+        <label class="fuego"><input type="checkbox" id="imp"> Importante 🔥</label>
+      </div>
+      <div id="aviso"></div>
     </div>
   </div>
 </div>
