@@ -214,7 +214,68 @@ declare(strict_types=1);
          + (esHoy(sel.y, sel.m, sel.d) ? ' (hoy)' : '') + ', ' + horaTxt();
   }
 
+
+  /**
+   * LABORATORIO — solo en el deal de prueba 401173.
+   *
+   * La referencia lista bloques y propiedades que nunca usamos: `list`,
+   * `section` con type e imageSrc, los ocho colores de `text`, los cinco
+   * tamaños, `withTitle` con inline y titleWidth, y `dropdownMenu`. Antes de
+   * rediseñar a ojo conviene ver QUÉ pinta Bitrix con cada uno y medirlo en el
+   * DOM. Esto no se le muestra a nadie más.
+   */
+  var LAB = 401173;
+  function layoutLab() {
+    var b = {};
+    var COLORES = ['base_50','base_60','base_70','base_90','primary','warning','danger','success'];
+    var TAMANOS = ['xs','sm','md','lg','xl'];
+
+    COLORES.forEach(function (c, i) {
+      b['col'+i] = { type:'text', properties:{ value:'color '+c+' 08 15 22', color:c } };
+    });
+    TAMANOS.forEach(function (t, i) {
+      b['tam'+i] = { type:'text', properties:{ value:'size '+t+' 08 15 22', size:t } };
+    });
+    TAMANOS.forEach(function (t, i) {
+      b['lnk'+i] = { type:'link', properties:{ text:'link '+t+' 08 15 22', size:t, bold:(i%2===0),
+        action:{ type:'layoutEvent', value:'nada' } } };
+    });
+
+    ['default','primary','warning','danger','success','withBorder'].forEach(function (t, i) {
+      b['sec'+i] = { type:'section', properties:{ type:t, blocks:{
+        x:{ type:'text', properties:{ value:'section type='+t } } } } };
+    });
+
+    b.secImg = { type:'section', properties:{ type:'withBorder', imageSrc:'/cal.svg', imageSize:'md',
+      blocks:{ x:{ type:'text', properties:{ value:'section con imageSrc' } } } } };
+
+    b.lista = { type:'list', properties:{ blocks:{
+      a:{ type:'text', properties:{ value:'list · fila de texto' } },
+      c:{ type:'link', properties:{ text:'list · fila de enlace', action:{ type:'layoutEvent', value:'nada' } } },
+      e:{ type:'lineOfBlocks', properties:{ blocks:{
+            p:{ type:'text', properties:{ value:'08' } },
+            q:{ type:'link', properties:{ text:'15', action:{ type:'layoutEvent', value:'nada' } } } } } }
+    } } };
+
+    ['sm','md','lg'].forEach(function (w, i) {
+      b['wt'+i] = { type:'withTitle', properties:{ title:'ancho '+w, inline:true, titleWidth:w,
+        block:{ type:'lineOfBlocks', properties:{ blocks:{
+          a:{ type:'text', properties:{ value:'08' } },
+          c:{ type:'link', properties:{ text:'15', action:{ type:'layoutEvent', value:'nada' } } } } } } } };
+    });
+    b.wtno = { type:'withTitle', properties:{ title:'sin inline', inline:false,
+      block:{ type:'text', properties:{ value:'08 15 22' } } } };
+
+    b.drop = { type:'dropdownMenu', properties:{ selectedValue:'agosto',
+      values:{ julio:'julio', agosto:'agosto', septiembre:'septiembre' } } };
+
+    return { blocks:b,
+      primaryButton:{ title:'lab', state:'disabled' },
+      secondaryButton:{ title:'', state:'disabled' } };
+  }
+
   function layout() {
+    if (dealId === LAB) return layoutLab();
     // Mientras el vendedor no toque nada, día y hora se mantienen al día solos:
     // si deja la pestaña abierta media hora, no registra con la hora vieja.
     if (!horaManual) hhmm = ahoraHHMM();
