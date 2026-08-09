@@ -88,6 +88,26 @@ declare(strict_types=1);
   // arrancan pegadas a la izquierda y los rótulos hacen la columna. Lo único
   // que se centra es el calendario, sobre el ancho de la fila de horas, que
   // con el rótulo en negrita queda en 434,6 px.
+
+  // El encabezado va a 12 px y los números a 14, así que sus espacios NO miden
+  // lo mismo (U+2007 vale 7,559 contra 8,668). Con un relleno fijo el paso del
+  // encabezado se iba de 19,1 a 26,4 px mientras el de los números es 25,3
+  // clavado -- por eso las columnas se veían corridas. Acá cada rótulo se
+  // rellena por separado hasta esos 25,3 px, con los espacios de SU tamaño.
+  // Anchos medidos a 12 px: LU 15,369 · MA 18,574 · MI 13,699 · JU 15,305 ·
+  // VI 11,297 · SA 15,732 · DO 17,977. Peor error: 0,40 px.
+  var SEPCAB = {
+    LU: '\u2007\u2006',
+    MA: '\u2006\u2006\u2006\u200A',
+    MI: '\u2007\u2006\u2006',
+    JU: '\u2007\u2006\u200A',
+    VI: '\u2007\u2006\u2006\u2006\u200A',
+    SA: '\u2007\u2006',
+    DO: '\u2006\u2006\u2006\u200A\u200A'
+  };
+  // misma sangría que los números (127,37 px) pero con espacios de 12 px
+  var SANG_CAB = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A';
+
   var SANGRIA = {
     celda: '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A',
     raya:  '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u200A'
@@ -241,7 +261,7 @@ declare(strict_types=1);
     // días no se puede: ahí son `link`, y `link` ignora color (probado en el
     // DOM: el sábado salía con el mismo azul que el viernes).
     for (var i = 0; i < 7; i++) cab['h'+i] = { type:'text', properties:{
-      value: (i === 0 ? SANGRIA.celda : '') + DOW[i] + SEP,
+      value: (i === 0 ? SANG_CAB : '') + DOW[i] + SEPCAB[DOW[i]],
       size:'xs', color: (i >= 5 ? 'danger' : 'base_50') } };
     cal.dow = { type:'lineOfBlocks', properties:{ blocks: cab } };
     // raya bajo los días, como el selector nativo
