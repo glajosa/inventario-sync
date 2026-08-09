@@ -189,11 +189,19 @@ declare(strict_types=1);
     return (y<h.y) || (y===h.y && m<h.m) || (y===h.y && m===h.m && d<h.d);
   }
 
-  /** Los botones se arman en un solo lugar: nunca falta ninguno. */
+  /**
+   * Los botones se arman en un solo lugar: nunca falta ninguno.
+   *
+   * NO se pueden pintar. ButtonDto solo acepta `title` y `state`, y `state`
+   * solo entiende normal/disabled: probé state:'danger' y Bitrix descartó el
+   * diseño entero -- los dos botones salieron VACÍOS en el DOM. Lo único que
+   * sí se ve es un símbolo en el título, así que "No contestó" lleva una cruz
+   * roja para que se lea como lo negativo de un vistazo.
+   */
   function botones(activos) {
     return {
-      primaryButton:   { title:'Sí, contestó', state: activos ? 'normal' : 'disabled' },
-      secondaryButton: { title:'No contestó',  state: activos ? 'danger' : 'disabled' }
+      primaryButton:   { title:'S\u00ed, contest\u00f3',    state: activos ? 'normal' : 'disabled' },
+      secondaryButton: { title:'\u274c No contest\u00f3', state: activos ? 'normal' : 'disabled' }
     };
   }
 
