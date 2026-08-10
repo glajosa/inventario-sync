@@ -304,15 +304,20 @@ declare(strict_types=1);
     var y = vista.getFullYear(), m = vista.getMonth();
     var blocks = {};
 
-    // ── encabezado: ◀  agosto 2026  ▶
     var cal = {};
-    cal.nav = { type:'lineOfBlocks', properties:{ blocks:{
-      ant: { type:'link', properties:{ text: SANG_NAV + '\u25c0', action:{ type:'layoutEvent', value:'mes:-1' } } },
-      tit: { type:'text', properties:{
-        value: EC + RELLENO[MESES[m]][0] + MESES[m] + ' ' + y + RELLENO[MESES[m]][1] + EC,
-        bold:true } },
-      sig: { type:'link', properties:{ text:'▶', action:{ type:'layoutEvent', value:'mes:1' } } }
-    }}};
+
+    // ── encabezado: UN desplegable con mes y año.
+    // Reemplaza a "◀ agosto 2026 ▶": se salta a cualquier mes de un tirón, y
+    // de paso desaparecen todos los rellenos que hacían falta para centrar la
+    // fila de flechas. Se ofrecen 3 meses atrás y 14 adelante.
+    var opcMes = {};
+    var base = new Date(hoy().y, hoy().m, 1);
+    for (var k = -3; k <= 14; k++) {
+      var f = new Date(base.getFullYear(), base.getMonth() + k, 1);
+      opcMes[f.getFullYear() + '-' + pad(f.getMonth())] = MESES[f.getMonth()] + ' ' + f.getFullYear();
+    }
+    cal.nav = { type:'dropdownMenu', properties:{
+      selectedValue: y + '-' + pad(m), values: opcMes } };
 
     // ── fila de días de la semana (2 caracteres, igual que los números)
     var cab = {};
@@ -391,64 +396,22 @@ declare(strict_types=1);
 
     var hh = hhmm.slice(0,2), mi = hhmm.slice(3);
 
-    // ── hora, dentro de una caja (section withBorder: borde de 0,75 px y
-    // esquinas de 10 px, medido en el DOM). Dos filas que se complementan:
-    //   arriba  − 11 +  :  − 00 +   para afinar (el area clickeable ES el
-    //                                texto, por eso los signos van con un
-    //                                espacio de cifra a cada lado: de 9 px
-    //                                de ancho pasan a ~27)
-    //   abajo   08 … 20             para saltar directo a la hora
-    // El rango 08-20 sale de los datos: de 400 llamadas leídas en Bitrix, no
-    // hay ninguna fuera de esa franja salvo tres sueltas.
-    var ruedas = { type:'lineOfBlocks', properties:{ blocks:{
-      hmen: { type:'link', properties:{ text: SANG_RUE+EC+'\u2212'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h-1' } } },
-      hval: { type:'text', properties:{ value: EC + hh + EC, bold:true, size:'xl' } },
-      hmas: { type:'link', properties:{ text: EC+'+'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h+1' } } },
-      dos:  { type:'text', properties:{ value: EC + ':' + EC, bold:true, size:'xl' } },
-      mmen: { type:'link', properties:{ text: EC+'\u2212'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'m-5' } } },
-      mval: { type:'text', properties:{ value: EC + mi + EC, bold:true, size:'xl' } },
-      mmas: { type:'link', properties:{ text: EC+'+'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'m+5' } } }
-    }}};
-
-    // Fila de atajos: un click y queda. Va una para la hora y otra para el
-    // minuto -- no se puede "aplastar y escribir" sobre el número, porque
-    // dentro de un lineOfBlocks solo entran `text` y `link`: el `input` es de
-    // ancho completo y el `dropdownMenu` se va a su propio renglón (medido).
-    // El valor activo va en negrita y sin enlace, igual que el día elegido.
-    // `pre` va en la clave de cada bloque: las dos filas comparten valores
-    // (10, 15, 20) y con la misma clave quedaban ids duplicados en el mismo
-    // diseño -- verificado en el DOM: q10, q15 y q20 aparecían dos veces.
-    // withTitle con inline: la columna del rótulo la arma Bitrix (titleWidth
-    // 'sm' = 100 px medidos), sin rellenos a mano.
-    function conRotulo(titulo, bloque) {
-      return { type:'withTitle', properties:{
-        title: titulo, inline:true, titleWidth:'sm', block: bloque } };
+    // ── hora y minuto como desplegables.
+    // Las etiquetas se explican solas ("8 a.m.", ":30"), así no hace falta
+    // rótulo al costado -- y un dropdownMenu no entra en un withTitle ni en
+    // una fila, cada uno ocupa su renglón. Con esto se van la rueda de -/+ y
+    // las filas de Mañana, Tarde y Minuto: de cuatro renglones a dos.
+    var opcHora = {};
+    for (var h = 0; h < 24; h++) {
+      var h12 = h % 12; if (h12 === 0) h12 = 12;
+      opcHora[pad(h)] = h12 + ' ' + (h < 12 ? 'a.m.' : 'p.m.');
     }
-
-    function filaAtajos(pre, pares, actual, evento, sangria) {
-      // La sangría va en su PROPIO bloque, con peso normal. Si viviera dentro
-      // de la primera celda y esa celda fuera la elegida (el 8 de Mañana, el
-      // 12 de Tarde, el 0 de Minuto), se renderizaría en negrita: los espacios
-      // engordan y la fila entera salta. Es el mismo error que ya tuve en el
-      // calendario, con la misma solución.
-      var f = { sang: { type:'text', properties:{ value: sangria || '', size:'sm' } } };
-      for (var i = 0; i < pares.length; i++) {
-        var val = pares[i][0], txt = pares[i][1];
-        var activo = (pad(val) === actual);
-        var cel = celda(txt, activo);
-        f[pre+val] = activo
-          ? { type:'text', properties:{ value: cel, bold:true, size:'sm' } }
-          : { type:'link', properties:{ text: cel, size:'sm',
-                action:{ type:'layoutEvent', value: evento + pad(val) } } };
-      }
-      return { type:'lineOfBlocks', properties:{ blocks: f } };
-    }
+    var opcMin = {};
+    for (var q = 0; q < 60; q += 5) opcMin[pad(q)] = ':' + pad(q);
 
     blocks.caja = { type:'section', properties:{ type:'withBorder', blocks:{
-      ruedas:  conRotulo('Tiempo', ruedas),
-      manana:  conRotulo('Ma\u00f1ana', filaAtajos('h', MANANA, hh, 'hora:', SANG_MANANA)),
-      tarde:   conRotulo('Tarde',   filaAtajos('t', TARDE,  hh, 'hora:', SANG_TARDE)),
-      minutos: conRotulo('Minuto',  filaAtajos('m', MINUTOS, mi, 'min:', SANG_MIN))
+      hora:   { type:'dropdownMenu', properties:{ selectedValue: hh, values: opcHora } },
+      minuto: { type:'dropdownMenu', properties:{ selectedValue: mi, values: opcMin } }
     }}};
 
     // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
@@ -633,7 +596,15 @@ declare(strict_types=1);
     // cursor se queda quieto mientras teclea, y a partir del quinto dígito el
     // campo simplemente no cambia: quedan los 4 y nada más.
     BX24.placement.call('bindValueChangeCallback', null, function (ev) {
-      if (!ev || ev.id !== 'coment') return;
+      if (!ev || !ev.id) return;
+      if (ev.id === 'nav') {                       // mes + año
+        var p = String(ev.value).split('-');
+        vista = new Date(parseInt(p[0],10), parseInt(p[1],10), 1);
+        redibujar(); return;
+      }
+      if (ev.id === 'hora')   { hhmm = ev.value + ':' + hhmm.slice(3); horaManual = true; aviso=''; redibujar(); return; }
+      if (ev.id === 'minuto') { hhmm = hhmm.slice(0,2) + ':' + ev.value; horaManual = true; aviso=''; redibujar(); return; }
+      if (ev.id !== 'coment') return;
       var antes = !!comentario.replace(/\s/g,'');
       comentario = String(ev.value == null ? '' : ev.value);
       // solo se redibuja cuando aparece o desaparece el enlace de enviar: si
