@@ -105,9 +105,9 @@ declare(strict_types=1);
   var SANG_RAYA     = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006';
   var SANG_NAV      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007';
   var SANG_RUE      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u200A\u200A';
-  var SANG_MANANA = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A\u200A';
-  var SANG_TARDE  = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u200A\u200A';
-  var SANG_MIN = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006\u2006\u200A\u200A';
+  var SANG_MANANA = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006';
+  var SANG_TARDE  = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u200A\u200A';
+  var SANG_MIN = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2006\u2006';
   var SANG_PIE      = '\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u2007\u200A';
   var RAYA = '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500';
 
@@ -426,15 +426,19 @@ declare(strict_types=1);
     }
 
     function filaAtajos(pre, pares, actual, evento, sangria) {
-      var f = {}, primero = true;
+      // La sangría va en su PROPIO bloque, con peso normal. Si viviera dentro
+      // de la primera celda y esa celda fuera la elegida (el 8 de Mañana, el
+      // 12 de Tarde, el 0 de Minuto), se renderizaría en negrita: los espacios
+      // engordan y la fila entera salta. Es el mismo error que ya tuve en el
+      // calendario, con la misma solución.
+      var f = { sang: { type:'text', properties:{ value: sangria || '', size:'sm' } } };
       for (var i = 0; i < pares.length; i++) {
         var val = pares[i][0], txt = pares[i][1];
         var activo = (pad(val) === actual);
-        var sg = primero ? (sangria || '') : ''; primero = false;
         var cel = celda(txt, activo);
         f[pre+val] = activo
-          ? { type:'text', properties:{ value: sg + cel, bold:true, size:'sm' } }
-          : { type:'link', properties:{ text: sg + cel, size:'sm',
+          ? { type:'text', properties:{ value: cel, bold:true, size:'sm' } }
+          : { type:'link', properties:{ text: cel, size:'sm',
                 action:{ type:'layoutEvent', value: evento + pad(val) } } };
       }
       return { type:'lineOfBlocks', properties:{ blocks: f } };
