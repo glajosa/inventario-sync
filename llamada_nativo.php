@@ -283,6 +283,15 @@ declare(strict_types=1);
     return h12 + ':' + hhmm.slice(3) + ' ' + (h < 12 ? 'a.m.' : 'p.m.');
   }
 
+  /** "vie 14 de agosto" — o "hoy"/"mañana" cuando corresponde. */
+  function textoFecha(f) {
+    var h = hoy(), d = new Date(f.y, f.m, f.d);
+    var difd = Math.round((d - new Date(h.y, h.m, h.d)) / 86400000);
+    if (difd === 0) return 'hoy';
+    if (difd === 1) return 'ma\u00f1ana';
+    return DIAN[d.getDay()] + ' ' + f.d + ' de ' + MESES[f.m];
+  }
+
   /** La frase que se lee en los dos estados: siempre la misma, sin repetir rótulos. */
   function resumenTxt() {
     var f = new Date(sel.y, sel.m, sel.d);
@@ -383,54 +392,72 @@ declare(strict_types=1);
         action:{ type:'layoutEvent', value:'coment' } } };
     }
 
-    // El calendario va en su propia caja: antes quedaba pegado al borde
-    // izquierdo mientras la hora arrancaba 16 px mas adentro (el padding del
-    // section). Dos cajas iguales = todo a plomo, y de paso cada cosa queda
-    // agrupada en vez de ser una lista larga de numeros sueltos.
-    blocks.cal = { type:'section', properties:{ type:'withBorder', blocks: cal } };
+    // ── Lo que toca, según la escalera ──────────────────────────────────
+    // Sin calendario: el vendedor no elige fecha. Solo aparece si el cliente
+    // pactó una, que es el único caso en que la fecha significa algo.
+    var TOCA = {
+      'NUEVO':        'Primer contacto',
+      'ESCALERA-1':   '2\u00ba intento',
+      'ESCALERA-2':   '3\u00ba intento',
+      'MANTENIMIENTO':'Mantenimiento',
+      'CONTACTADO':   'Devolver la llamada'
+    };
+
+    if (!modoPacto) {
+      var linea = protocolo
+        ? (TOCA[protocolo.estado] || protocolo.estado) + '  \u00b7  ' + protocolo.estado
+        : 'Leyendo el historial\u2026';
+      blocks.estado = { type:'text', properties:{ value: linea, color:'base_70', size:'sm' } };
+
+      if (protocolo) {
+        var pNo = fechaMas(diasProxima(false)), pSi = fechaMas(diasProxima(true));
+        blocks.plan = { type:'section', properties:{ type:'primary', blocks:{
+          a: { type:'text', properties:{ bold:true,
+               value: 'No contest\u00f3  \u2192  vuelvo a llamar el ' + textoFecha(pNo) } },
+          b: { type:'text', properties:{ size:'sm', color:'base_70',
+               value: 'S\u00ed contest\u00f3  \u2192  ' + textoFecha(pSi) + ', salvo que pacten otra' } }
+        }}};
+        blocks.pacto = { type:'link', properties:{ size:'sm',
+          text:'El cliente pidi\u00f3 otra fecha \u203a',
+          action:{ type:'layoutEvent', value:'pacto' } } };
+      }
+
+      var b0 = botones(!!protocolo);
+      b0.blocks = blocks;
+      return b0;
+    }
+
+    // ── Modo pacto: acá sí el calendario, porque la fecha la puso el cliente
+    blocks.volver = { type:'link', properties:{ size:'sm',
+      text:'\u2039 Volver', action:{ type:'layoutEvent', value:'sinpacto' } } };
+
+    blocks.cal  = { type:'section', properties:{ type:'withBorder', blocks: cal } };
 
     var hh = hhmm.slice(0,2), mi = hhmm.slice(3);
 
-    // ── hora, dentro de una caja (section withBorder: borde de 0,75 px y
-    // esquinas de 10 px, medido en el DOM). Dos filas que se complementan:
-    //   arriba  − 11 +  :  − 00 +   para afinar (el area clickeable ES el
-    //                                texto, por eso los signos van con un
-    //                                espacio de cifra a cada lado: de 9 px
-    //                                de ancho pasan a ~27)
-    //   abajo   08 … 20             para saltar directo a la hora
-    // El rango 08-20 sale de los datos: de 400 llamadas leídas en Bitrix, no
-    // hay ninguna fuera de esa franja salvo tres sueltas.
     var ruedas = { type:'lineOfBlocks', properties:{ blocks:{
-      hmen: { type:'link', properties:{ text: SANG_RUE+EC+'\u2212'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h-1' } } },
+      hmen: { type:'link', properties:{ text: SANG_RUE+EC+'\u2212'+EC, size:'xl', bold:true,
+              action:{ type:'layoutEvent', value:'h-1' } } },
       hval: { type:'text', properties:{ value: EC + hh + EC, bold:true, size:'xl' } },
-      hmas: { type:'link', properties:{ text: EC+'+'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'h+1' } } },
+      hmas: { type:'link', properties:{ text: EC+'+'+EC, size:'xl', bold:true,
+              action:{ type:'layoutEvent', value:'h+1' } } },
       dos:  { type:'text', properties:{ value: EC + ':' + EC, bold:true, size:'xl' } },
-      mmen: { type:'link', properties:{ text: EC+'\u2212'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'m-5' } } },
+      mmen: { type:'link', properties:{ text: EC+'\u2212'+EC, size:'xl', bold:true,
+              action:{ type:'layoutEvent', value:'m-5' } } },
       mval: { type:'text', properties:{ value: EC + mi + EC, bold:true, size:'xl' } },
-      mmas: { type:'link', properties:{ text: EC+'+'+EC, size:'xl', bold:true, action:{ type:'layoutEvent', value:'m+5' } } }
+      mmas: { type:'link', properties:{ text: EC+'+'+EC, size:'xl', bold:true,
+              action:{ type:'layoutEvent', value:'m+5' } } }
     }}};
 
-    // Fila de atajos: un click y queda. Va una para la hora y otra para el
-    // minuto -- no se puede "aplastar y escribir" sobre el número, porque
-    // dentro de un lineOfBlocks solo entran `text` y `link`: el `input` es de
-    // ancho completo y el `dropdownMenu` se va a su propio renglón (medido).
-    // El valor activo va en negrita y sin enlace, igual que el día elegido.
-    // `pre` va en la clave de cada bloque: las dos filas comparten valores
-    // (10, 15, 20) y con la misma clave quedaban ids duplicados en el mismo
-    // diseño -- verificado en el DOM: q10, q15 y q20 aparecían dos veces.
-    // withTitle con inline: la columna del rótulo la arma Bitrix (titleWidth
-    // 'sm' = 100 px medidos), sin rellenos a mano.
+    // withTitle con inline: la columna del rótulo la arma Bitrix (100 px).
     function conRotulo(titulo, bloque) {
       return { type:'withTitle', properties:{
         title: titulo, inline:true, titleWidth:'sm', block: bloque } };
     }
 
+    // La sangría de centrado va en su PROPIO bloque: dentro de una celda que
+    // caiga en negrita, sus espacios engordan y la fila entera se corre.
     function filaAtajos(pre, pares, actual, evento, sangria) {
-      // La sangría va en su PROPIO bloque, con peso normal. Si viviera dentro
-      // de la primera celda y esa celda fuera la elegida (el 8 de Mañana, el
-      // 12 de Tarde, el 0 de Minuto), se renderizaría en negrita: los espacios
-      // engordan y la fila entera salta. Es el mismo error que ya tuve en el
-      // calendario, con la misma solución.
       var f = { sang: { type:'text', properties:{ value: sangria || '', size:'sm' } } };
       for (var i = 0; i < pares.length; i++) {
         var val = pares[i][0], txt = pares[i][1];
@@ -451,7 +478,6 @@ declare(strict_types=1);
       minutos: conRotulo('Minuto',  filaAtajos('m', MINUTOS, mi, 'min:', SANG_MIN))
     }}};
 
-    // ── resumen: la confirmación en palabras, y de paso el a.m./p.m.
     // Confirmación en tarjeta celeste (#E5F9FF medido): es el bloque de aviso
     // que usa Bitrix en sus propias pantallas, y separa lo que se va a guardar
     // de los controles de arriba.
@@ -487,9 +513,20 @@ declare(strict_types=1);
 
 
 
-  function inicioIso() {
-    return sel.y + '-' + pad(sel.m+1) + '-' + pad(sel.d) + 'T' + hhmm + ':00-05:00';
+  /**
+   * La fecha que se guarda.
+   *
+   * Sin pacto la pone la escalera; con pacto, lo que eligió el vendedor
+   * porque el cliente lo dijo. La hora de agenda es fija (10 h, de las más
+   * usadas): lo que califica el protocolo es el DÍA, no la hora.
+   */
+  function inicioIso(contesto) {
+    var f, hm;
+    if (modoPacto && sel) { f = sel; hm = hhmm; }
+    else { f = fechaMas(diasProxima(contesto)); hm = HORA_AGENDA; }
+    return f.y + '-' + pad(f.m+1) + '-' + pad(f.d) + 'T' + hm + ':00-05:00';
   }
+
   /** +1h a mano: Date() rompería el offset fijo -05:00. */
   function masUnaHora(iso) {
     var m = iso.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):00(-05:00)$/);
@@ -503,6 +540,58 @@ declare(strict_types=1);
   // Los dos primeros no dependen de nada que el vendedor elija, así que se
   // piden apenas se abre el panel, mientras mira el calendario. Al momento de
   // apretar ya están y solo queda el tercero: de 3 viajes a 1.
+  // ── El protocolo ────────────────────────────────────────────────────────
+  // La fecha de la próxima llamada NO la elige el vendedor: la dicta la
+  // escalera del documento "El Modelo de Proyección". El deadline que él
+  // ponía a mano se cumplía el 45% de las veces (21% antes, 34% después), o
+  // sea que el dato no servía y encima se lo calificaba por él.
+  //
+  //   ① entró el deal        → hoy
+  //   ② 1ª sin contestar     → +2 días
+  //   ③ 2ª sin contestar     → +7 días
+  //   ④ 3ª sin contestar     → +30 días, y de ahí cada 100
+  //   ⑤ contestó             → +3 días, salvo que el cliente pacte fecha
+  //
+  // El estado se calcula recorriendo las salientes en orden de CREATED, no
+  // sumando contadores: dos deals con los mismos números pueden estar en
+  // estados opuestos según el ORDEN. Contestada = SUBJECT contiene "1234".
+  var PLAZO = { 1:2, 2:7, 3:30 };        // sin contestar consecutivas -> días
+  var PLAZO_MANT = 100;
+  var PLAZO_CONTESTO = 3;
+  var HORA_AGENDA = '10:00';             // 10 h es de las más usadas (11,7%)
+
+  var protocolo = null;    // { estado, sinContestar }
+  var modoPacto = false;   // el cliente dijo una fecha -> ahí sí calendario
+
+  function calcularProtocolo(llamadas) {
+    // llamadas: [{fecha, contesto}] ya ordenadas por CREATED
+    var estado = 'NUEVO', nc = 0;
+    for (var i = 0; i < llamadas.length; i++) {
+      if (llamadas[i].contesto) { estado = 'CONTACTADO'; nc = 0; }
+      else { nc++; estado = nc === 1 ? 'ESCALERA-1' : (nc === 2 ? 'ESCALERA-2' : 'MANTENIMIENTO'); }
+    }
+    return { estado: estado, sinContestar: nc };
+  }
+
+  /** Días hasta la próxima llamada según lo que acaba de pasar. */
+  function diasProxima(contesto) {
+    if (contesto) return PLAZO_CONTESTO;
+    var k = (protocolo ? protocolo.sinContestar : 0) + 1;
+    return PLAZO[k] || PLAZO_MANT;
+  }
+
+  /** El estado en que queda el deal después de esta llamada. */
+  function estadoProximo(contesto) {
+    if (contesto) return 'CONTACTADO';
+    var k = (protocolo ? protocolo.sinContestar : 0) + 1;
+    return k === 1 ? 'ESCALERA-1' : (k === 2 ? 'ESCALERA-2' : 'MANTENIMIENTO');
+  }
+
+  function fechaMas(dias) {
+    var d = new Date(); d.setDate(d.getDate() + dias);
+    return { y:d.getFullYear(), m:d.getMonth(), d:d.getDate() };
+  }
+
   var ctx = null;          // { resp, contactId, nombre, tel }
   var ctxCargando = false;
   var ctxCola = [];        // lo que quedó esperando la precarga
@@ -516,6 +605,22 @@ declare(strict_types=1);
       var cola = ctxCola; ctxCola = [];
       for (var i = 0; i < cola.length; i++) cola[i]();
     }
+
+    // el historial de salientes viaja junto con el deal: sirve para saber en
+    // qué peldaño de la escalera va y, por lo tanto, qué día toca
+    BX24.callMethod('crm.activity.list', {
+      filter: { OWNER_TYPE_ID:2, OWNER_ID:dealId, TYPE_ID:2, DIRECTION:2 },
+      select: ['ID','CREATED','SUBJECT'], order: { CREATED:'ASC' }
+    }, function (rl) {
+      var l = [];
+      if (!rl.error()) {
+        var d = rl.data() || [];
+        for (var i = 0; i < d.length; i++)
+          l.push({ contesto: String(d[i].SUBJECT || '').indexOf('1234') >= 0 });
+      }
+      protocolo = calcularProtocolo(l);
+      redibujar();
+    });
 
     BX24.callMethod('crm.deal.get', { id: dealId }, function (rd) {
       if (rd.error()) { listo(null); return; }
@@ -553,9 +658,9 @@ declare(strict_types=1);
     BX24.placement.call('lock');
     // Si nunca tocó la hora, se sella la de ESTE momento, no la del render.
     if (!horaManual) hhmm = ahoraHHMM();
-    var inicio = inicioIso();
 
     function guardar() {
+      var inicio = inicioIso(contesto);
       if (!ctx) {
         BX24.placement.call('unlock');
         aviso = 'No se pudo leer la negociación'; redibujar(); return;
@@ -578,8 +683,14 @@ declare(strict_types=1);
         if (ra.error()) { aviso = 'No se pudo guardar: ' + ra.error(); redibujar(); return; }
         // Sin texto de "Guardado": la actividad recien creada YA sale ahi
         // abajo en la linea de tiempo con su fecha limite.
-        aviso = '';
-        horaManual = false; diaManual = false; importante = false;
+        aviso = 'Guardado \u2713  ' + (contesto ? 'contest\u00f3' : 'no contest\u00f3')
+              + ' \u00b7 vuelvo a llamar el ' + textoFecha(
+                  modoPacto && sel ? sel : fechaMas(diasProxima(contesto)));
+        if (protocolo) {
+          protocolo = { estado: estadoProximo(contesto),
+                        sinContestar: contesto ? 0 : protocolo.sinContestar + 1 };
+        }
+        modoPacto = false; horaManual = false; diaManual = false; importante = false;
         // si escribió algo, se publica junto con la llamada: un solo paso
         mandarComentario(function(){
           comentario = '';
