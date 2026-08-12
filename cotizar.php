@@ -977,4 +977,41 @@ $hoy  = new DateTimeImmutable('now');
   </p>
 
 </div></div>
+
+<script>
+// MANTENER EL LUGAR AL RECALCULAR. "Partir en 2 pagos" cambia CUÁNTOS pagos hay, así
+// que sí o sí lo recalcula el servidor; lo que no tiene por qué pasar es que la página
+// se vaya arriba y el asesor pierda de vista lo que estaba tocando.
+// Se guardan los DOS scrolls: el de la ventana y el del panel de ajustes, que scrollea
+// por dentro (.ajustes es sticky con overflow-y:auto).
+(function(){
+  var LLAVE = 'cot_scroll';
+  var panel = document.querySelector('.ajustes');
+  function guardar(){
+    try{ sessionStorage.setItem(LLAVE, JSON.stringify({
+      w: window.scrollY || 0,
+      p: panel ? panel.scrollTop : 0
+    })); }catch(e){}
+  }
+  // Cualquier envío del formulario (checkbox, select o el botón Recalcular).
+  document.addEventListener('submit', guardar, true);
+  var f = document.querySelector('form.ajustes');
+  if (f) f.addEventListener('submit', guardar);
+
+  try{
+    var s = JSON.parse(sessionStorage.getItem(LLAVE) || 'null');
+    if (s){
+      sessionStorage.removeItem(LLAVE);
+      // En dos tiempos: el layout todavía se está armando en el primer frame.
+      var poner = function(){
+        if (s.w) window.scrollTo(0, s.w);
+        if (panel && s.p) panel.scrollTop = s.p;
+      };
+      poner();
+      requestAnimationFrame(poner);
+      setTimeout(poner, 60);
+    }
+  }catch(e){}
+})();
+</script>
 </body></html>
