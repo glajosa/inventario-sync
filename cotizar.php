@@ -435,6 +435,27 @@ $hoy  = new DateTimeImmutable('now');
          padding:10px 13px;font-size:13px;margin-bottom:16px}
   /* Variante ROJA del aviso: se usa cuando lo que escribió el asesor NO cuadra y
      hay que decirle por qué. El .aviso ámbar informa; este corrige. */
+  /* Los dos interruptores, en una fila propia a lo ancho del grupo. */
+  .fila-chks{display:flex;gap:var(--space-lg);flex-wrap:wrap;align-items:center;
+             margin-bottom:var(--space-sm)}
+  /* Caja de montos personalizados: se separa visualmente porque es un modo aparte. */
+  .pers-caja{grid-column:1 / -1;background:var(--paper);border:1px solid var(--border-2);
+             border-radius:var(--radius-sm);padding:var(--space-sm) var(--space-sm) var(--space-xs);
+             margin-bottom:var(--space-sm)}
+  /* Rejilla propia: se acomoda sola a 4, 7 u 8 pagos sin romperse, y NO hereda las
+     2 columnas rígidas de .grupo-campos, que era lo que descuadraba las etiquetas. */
+  .extras-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));
+               gap:var(--space-xs) var(--space-sm)}
+  .extra-campo{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .extra-campo label{font-size:10px;letter-spacing:.04em;white-space:nowrap;
+             overflow:hidden;text-overflow:ellipsis}
+  .extra-campo input{width:100%;min-width:0;font-size:13px;padding:6px 8px;
+             font-variant-numeric:tabular-nums;text-align:right}
+  /* El último es de lectura: se ve que lo calcula el sistema, no que está deshabilitado. */
+  .extra-campo.es-ultimo input{background:var(--paper-2);color:var(--ink-2);font-weight:600;
+             border-style:dashed;cursor:default}
+  .extra-fecha{font-size:9.5px;color:var(--gris);text-align:right;
+             font-variant-numeric:tabular-nums}
   .aviso-rojo{background:#fdecea;border:1px solid #f5b5ae;color:#8f2418;border-radius:8px;
          padding:10px 13px;font-size:13px;margin:8px 0 4px}
   /* Texto de apoyo debajo de un campo, para explicar la regla sin abrir un tooltip. */
@@ -568,45 +589,57 @@ $hoy  = new DateTimeImmutable('now');
       if (!$mesesPlan) $mesesPlan = range(1, 12);
       ?>
       <div class="grupo-tit">Cuota extraordinaria (una por año)</div>
-      <div class="grupo-campos">
+      <!-- Los dos interruptores van en su PROPIA fila a lo ancho. Antes caían dentro de
+           la rejilla de 2 columnas junto a los meses y se empujaban entre sí. -->
+      <div class="fila-chks">
         <label class="chk-linea" title="Parte la extraordinaria de cada año en dos pagos en vez de uno solo.">
           <input type="checkbox" name="extrapartes" value="2" id="chk-partes" <?= $extraPartes === 2 ? 'checked' : '' ?>
-                 onchange="document.getElementById('wrap-mes2').style.display=this.checked?'':'none';
-                           document.getElementById('lbl-mes1').textContent=this.checked?'Mes 1 de 2':'Mes de pago'">
+                 onchange="this.form.submit()">
           Partir en 2 pagos
         </label>
         <?php if ($modelo['maxExtra'] > 1): ?>
-        <!-- PERSONALIZAR: en vez de repartir el total en partes iguales, el asesor
-             escribe cuánto va en cada extraordinaria. La ÚLTIMA no se escribe: sale
-             del residuo, así el plan siempre cuadra con el precio y no hay forma de
-             dejar un descuadre a mano. Si lo escrito se pasa del total, el aviso
-             explica en rojo por qué y cuánto sobra. -->
-        <label class="chk-linea" title="Escribir cuánto va en cada extraordinaria. La última se calcula sola con lo que falte.">
+        <!-- PERSONALIZAR: en vez de repartir el total en partes iguales, el asesor escribe
+             cuánto va en cada pago. El ÚLTIMO no se escribe: sale del residuo, así el plan
+             cuadra con el precio por construcción. Al partir en 2 los pagos se duplican
+             (4 años × 2 = 8) y hay un campo por cada uno. -->
+        <label class="chk-linea" title="Escribir cuánto va en cada pago extraordinario. El último se calcula solo con lo que falte.">
           <input type="checkbox" name="extrapers" value="1" id="chk-pers" <?= $extraPers ? 'checked' : '' ?>
-                 onchange="document.getElementById('wrap-pers').style.display=this.checked?'':'none'">
+                 onchange="this.form.submit()">
           Personalizar montos
         </label>
         <?php endif; ?>
-        <?php if ($modelo['maxExtra'] > 1 && (int)$plan['nExtra'] > 1): ?>
-        <div id="wrap-pers" style="<?= $extraPers ? '' : 'display:none' ?>">
-          <div class="ayuda-campo">Escribí las primeras. La <b>última sale sola</b> con lo que falte para cuadrar el total de <?= '$' . number_format($plan['extraTotal'], 2) ?>.</div>
-          <div class="grupo-campos">
-            <?php for ($k = 1; $k <= (int)$plan['nExtra'] - 1; $k++): ?>
-            <div><label>Extra <?= $k ?></label>
-              <input type="text" name="extramonto<?= $k ?>" inputmode="decimal"
-                     value="<?= $extraPers && isset($plan['extraMontos'][$k-1]) ? number_format($plan['extraMontos'][$k-1], 2, '.', '') : '' ?>"></div>
-            <?php endfor; ?>
-            <div><label>Extra <?= (int)$plan['nExtra'] ?> (sale sola)</label>
-              <input type="text" value="<?= isset($plan['extraMontos'][(int)$plan['nExtra']-1]) ? number_format($plan['extraMontos'][(int)$plan['nExtra']-1], 2, '.', '') : number_format($plan['valorExtra'], 2, '.', '') ?>" readonly
-                     title="La calcula el sistema con lo que falte. No se puede escribir: es lo que garantiza que el plan cuadre con el precio."></div>
+      </div>
+
+      <?php if ($extraPers && $modelo['maxExtra'] > 1 && (int)$plan['nExtra'] > 1): ?>
+      <div class="pers-caja">
+        <div class="ayuda-campo">Escribí los primeros. El <b>último sale solo</b> con lo que falte para cuadrar los <?= '$' . number_format($plan['extraTotal'], 2) ?> de extraordinarias.</div>
+        <div class="extras-grid">
+          <?php for ($k = 1; $k <= (int)$plan['nExtra']; $k++):
+                  $ultimo = ($k === (int)$plan['nExtra']);
+                  $val = isset($plan['extraMontos'][$k-1]) ? number_format($plan['extraMontos'][$k-1], 2, '.', '') : '';
+                  $fx  = $plan['filas'][$plan['posExtra'][$k-1] ?? -1]['fecha'] ?? ''; ?>
+          <div class="extra-campo<?= $ultimo ? ' es-ultimo' : '' ?>">
+            <label><?= $ultimo ? 'Último · sale solo' : 'Pago ' . $k ?></label>
+            <?php if ($ultimo): ?>
+            <input type="text" value="<?= $val ?>" readonly tabindex="-1"
+                   title="Lo calcula el sistema con lo que falte. No se escribe: es lo que garantiza que el plan cuadre con el precio.">
+            <?php else: ?>
+            <input type="text" name="extramonto<?= $k ?>" inputmode="decimal" placeholder="0.00"
+                   value="<?= $extraPers ? $val : '' ?>">
+            <?php endif; ?>
+            <?php if ($fx !== ''): ?><span class="extra-fecha"><?= $fx ?></span><?php endif; ?>
           </div>
-          <?php if (!empty($plan['extraExcedido'])): ?>
-          <div class="aviso-rojo">Lo que escribiste se pasa por <b><?= '$' . number_format($plan['extraExcedido'], 2) ?></b> del total en extraordinarias (<?= '$' . number_format($plan['extraTotal'], 2) ?>). Las últimas quedaron en cero porque ya no había de dónde. Bajá los montos o subí el % a financiar.</div>
-          <?php endif; ?>
+          <?php endfor; ?>
         </div>
+        <?php if (!empty($plan['extraExcedido'])): ?>
+        <div class="aviso-rojo">Lo que escribiste se pasa por <b><?= '$' . number_format($plan['extraExcedido'], 2) ?></b> de los <?= '$' . number_format($plan['extraTotal'], 2) ?> disponibles. Los últimos pagos quedaron en cero porque ya no había de dónde. Bajá los montos o subí el <b>Financia %</b>.</div>
         <?php endif; ?>
+      </div>
+      <?php endif; ?>
+
+      <div class="grupo-campos">
         <div><label id="lbl-mes1"><?= $extraPartes === 2 ? 'Mes 1 de 2' : 'Mes de pago' ?></label>
-          <select name="extrames1">
+          <select name="extrames1" onchange="this.form.submit()">
             <?php foreach ($mesesPlan as $m): ?>
             <option value="<?= $m ?>" <?= (int)$plan['extraMes1'] === $m ? 'selected' : '' ?>><?= $mesesSel[$m] ?></option>
             <?php endforeach; ?>

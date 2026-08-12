@@ -277,6 +277,15 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     if (!$iguales) {
         $porAnio = [];
         foreach ($fechas as $i => $f) $porAnio[(int)$f->format('Y')][] = $i;
+        // TOPE: se cuenta en AÑOS, no en pagos. Noral Apartments tiene 4 extraordinarias;
+        // si además se parten en 2, son 4 años × 2 = 8 pagos, y el tope sigue siendo 4.
+        // Aplicarlo sobre los pagos (como estaba) dejaba 4 pagos = 2 años al partir.
+        // Se sueltan los años MÁS TEMPRANOS: el primero casi siempre es parcial y cobrar
+        // una extraordinaria a las pocas semanas de firmar es lo más duro para el cliente.
+        $maxExtra = isset($opts['maxExtra']) ? (int)$opts['maxExtra'] : 0;
+        if ($maxExtra > 0 && count($porAnio) > $maxExtra) {
+            $porAnio = array_slice($porAnio, count($porAnio) - $maxExtra, null, true);
+        }
         $mejor = null;
         foreach ($porAnio as $y => $idxs) if ($mejor === null || count($idxs) > count($porAnio[$mejor])) $mejor = $y;
         $ref     = $porAnio[$mejor];
@@ -298,14 +307,6 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
             }
         }
         sort($posExtra);
-    }
-    // TOPE DE EXTRAORDINARIAS (Noral Apartments: 4). Se derivan de los años calendario
-    // que abarca el plan, así que un plazo largo puede dar 5. Si hay tope, se sueltan
-    // las MÁS TEMPRANAS: el primer año casi siempre es parcial y cobrar una
-    // extraordinaria a las pocas semanas de firmar es lo más duro para el cliente.
-    $maxExtra = isset($opts['maxExtra']) ? (int)$opts['maxExtra'] : 0;
-    if ($maxExtra > 0 && count($posExtra) > $maxExtra) {
-        $posExtra = array_slice($posExtra, count($posExtra) - $maxExtra);
     }
     $nExtra = count($posExtra);
 
@@ -502,6 +503,7 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         'extraPartes'   => $extraPartes,
         'valorExtra'    => $valorExtra,
         'extraMontos'   => $extraMontos,
+        'posExtra'      => $posExtra,
         'extraExcedido' => $extraExcedido,
         // Meses reales que quedaron para la(s) extraordinaria(s), para que la
         // pantalla los muestre y el asesor pueda editarlos.
