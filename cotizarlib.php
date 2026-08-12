@@ -37,8 +37,50 @@ function cot_entrega(int $categoryId): ?array {
     switch ($categoryId) {
         case 39: return ['y' => 2030, 'm' => 4];   // Noral Apartments — abril 2030
         case 33: return ['y' => 2031, 'm' => 4];   // Noral Plaza      — abril 2031
+        case 51: return ['y' => 2027, 'm' => 5];   // Galero Torre D   — financia hasta mayo 2027
     }
-    return null;
+    return null;   // Torre C, Casas y Suites: sin fecha fija (ver cot_modelo)
+}
+
+/** MODELO DE PAGO por proyecto. Galjosa no vende igual en todos: Noral está en
+ *  planos y financia a años (10/60/30 con extraordinarias); Galero Torre C ya está
+ *  casi entregada, así que no hay plazo que financiar y va 30/70 sin extraordinarias.
+ *
+ *  reservaPct  qué parte del precio es la ENTRADA (incluye la separación de $1.000)
+ *  contraPct   qué parte se paga CONTRA ENTREGA
+ *  extra       si el proyecto usa cuotas extraordinarias
+ *  maxCuotas   tope de cuotas mensuales que el asesor puede pedir
+ *  maxExtra    tope de extraordinarias (solo si extra = true)
+ *  entregaMin/entregaMax  rango en MESES que el asesor puede elegir como entrega,
+ *              para los proyectos sin fecha fija (Galero Casas: 6 a 36 meses).
+ *
+ *  Un proyecto nuevo = un case más. El resto del motor no cambia. */
+function cot_modelo(int $categoryId): array {
+    $base = ['reservaPct'=>0.10, 'contraPct'=>0.60, 'extra'=>true,
+             'maxCuotas'=>COT_PLAZO_REF, 'maxExtra'=>0, 'entregaMin'=>0, 'entregaMax'=>0,
+             'banco'=>false, 'inmediata'=>false];
+    switch ($categoryId) {
+        // Noral Apartments: hasta 46 cuotas y solo 4 extraordinarias.
+        case 39: return array_merge($base, ['maxCuotas'=>46, 'maxExtra'=>4]);
+
+        // Galero Torre C — ENTREGA INMEDIATA. No se financia nada: el 30% de entrada
+        // se paga DE UNA (los $1.000 de reserva son su primer abono) y el 70% restante
+        // lo cubre el cliente CON EL BANCO contra entrega. Por eso maxCuotas = 0: no
+        // hay cuotas mensuales que repartir, y la cotización muestra el bloque de
+        // crédito hipotecario en vez de una tabla de pagos.
+        case 47: return array_merge($base, ['reservaPct'=>0.30, 'contraPct'=>0.70,
+                                            'extra'=>false, 'maxCuotas'=>0,
+                                            'banco'=>true, 'inmediata'=>true]);
+
+        // Galero Casas — mismo 30/70 con banco, pero NO es entrega inmediata: la
+        // entrega la elige el asesor entre 6 y 36 meses, y el 30% se reparte en las
+        // cuotas que quepan hasta esa fecha.
+        case 55: return array_merge($base, ['reservaPct'=>0.30, 'contraPct'=>0.70,
+                                            'extra'=>false, 'maxCuotas'=>36,
+                                            'banco'=>true,
+                                            'entregaMin'=>6, 'entregaMax'=>36]);
+    }
+    return $base;   // Noral Plaza, Torre D, Suites y el resto: modelo histórico
 }
 
 const COT_PLAZO_REF = 60;     // plazo de referencia
@@ -121,6 +163,15 @@ function cot_descuento_parqueo(int $suites, bool $aplicar): float {
  *                       vez del automático. 'extraMes2' es el de la segunda cuando
  *                       extraPartes=2 (por defecto abril y diciembre).
  */
+/** Monto de la extraordinaria que cae en la cuota $i. Con montos personalizados usa
+ *  el de su posición; si no, el valor parejo. Separado en función para que la fila de
+ *  la tabla siga siendo una línea legible. */
+function cot_monto_extra(array $posExtra, array $extraMontos, float $parejo, int $i): float {
+    if (!$extraMontos) return $parejo;
+    $k = array_search($i, $posExtra, true);
+    return $k === false ? $parejo : (float)($extraMontos[$k] ?? $parejo);
+}
+
 function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInicio, ?array $entrega, float $presupuesto = 0.0, array $opts = []): array {
     $iguales = ($modalidad === 'iguales');
     $porc    = $iguales ? 0.30 : 0.20;          // lo que va en cuotas mensuales
@@ -158,7 +209,10 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     } else {
         $contraPct = isset($opts['contraPct']) ? max(0.0, min(1.0, (float)$opts['contraPct'])) : 0.60;
     }
-    $reserva10     = 0.10 * $v;
+    // La ENTRADA ya no está clavada en 10%: Galero Torre C y Casas van con 30%.
+    // Se sigue llamando reserva10 para no tocar las 6 referencias de abajo.
+    $reservaPct    = isset($opts['reservaPct']) ? max(0.0, min(1.0, (float)$opts['reservaPct'])) : 0.10;
+    $reserva10     = $reservaPct * $v;
     $separacion    = min((float)COT_SEPARACION, $reserva10);
     $contraentrega = $contraPct * $v;
     $cargaCuotas   = $porc * $v;
@@ -245,6 +299,14 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         }
         sort($posExtra);
     }
+    // TOPE DE EXTRAORDINARIAS (Noral Apartments: 4). Se derivan de los años calendario
+    // que abarca el plan, así que un plazo largo puede dar 5. Si hay tope, se sueltan
+    // las MÁS TEMPRANAS: el primer año casi siempre es parcial y cobrar una
+    // extraordinaria a las pocas semanas de firmar es lo más duro para el cliente.
+    $maxExtra = isset($opts['maxExtra']) ? (int)$opts['maxExtra'] : 0;
+    if ($maxExtra > 0 && count($posExtra) > $maxExtra) {
+        $posExtra = array_slice($posExtra, count($posExtra) - $maxExtra);
+    }
     $nExtra = count($posExtra);
 
     // ---------- REPARTO DEL DINERO ----------
@@ -253,7 +315,12 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     // variantes que se venden.
     $firmaFijada   = isset($opts['firma'])   && $opts['firma'] !== '';
     $extraAbsorbio = false;
-    if ($iguales) {
+    // Proyecto SIN extraordinarias (Galero Torre C / Casas): el 30% de entrada se
+    // reparte entre separación, firma y cuotas, y no hay dónde poner un extra.
+    $sinExtra = array_key_exists('extra', $opts) && !$opts['extra'];
+    if ($sinExtra) {
+        $extraTotal = 0.0;
+    } elseif ($iguales) {
         $extraTotal = 0.0;
     } elseif (isset($opts['extraCada']) && (float)$opts['extraCada'] > 0) {
         $extraTotal = (float)$opts['extraCada'] * $nExtra;
@@ -298,6 +365,16 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         // "No quiero pagar nada a la firma": la CUOTA absorbe la diferencia.
         $firmaBase = max(0.0, min((float)$opts['firma'], $porRepartir));
         $mensual   = max(0.0, ($porRepartir - $firmaBase) / $n);
+    } elseif ($sinExtra) {
+        // GALERO (30/70). Acá la ENTRADA no es un pago único: es lo que el cliente
+        // abona ANTES de la entrega. Si pide cuotas, se reparte entre ellas y a la
+        // firma va solo la separación; si pide 0 cuotas, cae toda a la firma —
+        // que es el caso de Torre C, ya casi entregada.
+        // El reparto clásico no sirve aquí: topaba la firma en reserva-separación,
+        // que con entrada del 30% es TODO, y dejaba las cuotas en cero.
+        $firmaBase = 0.0;
+        $mensual   = ($n > 0) ? max(0.0, $porRepartir / $n) : 0.0;
+        if ($n === 0) $firmaBase = $porRepartir;
     } else {
         // Sin variantes: reparto clásico. La firma se topa contra lo disponible por si
         // las extraordinarias se cargaron y ya no cabe el 10% completo.
@@ -334,7 +411,27 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
             $diferidoSobra = 0.0;
         }
     }
-    $valorExtra = $nExtra > 0 ? $extraTotal / $nExtra : 0.0;
+    // MONTOS POR EXTRAORDINARIA. Por defecto se reparte el total en partes iguales.
+    // Si el asesor los personaliza, escribe los primeros y la ÚLTIMA sale del RESIDUO:
+    // así el plan cuadra con el precio por construcción y no hay descuadre posible a
+    // mano. Un monto escrito de más se topa contra lo que queda (nunca negativo) y
+    // 'extraExcedido' avisa cuánto sobró para que la pantalla lo diga en rojo.
+    $valorExtra   = $nExtra > 0 ? $extraTotal / $nExtra : 0.0;
+    $extraMontos  = [];
+    $extraExcedido = 0.0;
+    if ($nExtra > 0 && !empty($opts['extraMontos']) && is_array($opts['extraMontos'])) {
+        $pedidos = array_values(array_map(fn($x) => max(0.0, (float)$x), $opts['extraMontos']));
+        $usado = 0.0;
+        for ($k = 0; $k < $nExtra - 1; $k++) {
+            $m = $pedidos[$k] ?? 0.0;
+            $m = min($m, max(0.0, $extraTotal - $usado));     // no puede pasarse del total
+            $extraMontos[$k] = $m; $usado += $m;
+        }
+        $extraMontos[$nExtra - 1] = max(0.0, $extraTotal - $usado);   // la última: residuo
+        $sumaPedida = 0.0;
+        for ($k = 0; $k < $nExtra - 1; $k++) $sumaPedida += ($pedidos[$k] ?? 0.0);
+        if ($sumaPedida > $extraTotal) $extraExcedido = $sumaPedida - $extraTotal;
+    }
 
     // --- tabla final ---
     $filas = [];
@@ -344,7 +441,7 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         $filas[] = [
             'n'        => $i + 1,
             'fecha'    => $f->format('d/m/Y'),
-            'monto'    => $mensual + ($esExtra ? $valorExtra : 0.0) + ($esDiferido ? $diferidoCuota : 0.0),
+            'monto'    => $mensual + ($esExtra ? cot_monto_extra($posExtra, $extraMontos, $valorExtra, $i) : 0.0) + ($esDiferido ? $diferidoCuota : 0.0),
             'extra'    => $esExtra,
             'diferido' => $esDiferido,
         ];
@@ -404,6 +501,8 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         'nExtra'        => $nExtra,
         'extraPartes'   => $extraPartes,
         'valorExtra'    => $valorExtra,
+        'extraMontos'   => $extraMontos,
+        'extraExcedido' => $extraExcedido,
         // Meses reales que quedaron para la(s) extraordinaria(s), para que la
         // pantalla los muestre y el asesor pueda editarlos.
         'extraMes1'     => $iguales ? 0 : (isset($mes1) ? $mes1 : 0),

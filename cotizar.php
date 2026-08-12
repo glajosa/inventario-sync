@@ -95,7 +95,8 @@ $suites = 0;   // suites de Noral Plaza en la compra: deciden si aplica el descu
 // Apartments. El de Galjosa va siempre; el de Noral es el que corresponda a la
 // categoría de la unidad — si es otro proyecto (Galero, Barranca...) no hay logo
 // propio todavía y solo sale el de Galjosa.
-$esPlaza = false; $esApartments = false;
+$esPlaza = false; $esApartments = false; $esGalero = false;
+$catPrincipal = 0;          // categoría que manda el modelo de pago (la primera con precio)
 foreach ($unidades as $u) {
     $p = (float)str_replace(['|USD', ','], '', (string)$u['pvp']);
     $pvp += $p;
@@ -107,6 +108,8 @@ foreach ($unidades as $u) {
     if (cot_es_suite((int)$u['cat'], (int)($u['tipo'] ?? 0))) $suites++;
     if ((int)$u['cat'] === 33) $esPlaza = true;
     if ((int)$u['cat'] === 39) $esApartments = true;
+    if (in_array((int)$u['cat'], [47, 51, 53, 55], true)) $esGalero = true;
+    if ($catPrincipal === 0) $catPrincipal = (int)$u['cat'];
     if (($u['stage'] ?? '') !== 'DISPONIBLE') $ocupadas[] = $u['codigo'] . ' (' . ($u['stage'] ?: 'sin etapa') . ')';
     $e = cot_entrega((int)$u['cat']);
     if ($e && (!$entrega || ($e['y'] * 12 + $e['m']) < ($entrega['y'] * 12 + $entrega['m']))) $entrega = $e;
@@ -179,7 +182,38 @@ $vExtraMes2  = (int)($_GET['extrames2'] ?? 0);
 //    según lo que pida el cliente, pero el PISO ES 35 — se topa dentro del motor
 //    (cot_plan), no aquí, así que ninguna URL armada a mano lo salta.
 $vFinanciar = $num('financiar');
-$opts = ['extraPartes' => $extraPartes];
+// MODELO POR PROYECTO. Galero no se vende como Noral: 30% de entrada y 70% con el
+// banco. El modelo sale de cot_modelo() para que la pantalla no repita reglas que ya
+// viven en el motor.
+$modelo = cot_modelo($catPrincipal);
+$opts = ['extraPartes' => $extraPartes,
+         'reservaPct'  => $modelo['reservaPct'],
+         'contraPct'   => $modelo['contraPct'],
+         'extra'       => $modelo['extra'],
+         'maxExtra'    => $modelo['maxExtra']];
+
+// MONTOS PERSONALIZADOS de las extraordinarias. Se escriben las primeras; la última
+// la calcula el motor con el residuo, así que acá NO se lee ni se manda.
+$extraPers   = (($_GET['extrapers'] ?? '') === '1');
+$extraMontos = [];
+if ($extraPers) {
+    for ($k = 1; $k <= 6; $k++) {
+        $vv = str_replace([',', '$', ' '], '', (string)($_GET['extramonto' . $k] ?? ''));
+        $extraMontos[] = is_numeric($vv) ? (float)$vv : 0.0;
+    }
+    $opts['extraMontos'] = $extraMontos;
+}
+
+// ENTREGA ELEGIBLE (Galero Casas: 6 a 36 meses). Los proyectos con fecha fija la
+// traen de cot_entrega(); en Casas la pone el asesor y de ahí sale el plazo máximo.
+$vEntregaMeses = (int)($_GET['entregameses'] ?? 0);
+if ($modelo['entregaMax'] > 0) {
+    if ($vEntregaMeses < $modelo['entregaMin'] || $vEntregaMeses > $modelo['entregaMax']) {
+        $vEntregaMeses = $modelo['entregaMax'];          // por defecto, el plazo más largo
+    }
+    $t = strtotime('+' . $vEntregaMeses . ' months');
+    $entrega = ['y' => (int)date('Y', $t), 'm' => (int)date('n', $t)];
+}
 if ($vFirmaMeses > 0) $opts['firmaMeses'] = min(12, $vFirmaMeses);
 if ($vFirmaCuota !== '') $opts['firmaCuota'] = (float)$vFirmaCuota;
 if ($vFirma !== '') $opts['firma'] = (float)$vFirma;
@@ -399,6 +433,12 @@ $hoy  = new DateTimeImmutable('now');
        padding:2px 6px;border-radius:4px;margin-left:7px;letter-spacing:.6px}
   .aviso{background:#fff4e5;border:1px solid #ffd9a0;color:#7a5200;border-radius:8px;
          padding:10px 13px;font-size:13px;margin-bottom:16px}
+  /* Variante ROJA del aviso: se usa cuando lo que escribió el asesor NO cuadra y
+     hay que decirle por qué. El .aviso ámbar informa; este corrige. */
+  .aviso-rojo{background:#fdecea;border:1px solid #f5b5ae;color:#8f2418;border-radius:8px;
+         padding:10px 13px;font-size:13px;margin:8px 0 4px}
+  /* Texto de apoyo debajo de un campo, para explicar la regla sin abrir un tooltip. */
+  .ayuda-campo{font-size:11.5px;color:var(--gris);margin:4px 0 8px;line-height:1.45}
   .pie{font-size:11.5px;color:var(--gris);margin-top:16px;line-height:1.5}
   @media print{
     body{background:#fff}
@@ -501,6 +541,32 @@ $hoy  = new DateTimeImmutable('now');
          se muestra/oculta con JS al toque — antes solo aparecía después de apretar
          Recalcular, que confundía porque parecía que no había pasado nada. -->
     <div class="grupo">
+      <?php if ($modelo['entregaMax'] > 0): ?>
+      <div class="grupo-tit">Entrega estimada</div>
+      <div class="grupo-campos">
+        <div><label title="Galero Casas se entrega entre <?= $modelo['entregaMin'] ?> y <?= $modelo['entregaMax'] ?> meses. De acá sale el plazo máximo de cuotas.">Entrega en</label>
+          <select name="entregameses" onchange="this.form.submit()">
+            <?php for ($mm = $modelo['entregaMin']; $mm <= $modelo['entregaMax']; $mm += 6): ?>
+            <option value="<?= $mm ?>" <?= $vEntregaMeses === $mm ? 'selected' : '' ?>><?= $mm ?> meses<?= $mm === $modelo['entregaMax'] ? ' (máximo)' : '' ?></option>
+            <?php endfor; ?>
+          </select></div>
+        <div class="ayuda-campo">Manda el plazo: no caben cuotas después de la entrega.</div>
+      </div>
+      <?php endif; ?>
+      <?php
+      // MESES QUE DE VERDAD EXISTEN en la tabla. Ofrecer los 12 era una trampa: si el
+      // asesor elegía un mes que el plan no toca, la extraordinaria caía en otro y la
+      // pantalla mostraba una fecha que nadie eligió. Ahora solo se ofrecen los meses
+      // con cuota, y si el plan es corto se ve de una que hay menos opciones.
+      $mesesPlan = [];
+      foreach (($plan['filas'] ?? []) as $f) {
+          $mm = (int)substr((string)$f['fecha'], 3, 2);   // dd/mm/yyyy
+          if ($mm >= 1 && $mm <= 12) $mesesPlan[$mm] = true;
+      }
+      $mesesPlan = array_keys($mesesPlan);
+      sort($mesesPlan);
+      if (!$mesesPlan) $mesesPlan = range(1, 12);
+      ?>
       <div class="grupo-tit">Cuota extraordinaria (una por año)</div>
       <div class="grupo-campos">
         <label class="chk-linea" title="Parte la extraordinaria de cada año en dos pagos en vez de uno solo.">
@@ -509,18 +575,48 @@ $hoy  = new DateTimeImmutable('now');
                            document.getElementById('lbl-mes1').textContent=this.checked?'Mes 1 de 2':'Mes de pago'">
           Partir en 2 pagos
         </label>
+        <?php if ($modelo['maxExtra'] > 1): ?>
+        <!-- PERSONALIZAR: en vez de repartir el total en partes iguales, el asesor
+             escribe cuánto va en cada extraordinaria. La ÚLTIMA no se escribe: sale
+             del residuo, así el plan siempre cuadra con el precio y no hay forma de
+             dejar un descuadre a mano. Si lo escrito se pasa del total, el aviso
+             explica en rojo por qué y cuánto sobra. -->
+        <label class="chk-linea" title="Escribir cuánto va en cada extraordinaria. La última se calcula sola con lo que falte.">
+          <input type="checkbox" name="extrapers" value="1" id="chk-pers" <?= $extraPers ? 'checked' : '' ?>
+                 onchange="document.getElementById('wrap-pers').style.display=this.checked?'':'none'">
+          Personalizar montos
+        </label>
+        <?php endif; ?>
+        <?php if ($modelo['maxExtra'] > 1 && (int)$plan['nExtra'] > 1): ?>
+        <div id="wrap-pers" style="<?= $extraPers ? '' : 'display:none' ?>">
+          <div class="ayuda-campo">Escribí las primeras. La <b>última sale sola</b> con lo que falte para cuadrar el total de <?= '$' . number_format($plan['extraTotal'], 2) ?>.</div>
+          <div class="grupo-campos">
+            <?php for ($k = 1; $k <= (int)$plan['nExtra'] - 1; $k++): ?>
+            <div><label>Extra <?= $k ?></label>
+              <input type="text" name="extramonto<?= $k ?>" inputmode="decimal"
+                     value="<?= $extraPers && isset($plan['extraMontos'][$k-1]) ? number_format($plan['extraMontos'][$k-1], 2, '.', '') : '' ?>"></div>
+            <?php endfor; ?>
+            <div><label>Extra <?= (int)$plan['nExtra'] ?> (sale sola)</label>
+              <input type="text" value="<?= isset($plan['extraMontos'][(int)$plan['nExtra']-1]) ? number_format($plan['extraMontos'][(int)$plan['nExtra']-1], 2, '.', '') : number_format($plan['valorExtra'], 2, '.', '') ?>" readonly
+                     title="La calcula el sistema con lo que falte. No se puede escribir: es lo que garantiza que el plan cuadre con el precio."></div>
+          </div>
+          <?php if (!empty($plan['extraExcedido'])): ?>
+          <div class="aviso-rojo">Lo que escribiste se pasa por <b><?= '$' . number_format($plan['extraExcedido'], 2) ?></b> del total en extraordinarias (<?= '$' . number_format($plan['extraTotal'], 2) ?>). Las últimas quedaron en cero porque ya no había de dónde. Bajá los montos o subí el % a financiar.</div>
+          <?php endif; ?>
+        </div>
+        <?php endif; ?>
         <div><label id="lbl-mes1"><?= $extraPartes === 2 ? 'Mes 1 de 2' : 'Mes de pago' ?></label>
           <select name="extrames1">
-            <?php for ($m = 1; $m <= 12; $m++): ?>
+            <?php foreach ($mesesPlan as $m): ?>
             <option value="<?= $m ?>" <?= (int)$plan['extraMes1'] === $m ? 'selected' : '' ?>><?= $mesesSel[$m] ?></option>
-            <?php endfor; ?>
+            <?php endforeach; ?>
           </select></div>
         <div id="wrap-mes2" style="<?= $extraPartes === 2 ? '' : 'display:none' ?>">
           <label>Mes 2 de 2</label>
           <select name="extrames2">
-            <?php for ($m = 1; $m <= 12; $m++): ?>
+            <?php foreach ($mesesPlan as $m): ?>
             <option value="<?= $m ?>" <?= (int)$plan['extraMes2'] === $m ? 'selected' : '' ?>><?= $mesesSel[$m] ?></option>
-            <?php endfor; ?>
+            <?php endforeach; ?>
           </select></div>
       </div>
     </div>
@@ -644,6 +740,9 @@ $hoy  = new DateTimeImmutable('now');
     <?php endif; ?>
     <?php if ($esApartments): ?>
     <img src="assets/logo_noral_apartments.png" alt="Noral Apartments" onerror="this.style.display='none'">
+    <?php endif; ?>
+    <?php if ($esGalero): ?>
+    <img src="assets/logo_galero.png" alt="Galero Urbanización" onerror="this.style.display='none'">
     <?php endif; ?>
   </div>
 
