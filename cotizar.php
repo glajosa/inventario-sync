@@ -235,7 +235,12 @@ if ($vFirmaCuota !== '') $opts['firmaCuota'] = (float)$vFirmaCuota;
 if ($vFirma !== '') $opts['firma'] = (float)$vFirma;
 if ($vExtraMes1 >= 1 && $vExtraMes1 <= 12) $opts['extraMes1'] = $vExtraMes1;
 if ($vExtraMes2 >= 1 && $vExtraMes2 <= 12) $opts['extraMes2'] = $vExtraMes2;
-if ($vFinanciar !== '') $opts['financiarPct'] = (float)$vFinanciar;
+// "Financia %" es una palanca de NORAL: mueve cuánto se paga antes de la entrega y
+// tiene piso de 35% dentro del motor. En Galero el reparto es fijo por contrato
+// (30/70 en Torre C y Casas), así que si se dejaba pasar, ese piso de 35 pisaba el
+// 30 y la cotización salía 35/65 con un préstamo menor al que de verdad necesita.
+$repartoFijo = !empty($modelo['banco']);
+if ($vFinanciar !== '' && !$repartoFijo) $opts['financiarPct'] = (float)$vFinanciar;
 // Parqueo: en una compra de 2+ suites se puede perdonar UNO solo. Apagado por
 // defecto — lo decide el asesor, no se descuenta a espaldas de nadie.
 $sinParqueo = (($_GET['sinparq'] ?? '') === '1');
@@ -569,7 +574,7 @@ $hoy  = new DateTimeImmutable('now');
              placeholder="<?= h(number_format($pvpInventario, 2, '.', '')) ?> (del inventario)"
              title="Precio de venta de la unidad. Si lo dejas vacío se usa el del inventario (<?= h(cot_money($pvpInventario)) ?>). Todo el plan se recalcula sobre este número."></div>
     <div><label>Cuotas<?= !empty($plan['plazoFijo']) ? ' · fijas' : '' ?></label>
-      <input type="number" name="n" min="1" max="<?= (int)($plan['plazoMax'] ?? 120) ?>" value="<?= (int)$plan['cuotas'] ?>"
+      <input type="number" name="n" min="<?= !empty($modelo['inmediata']) ? 0 : 1 ?>" max="<?= (int)($plan['plazoMax'] ?? 120) ?>" value="<?= (int)$plan['cuotas'] ?>"
              <?= !empty($plan['plazoFijo']) ? 'readonly' : '' ?>
              title="<?= !empty($plan['plazoFijo'])
                ? 'Proyecto en planos: el plazo lo fija la fecha de entrega y no se acorta. Si el cliente puede pagar más al mes, se reducen las extraordinarias.'
@@ -594,7 +599,8 @@ $hoy  = new DateTimeImmutable('now');
          (se topa DENTRO del motor, el min/max de aquí es solo guía visual). -->
     <div><label>Financia %</label>
       <input type="number" name="financiar" min="35" max="100" step="1"
-             value="<?= $vFinanciar !== '' ? h($vFinanciar) : round($plan['financiarPct']) ?>"
+             <?= $repartoFijo ? 'disabled title="En este proyecto el reparto es fijo por contrato y no se negocia acá."' : '' ?>
+             value="<?= $repartoFijo ? round($plan['financiarPct']) : ($vFinanciar !== '' ? h($vFinanciar) : round($plan['financiarPct'])) ?>"
              title="% del precio que se paga antes de la entrega (separación + firma + cuotas + extraordinarias). Lo común es 40. El piso de negocio es 35 — no baja de ahí aunque se escriba menos."></div>
     <div><label>A la firma</label>
       <input type="text" name="firma" inputmode="decimal" placeholder="auto" value="<?= h($vFirma) ?>"
