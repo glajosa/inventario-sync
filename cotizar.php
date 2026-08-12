@@ -534,7 +534,14 @@ $hoy  = new DateTimeImmutable('now');
         font-size:11.5px;color:var(--ink-2);padding:3px 0;flex-wrap:wrap;min-width:0}
   .pich-fila > span{min-width:0}
   .pich-fila b{color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
-  .pich-fila select{font-size:11.5px;padding:2px 6px;max-width:110px}
+  /* Las dos filas que llevan un <select> no caben en el patrón etiqueta↔valor: el
+     select queda espachurrado contra la etiqueta y recorta el texto ("Francés · cuota
+     fij…"). Se apilan: etiqueta arriba, control a lo ancho de la caja. */
+  .pich-fila--sel{flex-direction:column;align-items:stretch;gap:3px}
+  .pich-fila--sel > b{width:100%}
+  .pich-fila select{font-size:11.5px;padding:4px 8px;width:100%;max-width:none;
+        font-weight:600;color:var(--ink);background:var(--paper);
+        border:1px solid var(--border-2);border-radius:var(--radius-sm)}
   .pich-suma{border-top:1px solid var(--border-2);margin-top:4px;padding-top:6px;font-weight:600}
   .pich-comp{width:100%;font-size:10.5px;line-height:1.5;color:var(--ink-2);
         background:var(--paper-2);border:1px solid var(--border-2);border-radius:var(--radius-sm);
@@ -1072,16 +1079,16 @@ $hoy  = new DateTimeImmutable('now');
           <div class="pich-caja-tit">Lo que calculaste</div>
           <div class="pich-fila"><span>Precio de la vivienda</span><b><?= h(cot_money($sim['vivienda'])) ?></b></div>
           <div class="pich-fila"><span>Monto solicitado</span><b><?= h(cot_money($sim['prestamo'])) ?></b></div>
-          <div class="pich-fila"><span>Plazo de pago</span><b>
+          <div class="pich-fila pich-fila--sel"><span>Plazo de pago</span><b>
             <select name="pichanios" form="frm-ajustes" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
               <?php for ($y = (int)$pp['anios_min']; $y <= (int)$pp['anios_max']; $y++): ?>
               <option value="<?= $y ?>" <?= $pichAnios === $y ? 'selected' : '' ?>><?= $y ?> años</option>
               <?php endfor; ?>
             </select></b></div>
-          <div class="pich-fila"><span>Amortización</span><b>
+          <div class="pich-fila pich-fila--sel"><span>Amortización</span><b>
             <select name="pichsis" form="frm-ajustes" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
-              <option value="frances" <?= $pichSis === 'frances' ? 'selected' : '' ?>>Francés · cuota fija</option>
-              <option value="aleman"  <?= $pichSis === 'aleman'  ? 'selected' : '' ?>>Alemán · va bajando</option>
+              <option value="frances" <?= $pichSis === 'frances' ? 'selected' : '' ?>>Francés — cuota fija</option>
+              <option value="aleman"  <?= $pichSis === 'aleman'  ? 'selected' : '' ?>>Alemán — cuota decreciente</option>
             </select></b></div>
           <div class="pich-fila"><span>Producto elegido</span><b>Vivienda nueva o usada</b></div>
           <div class="pich-fila"><span>Tasa de interés</span><b><?= number_format($sim['tasa'], 2) ?>%</b></div>
