@@ -186,6 +186,15 @@ $vFinanciar = $num('financiar');
 // banco. El modelo sale de cot_modelo() para que la pantalla no repita reglas que ya
 // viven en el motor.
 $modelo = cot_modelo($catPrincipal);
+
+// CRÉDITO HIPOTECARIO. En Galero el 70% de contra entrega lo cubre el cliente con el
+// banco, así que la cotización tiene que poder responder "¿y mi cuota mensual?" sin
+// mandarlo a otra página. Se calca la simulación de Banco Pichincha (aliado), que el
+// cliente ya conoce. REFERENCIAL: el número final lo confirma el banco.
+require_once __DIR__ . '/pichinchalib.php';
+$pichAnios = (int)($_GET['pichanios'] ?? 0);
+$pp = pich_params();
+if ($pichAnios < (int)$pp['anios_min'] || $pichAnios > (int)$pp['anios_max']) $pichAnios = 20;
 $opts = ['extraPartes' => $extraPartes,
          'reservaPct'  => $modelo['reservaPct'],
          'contraPct'   => $modelo['contraPct'],
@@ -206,6 +215,13 @@ if ($extraPers) {
 
 // ENTREGA ELEGIBLE (Galero Casas: 6 a 36 meses). Los proyectos con fecha fija la
 // traen de cot_entrega(); en Casas la pone el asesor y de ahí sale el plazo máximo.
+// TOPE DE CUOTAS DEL PROYECTO. Torre C es entrega inmediata: maxCuotas = 0, o sea el
+// 30% se paga de una y no hay tabla de cuotas que armar. Sin esto la pantalla usaba el
+// plazo por defecto (60) y repartía la entrada en 5 años, que es justo lo contrario.
+$topeCuotas = (int)$modelo['maxCuotas'];
+if ($topeCuotas > 0 && $cuotas > $topeCuotas) $cuotas = $topeCuotas;
+if ($topeCuotas === 0 && !empty($modelo['inmediata'])) { $cuotas = 0; $opts['inmediata'] = true; }
+
 $vEntregaMeses = (int)($_GET['entregameses'] ?? 0);
 if ($modelo['entregaMax'] > 0) {
     if ($vEntregaMeses < $modelo['entregaMin'] || $vEntregaMeses > $modelo['entregaMax']) {
@@ -465,6 +481,55 @@ $hoy  = new DateTimeImmutable('now');
          padding:10px 13px;font-size:13px;margin:8px 0 4px}
   /* Texto de apoyo debajo de un campo, para explicar la regla sin abrir un tooltip. */
   .ayuda-campo{font-size:11.5px;color:var(--gris);margin:4px 0 8px;line-height:1.45}
+
+  /* ── SIMULACIÓN DE CRÉDITO (calcada de Banco Pichincha) ────────────────────
+     Se copia su estructura a propósito: el cliente ya vio esa pantalla y la
+     entiende, así no hay que explicar de nuevo qué es SOLCA o el desgravamen.
+     Los colores son los suyos: amarillo el capital, azul marino el desgravamen,
+     azul grisáceo el incendio. */
+  .pich{margin-top:var(--space-lg);border:1px solid var(--border-2);border-radius:var(--radius-md);
+        background:var(--paper);overflow:hidden;break-inside:avoid}
+  .pich-tit{display:flex;align-items:center;justify-content:space-between;gap:var(--space-sm);
+        padding:var(--space-sm) var(--space-md);background:var(--paper-2);
+        border-bottom:1px solid var(--border-2);font-size:13px;font-weight:600;color:var(--ink)}
+  .pich-ref{font-size:9.5px;letter-spacing:.1em;font-weight:700;color:#8a6412;
+        background:#fdf3d8;border:1px solid #eedca0;border-radius:4px;padding:2px 7px}
+  .pich-cuerpo{display:grid;grid-template-columns:minmax(0,250px) minmax(0,1fr);gap:var(--space-md);
+        padding:var(--space-md);align-items:start}
+  .pich-dona-col{display:flex;flex-direction:column;gap:var(--space-sm);align-items:center}
+  /* Dona con conic-gradient: sin librerías (la CSP no deja cargar nada externo) y se
+     imprime bien. --a y --b son los cortes acumulados en %. */
+  .pich-dona{width:172px;height:172px;border-radius:50%;flex:none;
+        background:conic-gradient(#F5D000 0 var(--a), #12305B var(--a) var(--b), #7C93B5 var(--b) 100%);
+        display:flex;align-items:center;justify-content:center;
+        -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .pich-dona-centro{width:112px;height:112px;border-radius:50%;background:var(--paper);
+        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center}
+  .pich-dona-centro span{font-size:10px;color:var(--ink-2);line-height:1.25}
+  .pich-dona-centro b{font-size:19px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .pich-leyenda{list-style:none;margin:0;padding:0;width:100%;display:flex;flex-direction:column;gap:5px}
+  .pich-leyenda li{display:flex;align-items:baseline;gap:7px;font-size:11.5px;color:var(--ink-2);
+        flex-wrap:wrap;min-width:0}
+  .pich-leyenda li b{margin-left:auto;color:var(--ink);font-variant-numeric:tabular-nums}
+  .pich-leyenda i{width:9px;height:9px;border-radius:50%;flex:none;
+        -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .pich-leyenda .c1{background:#F5D000} .pich-leyenda .c2{background:#12305B} .pich-leyenda .c3{background:#7C93B5}
+  .pich-cuota-final{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;
+        border-top:1px solid var(--border-2);padding-top:7px;font-size:12px;color:var(--ink-2)}
+  .pich-cuota-final b{font-size:14px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .pich-datos{display:flex;flex-direction:column;gap:var(--space-sm);min-width:0}
+  .pich-caja{background:var(--paper-2);border:1px solid var(--border-2);border-radius:var(--radius-sm);
+        padding:var(--space-sm)}
+  .pich-caja-tit{font-size:12px;font-weight:600;color:var(--ink);margin-bottom:5px}
+  .pich-fila{display:flex;align-items:baseline;justify-content:space-between;gap:4px 10px;
+        font-size:11.5px;color:var(--ink-2);padding:3px 0;flex-wrap:wrap;min-width:0}
+  .pich-fila > span{min-width:0}
+  .pich-fila b{color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .pich-fila select{font-size:11.5px;padding:2px 6px;max-width:110px}
+  .pich-suma{border-top:1px solid var(--border-2);margin-top:4px;padding-top:6px;font-weight:600}
+  .pich-nota{margin:0;padding:0 var(--space-md) var(--space-sm);font-size:10.5px;
+        color:var(--gris);line-height:1.5}
+  @media (max-width:960px){ .pich-cuerpo{grid-template-columns:minmax(0,1fr)} .pich-dona-col{max-width:320px;margin:0 auto} }
   .pie{font-size:11.5px;color:var(--gris);margin-top:16px;line-height:1.5}
   @media print{
     body{background:#fff}
@@ -488,7 +553,7 @@ $hoy  = new DateTimeImmutable('now');
 
 <div class="envoltura"><div class="tarjeta-opciones">
 
-  <form class="ajustes" method="get">
+  <form class="ajustes" id="frm-ajustes" method="get">
     <input type="hidden" name="u" value="<?= h(implode(',', $ids)) ?>">
     <input type="hidden" name="d" value="<?= (int)$dealId ?>">
     <input type="hidden" name="exp" value="<?= (int)$exp ?>">
@@ -945,6 +1010,77 @@ $hoy  = new DateTimeImmutable('now');
       <tr class="hito"><td></td><td>CONTRAENTREGA</td><td><?= h(cot_money($plan['contraentrega'])) ?></td></tr>
     </tbody>
   </table>
+
+  <?php if (!empty($modelo['banco']) && $plan['contraentrega'] > 0):
+          $sim = pich_simular($pvpFinal, $plan['contraentrega'], $pichAnios); ?>
+  <!-- SIMULACIÓN DE CRÉDITO — se calca la pantalla de Banco Pichincha a propósito:
+       el cliente ya la vio y la entiende, y copiar su estructura evita explicar de
+       nuevo qué es cada rubro. La dona es un conic-gradient (sin librerías: la CSP no
+       deja cargar nada externo y así también sale bien impresa). -->
+  <div class="pich">
+    <div class="pich-tit">
+      <span>Crédito hipotecario para la contraentrega</span>
+      <span class="pich-ref">REFERENCIAL</span>
+    </div>
+
+    <div class="pich-cuerpo">
+      <div class="pich-dona-col">
+        <div class="pich-dona" style="--a:<?= round($sim['pctCapInt'],2) ?>%; --b:<?= round($sim['pctCapInt']+$sim['pctDesgrav'],2) ?>%">
+          <div class="pich-dona-centro">
+            <span>Cuota mensual<br>aproximada</span>
+            <b><?= h(cot_money($sim['cuota'])) ?></b>
+          </div>
+        </div>
+        <ul class="pich-leyenda">
+          <li><i class="c1"></i>Capital + interés<b><?= h(cot_money($sim['capInt'])) ?></b></li>
+          <li><i class="c2"></i>Seguro de Desgravamen<b><?= h(cot_money($sim['desgrav'])) ?></b></li>
+          <li><i class="c3"></i>Seguro contra incendio y terremoto<b><?= h(cot_money($sim['incendio'])) ?></b></li>
+        </ul>
+        <div class="pich-cuota-final"><span>Cuota mensual aproximada</span><b><?= h(cot_money($sim['cuota'])) ?></b></div>
+      </div>
+
+      <div class="pich-datos">
+        <div class="pich-caja">
+          <div class="pich-caja-tit">Lo que calculaste</div>
+          <div class="pich-fila"><span>Precio de la vivienda</span><b><?= h(cot_money($sim['vivienda'])) ?></b></div>
+          <div class="pich-fila"><span>Monto solicitado</span><b><?= h(cot_money($sim['prestamo'])) ?></b></div>
+          <div class="pich-fila"><span>Plazo de pago</span><b>
+            <select name="pichanios" form="frm-ajustes" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
+              <?php for ($y = (int)$pp['anios_min']; $y <= (int)$pp['anios_max']; $y++): ?>
+              <option value="<?= $y ?>" <?= $pichAnios === $y ? 'selected' : '' ?>><?= $y ?> años</option>
+              <?php endfor; ?>
+            </select></b></div>
+          <div class="pich-fila"><span>Producto elegido</span><b>Vivienda nueva o usada</b></div>
+          <div class="pich-fila"><span>Tasa de interés</span><b><?= number_format($sim['tasa'], 2) ?>%</b></div>
+        </div>
+
+        <div class="pich-caja">
+          <div class="pich-caja-tit">Detalles de tu crédito</div>
+          <div class="pich-fila"><span>Monto para tu vivienda</span><b><?= h(cot_money($sim['prestamo'])) ?></b></div>
+          <div class="pich-fila"><span>Gastos de avalúo</span><b>+ <?= h(cot_money($sim['avaluo'])) ?></b></div>
+          <div class="pich-fila"><span>Gastos legales</span><b>+ <?= h(cot_money($sim['legales'])) ?></b></div>
+          <div class="pich-fila"><span>Contribución SOLCA</span><b>+ <?= h(cot_money($sim['solca'])) ?></b></div>
+          <div class="pich-fila pich-suma"><span>Monto total a financiar</span><b>= <?= h(cot_money($sim['total'])) ?></b></div>
+        </div>
+
+        <div class="pich-caja">
+          <div class="pich-caja-tit">Valores totales referenciales</div>
+          <div class="pich-fila"><span>Monto total a financiar</span><b><?= h(cot_money($sim['total'])) ?></b></div>
+          <div class="pich-fila"><span>Total intereses</span><b><?= h(cot_money($sim['totalInteres'])) ?></b></div>
+          <div class="pich-fila"><span>Total seguros</span><b><?= h(cot_money($sim['totalSeguros'])) ?></b></div>
+        </div>
+      </div>
+    </div>
+
+    <p class="pich-nota">
+      Estimación referencial calcada de la calculadora de Banco Pichincha. No es una
+      preaprobación ni un otorgamiento del crédito. Los gastos de avalúo y legales
+      salen de una tabla del banco y pueden variar; confirmalos con tu asesor de
+      crédito. Los seguros son obligatorios por normativa.
+      El cliente puede financiar con otro banco: acá se usa Pichincha por ser el aliado.
+    </p>
+  </div>
+  <?php endif; ?>
 
   <p class="pie">
     Plan: <?= h($pc($plan['reservaPct'])) ?> de reserva (separación <?= h(cot_money($plan['separacion'])) ?>

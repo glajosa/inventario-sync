@@ -246,10 +246,17 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
             $n = $plazoMax; $insuficiente = true; $cuotaMinima = $cargaCuotas / $plazoMax;
         }
     } else {
-        $n = $nCuotas > 0 ? $nCuotas : ($plazoMax !== null ? min(COT_PLAZO_REF, $plazoMax) : COT_PLAZO_REF);
+        // ENTREGA INMEDIATA (Galero Torre C): no hay nada que financiar, la entrada se
+        // paga de una a la firma. Sin este caso, pedir 0 cuotas caía al plazo de
+        // referencia (60) y repartía el 30% en cinco años, justo lo contrario.
+        if (!empty($opts['inmediata'])) $n = 0;
+        else $n = $nCuotas > 0 ? $nCuotas : ($plazoMax !== null ? min(COT_PLAZO_REF, $plazoMax) : COT_PLAZO_REF);
         if ($plazoMax !== null && $n > $plazoMax) { $n = $plazoMax; $recortado = true; }
     }
-    $n = max(1, $n);
+    // El piso de 1 cuota vale para todo el resto: un plan sin cuotas no existiría. La
+    // excepción es la ENTREGA INMEDIATA (Galero Torre C), donde 0 es lo correcto: no
+    // hay tabla de cuotas, la entrada va entera a la firma y el 70% al banco.
+    if (empty($opts['inmediata'])) $n = max(1, $n);
 
     // Cuota mensual objetivo cuando el plazo es fijo: manda sobre el reparto y las
     // extraordinarias absorben la diferencia (arriba y abajo: pagar MENOS al mes las
@@ -274,7 +281,9 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     $mesExtra1 = (int)($opts['extraMes1'] ?? 0);   // 0 = automático (el de siempre)
     $mesExtra2 = max(1, min(12, (int)($opts['extraMes2'] ?? 12)));
     $posExtra = [];
-    if (!$iguales) {
+    // Sin cuotas (entrega inmediata) no hay dónde poner una extraordinaria: el bloque
+    // de abajo asume al menos una fecha y explotaba con la tabla vacía.
+    if (!$iguales && $fechas) {
         $porAnio = [];
         foreach ($fechas as $i => $f) $porAnio[(int)$f->format('Y')][] = $i;
         // TOPE: se cuenta en AÑOS, no en pagos. Noral Apartments tiene 4 extraordinarias;
@@ -308,6 +317,9 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         }
         sort($posExtra);
     }
+    // Proyecto sin extraordinarias (Galero): no basta con poner el monto en 0 — hay que
+    // sacar las posiciones, si no la tabla marca una fila como EXTRA sin serlo.
+    if (array_key_exists('extra', $opts) && !$opts['extra']) $posExtra = [];
     $nExtra = count($posExtra);
 
     // ---------- REPARTO DEL DINERO ----------
