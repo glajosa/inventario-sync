@@ -444,6 +444,11 @@ $hoy  = new DateTimeImmutable('now');
              margin-bottom:var(--space-sm)}
   /* Rejilla propia: se acomoda sola a 4, 7 u 8 pagos sin romperse, y NO hereda las
      2 columnas rígidas de .grupo-campos, que era lo que descuadraba las etiquetas. */
+  /* Un bloque por AÑO: los pagos de 2027 van juntos, los de 2028 juntos, etc.
+     Antes la rejilla los ponía de a 3 y la primera fila mezclaba dos años. */
+  .anio-bloque{margin-bottom:var(--space-xs)}
+  .anio-tit{font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--ink-2);
+            margin-bottom:2px;font-variant-numeric:tabular-nums}
   .extras-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));
                gap:var(--space-xs) var(--space-sm)}
   .extra-campo{display:flex;flex-direction:column;gap:2px;min-width:0}
@@ -589,57 +594,96 @@ $hoy  = new DateTimeImmutable('now');
       if (!$mesesPlan) $mesesPlan = range(1, 12);
       ?>
       <div class="grupo-tit">Cuota extraordinaria (una por año)</div>
-      <!-- Los dos interruptores van en su PROPIA fila a lo ancho. Antes caían dentro de
-           la rejilla de 2 columnas junto a los meses y se empujaban entre sí. -->
+      <!-- Los dos interruptores van en su PROPIA fila a lo ancho. NO recargan la página:
+           mostrar/ocultar es cosa del navegador, y el residuo se recalcula en vivo. Antes
+           hacían submit y la página saltaba arriba en cada clic. -->
       <div class="fila-chks">
         <label class="chk-linea" title="Parte la extraordinaria de cada año en dos pagos en vez de uno solo.">
           <input type="checkbox" name="extrapartes" value="2" id="chk-partes" <?= $extraPartes === 2 ? 'checked' : '' ?>
-                 onchange="this.form.submit()">
+                 onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
           Partir en 2 pagos
         </label>
         <?php if ($modelo['maxExtra'] > 1): ?>
-        <!-- PERSONALIZAR: en vez de repartir el total en partes iguales, el asesor escribe
-             cuánto va en cada pago. El ÚLTIMO no se escribe: sale del residuo, así el plan
-             cuadra con el precio por construcción. Al partir en 2 los pagos se duplican
-             (4 años × 2 = 8) y hay un campo por cada uno. -->
-        <label class="chk-linea" title="Escribir cuánto va en cada pago extraordinario. El último se calcula solo con lo que falte.">
+        <label class="chk-linea" title="Escribir cuánto va en cada pago. El último se calcula solo con lo que falte.">
           <input type="checkbox" name="extrapers" value="1" id="chk-pers" <?= $extraPers ? 'checked' : '' ?>
-                 onchange="this.form.submit()">
+                 onchange="var c=document.getElementById('pers-caja'); if(c) c.style.display=this.checked?'':'none';">
           Personalizar montos
         </label>
         <?php endif; ?>
       </div>
 
-      <?php if ($extraPers && $modelo['maxExtra'] > 1 && (int)$plan['nExtra'] > 1): ?>
-      <div class="pers-caja">
-        <div class="ayuda-campo">Escribí los primeros. El <b>último sale solo</b> con lo que falte para cuadrar los <?= '$' . number_format($plan['extraTotal'], 2) ?> de extraordinarias.</div>
-        <div class="extras-grid">
-          <?php for ($k = 1; $k <= (int)$plan['nExtra']; $k++):
-                  $ultimo = ($k === (int)$plan['nExtra']);
-                  $val = isset($plan['extraMontos'][$k-1]) ? number_format($plan['extraMontos'][$k-1], 2, '.', '') : '';
-                  $fx  = $plan['filas'][$plan['posExtra'][$k-1] ?? -1]['fecha'] ?? ''; ?>
-          <div class="extra-campo<?= $ultimo ? ' es-ultimo' : '' ?>">
-            <label><?= $ultimo ? 'Último · sale solo' : 'Pago ' . $k ?></label>
-            <?php if ($ultimo): ?>
-            <input type="text" value="<?= $val ?>" readonly tabindex="-1"
-                   title="Lo calcula el sistema con lo que falte. No se escribe: es lo que garantiza que el plan cuadre con el precio.">
-            <?php else: ?>
-            <input type="text" name="extramonto<?= $k ?>" inputmode="decimal" placeholder="0.00"
-                   value="<?= $extraPers ? $val : '' ?>">
-            <?php endif; ?>
-            <?php if ($fx !== ''): ?><span class="extra-fecha"><?= $fx ?></span><?php endif; ?>
+      <?php if ($modelo['maxExtra'] > 1 && (int)$plan['nExtra'] > 1):
+              // AGRUPADO POR AÑO: los pagos de un mismo año van juntos. Antes la rejilla
+              // los ponía de a 3 y la primera fila mezclaba 2027, 2027 y 2028.
+              $porAnioUI = [];
+              foreach (($plan['posExtra'] ?? []) as $idx => $posFila) {
+                  $fx = $plan['filas'][$posFila]['fecha'] ?? '';
+                  $anio = $fx !== '' ? substr($fx, 6, 4) : '—';
+                  $porAnioUI[$anio][] = ['k' => $idx + 1, 'fecha' => $fx];
+              }
+              $ultimoK = (int)$plan['nExtra'];
+      ?>
+      <div class="pers-caja" id="pers-caja" style="<?= $extraPers ? '' : 'display:none' ?>">
+        <div class="ayuda-campo">Escribí los que quieras. El <b>último sale solo</b> con lo que falte para cuadrar los
+          <b id="extra-total-txt"><?= '$' . number_format($plan['extraTotal'], 2) ?></b> de extraordinarias.</div>
+        <?php foreach ($porAnioUI as $anio => $pagos): ?>
+        <div class="anio-bloque">
+          <div class="anio-tit"><?= $anio ?></div>
+          <div class="extras-grid">
+            <?php foreach ($pagos as $pg): $k = $pg['k']; $ultimo = ($k === $ultimoK);
+                    $val = isset($plan['extraMontos'][$k-1]) ? number_format($plan['extraMontos'][$k-1], 2, '.', '') : ''; ?>
+            <div class="extra-campo<?= $ultimo ? ' es-ultimo' : '' ?>">
+              <?php if ($ultimo): ?>
+              <label>Último · sale solo</label>
+              <input type="text" id="extra-ultimo" value="<?= $val !== '' ? $val : number_format($plan['valorExtra'], 2, '.', '') ?>" readonly tabindex="-1"
+                     title="Lo calcula el sistema con lo que falte. No se escribe: es lo que garantiza que el plan cuadre con el precio.">
+              <?php else: ?>
+              <label>Pago <?= $k ?></label>
+              <input type="text" class="extra-monto" name="extramonto<?= $k ?>" inputmode="decimal"
+                     placeholder="<?= number_format($plan['valorExtra'], 2, '.', '') ?>"
+                     value="<?= ($extraPers && $val !== '' && (float)$val > 0) ? $val : '' ?>">
+              <?php endif; ?>
+              <span class="extra-fecha"><?= $pg['fecha'] ?></span>
+            </div>
+            <?php endforeach; ?>
           </div>
-          <?php endfor; ?>
         </div>
-        <?php if (!empty($plan['extraExcedido'])): ?>
-        <div class="aviso-rojo">Lo que escribiste se pasa por <b><?= '$' . number_format($plan['extraExcedido'], 2) ?></b> de los <?= '$' . number_format($plan['extraTotal'], 2) ?> disponibles. Los últimos pagos quedaron en cero porque ya no había de dónde. Bajá los montos o subí el <b>Financia %</b>.</div>
-        <?php endif; ?>
+        <?php endforeach; ?>
+        <div class="aviso-rojo" id="extra-excedido" style="<?= !empty($plan['extraExcedido']) ? '' : 'display:none' ?>">
+          Lo que escribiste se pasa por <b id="extra-excedido-monto"><?= '$' . number_format($plan['extraExcedido'] ?? 0, 2) ?></b>
+          de los <?= '$' . number_format($plan['extraTotal'], 2) ?> disponibles. Bajá los montos o subí el <b>Financia %</b>.
+        </div>
       </div>
+      <script>
+      // RESIDUO EN VIVO: el último pago se recalcula mientras el asesor escribe, sin
+      // recargar. El servidor vuelve a hacer la misma cuenta al recalcular, así que esto
+      // es solo para que vea el efecto al instante — la verdad la sigue teniendo el PHP.
+      (function(){
+        var TOTAL = <?= json_encode(round((float)$plan['extraTotal'], 2)) ?>;
+        var campos = document.querySelectorAll('.extra-monto');
+        var ultimo = document.getElementById('extra-ultimo');
+        var aviso  = document.getElementById('extra-excedido');
+        var montoEx= document.getElementById('extra-excedido-monto');
+        function fmt(n){ return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+        function recalc(){
+          var suma = 0;
+          campos.forEach(function(c){ var v = parseFloat(String(c.value).replace(/[^0-9.]/g,'')); if(!isNaN(v)) suma += v; });
+          var resto = TOTAL - suma;
+          if (ultimo) ultimo.value = fmt(Math.max(0, resto));
+          if (aviso){
+            if (resto < -0.005){ aviso.style.display=''; if(montoEx) montoEx.textContent = '$' + fmt(-resto); }
+            else aviso.style.display='none';
+          }
+        }
+        campos.forEach(function(c){ c.addEventListener('input', recalc); });
+        recalc();
+      })();
+      </script>
       <?php endif; ?>
 
       <div class="grupo-campos">
         <div><label id="lbl-mes1"><?= $extraPartes === 2 ? 'Mes 1 de 2' : 'Mes de pago' ?></label>
-          <select name="extrames1" onchange="this.form.submit()">
+          <select name="extrames1" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
             <?php foreach ($mesesPlan as $m): ?>
             <option value="<?= $m ?>" <?= (int)$plan['extraMes1'] === $m ? 'selected' : '' ?>><?= $mesesSel[$m] ?></option>
             <?php endforeach; ?>
