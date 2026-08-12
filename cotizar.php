@@ -939,7 +939,11 @@ $hoy  = new DateTimeImmutable('now');
     <div class="aviso">Se ajustó a <b><?= (int)$plan['cuotas'] ?> cuotas</b>: es el máximo que cabe antes de la
       entrega (<?= h(cot_mes_es((int)$entrega['m']) . ' ' . $entrega['y']) ?>) empezando en <?= h($plan['inicioTxt']) ?>.</div>
   <?php endif; ?>
-  <?php if (!$entrega): ?>
+  <?php // El aviso solo tiene sentido si HAY cuotas mensuales que puedan pasarse de la
+        // entrega. En entrega inmediata (Torre C: 30% + 70% con el banco) no hay ninguna,
+        // así que salía un "verifica que las 0 cuotas terminen antes de la entrega" que
+        // no dice nada y solo confunde al asesor.
+        if (!$entrega && (int)$plan['cuotas'] > 0): ?>
     <div class="aviso">Este proyecto no tiene fecha de entrega configurada, así que el plazo no se limita solo.
       Verifica que las <?= (int)$plan['cuotas'] ?> cuotas terminen antes de la entrega real.</div>
   <?php endif; ?>
