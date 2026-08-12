@@ -195,6 +195,10 @@ require_once __DIR__ . '/pichinchalib.php';
 $pichAnios = (int)($_GET['pichanios'] ?? 0);
 $pp = pich_params();
 if ($pichAnios < (int)$pp['anios_min'] || $pichAnios > (int)$pp['anios_max']) $pichAnios = 20;
+// Francés (cuota fija) o Alemán (arranca más alto y baja). No es un detalle técnico:
+// el banco califica al cliente por la PRIMERA cuota, así que el sistema decide si
+// entra o no en el crédito.
+$pichSis = (($_GET['pichsis'] ?? '') === 'aleman') ? 'aleman' : 'frances';
 $opts = ['extraPartes' => $extraPartes,
          'reservaPct'  => $modelo['reservaPct'],
          'contraPct'   => $modelo['contraPct'],
@@ -532,6 +536,9 @@ $hoy  = new DateTimeImmutable('now');
   .pich-fila b{color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
   .pich-fila select{font-size:11.5px;padding:2px 6px;max-width:110px}
   .pich-suma{border-top:1px solid var(--border-2);margin-top:4px;padding-top:6px;font-weight:600}
+  .pich-comp{width:100%;font-size:10.5px;line-height:1.5;color:var(--ink-2);
+        background:var(--paper-2);border:1px solid var(--border-2);border-radius:var(--radius-sm);
+        padding:7px 9px}
   .pich-nota{margin:0;padding:0 var(--space-md) var(--space-sm);font-size:10.5px;
         color:var(--gris);line-height:1.5}
   @media (max-width:960px){ .pich-cuerpo{grid-template-columns:minmax(0,1fr)} .pich-dona-col{max-width:320px;margin:0 auto} }
@@ -1018,7 +1025,8 @@ $hoy  = new DateTimeImmutable('now');
   </table>
 
   <?php if (!empty($modelo['banco']) && $plan['contraentrega'] > 0):
-          $sim = pich_simular($pvpFinal, $plan['contraentrega'], $pichAnios); ?>
+          $sim = pich_simular($pvpFinal, $plan['contraentrega'], $pichAnios, null, $pichSis);
+          $simOtro = pich_simular($pvpFinal, $plan['contraentrega'], $pichAnios, null, $pichSis === 'aleman' ? 'frances' : 'aleman'); ?>
   <!-- SIMULACIÓN DE CRÉDITO — se calca la pantalla de Banco Pichincha a propósito:
        el cliente ya la vio y la entiende, y copiar su estructura evita explicar de
        nuevo qué es cada rubro. La dona es un conic-gradient (sin librerías: la CSP no
@@ -1033,7 +1041,7 @@ $hoy  = new DateTimeImmutable('now');
       <div class="pich-dona-col">
         <div class="pich-dona" style="--a:<?= round($sim['pctCapInt'],2) ?>%; --b:<?= round($sim['pctCapInt']+$sim['pctDesgrav'],2) ?>%">
           <div class="pich-dona-centro">
-            <span>Cuota mensual<br>aproximada</span>
+            <span><?= $pichSis === 'aleman' ? 'Primera cuota<br>aproximada' : 'Cuota mensual<br>aproximada' ?></span>
             <b><?= h(cot_money($sim['cuota'])) ?></b>
           </div>
         </div>
@@ -1042,7 +1050,21 @@ $hoy  = new DateTimeImmutable('now');
           <li><i class="c2"></i>Seguro de Desgravamen<b><?= h(cot_money($sim['desgrav'])) ?></b></li>
           <li><i class="c3"></i>Seguro contra incendio y terremoto<b><?= h(cot_money($sim['incendio'])) ?></b></li>
         </ul>
+        <?php if ($pichSis === 'aleman'): ?>
+        <div class="pich-cuota-final"><span>Última cuota (va bajando)</span><b><?= h(cot_money($sim['cuotaUltima'])) ?></b></div>
+        <?php else: ?>
         <div class="pich-cuota-final"><span>Cuota mensual aproximada</span><b><?= h(cot_money($sim['cuota'])) ?></b></div>
+        <?php endif; ?>
+        <!-- Comparativa: la decisión real no es "cuál es mejor" sino si el cliente
+             CALIFICA con la primera cuota, que es por donde lo mide el banco. -->
+        <div class="pich-comp">
+          <?php $dif = $simOtro['cuotaPrimera'] - $sim['cuotaPrimera']; $difInt = $simOtro['totalInteres'] - $sim['totalInteres']; ?>
+          Con <b><?= $pichSis === 'aleman' ? 'Francés' : 'Alemán' ?></b> la primera cuota sería
+          <b><?= h(cot_money($simOtro['cuotaPrimera'])) ?></b>
+          (<?= $dif >= 0 ? '+' : '−' ?><?= h(cot_money(abs($dif))) ?>)
+          y los intereses totales <b><?= h(cot_money($simOtro['totalInteres'])) ?></b>
+          (<?= $difInt >= 0 ? '+' : '−' ?><?= h(cot_money(abs($difInt))) ?>).
+        </div>
       </div>
 
       <div class="pich-datos">
@@ -1055,6 +1077,11 @@ $hoy  = new DateTimeImmutable('now');
               <?php for ($y = (int)$pp['anios_min']; $y <= (int)$pp['anios_max']; $y++): ?>
               <option value="<?= $y ?>" <?= $pichAnios === $y ? 'selected' : '' ?>><?= $y ?> años</option>
               <?php endfor; ?>
+            </select></b></div>
+          <div class="pich-fila"><span>Amortización</span><b>
+            <select name="pichsis" form="frm-ajustes" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
+              <option value="frances" <?= $pichSis === 'frances' ? 'selected' : '' ?>>Francés · cuota fija</option>
+              <option value="aleman"  <?= $pichSis === 'aleman'  ? 'selected' : '' ?>>Alemán · va bajando</option>
             </select></b></div>
           <div class="pich-fila"><span>Producto elegido</span><b>Vivienda nueva o usada</b></div>
           <div class="pich-fila"><span>Tasa de interés</span><b><?= number_format($sim['tasa'], 2) ?>%</b></div>

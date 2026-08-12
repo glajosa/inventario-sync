@@ -95,7 +95,7 @@ function pich_legales(float $prestamo): float {
  * @param int   $anios     plazo (3 a 20)
  * @param float|null $tasa tasa anual en %; null = la de vivienda nueva o usada
  */
-function pich_simular(float $vivienda, float $prestamo, int $anios, ?float $tasa = null): array {
+function pich_simular(float $vivienda, float $prestamo, int $anios, ?float $tasa = null, string $sistema = 'frances'): array {
     $p = pich_params();
     $vivienda = max(0.0, $vivienda);
     $prestamo = max(0.0, $prestamo);
@@ -109,8 +109,19 @@ function pich_simular(float $vivienda, float $prestamo, int $anios, ?float $tasa
 
     $n = $anios * 12;
     $i = ($tasa / 100.0) / 12.0;
-    // Francés sobre el TOTAL financiado. Sin interés (i=0) es simplemente capital/n.
-    $capInt = ($i > 0) ? $total * $i / (1 - pow(1 + $i, -$n)) : ($n > 0 ? $total / $n : 0.0);
+    $aleman = ($sistema === 'aleman');
+
+    // FRANCÉS: cuota fija. ALEMÁN: capital fijo e interés sobre el saldo, así que la
+    // cuota ARRANCA más alta y va bajando. La diferencia no es cosmética: el banco
+    // califica al cliente por la PRIMERA cuota, y en un crédito a 20 años el alemán
+    // empieza ~30% más caro pero ahorra ~22% de intereses. Por eso se muestran las dos.
+    $capFijo   = $n > 0 ? $total / $n : 0.0;
+    $capIntFr  = ($i > 0) ? $total * $i / (1 - pow(1 + $i, -$n)) : $capFijo;
+    $capIntPri = $aleman ? ($capFijo + $total * $i) : $capIntFr;                 // primera
+    $capIntUlt = $aleman ? ($capFijo + $capFijo * $i) : $capIntFr;               // última
+    // Intereses totales del alemán: serie aritmética sobre los saldos.
+    $intAleman = ($n > 0) ? $i * $total * ($n + 1) / 2 : 0.0;
+    $capInt    = $capIntPri;   // lo que se muestra arriba es SIEMPRE la primera cuota
 
     $desgrav  = $total * (float)$p['desgravamen_mes'];
     $incendio = $vivienda * (float)$p['incendio_mes'];
@@ -130,7 +141,12 @@ function pich_simular(float $vivienda, float $prestamo, int $anios, ?float $tasa
         'desgrav'   => $desgrav,
         'incendio'  => $incendio,
         'cuota'     => $cuota,
-        'totalInteres' => max(0.0, $capInt * $n - $total),
+        'sistema'      => $aleman ? 'aleman' : 'frances',
+        'capIntPrimera'=> $capIntPri,
+        'capIntUltima' => $capIntUlt,
+        'cuotaPrimera' => $capIntPri + $desgrav + $incendio,
+        'cuotaUltima'  => $capIntUlt + $desgrav + $incendio,
+        'totalInteres' => $aleman ? $intAleman : max(0.0, $capIntFr * $n - $total),
         'totalSeguros' => ($desgrav + $incendio) * $n,
         // Para la dona: qué porción de la cuota es cada cosa.
         'pctCapInt'   => $cuota > 0 ? $capInt   / $cuota * 100 : 0,
