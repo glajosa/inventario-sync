@@ -63,6 +63,12 @@ function cot_modelo(int $categoryId): array {
         // Noral Apartments: hasta 46 cuotas y solo 4 extraordinarias.
         case 39: return array_merge($base, ['maxCuotas'=>46, 'maxExtra'=>4]);
 
+        // Noral Plaza: mismas 4 extraordinarias que Apartments (y con eso se habilita
+        // partirlas en 2 y personalizar los montos), pero el PLAZO se queda como estaba
+        // — Plaza entrega en abril de 2031 y son sus meses los que mandan, no los 46 de
+        // Apartments.
+        case 33: return array_merge($base, ['maxExtra'=>4]);
+
         // Galero Torre C — ENTREGA INMEDIATA. No se financia nada: el 30% de entrada
         // se paga DE UNA (los $1.000 de reserva son su primer abono) y el 70% restante
         // lo cubre el cliente CON EL BANCO contra entrega. Por eso maxCuotas = 0: no
