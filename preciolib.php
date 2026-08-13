@@ -83,6 +83,36 @@ function pf_escribir(string $f, array $a): void {
  */
 function pf_mapa(): array { return pf_leer('mapa48.json'); }
 
+/** Unidades de una entrada del mapa. Acepta el formato viejo (lista pelada). */
+function pf_unis($e): array {
+    if (is_array($e) && array_key_exists('u', $e)) return array_map('intval', (array)$e['u']);
+    return is_array($e) ? array_map('intval', $e) : [];
+}
+/** VALOR DEL ACTIVO del deal de Clientes, si el mapa lo trae. */
+function pf_v44($e): ?float {
+    return (is_array($e) && isset($e['v44']) && $e['v44'] !== null) ? (float)$e['v44'] : null;
+}
+
+/**
+ * Tolerancia en dólares para comparar precios.
+ * Cobranzas redondea: donde Clientes dice 129.098,72 el deal de Cobranzas dice
+ * 129.098. Esas diferencias de centavos no son un descuento y no deben frenar nada.
+ * Regla del negocio: cuando Clientes y Cobranzas difieren dentro de la tolerancia,
+ * MANDA EL DE CLIENTES, que es el que trae el número exacto.
+ */
+function pf_tol(): float { return max(0.0, (float)(getenv('PF_TOLERANCIA') ?: 1.00)); }
+
+/** Elige el valor a escribir entre el de Cobranzas y el de Clientes. */
+function pf_valor(float $vf, ?float $v44): array {
+    $t = pf_tol();
+    if ($v44 !== null && abs($v44 - $vf) > 0.0049 && abs($v44 - $vf) <= $t) {
+        return [$v44, sprintf('Clientes %s en vez de Cobranzas %s (difieren %s)',
+                number_format($v44,2,'.',''), number_format($vf,2,'.',''),
+                number_format(abs($v44-$vf),2,'.',''))];
+    }
+    return [$vf, ''];
+}
+
 /** Última cosa que se escribió por deal, para no repetir escrituras idénticas. */
 function pf_visto(): array  { return pf_leer('pf_visto.json'); }
 function pf_marcar(string $dealId, ?float $v): void {
@@ -112,26 +142,27 @@ function pf_rafaga(): int {
  * (copia recién creada). Se apoya en el deal de CLIENTES(44) del mismo contacto
  * que tenga el campo Inventario puesto: la unidad la eligió el vendedor allá, aquí
  * solo se lee. 1 llamada. Si hay más de un candidato NO se adivina.
+ * Devuelve [unidades, VALOR DEL ACTIVO de Clientes].
  */
 function pf_resolver_al_vuelo(array $deal): array {
     $contacto = (int)($deal['CONTACT_ID'] ?? 0);
-    if ($contacto <= 0) return [];
+    if ($contacto <= 0) return [[], null];
     $r = bx('crm.deal.list', [
         'filter' => ['CONTACT_ID' => $contacto, 'CATEGORY_ID' => CLIENTES_CAT, '!' . CAMPO_NUEVO => ''],
-        'select' => ['ID', D_ACTIVO, CAMPO_NUEVO],
+        'select' => ['ID', D_ACTIVO, D_VALOR, CAMPO_NUEVO],
     ]);
-    if (!$r['ok']) return [];
+    if (!$r['ok']) return [[], null];
     $cands = $r['result'] ?? [];
-    if (!$cands) return [];
+    if (!$cands) return [[], null];
     $cod = pf_cod((string)($deal[D_ACTIVO] ?? ''));
     if ($cod !== '') {
         $ex = [];
         foreach ($cands as $c) if (pf_cod((string)($c[D_ACTIVO] ?? '')) === $cod) $ex[] = $c;
-        if (count($ex) === 1) return ids_de((string)($ex[0][CAMPO_NUEVO] ?? ''));
-        if (count($ex) > 1)  return [];        // ambiguo: mejor no escribir nada
+        if (count($ex) === 1) return [ids_de((string)($ex[0][CAMPO_NUEVO] ?? '')), pf_money($ex[0][D_VALOR] ?? null)];
+        if (count($ex) > 1)  return [[], null];   // ambiguo: mejor no escribir nada
     }
-    if (count($cands) === 1) return ids_de((string)($cands[0][CAMPO_NUEVO] ?? ''));
-    return [];
+    if (count($cands) === 1) return [ids_de((string)($cands[0][CAMPO_NUEVO] ?? '')), pf_money($cands[0][D_VALOR] ?? null)];
+    return [[], null];
 }
 
 /**
@@ -222,7 +253,8 @@ function pf_agrupa(string $a, string $b): bool {
  * iguales. Los centavos sobrantes van a la última, así que la suma de las partes
  * da EXACTAMENTE el precio final y el inventario no se desvía por redondeo.
  */
-function pf_repartir(string $dealId, array $unis, float $vf): string {
+function pf_repartir(string $dealId, array $unis, float $vf, ?float $v44 = null): string {
+    [$vf, $porque] = pf_valor($vf, $v44);
     sort($unis);
     $g = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY,
                               'filter' => ['@id' => $unis],
@@ -241,7 +273,7 @@ function pf_repartir(string $dealId, array $unis, float $vf): string {
     // está cargado entero en una sola unidad y la otra queda en blanco a propósito.
     $suma = 0.0;
     foreach ($items as $it) $suma += (float)(pf_money($it[U_PVP] ?? null) ?? 0.0);
-    if ($vf < $suma - 0.5) {
+    if ($vf < $suma - pf_tol()) {
         pf_log("REPARTO deal=$dealId final=$vf < suma de PVP=$suma — no se escribe");
         return 'pf-menor-que-pvp';
     }
@@ -256,7 +288,7 @@ function pf_repartir(string $dealId, array $unis, float $vf): string {
         $it  = $items[$uid];
         $pvp = pf_money($it[U_PVP] ?? null);
         $ya  = pf_money($it[PF_U_PRECIO] ?? null);
-        if ($pvp !== null && $val < $pvp - 0.5) $bajos[] = ($it['title'] ?? $uid) . " ($val < PVP $pvp)";
+        if ($pvp !== null && $val < $pvp - pf_tol()) $bajos[] = ($it['title'] ?? $uid) . " ($val < PVP $pvp)";
         if ($ya !== null && abs($ya - $val) < 0.005) continue;
         @touch(pf_dir() . '/self_u_' . $uid);
         $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid,
@@ -265,7 +297,8 @@ function pf_repartir(string $dealId, array $unis, float $vf): string {
         else pf_log("ERR update u=$uid: {$u['error']}");
     }
     pf_marcar($dealId, $vf);
-    $msg = "REPARTO deal=$dealId final=$vf entre $n unidades -> $parte c/u (última $resto), escritas $esc";
+    $msg = "REPARTO deal=$dealId final=$vf entre $n unidades -> $parte c/u (última $resto), escritas $esc"
+         . ($porque !== '' ? " · se tomó $porque" : '');
     if ($bajos) $msg .= ' · OJO por debajo de su PVP: ' . implode(', ', $bajos);
     pf_log($msg);
     return 'pf-reparto-ok';
@@ -303,10 +336,12 @@ function precio_final_evento(string $dealId, ?array $deal = null): string {
 
     // Deal del 48 que aún no está en el mapa (copia recién creada por la
     // automatización de PROMESA FIRMADA): se resuelve y se memoriza.
-    $unis = $mapa[$dealId] ?? null;
+    $entrada = $mapa[$dealId] ?? null;
+    $unis = $entrada === null ? null : pf_unis($entrada);
+    $v44  = pf_v44($entrada);
     if ($unis === null || $unis === []) {
-        $unis = pf_resolver_al_vuelo($deal);
-        $mapa[$dealId] = $unis;
+        [$unis, $v44] = pf_resolver_al_vuelo($deal);
+        $mapa[$dealId] = ['u' => $unis, 'v44' => $v44];
         pf_escribir('mapa48.json', $mapa);
         if ($unis) pf_log("ALTA deal=$dealId -> unidad(es) [" . implode(',', $unis) . ']');
     }
@@ -325,7 +360,7 @@ function precio_final_evento(string $dealId, ?array $deal = null): string {
     // no unidad por unidad: repartir en partes iguales puede dejar a la unidad más
     // cara por debajo de su propio PVP y esa comparación bloquearía el reparto sin
     // que haya nada malo. Esos casos se anotan en el log para que se puedan mirar.
-    if (count($unis) > 1) return pf_repartir($dealId, $unis, $vf);
+    if (count($unis) > 1) return pf_repartir($dealId, $unis, $vf, $v44);
 
     $uid = (int)$unis[0];
     $g = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $uid,
@@ -337,21 +372,27 @@ function precio_final_evento(string $dealId, ?array $deal = null): string {
     $cod = (string)($it['title'] ?? $uid);
 
     if ($pvp === null) { pf_log("SIN-PVP u=$uid $cod final=$vf — no se escribe"); return 'pf-sin-pvp'; }
-    if ($vf < $pvp - 0.5) {
-        pf_log("MENOR u=$uid $cod final=$vf < pvp=$pvp — no se escribe");
+
+    // Centavos de diferencia entre Clientes y Cobranzas: manda Clientes.
+    [$valor, $porque] = pf_valor($vf, $v44);
+    // Y la regla "mayor o igual al PVP" admite la misma tolerancia, porque si no,
+    // un redondeo de 72 centavos bloquearía una venta que está perfectamente bien.
+    if ($valor < $pvp - pf_tol()) {
+        pf_log("MENOR u=$uid $cod · pvp=$pvp · clientes=" . ($v44 ?? '-') . " · cobranzas=$vf — no se escribe");
         return 'pf-menor-que-pvp';
     }
-    if ($ya !== null && abs($ya - $vf) < 0.005) { pf_marcar($dealId, $vf); return 'pf-ya-estaba'; }
+    if ($ya !== null && abs($ya - $valor) < 0.005) { pf_marcar($dealId, $vf); return 'pf-ya-estaba'; }
 
     // El guardián de unidadlib revierte arrastres de STAGE hechos a mano. Aquí no
     // se toca el stage, pero se deja la marca igual: es la señal de "esta escritura
     // es del sistema" y cuesta un touch.
     @touch(pf_dir() . '/self_u_' . $uid);
     $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid,
-                                'fields' => [PF_U_PRECIO => pf_fmt($vf)]]);            // 1 llamada
+                                'fields' => [PF_U_PRECIO => pf_fmt($valor)]]);        // 1 llamada
     if (!$u['ok']) { pf_log("ERR update u=$uid: {$u['error']}"); return 'pf-err-update'; }
 
     pf_marcar($dealId, $vf);
-    pf_log("OK deal=$dealId u=$uid $cod " . ($ya === null ? 'vacío' : (string)$ya) . " -> $vf");
+    pf_log("OK deal=$dealId u=$uid $cod " . ($ya === null ? 'vacío' : (string)$ya) . " -> $valor"
+           . ($porque !== '' ? " · se tomó $porque" : ''));
     return 'pf-ok';
 }

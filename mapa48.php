@@ -115,7 +115,7 @@ function m48_elegir(array $cands, ?float $valor): ?array {
 // Cada regla exige que quede UN solo candidato. Ante la duda no se empareja: el
 // error caro no es "queda sin precio", es "se le escribe el precio de otra unidad".
 $mapa = []; $via = []; $sin = 0;
-foreach ($c48 as $d) $mapa[(string)$d['ID']] = [];   // el mapa hace de lista blanca
+foreach ($c48 as $d) $mapa[(string)$d['ID']] = ['u' => [], 'v44' => null];  // hace de lista blanca
 
 foreach ($c44 as $d) {
     $con = (string)($d['CONTACT_ID'] ?? '');
@@ -168,14 +168,19 @@ foreach ($c44 as $d) {
     }
     if (!$hit) { $sin++; continue; }
     $id = (string)$hit['ID'];
-    $u  = array_flip($mapa[$id] ?? []);
+    $ant = $mapa[$id] ?? [];
+    $u = array_flip(is_array($ant['u'] ?? null) ? $ant['u'] : (is_array($ant) && !isset($ant['u']) ? $ant : []));
     foreach ($unis as $x) $u[$x] = true;
-    $mapa[$id] = array_values(array_map('intval', array_keys($u)));
+    // Se guarda TAMBIÉN el VALOR DEL ACTIVO del deal de Clientes. Cobranzas a veces
+    // redondea ("129.098,72" allá, "129.098" acá) y el negocio pide que en esas
+    // diferencias de centavos mande Clientes. Guardarlo aquí evita que el evento
+    // tenga que leer el deal de Clientes cada vez.
+    $mapa[$id] = ['u' => array_values(array_map('intval', array_keys($u))), 'v44' => $val];
     $via[$como] = ($via[$como] ?? 0) + 1;
 }
 
 pf_escribir('mapa48.json', $mapa);
-$con  = count(array_filter($mapa));
+$con  = count(array_filter($mapa, fn($x) => !empty($x['u'])));
 $msg  = 'MAPA48 ok -> ' . count($mapa) . ' deals del 48, ' . $con . ' con unidad, ' . $sin . ' sin resolver'
       . ' · via ' . json_encode($via);
 logline($msg);
