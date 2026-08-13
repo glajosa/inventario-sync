@@ -190,6 +190,60 @@ function pf_agrupa(string $a, string $b): bool {
 }
 
 /**
+ * Reparte un precio final entre las unidades de una venta conjunta, en partes
+ * iguales. Los centavos sobrantes van a la última, así que la suma de las partes
+ * da EXACTAMENTE el precio final y el inventario no se desvía por redondeo.
+ */
+function pf_repartir(string $dealId, array $unis, float $vf): string {
+    sort($unis);
+    $g = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY,
+                              'filter' => ['@id' => $unis],
+                              'select' => ['id', 'title', U_PVP, PF_U_PRECIO]]);
+    if (!$g['ok']) { pf_log("ERR list unidades [" . implode(',', $unis) . "]: {$g['error']}"); return 'pf-err-unidad'; }
+    $items = [];
+    foreach (($g['result']['items'] ?? []) as $it) $items[(int)$it['id']] = $it;
+    // Bitrix ignora en silencio un filtro que no entiende y devuelve otra cosa: si
+    // no volvieron TODAS las unidades pedidas, no se reparte nada.
+    foreach ($unis as $u) if (!isset($items[(int)$u])) {
+        pf_log("REPARTO deal=$dealId ABORTA: la unidad $u no volvió en la lectura");
+        return 'pf-err-unidad';
+    }
+
+    // El PVP vacío cuenta como 0: en los combos de Noral el precio de la pareja
+    // está cargado entero en una sola unidad y la otra queda en blanco a propósito.
+    $suma = 0.0;
+    foreach ($items as $it) $suma += (float)(pf_money($it[U_PVP] ?? null) ?? 0.0);
+    if ($vf < $suma - 0.5) {
+        pf_log("REPARTO deal=$dealId final=$vf < suma de PVP=$suma — no se escribe");
+        return 'pf-menor-que-pvp';
+    }
+
+    $n = count($unis);
+    $parte = floor($vf / $n * 100) / 100;
+    $resto = round($vf - $parte * ($n - 1), 2);      // la última se lleva los centavos
+    $i = 0; $esc = 0; $bajos = [];
+    foreach ($unis as $uid) {
+        $uid = (int)$uid;
+        $val = (++$i === $n) ? $resto : $parte;
+        $it  = $items[$uid];
+        $pvp = pf_money($it[U_PVP] ?? null);
+        $ya  = pf_money($it[PF_U_PRECIO] ?? null);
+        if ($pvp !== null && $val < $pvp - 0.5) $bajos[] = ($it['title'] ?? $uid) . " ($val < PVP $pvp)";
+        if ($ya !== null && abs($ya - $val) < 0.005) continue;
+        @touch(pf_dir() . '/self_u_' . $uid);
+        $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid,
+                                    'fields' => [PF_U_PRECIO => pf_fmt($val)]]);
+        if ($u['ok']) $esc++;
+        else pf_log("ERR update u=$uid: {$u['error']}");
+    }
+    pf_marcar($dealId, $vf);
+    $msg = "REPARTO deal=$dealId final=$vf entre $n unidades -> $parte c/u (última $resto), escritas $esc";
+    if ($bajos) $msg .= ' · OJO por debajo de su PVP: ' . implode(', ', $bajos);
+    pf_log($msg);
+    return 'pf-reparto-ok';
+}
+
+/**
  * Handler del evento. Devuelve un texto corto para el log de Bitrix.
  * Coste: 0 llamadas si el deal no es del 48 ni cambió; 1 lectura + 1 escritura
  * cuando el precio de verdad cambió.
@@ -236,13 +290,14 @@ function precio_final_evento(string $dealId, ?array $deal = null): string {
     if (array_key_exists($dealId, $visto) && $visto[$dealId] !== null
         && abs((float)$visto[$dealId] - $vf) < 0.005) return 'pf-igual';
 
-    // Una venta de varias unidades trae UN precio final para todas. Escribirlo en
-    // cada una inflaría el inventario (dos veces la misma venta), y repartirlo
-    // necesita una regla que el negocio todavía no fijó.
-    if (count($unis) > 1) {
-        pf_log("REPARTO deal=$dealId final=$vf cubre " . count($unis) . ' unidades [' . implode(',', $unis) . '] — no se escribe');
-        return 'pf-varias-unidades';
-    }
+    // ── Venta de VARIAS unidades: un solo precio final para todas ─────────────
+    // Regla del negocio: se reparte MITAD Y MITAD (en partes iguales). Escribir el
+    // total en cada una duplicaría la venta en el inventario.
+    // La validación "mayor o igual al PVP" se hace aquí sobre el TOTAL de la venta,
+    // no unidad por unidad: repartir en partes iguales puede dejar a la unidad más
+    // cara por debajo de su propio PVP y esa comparación bloquearía el reparto sin
+    // que haya nada malo. Esos casos se anotan en el log para que se puedan mirar.
+    if (count($unis) > 1) return pf_repartir($dealId, $unis, $vf);
 
     $uid = (int)$unis[0];
     $g = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $uid,
