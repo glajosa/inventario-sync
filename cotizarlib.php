@@ -63,11 +63,13 @@ function cot_modelo(int $categoryId): array {
         // Noral Apartments: hasta 46 cuotas y solo 4 extraordinarias.
         case 39: return array_merge($base, ['maxCuotas'=>46, 'maxExtra'=>4]);
 
-        // Noral Plaza: mismas 4 extraordinarias que Apartments (y con eso se habilita
-        // partirlas en 2 y personalizar los montos), pero el PLAZO se queda como estaba
-        // — Plaza entrega en abril de 2031 y son sus meses los que mandan, no los 46 de
-        // Apartments.
-        case 33: return array_merge($base, ['maxExtra'=>4]);
+        // Noral Plaza: 5 extraordinarias, no 4. El tope NO es una regla del cotizador,
+        // es cuántas cabe cobrar en cada proyecto: Plaza entrega en abril de 2031 y su
+        // plan cruza cinco años, Apartments entrega antes y cruza cuatro. Declararlo
+        // aquí (en vez de dejarlo en 0 = sin tope) es lo que habilita partir la
+        // extraordinaria en 2 y personalizar los montos. El PLAZO no se toca: manda la
+        // entrega de Plaza, no los 46 meses de Apartments.
+        case 33: return array_merge($base, ['maxExtra'=>5]);
 
         // Galero Torre C — ENTREGA INMEDIATA. No se financia nada: el 30% de entrada
         // se paga DE UNA (los $1.000 de reserva son su primer abono) y el 70% restante
