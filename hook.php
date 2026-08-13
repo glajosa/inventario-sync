@@ -132,6 +132,26 @@ if (strpos($event, 'DYNAMICITEM') !== false) {
 
 if ($dealId === '') { echo 'no-id'; exit; }
 
+// ---- 1.6) COBRANZAS(48): el PRECIO FINAL de la unidad ------------------------
+// Regla del negocio: Clientes mueve las unidades, pero el VALOR FINAL lo manda
+// Cobranzas y tiene que llegar solo al SPA en cuanto lo escriban allá.
+//
+// Se cuelga de este MISMO evento a propósito. ONCRMDEALUPDATE ya está llegando
+// aquí para todos los deals del portal y hoy se descarta; enganchar el 48 no
+// agrega tráfico nuevo, solo deja de tirar los que importan. Un ID que no está en
+// el mapa del 48 sale con CERO llamadas, igual que el resto del ruido.
+//
+// No se toca stage, ni parentId2, ni contacto: escribe UN campo y nada más. Por eso
+// va ANTES del filtro de P44 — un deal del 48 nunca entra por ese camino.
+// El ALTA no entra aquí: hook.php lee el deal más abajo para saber si es del 44, y
+// esa misma lectura se reutiliza (ver el bloque ADD) en vez de pedirlo dos veces.
+if ($event === 'ONCRMDEALUPDATE') {
+    require_once __DIR__ . '/preciolib.php';
+    $pf = precio_final_evento($dealId);
+    if ($pf !== 'pf-skip-no48') { echo $pf; exit; }
+    // 'pf-skip-no48' = no es del 48; sigue el camino normal de P44 / pendientes 28.
+}
+
 // ---- 2) DELETE: soltar unidades atadas a ese deal ---------------------------
 if ($event === 'ONCRMDEALDELETE') {
     allowlist_remove($dealId);
@@ -197,8 +217,16 @@ if ($event === 'ONCRMDEALADD') {
         allowlist_add($dealId);
         $allow[$dealId] = true;              // seguir procesando abajo por si ya trae unidades
         logline("ADD deal=$dealId registrado en P44");
+    } elseif ($r['ok'] && (int)($r['result']['CATEGORY_ID'] ?? -1) === 48) {
+        // Copia recién creada en COBRANZAS. Se registra en el mapa AHORA, con el
+        // deal que ya se leyó arriba: si esperara al barrido de mapa48.php, sus
+        // ONCRMDEALUPDATE se descartarían por "no está en el mapa" hasta 6 h, y el
+        // precio final que escriban en ese rato no llegaría al inventario.
+        require_once __DIR__ . '/preciolib.php';
+        echo precio_final_evento($dealId, $r['result']);
+        exit;
     } else {
-        echo 'ok-add-skip';                  // no es P44, fuera. 1 get gastado, aceptable.
+        echo 'ok-add-skip';                  // no es P44 ni P48, fuera. 1 get gastado, aceptable.
         exit;
     }
 }

@@ -16,12 +16,15 @@ cron
 # AL ARRANCAR (cubre el hueco del deploy/reinicio, sin esperar los crons):
 #   1. rebuild  -> allowlist lista de una (no esperar 6h)
 #   2. reconcile -> recupera CUALQUIER evento perdido durante el downtime del deploy
+#   3. mapa48   -> sin el mapa, el evento del precio final no sabe a qué unidad va
+#                  y se descartaría TODO el 48 pensando que no es del 48
 # Secuencial y en background para no bloquear apache. Espera 5s a que el
 # webhook entrante esté resoluble.
 (
   sleep 5
   php /var/www/html/rebuild.php   >> /data/cron.log 2>&1
   php /var/www/html/reconcile.php >> /data/cron.log 2>&1
+  php /var/www/html/mapa48.php    >> /data/cron.log 2>&1
 ) &
 
 exec "$@"
