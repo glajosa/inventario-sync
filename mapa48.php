@@ -154,6 +154,18 @@ foreach ($c44 as $d) {
         if (count($c) === 1) { $hit = $c[0]; $como = 'proyecto+codigo'; }
     }
 
+    // Salvaguarda: la copia de Cobranzas es LA MISMA VENTA, así que tiene que ser
+    // del mismo proyecto. Un cliente con el mismo código de unidad en dos proyectos
+    // (el "C-9-2" existe en Galero y en Barranca) se emparejaba con el deal
+    // equivocado por código+contacto. Ante eso vale más quedarse sin precio.
+    if ($hit) {
+        $fa = pf_familia((string)($d['TITLE'] ?? ''));
+        $fb = pf_familia((string)($hit['TITLE'] ?? ''));
+        if ($fa !== '' && $fb !== '' && $fa !== $fb) {
+            logline("MAPA48 RECHAZA 44:{$d['ID']} [$fa] <-> 48:{$hit['ID']} [$fb] · mismo código, proyecto distinto");
+            $hit = null; $como = '';
+        }
+    }
     if (!$hit) { $sin++; continue; }
     $id = (string)$hit['ID'];
     $u  = array_flip($mapa[$id] ?? []);

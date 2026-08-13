@@ -160,6 +160,34 @@ function pf_proy(string $titulo): string {
     return preg_replace('/[^A-Z0-9]/', '', $s);
 }
 
+/**
+ * Proyecto CANÓNICO del título. El texto libre no sirve para comparar: el mismo
+ * proyecto aparece como "Noral Plaza", "Noral Plaza (Nuevo Samborondón)" y
+ * "Noral Plaza (Locales Comerciales)". Esto lo reduce a la familia.
+ *
+ * Se usa como salvaguarda: un deal de Clientes y su copia en Cobranzas SON la misma
+ * venta, así que tienen que ser del mismo proyecto. Sin esta comprobación, un
+ * cliente que compró en dos proyectos con el mismo código de unidad (pasa: "C-9-2"
+ * existe en Galero y en Barranca) se emparejaba por código+contacto con el deal
+ * equivocado y se le escribía el precio de la otra unidad. Eran 6 de 848.
+ */
+function pf_familia(string $titulo): string {
+    $t = strtoupper($titulo);
+    $t = strtr($t, ['Á'=>'A','É'=>'E','Í'=>'I','Ó'=>'O','Ú'=>'U','Ñ'=>'N']);
+    foreach ([
+        'NORAL PLAZA'      => '/NORAL\s*PLAZA/',
+        'NORAL APARTMENTS' => '/NORAL\s*(APART|APT)/',
+        'BARRANCA'         => '/BARRANCA/',
+        'ELITE'            => '/ELITE/',
+        'RIVERSIDE'        => '/RIVERSIDE/',
+        'SUN BAY'          => '/SUN\s*BAY/',
+        'GALERO'           => '/GALERO/',
+    ] as $nombre => $re) {
+        if (preg_match($re, $t)) return $nombre;
+    }
+    return '';
+}
+
 /** Título sin el prefijo COBRANZAS, para comparar la copia con su original. */
 function pf_base(string $titulo): string {
     $t = preg_replace('/^\s*COBRANZAS\s*--\s*/i', '', $titulo);
