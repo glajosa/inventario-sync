@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Noral Apartments — Explorador</title>
+  <style>
+    :root{
+      --bg:#f8f7f4;--surf:#fff;--surf2:#f2f0ec;
+      --bd:rgba(0,0,0,.09);--bds:rgba(0,0,0,.16);
+      --t1:#1a1a18;--t2:#52514e;--t3:#898781;
+      --pri:#0f4c75;--pri2:#0b3c5e;
+      --m-bg:#f1efe8;--m-bd:#5f5e5a;--m-tx:#2c2c2a;
+      --e1-bg:#e6f1fb;--e1-bd:#185fa5;--e1-tx:#042c53;
+      --e2-bg:#e1f5ee;--e2-bd:#0f6e56;--e2-tx:#04342c;
+      --e3-bg:#faeeda;--e3-bd:#854f0b;--e3-tx:#412402;
+      --p-bg:#f5f5f3;--p-bd:#c3c2b7;--p-tx:#898781;
+    }
+    @media(prefers-color-scheme:dark){:root{
+      --bg:#1a1a19;--surf:#242423;--surf2:#2c2c2a;
+      --bd:rgba(255,255,255,.09);--bds:rgba(255,255,255,.16);
+      --t1:#f0efeb;--t2:#c3c2b7;--t3:#898781;--pri:#3987e5;--pri2:#2a78d6;
+      --m-bg:#444441;--m-bd:#b4b2a9;--m-tx:#d3d1c7;
+      --e1-bg:#0c447c;--e1-bd:#85b7eb;--e1-tx:#b5d4f4;
+      --e2-bg:#085041;--e2-bd:#5dcaa5;--e2-tx:#9fe1cb;
+      --e3-bg:#633806;--e3-bd:#ef9f27;--e3-tx:#fac775;
+      --p-bg:#2c2c2a;--p-bd:#5f5e5a;--p-tx:#898781;
+    }}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--t1);min-height:100vh}
+
+    /* Header */
+    header{background:var(--pri);color:#fff;padding:1.25rem 2rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem}
+    .hdr-left h1{font-size:18px;font-weight:500}
+    .hdr-left p{font-size:11px;opacity:.65;margin-top:2px}
+
+    /* Wrap */
+    .main{max-width:1100px;margin:0 auto;padding:1.5rem 2rem}
+
+    /* Building tabs */
+    .btabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1rem}
+    .btab{padding:7px 18px;border-radius:8px;border:0.5px solid var(--bds);background:var(--surf);color:var(--t2);cursor:pointer;font-size:14px;font-weight:500;transition:all .15s;user-select:none;position:relative}
+    .btab:hover{background:var(--surf2)}
+    .btab.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+    .btab .grp-dot{position:absolute;top:4px;right:5px;width:5px;height:5px;border-radius:50%}
+
+    /* Info bar */
+    .ibar{background:var(--surf);border:0.5px solid var(--bd);border-radius:10px;padding:10px 16px;margin-bottom:1rem;display:flex;gap:1.5rem;flex-wrap:wrap}
+    .ii .il{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--t3)}
+    .ii .iv{font-size:13px;font-weight:500;margin-top:2px}
+
+    /* Category filter */
+    .cfilter{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:1rem;align-items:center}
+    .cfilter .lbl{font-size:11px;color:var(--t3);flex-shrink:0}
+    .cbtn{padding:6px 13px;border-radius:20px;border:1.5px solid;cursor:pointer;font-size:12px;font-weight:500;user-select:none;display:inline-flex;align-items:center;gap:6px;transition:opacity .15s}
+    .cbtn .cnt{font-size:10px;opacity:.7;font-weight:400}
+    .cbtn.dim{opacity:.35}
+    .cbtn-all{border-color:var(--bds);color:var(--t2);background:var(--surf)}
+    .cbtn-all.on{background:var(--t1);color:var(--bg);border-color:var(--t1);opacity:1}
+    .cbtn-m  {background:var(--m-bg);border-color:var(--m-bd);color:var(--m-tx)}
+    .cbtn-e1 {background:var(--e1-bg);border-color:var(--e1-bd);color:var(--e1-tx)}
+    .cbtn-e2 {background:var(--e2-bg);border-color:var(--e2-bd);color:var(--e2-tx)}
+    .cbtn-e3 {background:var(--e3-bg);border-color:var(--e3-bd);color:var(--e3-tx)}
+
+    /* Legend */
+    .legend{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:1rem}
+    .leg{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)}
+    .sw{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+
+    /* Floors */
+    .floors{display:flex;flex-direction:column;gap:7px;margin-bottom:1.25rem}
+    .frow{display:flex;gap:8px;align-items:stretch;padding-top:7px}
+    .flbl{width:90px;flex-shrink:0;display:flex;flex-direction:column;justify-content:center;align-items:flex-end;padding-right:10px;text-align:right;line-height:1.35}
+    .fn{font-size:12px;font-weight:500;color:var(--t1)}
+    .fs{font-size:10px;color:var(--t3)}
+    .urow{display:flex;gap:5px;flex:1;align-items:stretch}
+
+    /* Núcleo ascensor + escaleras */
+    .core{width:26px;flex-shrink:0;display:flex;flex-direction:column;align-items:center}
+    .corebox{width:100%;height:62px;border-radius:5px;background:repeating-linear-gradient(45deg,var(--surf2),var(--surf2) 4px,var(--bg) 4px,var(--bg) 8px);border:1px solid var(--bds);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--t3)}
+    .core .unum{visibility:hidden}
+
+    /* Barra de orientación */
+    .orient{display:flex;gap:8px;align-items:center;margin-bottom:7px;font-size:10px;color:var(--t3);letter-spacing:.04em}
+    .orient .oline{flex:1;height:1px;background:var(--bd)}
+
+    /* Unit */
+    .unit{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;cursor:pointer;border-radius:8px;transition:transform .12s, opacity .15s}
+    .unit:hover{transform:scale(1.06)}
+    .unit:active{transform:scale(0.96)}
+    .unit.dim{opacity:.1;pointer-events:none}
+    .unit.sel .ubox{outline:2.5px solid var(--pri);outline-offset:2px}
+    .ubox{position:relative;width:100%;height:62px;border-radius:8px;border:1.5px solid;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+    /* Nombre de la unidad. La categoría la lleva el color de la caja. */
+    .ucat{font-size:11.5px;font-weight:700;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+    .um2{font-size:8.5px;opacity:.72}
+    .uprice{font-size:9px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px;padding:0 3px;border-radius:3px;background:rgba(0,0,0,.07)}
+    @media(prefers-color-scheme:dark){.uprice{background:rgba(255,255,255,.13)}}
+    /* Estado comercial */
+    .ubox.sold{opacity:.28;filter:saturate(.25)}
+    .ubox.sold::before{content:'';position:absolute;inset:0;border-radius:7px;
+      background:repeating-linear-gradient(135deg,transparent,transparent 4px,currentColor 4px,currentColor 5px);opacity:.35}
+    .ubox.resv{opacity:.62}
+    .ustate{position:absolute;bottom:-1px;left:50%;transform:translateX(-50%);
+      font-size:7.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;
+      padding:0 4px;border-radius:3px 3px 0 0;background:currentColor}
+    .ustate span{color:var(--surf);mix-blend-mode:normal}
+    /* Delta: cuánto cambiaría el precio si se aplica la matriz */
+    .udelta{position:absolute;top:-7px;left:50%;transform:translateX(-50%);white-space:nowrap;
+      font-size:8px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.02em;
+      padding:1px 5px;border-radius:9px;border:1px solid var(--surf)}
+    .udelta.up{background:#0f6e56;color:#fff}
+    .udelta.dn{background:#a4331f;color:#fff}
+    .ubox.fixed{border-width:2.5px;box-shadow:0 1px 4px rgba(0,0,0,.13)}
+    .ubox.fixed::after{content:'';position:absolute;top:4px;right:4px;width:5px;height:5px;border-radius:50%;background:currentColor}
+    .unum{font-size:9px;color:var(--t3);margin-top:3px}
+    .ubox-m   {background:var(--m-bg);border-color:var(--m-bd);color:var(--m-tx)}
+    .ubox-e1  {background:var(--e1-bg);border-color:var(--e1-bd);color:var(--e1-tx)}
+    .ubox-e2  {background:var(--e2-bg);border-color:var(--e2-bd);color:var(--e2-tx)}
+    .ubox-e3  {background:var(--e3-bg);border-color:var(--e3-bd);color:var(--e3-tx)}
+    .ubox-pend{background:var(--p-bg);border-color:var(--p-bd);border-style:dashed;color:var(--p-tx)}
+
+    /* Detail panel */
+    .detail{background:var(--surf);border:0.5px solid var(--bd);border-radius:10px;padding:14px 18px;margin-bottom:1rem;display:none}
+    .detail.show{display:block}
+    .dt-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+    .dt-id{font-size:17px;font-weight:500}
+    .dt-pill{padding:3px 11px;border-radius:10px;border:1px solid;font-size:11px;font-weight:500}
+    .dt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:14px}
+    .dt-item .dl{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--t3)}
+    .dt-item .dv{font-size:14px;font-weight:500;margin-top:2px}
+    .dt-item .dp{font-size:22px;font-weight:500;font-variant-numeric:tabular-nums;margin-top:2px;color:var(--pri)}
+
+    /* Price table */
+    .sec-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--t3);margin-bottom:10px}
+
+    /* Resumen de proyecto */
+    #resumen{margin-bottom:1.25rem}
+
+    /* Simulador de subida de precios */
+    #sim{background:var(--surf);border:0.5px solid var(--bd);border-radius:10px;
+      padding:14px 16px;margin-bottom:1.25rem}
+    #sim.act{border-color:var(--pri);box-shadow:inset 0 0 0 1px var(--pri)}
+    .simrow{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+    .simf{flex:1 1 140px;min-width:0}
+    .simf label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.07em;
+      color:var(--t3);margin-bottom:5px}
+    .simf select,.simf input{width:100%;padding:7px 10px;border:0.5px solid var(--bds);
+      border-radius:8px;background:var(--surf2);color:var(--t1);font:inherit;font-size:13px;
+      font-weight:500}
+    .simf select:focus-visible,.simf input:focus-visible{outline:2px solid var(--pri);outline-offset:1px}
+    .simbtn{padding:8px 16px;border-radius:8px;border:0.5px solid var(--bds);background:var(--surf2);
+      color:var(--t2);cursor:pointer;font-size:12px;font-weight:500;white-space:nowrap}
+    .simbtn:hover{background:var(--bg)}
+    .simout{display:flex;gap:1.75rem;flex-wrap:wrap;margin-top:14px;padding-top:12px;
+      border-top:0.5px solid var(--bd)}
+    .simo .sl{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--t3)}
+    .simo .sv{font-size:19px;font-weight:500;margin-top:3px;font-variant-numeric:tabular-nums}
+    .simo .sv.up{color:#0f6e56} .simo .sv.dn{color:#a4331f}
+    .simnota{font-size:11px;color:var(--t3);margin-top:10px;line-height:1.5}
+    .simbtn.prim{background:var(--pri);color:#fff;border-color:var(--pri);font-weight:500}
+    .simbtn.prim:hover{background:var(--pri2)}
+    .simbtn:disabled{opacity:.5;cursor:default}
+    .simconf{margin-top:12px;padding:12px 14px;border:0.5px solid var(--bds);border-radius:8px;
+      background:var(--surf2)}
+    .simconf p{font-size:12.5px;color:var(--t2);margin-bottom:9px;line-height:1.55}
+    .simconf .row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+    .simconf input{padding:7px 10px;border:0.5px solid var(--bds);border-radius:8px;
+      background:var(--surf);color:var(--t1);font:inherit;font-size:13px}
+    .simconf input.nota{flex:1 1 220px;min-width:0}
+    .simres{margin-top:10px;font-size:12.5px;line-height:1.55}
+    .simres.ok{color:#0f6e56} .simres.err{color:#a4331f}
+    .simjson{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--t2);
+      background:var(--surf2);border:0.5px solid var(--bd);border-radius:6px;padding:7px 10px;
+      margin-top:9px;overflow-x:auto;white-space:nowrap}
+    .rgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:8px;margin-bottom:12px}
+    .rcard{background:var(--surf);border:0.5px solid var(--bd);border-radius:10px;padding:11px 14px}
+    .rcard .rl{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)}
+    .rcard .rv{font-size:21px;font-weight:500;font-variant-numeric:tabular-nums;margin-top:3px;line-height:1.1}
+    .rcard .rs{font-size:10.5px;color:var(--t3);margin-top:2px}
+    .rtoggle{font-size:11px;color:var(--pri);cursor:pointer;user-select:none;
+      display:inline-flex;align-items:center;gap:4px;margin-bottom:8px}
+    .rtoggle:hover{text-decoration:underline}
+    #rdetalle[hidden]{display:none}
+    .ok{color:#0f6e56;font-weight:600}
+    .pend{color:#a4331f;font-weight:600}
+
+    /* Lista comercial */
+    .lc{background:var(--surf);border:0.5px solid var(--bd);border-radius:10px;padding:16px 18px;margin-top:10px}
+    .lc h4{font-size:13px;font-weight:600;margin-bottom:2px}
+    .lc .lcsub{font-size:11px;color:var(--t3);margin-bottom:10px}
+    .lc + .lc{margin-top:10px}
+    .combo{margin-top:1rem;background:var(--surf);border:0.5px solid var(--bd);border-left:3px solid var(--e3-bd);border-radius:8px;padding:12px 16px}
+    .combo h4{font-size:12px;font-weight:600;margin-bottom:4px}
+    .combo p{font-size:11.5px;color:var(--t2);line-height:1.5;margin-bottom:8px}
+    .combo .cr{display:flex;gap:1.25rem;flex-wrap:wrap}
+    .combo .cc .cl{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)}
+    .combo .cc .cv{font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;margin-top:1px}
+    .pt-wrap{overflow-x:auto}
+    table.pt{width:100%;border-collapse:collapse;font-size:12px;min-width:380px}
+    .pt th,.pt td{padding:7px 10px;border:0.5px solid var(--bd)}
+    .pt th{font-weight:500;color:var(--t2);text-align:center;background:var(--surf2)}
+    .pt th.L{text-align:left}
+    .pt .pl{font-weight:500;color:var(--t2);white-space:nowrap}
+    .pt .val{text-align:right;font-variant-numeric:tabular-nums;color:var(--t1)}
+    .pt .tbd{text-align:right;color:var(--t3);font-style:italic}
+    .pt .hlrow td{background:rgba(15,76,117,.07)}
+
+    @media(max-width:640px){
+      header,.main{padding-left:1rem;padding-right:1rem}
+      .flbl{width:64px}
+      .fn{font-size:11px}.fs{font-size:9px}
+      .ubox{height:40px}
+      .um2{display:none}
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="hdr-left">
+    <h1>Noral Apartments — Explorador de Edificios</h1>
+    <p>Numeración de derecha a izquierda (1 → 8) vista de frente · Selecciona edificio, filtra por categoría, haz clic en una unidad</p>
+  </div>
+</header>
+
+<div class="main">
+  <div class="sec-lbl">Simulador — subir precios por bloque</div>
+  <div id="sim">
+    <div class="simrow">
+      <div class="simf"><label for="sim-dest">A quién</label><select id="sim-dest"></select></div>
+      <div class="simf"><label for="sim-niv">Nivel</label><select id="sim-niv"></select></div>
+      <div class="simf"><label for="sim-cat">Categoría</label><select id="sim-cat"></select></div>
+      <div class="simf"><label for="sim-tipo">Tipo</label><select id="sim-tipo">
+        <option value="monto">Monto fijo USD</option><option value="pct">Porcentaje</option></select></div>
+      <div class="simf"><label for="sim-val">Cuánto</label><input id="sim-val" type="number" value="0" step="500"></div>
+      <button class="simbtn" id="sim-reset" type="button">Volver a cero</button>
+      <button class="simbtn prim" id="sim-aplicar" type="button" hidden>Aplicar en Bitrix</button>
+    </div>
+    <div class="simout" id="sim-out"></div>
+    <div class="simnota" id="sim-nota"></div>
+    <div class="simjson" id="sim-json" hidden></div>
+    <div class="simconf" id="sim-conf" hidden>
+      <p id="sim-conf-txt"></p>
+      <div class="row">
+        <input type="password" id="sim-clave" placeholder="Clave de autorización" autocomplete="off">
+        <input type="text" id="sim-nota" class="nota" placeholder="Motivo — queda en el histórico">
+        <button class="simbtn prim" id="sim-ok" type="button">Confirmar y escribir</button>
+        <button class="simbtn" id="sim-cancel" type="button">Cancelar</button>
+      </div>
+      <div class="simres" id="sim-res"></div>
+    </div>
+  </div>
+
+  <section id="resumen"></section>
+  <div class="btabs" id="tabs"></div>
+  <div class="ibar"  id="ibar"></div>
+  <div class="cfilter" id="cfilter"></div>
+  <div class="detail" id="detail"></div>
+  <div class="legend">
+    <div class="leg"><div class="sw" style="background:var(--m-bg);border:1px solid var(--m-bd)"></div>Medianero — pos. 2, 3, 6, 7</div>
+    <div class="leg"><div class="sw" style="background:var(--e1-bg);border:1px solid var(--e1-bd)"></div>Esq. interno (1) — pos. 4, 5 (junto al núcleo)</div>
+    <div class="leg"><div class="sw" style="background:var(--e2-bg);border:1px solid var(--e2-bd)"></div>Esquinero 2 — mayor metraje PA</div>
+    <div class="leg"><div class="sw" style="background:var(--e3-bg);border:1px solid var(--e3-bd)"></div>Esquinero 3 ★ — mayor metraje y valor</div>
+    <div class="leg"><div class="sw" style="background:var(--p-bg);border:1px dashed var(--p-bd)"></div>Pendiente</div>
+    <div class="leg"><div class="sw" style="background:repeating-linear-gradient(45deg,var(--surf2),var(--surf2) 3px,var(--bg) 3px,var(--bg) 6px);border:1px solid var(--bds)"></div>Núcleo: ascensor y escaleras</div>
+    <div class="leg"><div class="sw" style="background:transparent;border:2.5px solid var(--t2);position:relative"></div>Borde grueso + punto = unidad con regla propia</div>
+    <div class="leg"><div class="sw" style="background:repeating-linear-gradient(135deg,transparent,transparent 2px,var(--t3) 2px,var(--t3) 3px);border:1px solid var(--bd)"></div>Rayado = vendida · atenuada = reservada</div>
+  </div>
+  <div class="floors" id="floors"></div>
+  <div class="sec-lbl">Precios de referencia — Grupo <span id="grp-lbl"></span> <span style="font-size:10px;font-weight:400;opacity:.7">(referencia PDF)</span></div>
+  <div class="pt-wrap"><table class="pt" id="ptable"></table></div>
+
+  <div class="combo" id="combo"></div>
+
+  <div id="comwrap" style="margin-top:1.5rem">
+    <div class="sec-lbl">Lista de precios comercial — la que ve el cliente</div>
+    <div id="comercial"></div>
+  </div>
+
+  <div id="planwrap" style="margin-top:1.5rem">
+    <div class="sec-lbl">Plan de corrección — solo unidades disponibles</div>
+    <div id="plansum"></div>
+    <div class="pt-wrap"><table class="pt" id="plan"></table></div>
+  </div>
+</div>
+
+<script>
+/* ── DATA ─────────────────────────────────────────────────────────
+   Este bloque lo GENERA noral_motor.py a partir de noral_precios.json
+   y del estado en vivo de Bitrix. No editarlo a mano: se pisa en la
+   proxima corrida de `python3 noral_motor.py html`.                  */
+/*__DATOS__*/
+
+const GRP_COLOR = {A:'#185fa5', BCDE:'#0f6e56', F:'#854f0b', GH:'#5f5e5a', I:'#3b6d11'};
+
+const CATS = {
+  M:  {pfx:'m',   short:'Med',   label:'Medianero',        desc:'pos. 2, 3, 6, 7'},
+  E1: {pfx:'e1',  short:'E\u00b71',   label:'Esq. interno (1)', desc:'pos. 4 y 5 \u2014 junto al n\u00facleo'},
+  E2: {pfx:'e2',  short:'E\u00b72',   label:'Esquinero 2',      desc:'esquinero externo'},
+  E3: {pfx:'e3',  short:'E\u00b73\u2605',  label:'Esquinero 3',      desc:'mayor metraje y mayor valor'},
+  '?':{pfx:'p',   short:'?',     label:'Pendiente',        desc:'por confirmar'},
+};
+
+const FLOORS = [
+  {num:4,grp:'4P',name:'4to Piso',  sub:'Piso 4'},
+  {num:3,grp:'PA',name:'Piso 3',    sub:'Planta Alta'},
+  {num:2,grp:'PA',name:'Piso 2',    sub:'Planta Alta'},
+  {num:1,grp:'PB',name:'Planta Baja',sub:'PB \u00b7 con patio'},
+];
+
+const BLDGS = DATA.edificios;
+const ST    = DATA.estado;
+const BX    = DATA.pvp;
+const BXM2  = DATA.m2;
+const COMBOS = DATA.combos;
+
+/* Compatibilidad con el resto del render */
+const BD = {};
+BLDGS.forEach(b => {
+  const g = DATA.grupos[b], me = DATA.metraje[g];
+  BD[b] = {g, t: DATA.grupoNota[g],
+           m: {M:me.base, E1:me.base,
+               E2: me.cats_mayor.includes('E2') ? me.mayor : me.base,
+               E3: me.cats_mayor.includes('E3') ? me.mayor : null}};
+});
+const M_PB     = {}, PATIO_PB = {};
+Object.entries(DATA.metraje).forEach(([g,v]) => { M_PB[g]=v.base; PATIO_PB[g]=v.patio_pb; });
+
+/* PX se conserva por grupo solo para la tabla de referencia; el precio
+   real de cada unidad sale de DATA.precios, que es por edificio. */
+const PX = {};
+BLDGS.forEach(b => { PX[DATA.grupos[b]] = DATA.precios[b]; });
+
+/* ── STATE ─────────────────────────────────────────────────────── */
+const STL = {D:'Disponible', R:'Reservado', F:'Firmado / vendido'};
+let cur = 'A', curCat = 'all', sel = null, onlyFixed = false, onlyAvail = true;
+
+/* ── HELPERS ───────────────────────────────────────────────────── */
+/* Metraje de respaldo cuando Bitrix no lo trae cargado.
+   En PB todo es metraje base; en plantas altas el medianero puede tener
+   metraje propio (edificio J: 72,6 m2). */
+function m2Of(b, flGrp, cat) {
+  const g = DATA.grupos[b], me = DATA.metraje[g];
+  if (flGrp === 'PB') return me.base;
+  if (me.cats_mayor.includes(cat)) return me.mayor;
+  return DATA.m2paMed[b] != null ? DATA.m2paMed[b] : me.base;
+}
+
+/* Categoria de una unidad. Un override de unidad manda sobre el mapa
+   de posiciones del edificio. null en el mapa = aun sin definir. */
+function getCat(pos, b, floor) {
+  const ov = DATA.ovUnidad[`${b}-${floor}-${pos}`];
+  if (ov && ov.categoria) return ov.categoria;
+  return DATA.posiciones[b][String(pos)] || '?';
+}
+
+/* Precio objetivo. 'sigue_a' hace que la unidad herede la matriz de otro
+   edificio (caso registro de vista). */
+function target(b, flGrp, cat, uid) {
+  const ov = uid ? DATA.ovUnidad[uid] : null;
+  const fuente = (ov && ov.sigue_a) || b;
+  return DATA.precios[fuente]?.[flGrp]?.[cat] ?? null;
+}
+
+function fmt(v) {
+  return v ? '$'+v.toLocaleString('en-US') : '<span style="color:var(--t3);font-style:italic">\u2014</span>';
+}
+
+function pillSt(pfx) {
+  return `background:var(--${pfx}-bg);border:1px solid var(--${pfx}-bd);color:var(--${pfx}-tx)`;
+}
+
+/* Conteo por categoria. Con "solo disponibles" activo cuenta unicamente
+   las unidades en etapa Disponible. */
+function getCounts(b) {
+  const c = {M:0,E1:0,E2:0,E3:0,'?':0};
+  FLOORS.forEach(fl => {
+    for (let p=1;p<=8;p++) {
+      if (p > (DATA.uxp[b] || 8)) continue;
+      if (onlyAvail && ST[`${b}-${fl.num}-${p}`] !== 'D') continue;
+      c[getCat(p,b,fl.num)]++;
+    }
+  });
+  return c;
+}
+
+function getStates(b) {
+  const s = {D:0,R:0,F:0};
+  FLOORS.forEach(fl => {
+    for (let p=1;p<=(DATA.uxp[b]||8);p++) { const v = ST[`${b}-${fl.num}-${p}`]; if (v in s) s[v]++; }
+  });
+  return s;
+}
+
+/* ── RENDER ─────────────────────────────────────────────────────── */
+function renderTabs() {
+  document.getElementById('tabs').innerHTML = BLDGS.map(b => {
+    const gc = GRP_COLOR[BD[b].g] || '#888';
+    const s = getStates(b);
+    return `<div class="btab${b===cur?' on':''}" onclick="selBldg('${b}')"
+      title="${s.D} disponibles · ${s.R} reservadas · ${s.F} vendidas">
+      ${b} <span style="font-size:11px;opacity:.6;font-weight:400">${s.D}</span>
+      <div class="grp-dot" style="background:${gc}"></div>
+    </div>`;
+  }).join('');
+}
+
+function renderInfo() {
+  const d = BD[cur];
+  const altas = [...new Set(Object.values(d.m).filter(v=>v!==null))].sort((a,b)=>a-b).join(' · ')+' m²';
+  const pb = `${M_PB[d.g]} m² + ${String(PATIO_PB[d.g]).replace('.',',')} patio`;
+  const s = getStates(cur);
+  document.getElementById('ibar').innerHTML = `
+    <div class="ii"><div class="il">Edificio</div><div class="iv">${cur}</div></div>
+    <div class="ii"><div class="il">Grupo de precio</div><div class="iv">${d.g}</div></div>
+    <div class="ii"><div class="il">Planta baja</div><div class="iv">${pb}</div></div>
+    <div class="ii"><div class="il">Plantas altas</div><div class="iv">${altas}</div></div>
+    <div class="ii"><div class="il">Nivel</div><div class="iv">${d.t}</div></div>
+    <div class="ii"><div class="il">Disponibles</div>
+      <div class="iv" style="color:var(--pri)">${s.D} <span style="font-weight:400;color:var(--t3)">de ${(DATA.uxp[cur]||8)*4}</span></div></div>
+    <div class="ii"><div class="il">Reservadas · Vendidas</div>
+      <div class="iv" style="font-weight:400;color:var(--t2)">${s.R} · ${s.F}</div></div>
+  `;
+}
+
+function renderFilter() {
+  const counts = getCounts(cur);
+  const total = 32;
+  const btns = [
+    {cat:'all',  cls:'cbtn-all', label:'Todas',              cnt:total},
+    {cat:'M',    cls:'cbtn-m',   label:'Medianero',          cnt:counts.M},
+    {cat:'E1',   cls:'cbtn-e1',  label:'Esq. interno (1)',   cnt:counts.E1},
+    {cat:'E2',   cls:'cbtn-e2',  label:'Esquinero 2',        cnt:counts.E2},
+    {cat:'E3',   cls:'cbtn-e3',  label:'Esquinero 3 ★',     cnt:counts.E3},
+  ];
+  document.getElementById('cfilter').innerHTML =
+    '<span class="lbl">Filtrar:</span>' +
+    btns.map(b => {
+      const isActive = curCat === b.cat;
+      const isDim = curCat !== 'all' && !isActive;
+      const extraCls = b.cat==='all' && isActive ? ' on' : '';
+      return `<div class="cbtn ${b.cls}${extraCls}${isDim?' dim':''}" onclick="setCat('${b.cat}')">
+        ${b.label}${b.cnt > 0 ? `<span class="cnt">${b.cnt}</span>` : ''}
+      </div>`;
+    }).join('') +
+    (() => {
+      const n = Object.keys(DATA.ovUnidad).filter(k => k.startsWith(cur+'-')).length;
+      if (!n) return '';
+      return `<div class="cbtn cbtn-all${onlyFixed?' on':''}" style="margin-left:6px" onclick="toggleFixed()">
+        ● Regla propia<span class="cnt">${n}</span></div>`;
+    })() +
+    (() => {
+      const s = getStates(cur);
+      return `<div class="cbtn cbtn-all${onlyAvail?' on':''}" style="margin-left:6px" onclick="toggleAvail()">
+        ${onlyAvail?'✓ ':''}Solo disponibles<span class="cnt">${s.D}</span></div>`;
+    })();
+}
+
+function renderFloors() {
+  const d = BD[cur];
+  // Vista de frente al edificio: se cuenta de DERECHA a IZQUIERDA (pos. 1 = lado garita)
+  const NU = DATA.uxp[cur] || 8;
+  const ORDER = NU === 8 ? [8,7,6,5,'core',4,3,2,1]
+                         : Array.from({length:NU},(_,i)=>NU-i);
+  document.getElementById('floors').innerHTML =
+    `<div class="orient">
+       <span>← lado opuesto</span><div class="oline"></div>
+       <span>fachada vista de frente · núcleo ascensor al centro</span>
+       <div class="oline"></div><span>lado garita principal →</span>
+     </div>` +
+    FLOORS.map(fl =>
+    `<div class="frow">
+      <div class="flbl"><div class="fn">${fl.name}</div><div class="fs">${fl.sub}</div></div>
+      <div class="urow">${ORDER.map(pos=>{
+        if (pos === 'core') return `<div class="core"><div class="corebox" title="Ascensor y escaleras">⇅</div><div class="unum">·</div></div>`;
+        const cat = getCat(pos, cur, fl.num);
+        const cd = CATS[cat];
+        const uid = `${cur}-${fl.num}-${pos}`;
+        const fx = DATA.ovUnidad[uid] || null;
+        const st = ST[uid] || null;
+        // En disponibles mostramos el precio VIGENTE en Bitrix; el objetivo va como delta.
+        const m2v = BXM2[uid] || m2Of(cur, fl.grp, cat);
+        const tgt = target(cur, fl.grp, cat, uid);
+        const cur_ = BX[uid] ?? null;
+        const price = cur_ ?? tgt;
+        const delta = (st==='D' && cur_ != null && tgt != null) ? tgt - cur_ : null;
+        const dim = (curCat !== 'all' && cat !== curCat)
+                 || (onlyFixed && !fx)
+                 || (onlyAvail && st && st !== 'D');
+        const isSel = sel === uid;
+        const stCls = st === 'F' ? ' sold' : st === 'R' ? ' resv' : '';
+        return `<div class="unit${dim?' dim':''}${isSel?' sel':''}" onclick="selUnit('${uid}')">
+          <div class="ubox ubox-${cd.pfx}${fx?' fixed':''}${stCls}" title="${uid} · ${cd.label} · ${STL[st]||'—'}${fx?' · '+(fx.nota||'regla propia'):''}">
+            <div class="ucat">${uid}</div>
+            ${m2v ? `<div class="um2">${m2v}m²${fl.grp==='PB'?' +p':''}</div>` : ''}
+            ${price ? `<div class="uprice">${Math.round(price/1000)}k</div>` : ''}
+            ${delta ? `<div class="udelta ${delta>0?'up':'dn'}">${delta>0?'▲':'▼'}${Math.abs(delta).toLocaleString('en-US')}</div>` : ''}
+            ${st && st!=='D' ? `<div class="ustate"><span>${st==='F'?'vendido':'reserv'}</span></div>` : ''}
+          </div>
+          <div class="unum">${pos}</div>
+        </div>`;
+      }).join('')}</div>
+    </div>`
+  ).join('');
+}
+
+function renderDetail() {
+  const el = document.getElementById('detail');
+  if (!sel) { el.classList.remove('show'); el.innerHTML=''; return; }
+  const [b, flN, posS] = sel.split('-');
+  const pos = parseInt(posS);
+  const fl = FLOORS.find(f=>f.num===parseInt(flN));
+  const cat = getCat(pos, b, fl.num);
+  const cd = CATS[cat];
+  const grp = BD[b].g;
+  const fx = DATA.ovUnidad[sel] || null;
+  const st = ST[sel] || null;
+  const m2v = BXM2[sel] || m2Of(b, fl.grp, cat);
+  const tgt = target(b, fl.grp, cat, sel);
+  const act = BX[sel] ?? null;
+  const delta = (st==='D' && act != null && tgt != null) ? tgt - act : null;
+  const price = act ?? tgt;
+
+  el.innerHTML = `
+    <div class="dt-head">
+      <div class="dt-id">${sel}</div>
+      <div class="dt-pill" style="${pillSt(cd.pfx)}">${cd.label}</div>
+      ${(() => {
+        const v = st;
+        if (!v) return '';
+        const c = v==='D' ? 'background:var(--e2-bg);border-color:var(--e2-bd);color:var(--e2-tx)'
+                : v==='R' ? 'background:var(--e3-bg);border-color:var(--e3-bd);color:var(--e3-tx)'
+                          : 'background:var(--p-bg);border-color:var(--p-bd);color:var(--p-tx)';
+        return `<div class="dt-pill" style="${c}">${STL[v]}</div>`;
+      })()}
+      ${fx ? `<div class="dt-pill" style="background:var(--pri);border-color:var(--pri);color:#fff">${fx.nota||'Regla propia'}</div>` : ''}
+    </div>
+    <div class="dt-grid">
+      <div class="dt-item"><div class="dl">Piso</div><div class="dv">${fl.name}</div></div>
+      <div class="dt-item"><div class="dl">Posición</div><div class="dv">${pos} de 8</div></div>
+      <div class="dt-item"><div class="dl">Metros</div><div class="dv">${m2v ? m2v+' m²' : 'Por definir'}</div></div>
+      ${fl.grp==='PB' ? `<div class="dt-item"><div class="dl">Patio</div><div class="dv">${PATIO_PB[grp]} m²</div></div>` : ''}
+      <div class="dt-item"><div class="dl">${act!=null?'PVP hoy en Bitrix':'Precio ref.'}</div><div class="dp">${price ? '$'+price.toLocaleString('en-US') : '—'}</div></div>
+      ${st==='D' ? `<div class="dt-item"><div class="dl">Objetivo (lista)</div>
+        <div class="dp" style="color:${delta==null?'var(--t3)':delta>0?'#0f6e56':delta<0?'#a4331f':'var(--t2)'}">${tgt ? '$'+tgt.toLocaleString('en-US') : '—'}</div>
+        ${delta ? `<div style="font-size:11px;font-weight:600;color:${delta>0?'#0f6e56':'#a4331f'}">${delta>0?'▲ sube ':'▼ baja '}$${Math.abs(delta).toLocaleString('en-US')}</div>`
+                : (tgt ? '<div style="font-size:11px;color:var(--t3)">ya está correcto</div>' : '')}</div>` : ''}
+      <div class="dt-item"><div class="dl">Categoría</div><div class="dv">${cd.desc}</div></div>
+      <div class="dt-item"><div class="dl">${fx&&fx.sigue_a?'Sigue matriz de':'Grupo'}</div><div class="dv">${fx&&fx.sigue_a ? 'Edificio '+fx.sigue_a : grp}</div></div>
+    </div>`;
+  el.classList.add('show');
+}
+
+function renderPriceTable() {
+  const grp = BD[cur].g;
+  document.getElementById('grp-lbl').textContent = grp;
+  const px = PX[grp];
+  let hlFloor = null;
+  if (sel) {
+    const flNum = parseInt(sel.split('-')[1]);
+    hlFloor = (FLOORS.find(f=>f.num===flNum)||{}).grp || null;
+  }
+  document.getElementById('ptable').innerHTML = `
+    <thead><tr>
+      <th class="L">Piso</th>
+      <th style="background:var(--m-bg);color:var(--m-tx);border-color:var(--m-bd)">Medianero</th>
+      <th style="background:var(--e1-bg);color:var(--e1-tx);border-color:var(--e1-bd)">Esq. 1</th>
+      <th style="background:var(--e2-bg);color:var(--e2-tx);border-color:var(--e2-bd)">Esq. 2</th>
+      <th style="background:var(--e3-bg);color:var(--e3-tx);border-color:var(--e3-bd)">Esq. 3 ★</th>
+    </tr></thead>
+    <tbody>${[['PB','Planta Baja'],['PA','Pisos 2 y 3'],['4P','4to Piso']].map(([k,n])=>
+      `<tr${hlFloor===k?' class="hlrow"':''}>
+        <td class="pl">${n}</td>
+        <td class="${px[k].M?'val':'tbd'}">${fmt(px[k].M)}</td>
+        <td class="${px[k].E1?'val':'tbd'}">${fmt(px[k].E1)}</td>
+        <td class="${px[k].E2?'val':'tbd'}">${fmt(px[k].E2)}</td>
+        <td class="${px[k].E3?'val':'tbd'}">${fmt(px[k].E3)}</td>
+      </tr>`
+    ).join('')}</tbody>`;
+}
+
+function all() {
+  renderTabs(); renderInfo(); renderFilter();
+  renderFloors(); renderDetail(); renderPriceTable(); renderCombo(); renderPlan();
+  renderResumen(); renderComercial();
+}
+
+/* ── ACTIONS ─────────────────────────────────────────────────────── */
+function selBldg(b) { cur=b; sel=null; onlyFixed=false; all(); }
+function setCat(c)  { curCat=c; renderFilter(); renderFloors(); }
+function renderCombo() {
+  const g = BD[cur].g, c = COMBOS[g];
+  const el = document.getElementById('combo');
+  if (!c) { el.style.display='none'; return; }
+  el.style.display='block';
+  el.innerHTML = `
+    <h4>Unidades unidas — ${c.m2} m²</h4>
+    <p>Cuando un cliente compra dos departamentos contiguos, se unen en una sola unidad
+       de ${c.m2} m² con 2 parqueos y patio doble. El valor es la suma de los dos.
+       No son una categoría aparte: en la lista de precios aparecen como filas
+       “DESDE” y “3 DORM”, y por eso quedan fuera de la matriz de arriba.</p>
+    <div class="cr">
+      <div class="cc"><div class="cl">Planta baja</div><div class="cv">${fmt(c.pb)}</div></div>
+      <div class="cc"><div class="cl">Pisos 2 y 3</div><div class="cv">${fmt(c.pa)}</div></div>
+      <div class="cc"><div class="cl">4to piso</div><div class="cv">${fmt(c.p4)}</div></div>
+    </div>`;
+}
+
+/* Plan de corrección: recorre solo las DISPONIBLES del edificio actual y
+   compara el PVP vigente en Bitrix contra el objetivo de la matriz. */
+function planRows(b) {
+  const out = [];
+  FLOORS.forEach(fl => {
+    for (let p=1;p<=8;p++) {
+      if (p > (DATA.uxp[b] || 8)) continue;
+      const u = `${b}-${fl.num}-${p}`;
+      if (ST[u] !== 'D' && ST[u] !== 'N') continue;
+      const c = getCat(p,b,fl.num);
+      out.push({u, fl, cat:c, m2:BXM2[u]||null, act:BX[u] ?? null, tgt:target(b,fl.grp,c,u)});
+    }
+  });
+  return out;
+}
+
+function renderPlan() {
+  const rows = planRows(cur);
+  const cambian = rows.filter(r => r.act!=null && r.tgt!=null && r.tgt!==r.act);
+  const iguales = rows.filter(r => r.act!=null && r.tgt!=null && r.tgt===r.act);
+  const sinRef  = rows.filter(r => r.tgt==null);
+  const neto = cambian.reduce((s,r)=>s+(r.tgt-r.act),0);
+  const sube = cambian.filter(r=>r.tgt>r.act).length;
+  const baja = cambian.filter(r=>r.tgt<r.act).length;
+
+  document.getElementById('plansum').innerHTML = `
+    <div class="ibar" style="margin-bottom:10px">
+      <div class="ii"><div class="il">Disponibles</div><div class="iv">${rows.length}</div></div>
+      <div class="ii"><div class="il">Cambian</div><div class="iv">${cambian.length}</div></div>
+      <div class="ii"><div class="il">Suben · bajan</div>
+        <div class="iv"><span style="color:#0f6e56">${sube}</span> · <span style="color:#a4331f">${baja}</span></div></div>
+      <div class="ii"><div class="il">Ya correctas</div><div class="iv">${iguales.length}</div></div>
+      <div class="ii"><div class="il">Sin precio objetivo</div><div class="iv">${sinRef.length}</div></div>
+      <div class="ii"><div class="il">Efecto neto en cartera</div>
+        <div class="iv" style="color:${neto>0?'#0f6e56':neto<0?'#a4331f':'var(--t2)'}">${neto>=0?'+':'−'}$${Math.abs(neto).toLocaleString('en-US')}</div></div>
+    </div>`;
+
+  document.getElementById('plan').innerHTML = `
+    <thead><tr><th class="L">Unidad</th><th class="L">Piso</th><th>Categoría</th><th>m²</th>
+      <th>PVP hoy</th><th>Objetivo</th><th>Diferencia</th></tr></thead>
+    <tbody>${rows.map(r => {
+      const d = (r.act!=null && r.tgt!=null) ? r.tgt-r.act : null;
+      const col = d==null ? 'var(--t3)' : d>0 ? '#0f6e56' : d<0 ? '#a4331f' : 'var(--t3)';
+      const cd = CATS[r.cat];
+      return `<tr${sel===r.u?' style="background:var(--surf2)"':''}>
+        <td class="pl" style="cursor:pointer" onclick="selUnit('${r.u}')">${r.u}</td>
+        <td class="pl" style="font-weight:400;color:var(--t3)">${r.fl.name}</td>
+        <td style="text-align:center"><span class="dt-pill" style="${pillSt(cd.pfx)};font-size:10px">${cd.label}</span></td>
+        <td class="val">${r.m2 ?? '—'}</td>
+        <td class="val">${r.act!=null?'$'+r.act.toLocaleString('en-US'):'—'}</td>
+        <td class="val">${r.tgt!=null?'$'+r.tgt.toLocaleString('en-US'):'<span style="color:var(--t3)">sin definir</span>'}</td>
+        <td class="val" style="color:${col};font-weight:${d?600:400}">${
+          d==null ? '—' : d===0 ? 'sin cambio' : (d>0?'▲ +':'▼ −')+'$'+Math.abs(d).toLocaleString('en-US')}</td>
+      </tr>`;
+    }).join('')}</tbody>`;
+}
+
+/* ── RESUMEN DE PROYECTO ─────────────────────────────────────────── */
+function resumenEdificio(b) {
+  const r = planRows(b);
+  const cam = r.filter(x => x.act!=null && x.tgt!=null && x.tgt!==x.act);
+  return {
+    b, disp: r.length, cambian: cam.length,
+    neto: cam.reduce((s,x)=>s+(x.tgt-x.act),0),
+    pend: r.filter(x => x.tgt==null).map(x => x.u),
+    est: getStates(b),
+  };
+}
+
+function renderResumen() {
+  const R = BLDGS.map(resumenEdificio);
+  const t = R.reduce((a,x)=>({
+    disp:a.disp+x.disp, cambian:a.cambian+x.cambian,
+    neto:a.neto+x.neto, pend:a.pend+x.pend.length,
+    resv:a.resv+x.est.R, vend:a.vend+x.est.F,
+  }), {disp:0,cambian:0,neto:0,pend:0,resv:0,vend:0});
+  const listos = R.filter(x=>x.cambian===0 && x.pend===0).map(x=>x.b);
+
+  document.getElementById('resumen').innerHTML = `
+    <div class="sec-lbl">Noral Apartments — estado del proyecto</div>
+    <div class="rgrid">
+      <div class="rcard"><div class="rl">Disponibles</div><div class="rv">${t.disp}</div>
+        <div class="rs">de ${t.disp+t.resv+t.vend} unidades (A–I)</div></div>
+      <div class="rcard"><div class="rl">Reservadas · Vendidas</div><div class="rv">${t.resv} · ${t.vend}</div>
+        <div class="rs">no se tocan</div></div>
+      <div class="rcard"><div class="rl">Por corregir</div>
+        <div class="rv ${t.cambian?'pend':'ok'}">${t.cambian}</div>
+        <div class="rs">${t.cambian?'unidades fuera de matriz':'todo alineado'}</div></div>
+      <div class="rcard"><div class="rl">Efecto pendiente</div>
+        <div class="rv" style="color:${t.neto>0?'#0f6e56':t.neto<0?'#a4331f':'var(--t2)'}">${t.neto>=0?'+':'−'}$${Math.abs(t.neto).toLocaleString('en-US')}</div>
+        <div class="rs">si se aplica todo</div></div>
+      <div class="rcard"><div class="rl">Sin categoría</div>
+        <div class="rv ${t.pend?'pend':'ok'}">${t.pend}</div>
+        <div class="rs">${t.pend?'bloquean su edificio':'ninguna'}</div></div>
+      <div class="rcard"><div class="rl">Edificios al día</div>
+        <div class="rv ok">${listos.length}<span style="font-size:13px;color:var(--t3)"> / ${BLDGS.length}</span></div>
+        <div class="rs">${listos.join(' · ') || '—'}</div></div>
+    </div>
+
+    <div class="rtoggle" onclick="const d=document.getElementById('rdetalle');d.hidden=!d.hidden;this.firstChild.textContent=d.hidden?'▸ ':'▾ ';">
+      <span>▸ </span>Ver desglose por edificio
+    </div>
+    <div id="rdetalle" hidden>
+      <div class="pt-wrap"><table class="pt">
+        <thead><tr><th class="L">Edificio</th><th>Disponibles</th><th>Por corregir</th>
+          <th>Sin categoría</th><th>Efecto</th><th class="L">Estado</th></tr></thead>
+        <tbody>${R.map(x => {
+          const ok = x.cambian===0 && x.pend.length===0;
+          return `<tr>
+            <td class="pl" style="cursor:pointer" onclick="selBldg('${x.b}')">${x.b}</td>
+            <td class="val">${x.disp}</td>
+            <td class="val ${x.cambian?'pend':''}">${x.cambian || '—'}</td>
+            <td class="val ${x.pend.length?'pend':''}">${x.pend.length ? x.pend.join(', ') : '—'}</td>
+            <td class="val" style="color:${x.neto>0?'#0f6e56':x.neto<0?'#a4331f':'var(--t3)'}">${
+              x.neto ? (x.neto>0?'+':'−')+'$'+Math.abs(x.neto).toLocaleString('en-US') : '—'}</td>
+            <td class="pl" style="font-weight:400">${ok
+              ? '<span class="ok">al día</span>'
+              : x.pend.length ? 'falta definir categoría' : 'pendiente de aplicar'}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+    </div>`;
+}
+
+/* ── LISTA COMERCIAL ─────────────────────────────────────────────── */
+/* Lo que ve el cliente: precios por categoría, nunca por unidad.
+   Los edificios que comparten matriz salen en un mismo bloque. */
+function renderComercial() {
+  const firma = b => JSON.stringify(DATA.precios[b]);
+  const orden = [], bloq = {};
+  BLDGS.forEach(b => {
+    const f = firma(b);
+    if (bloq[f]) bloq[f].push(b); else { bloq[f] = [b]; orden.push(f); }
+  });
+
+  const NIV = [['PB','Planta Baja'],['PA','Pisos 2 y 3'],['4P','4to Piso']];
+  document.getElementById('comercial').innerHTML = orden.map(f => {
+    const eds = bloq[f], g = DATA.grupos[eds[0]], me = DATA.metraje[g];
+    const px = DATA.precios[eds[0]], cb = DATA.combos[g];
+    return `<div class="lc">
+      <h4>Edificio${eds.length>1?'s':''} ${eds.join(' · ')}</h4>
+      <div class="lcsub">${DATA.grupoNota[g]} · Planta baja ${me.base} m² + ${me.patio_pb} m² de patio
+        · Plantas altas ${me.base}${me.mayor!==me.base?' y '+me.mayor:''} m²</div>
+      <div class="pt-wrap"><table class="pt">
+        <thead><tr><th class="L">Piso</th>
+          <th style="background:var(--m-bg);color:var(--m-tx);border-color:var(--m-bd)">Medianero</th>
+          <th style="background:var(--e1-bg);color:var(--e1-tx);border-color:var(--e1-bd)">Esquinero 1</th>
+          <th style="background:var(--e2-bg);color:var(--e2-tx);border-color:var(--e2-bd)">Esquinero 2</th>
+          <th style="background:var(--e3-bg);color:var(--e3-tx);border-color:var(--e3-bd)">Esquinero 3</th>
+        </tr></thead>
+        <tbody>${NIV.map(([k,et]) => `<tr><td class="pl">${et}</td>` +
+          ['M','E1','E2','E3'].map(c => `<td class="val">${fmt(px[k]?.[c])}</td>`).join('') +
+          `</tr>`).join('')}
+        ${cb ? `<tr><td class="pl" style="font-weight:400;color:var(--t3)">Unidades unidas · ${cb.m2} m²</td>` +
+          NIV.map(([k]) => `<td class="val" style="color:var(--t2)">${fmt(cb[k])}</td>`).join('') +
+          `<td class="val">—</td></tr>` : ''}
+        </tbody>
+      </table></div>
+    </div>`;
+  }).join('');
+}
+
+/* ── SIMULADOR ────────────────────────────────────────────────────────
+   Toda la pantalla lee de DATA.precios. Se guarda una copia intacta y se
+   recalcula la matriz aplicando el ajuste: al volver a pintar, las fichas,
+   la tabla de referencia y el plan se mueven solos. No escribe en Bitrix. */
+const BASE = JSON.parse(JSON.stringify(DATA.precios));
+const LANZADOS = DATA.lanzados || BLDGS;
+const GRUPOS = {};
+BLDGS.forEach(b => { (GRUPOS[DATA.grupos[b]] = GRUPOS[DATA.grupos[b]] || []).push(b); });
+const NIVN = {PB:'Planta baja', PA:'Pisos 2 y 3', '4P':'4to piso'};
+const CATN = {M:'Medianero', E1:'Esquinero interno', E2:'Esquinero externo', E3:'Esquinero 3'};
+let AJ = {dest:'*', niv:'*', cat:'*', tipo:'monto', val:0};
+
+function simMatriz() {
+  DATA.precios = JSON.parse(JSON.stringify(BASE));
+  if (!AJ.val) return;
+  const obj = AJ.dest === '*' ? BLDGS.slice()
+            : AJ.dest.charAt(0) === 'g' ? (GRUPOS[AJ.dest.slice(2)] || [])
+            : [AJ.dest.slice(2)];
+  obj.forEach(b => {
+    const m = DATA.precios[b]; if (!m) return;
+    Object.keys(m).forEach(n => {
+      if (AJ.niv !== '*' && n !== AJ.niv) return;
+      Object.keys(m[n]).forEach(c => {
+        if (AJ.cat !== '*' && c !== AJ.cat) return;
+        const v = m[n][c];
+        if (v == null) return;              /* sin precio base no se ajusta */
+        m[n][c] = AJ.tipo === 'monto' ? v + AJ.val : Math.round(v * (1 + AJ.val/100));
+      });
+    });
+  });
+}
+
+/* Efecto real: solo unidades DISPONIBLES de edificios LANZADOS. Lo reservado y
+   lo vendido conserva su precio, y J no se escribe aunque se vea. */
+function simEfecto() {
+  let n = 0, antes = 0, desp = 0, fuera = 0;
+  BLDGS.forEach(b => {
+    FLOORS.forEach(fl => {
+      for (let p = 1; p <= (DATA.uxp[b] || 8); p++) {
+        const u = `${b}-${fl.num}-${p}`;
+        if (ST[u] !== 'D') continue;
+        const c = getCat(p, b, fl.num);
+        const ov = DATA.ovUnidad[u] || {};
+        const fuente = ov.sigue_a || b;
+        const base = BASE[fuente] && BASE[fuente][fl.grp] ? BASE[fuente][fl.grp][c] : null;
+        const now  = target(b, fl.grp, c, u);
+        if (base == null || now == null) continue;
+        if (LANZADOS.indexOf(b) < 0) { if (now !== base) fuera++; continue; }
+        antes += base; desp += now;
+        if (now !== base) n++;
+      }
+    });
+  });
+  return {n, antes, desp, fuera};
+}
+
+function renderSim() {
+  const e = simEfecto(), d = e.desp - e.antes;
+  const sg = d > 0 ? 'up' : d < 0 ? 'dn' : '';
+  document.getElementById('sim-out').innerHTML = `
+    <div class="simo"><div class="sl">Unidades que cambian</div>
+      <div class="sv ${e.n ? sg : ''}">${e.n}</div></div>
+    <div class="simo"><div class="sl">Efecto en la cartera</div>
+      <div class="sv ${sg}">${d >= 0 ? '+' : '−'}$${Math.abs(d).toLocaleString('en-US')}</div></div>
+    <div class="simo"><div class="sl">Cartera disponible antes</div>
+      <div class="sv">$${e.antes.toLocaleString('en-US')}</div></div>
+    <div class="simo"><div class="sl">Después</div>
+      <div class="sv">$${e.desp.toLocaleString('en-US')}</div></div>`;
+  const noLanz = BLDGS.filter(b => LANZADOS.indexOf(b) < 0);
+  document.getElementById('sim-nota').textContent = AJ.val
+    ? `Alcanza a ${e.n} unidades disponibles. Lo reservado y lo vendido conserva su precio`
+      + (noLanz.length ? `, y ${noLanz.join(', ')} queda fuera por no estar lanzado.` : '.')
+      + ' Esto es una simulación: no escribe nada en Bitrix.'
+    : 'Elige a quién le subes y cuánto. Las fichas de abajo se recalculan solas.';
+  const j = document.getElementById('sim-json');
+  j.hidden = !AJ.val;
+  if (AJ.val) {
+    const o = {aplica_a: AJ.dest === '*' ? '*' : AJ.dest.slice(2), nivel: AJ.niv, categoria: AJ.cat};
+    o[AJ.tipo] = AJ.val; o.nota = 'subida gerencia';
+    j.textContent = 'En el sistema real es una línea de ajustes:  ' + JSON.stringify(o);
+  }
+  document.getElementById('sim').classList.toggle('act', !!AJ.val);
+  const conf = document.getElementById('sim-conf');
+  if (conf && !AJ.val) conf.hidden = true;
+  if (typeof simAplicable === 'function') simAplicable();
+}
+
+function simCambio() {
+  AJ = {dest: document.getElementById('sim-dest').value,
+        niv:  document.getElementById('sim-niv').value,
+        cat:  document.getElementById('sim-cat').value,
+        tipo: document.getElementById('sim-tipo').value,
+        val:  parseFloat(document.getElementById('sim-val').value) || 0};
+  simMatriz(); all(); renderSim();
+}
+
+function simInit() {
+  const dest = document.getElementById('sim-dest');
+  dest.innerHTML = '<option value="*">Todo el proyecto</option>'
+    + Object.keys(GRUPOS).map(g => `<option value="g:${g}">Grupo ${g} — ${GRUPOS[g].join(', ')}</option>`).join('')
+    + BLDGS.map(b => `<option value="e:${b}">Edificio ${b}</option>`).join('');
+  document.getElementById('sim-niv').innerHTML = '<option value="*">Todos</option>'
+    + Object.keys(NIVN).map(k => `<option value="${k}">${NIVN[k]}</option>`).join('');
+  document.getElementById('sim-cat').innerHTML = '<option value="*">Todas</option>'
+    + Object.keys(CATN).map(k => `<option value="${k}">${CATN[k]}</option>`).join('');
+  ['sim-dest','sim-niv','sim-cat','sim-tipo','sim-val'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('change', simCambio);
+    el.addEventListener('input', simCambio);
+  });
+  document.getElementById('sim-reset').addEventListener('click', () => {
+    document.getElementById('sim-val').value = 0; simCambio();
+  });
+  const ap = document.getElementById('sim-aplicar');
+  if (ap) {
+    ap.addEventListener('click', simConfirmar);
+    document.getElementById('sim-ok').addEventListener('click', simEscribir);
+    document.getElementById('sim-cancel').addEventListener('click', () => {
+      document.getElementById('sim-conf').hidden = true;
+    });
+  }
+  renderSim();
+}
+
+/* ── APLICAR ──────────────────────────────────────────────────────────
+   Simular es gratis; escribir no. Por eso el boton solo aparece cuando hay algo
+   que aplicar, y aun asi pide clave y dice cuantas unidades va a tocar. */
+function simAplicable() {
+  const e = simEfecto();
+  const b = document.getElementById('sim-aplicar');
+  if (!b) return;
+  b.hidden = !(AJ.val && e.n);
+  b.textContent = `Aplicar en Bitrix — ${e.n} unidad${e.n === 1 ? '' : 'es'}`;
+}
+
+function simConfirmar() {
+  const e = simEfecto(), d = e.desp - e.antes;
+  document.getElementById('sim-conf-txt').innerHTML =
+    `Se van a escribir <b>${e.n}</b> unidades disponibles y la cartera pasa de `
+    + `<b>$${e.antes.toLocaleString('en-US')}</b> a <b>$${e.desp.toLocaleString('en-US')}</b> `
+    + `(${d >= 0 ? '+' : '−'}$${Math.abs(d).toLocaleString('en-US')}). `
+    + `Lo reservado y lo vendido no se toca.`;
+  document.getElementById('sim-res').textContent = '';
+  document.getElementById('sim-conf').hidden = false;
+  document.getElementById('sim-clave').focus();
+}
+
+function simEscribir() {
+  const btn = document.getElementById('sim-ok');
+  const res = document.getElementById('sim-res');
+  const clave = document.getElementById('sim-clave').value;
+  if (!clave) { res.className = 'simres err'; res.textContent = 'Falta la clave.'; return; }
+  btn.disabled = true; res.className = 'simres'; res.textContent = 'Escribiendo…';
+  const body = new URLSearchParams({
+    token: DATA.token, cat: DATA.cat, accion: 'aplicar', clave: clave,
+    dest: AJ.dest === '*' ? '*' : AJ.dest.slice(2),
+    niv: AJ.niv, cat_f: AJ.cat, tipo: AJ.tipo, val: String(AJ.val),
+    nota: document.getElementById('sim-nota').value,
+  });
+  fetch(location.pathname, {method: 'POST', body,
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'}})
+    .then(r => r.json())
+    .then(j => {
+      btn.disabled = false;
+      if (!j.ok) { res.className = 'simres err'; res.textContent = j.error || 'No se pudo aplicar.'; return; }
+      res.className = 'simres ok';
+      res.innerHTML = `Listo: <b>${j.escritas}</b> de ${j.previstas} unidades escritas.`
+        + (j.errores && j.errores.length ? ` Con ${j.errores.length} error(es): ${j.errores.join('; ')}` : '')
+        + ' Recargando…';
+      setTimeout(() => location.reload(), 1600);
+    })
+    .catch(err => { btn.disabled = false; res.className = 'simres err';
+                    res.textContent = 'Falló la conexión: ' + err.message; });
+}
+
+function toggleFixed(){ onlyFixed=!onlyFixed; renderFilter(); renderFloors(); }
+function toggleAvail(){ onlyAvail=!onlyAvail; renderTabs(); renderInfo(); renderFilter(); renderFloors(); }
+function selUnit(uid){ sel = sel===uid ? null : uid; renderFloors(); renderDetail(); renderPriceTable(); renderPlan(); }
+
+/* ── INIT ────────────────────────────────────────────────────────── */
+all();
+simInit();
+</script>
+</body>
+</html>
