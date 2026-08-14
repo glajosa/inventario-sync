@@ -153,6 +153,13 @@
     .simf label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.07em;
       color:var(--t3);margin-bottom:5px}
     .simf .pista{display:block;font-size:11px;color:var(--t3);margin-top:4px;line-height:1.35}
+    /* El simbolo va DENTRO del campo: asi no hay duda de si se escribe en dolares o
+       en porcentaje, y el numero se lee como una cifra y no como una cadena suelta. */
+    .simval{position:relative;display:flex;align-items:center}
+    .simval .simsig{position:absolute;left:11px;font-size:14px;font-weight:600;color:var(--t3);
+      pointer-events:none}
+    .simval input{padding-left:26px;font-variant-numeric:tabular-nums;font-size:15px;
+      font-weight:600;letter-spacing:.01em}
     .simf select,.simf input{width:100%;padding:7px 10px;border:0.5px solid var(--bds);
       border-radius:8px;background:var(--surf2);color:var(--t1);font:inherit;font-size:13px;
       font-weight:500}
@@ -258,8 +265,10 @@
         <span class="pista">medianero, esquinero…</span></div>
       <div class="simf"><label for="sim-tipo">Tipo</label><select id="sim-tipo" autocomplete="off">
         <option value="monto">Monto fijo USD</option><option value="pct">Porcentaje</option></select></div>
-      <div class="simf"><label for="sim-val">Cuánto</label><input id="sim-val" type="number" value="0" step="500"
-          inputmode="numeric" autocomplete="off" data-lpignore="true" data-1p-ignore></div>
+      <div class="simf"><label for="sim-val">Cuánto</label>
+        <div class="simval"><span class="simsig" id="sim-sig">$</span>
+          <input id="sim-val" type="text" value="" placeholder="0" inputmode="numeric"
+                 autocomplete="off" data-lpignore="true" data-1p-ignore></div></div>
       <button class="simbtn" id="sim-reset" type="button">Volver a cero</button>
       <button class="simbtn prim" id="sim-aplicar" type="button" hidden>Aplicar en Bitrix</button>
     </div>
@@ -763,12 +772,40 @@ function renderSim() {
   if (typeof simAplicable === 'function') simAplicable();
 }
 
+/* Formatea el monto mientras se teclea: 12313 -> 12,313.
+   Se cuenta cuantos DIGITOS quedaban a la izquierda del cursor y se lo devuelve
+   ahi mismo. Reponer el cursor por posicion de caracter lo manda de paseo cada vez
+   que entra o sale una coma. */
+function formatearMonto() {
+  const el = document.getElementById('sim-val');
+  const antes = el.value;
+  const pos = el.selectionStart ?? antes.length;
+  const digitosIzq = (antes.slice(0, pos).match(/\d/g) || []).length;
+
+  const neg = antes.trim().charAt(0) === '-';
+  let [ent, dec] = antes.replace(/[^\d.]/g, '').split('.');
+  ent = (ent || '').replace(/^0+(?=\d)/, '');          // fuera el cero pegado adelante
+  let out = ent ? Number(ent).toLocaleString('en-US') : '';
+  if (dec !== undefined) out += '.' + dec.slice(0, 2);
+  if (neg && out) out = '-' + out;
+  if (out === antes) return;
+
+  el.value = out;
+  let n = 0, i = 0;
+  for (; i < out.length && n < digitosIzq; i++) if (/\d/.test(out[i])) n++;
+  el.setSelectionRange(i, i);
+}
+
 function simCambio() {
+  formatearMonto();
   AJ = {dest: document.getElementById('sim-dest').value,
         niv:  document.getElementById('sim-niv').value,
         cat:  document.getElementById('sim-cat').value,
         tipo: document.getElementById('sim-tipo').value,
-        val:  parseFloat(document.getElementById('sim-val').value) || 0};
+        val:  parseFloat(String(document.getElementById('sim-val').value).replace(/,/g, '')) || 0};
+  // El simbolo sigue al tipo: $ para monto fijo, % para porcentaje.
+  const sig = document.getElementById('sim-sig');
+  if (sig) sig.textContent = AJ.tipo === 'pct' ? '%' : '$';
   simMatriz(); all(); renderSim();
 }
 
@@ -787,7 +824,7 @@ function simInit() {
     el.addEventListener('input', simCambio);
   });
   document.getElementById('sim-reset').addEventListener('click', () => {
-    document.getElementById('sim-val').value = 0; simCambio();
+    document.getElementById('sim-val').value = ''; simCambio();
   });
   const ap = document.getElementById('sim-aplicar');
   if (ap) {
