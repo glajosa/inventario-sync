@@ -33,6 +33,19 @@ const PLACEMENT = 'CRM_DEAL_DETAIL_TAB';
 const HANDLER   = 'https://galjosa-cotizador.pwluu1.easypanel.host/bitrix/deal';
 const TITULO    = 'Cotizador';
 
+/** El cotizador madre. Va en el menú del propio Inventario (el SPA 1072), que es
+ *  donde viven las unidades, y además en el menú izquierdo para llegar siempre.
+ *  El token viaja en el HANDLER porque Bitrix abre el placement por POST y no
+ *  arrastra la query que uno pondría a mano. */
+const PM_BASE   = 'https://galjosa-inventario-sync.pwluu1.easypanel.host/preciomadre.php';
+const PM_TITULO = 'Precios del proyecto';
+const PM_DESC   = 'Matriz de precios: simula una subida por bloque y aplícala';
+const PM_SITIOS = ['CRM_DYNAMIC_1072_LIST_MENU', 'LEFT_MENU'];
+
+function pm_handler(): string {
+    return PM_BASE . '?token=' . rawurlencode((string)getenv('OUTBOUND_TOKEN')) . '&cat=39';
+}
+
 $accion = (string)($_GET['accion'] ?? 'ver');
 
 /** Lista compacta de lo ENLAZADO, para ver antes y después sin adivinar.
@@ -87,6 +100,22 @@ if ($accion === 'poner') {
         'DESCRIPTION' => 'Genera la cotizacion del cliente con las unidades de este negocio',
     ]);
     echo "\nbind: " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
+} elseif ($accion === 'poner-precios') {
+    foreach (PM_SITIOS as $sitio) {
+        app_bx('placement.unbind', ['PLACEMENT' => $sitio, 'HANDLER' => pm_handler()]);
+        $r = app_bx('placement.bind', [
+            'PLACEMENT'   => $sitio,
+            'HANDLER'     => pm_handler(),
+            'TITLE'       => PM_TITULO,
+            'DESCRIPTION' => PM_DESC,
+        ]);
+        echo "\nbind {$sitio}: " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
+    }
+} elseif ($accion === 'quitar-precios') {
+    foreach (PM_SITIOS as $sitio) {
+        $r = app_bx('placement.unbind', ['PLACEMENT' => $sitio, 'HANDLER' => pm_handler()]);
+        echo "\nunbind {$sitio}: " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
+    }
 } elseif ($accion === 'quitar') {
     $r = app_bx('placement.unbind', ['PLACEMENT' => PLACEMENT, 'HANDLER' => HANDLER]);
     echo "\nunbind: " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
