@@ -105,13 +105,20 @@ if ($accion === 'aplicar') {
     // El ajuste se guarda ANTES de escribir: si Bitrix falla a la mitad, la matriz
     // ya dice cuál es el precio bueno y volver a aplicar termina el trabajo. Al
     // revés se perdería la subida y nadie sabría cuáles quedaron a medias.
+    //
+    // Pero se guarda como PENDIENTE. Si la petición muere antes de escribir -- pasó:
+    // la matriz decía 148.001 y Bitrix seguía en 148.000 -- el histórico lo dice y
+    // ofrece reintentar, en vez de figurar como aplicado y sin respaldo que deshacer.
+    $aj['estado'] = 'pendiente';
     $lista = mz_ajustes($cat);
     $lista[] = $aj;
     mz_ajustes_guardar($cat, $lista);
 
     $cfg2 = mz_cfg($cat);
-    mz_cache_borrar($cfg2);                 // tras escribir, la foto vieja miente
-    $filas = mz_plan($cfg2, mz_unidades($cfg2));
+    // Se usa el caché compartido, no una lectura nueva: releer las 304 unidades son
+    // 7 páginas con freno y era justo lo que hacía que la petición se cayera antes
+    // de escribir. El precio de hoy que hace falta para el plan ya está ahí.
+    $filas = mz_plan($cfg2, mz_unidades_cache($cfg2));
     [$ok, $err, $respaldo] = mz_aplicar($cfg2, $filas);
     mz_cache_borrar($cfg2);
     $n = count(array_filter($filas, fn($r) => $r['cambia']));
@@ -119,9 +126,13 @@ if ($accion === 'aplicar') {
     // El respaldo queda apuntado en el propio ajuste: así "deshacer" sabe qué
     // archivo restaurar sin que nadie tenga que elegirlo de una lista.
     $lista = mz_ajustes($cat);
-    if ($lista) { $lista[count($lista) - 1]['respaldo'] = $respaldo;
-                  $lista[count($lista) - 1]['escritas'] = $ok;
-                  mz_ajustes_guardar($cat, $lista); }
+    if ($lista) {
+        $i = count($lista) - 1;
+        $lista[$i]['respaldo'] = $respaldo;
+        $lista[$i]['escritas'] = $ok;
+        $lista[$i]['estado']   = $err ? 'parcial' : 'aplicado';
+        mz_ajustes_guardar($cat, $lista);
+    }
 
     logline("MATRIZ cat=$cat ajuste=" . json_encode($aj, JSON_UNESCAPED_UNICODE)
           . " · {$ok}/{$n} unidades escritas · respaldo={$respaldo}"

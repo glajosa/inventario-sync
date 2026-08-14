@@ -220,6 +220,9 @@
       background:none;border:0;padding:0;text-decoration:underline}
     .simhist .undo:hover{color:var(--pri2)}
     .simhist .vacio{font-size:12.5px;color:var(--t3)}
+    .simhist .pend{font-size:11px;font-weight:700;color:#a4331f;background:#fbeceb;
+      border-radius:99px;padding:2px 9px}
+    @media(prefers-color-scheme:dark){.simhist .pend{background:#2b1618;color:#ff8e93}}
     .simres{margin-top:10px;font-size:12.5px;line-height:1.55}
     .simres.ok{color:#0f6e56} .simres.err{color:#a4331f}
     .simjson{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--t2);
@@ -536,9 +539,13 @@ function renderFloors() {
         const cur_ = BX[uid] ?? null;
         const price = cur_ ?? tgt;
         const delta = (st==='D' && cur_ != null && tgt != null) ? tgt - cur_ : null;
+        // Con una subida en curso, lo que NO entra en ella se atenua. Si no, se
+        // marca "solo Medianero" y siguen igual de presentes las otras 28 fichas.
+        const simActiva = typeof AJ !== 'undefined' && AJ.val;
         const dim = (curCat !== 'all' && cat !== curCat)
                  || (onlyFixed && !fx)
-                 || (onlyAvail && st && st !== 'D');
+                 || (onlyAvail && st && st !== 'D')
+                 || (simActiva && !delta);
         const isSel = sel === uid;
         const stCls = st === 'F' ? ' sold' : st === 'R' ? ' resv' : '';
         return `<div class="unit${dim?' dim':''}${isSel?' sel':''}" onclick="selUnit('${uid}')">
@@ -905,10 +912,13 @@ function renderHist() {
       + (a.quien ? ` <span class="fecha">· por ${a.quien}</span>` : '')
       + (a.fecha ? ` <span class="fecha">· ${a.fecha}</span>` : '')
       + (a.nota ? ` <span class="fecha">· ${a.nota}</span>` : '')
-      + (i === A.length - 1
-          ? (a.respaldo ? ` <button class="undo" type="button" onclick="simDeshacer()">deshacer</button>`
-                        : ` <span class="fecha">· sin respaldo, no se puede deshacer</span>`)
-          : ` <span class="fecha" title="Solo se deshace la última: quitar una del medio dejaría las siguientes calculadas sobre un precio que ya no existe">·  bloqueada</span>`)
+      + (a.estado === 'pendiente'
+          ? ` <span class="pend">no llegó a escribirse</span>`
+            + ` <button class="undo" type="button" onclick="simDeshacer()">quitar</button>`
+          : i === A.length - 1
+            ? (a.respaldo ? ` <button class="undo" type="button" onclick="simDeshacer()">deshacer</button>`
+                          : ` <span class="fecha">· sin respaldo</span>`)
+            : ` <span class="fecha" title="Solo se deshace la última: quitar una del medio dejaría las siguientes calculadas sobre un precio que ya no existe">· bloqueada</span>`)
       + '</li>';
   }).join('') + '</ul>';
 }
