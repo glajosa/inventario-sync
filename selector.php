@@ -237,11 +237,21 @@ function catalogo(bool $force = false): array {
     foreach (($c['result']['categories'] ?? []) as $cat) $proyectos[(string)$cat['id']] = (string)$cat['name'];
 
     // stages por categoría (los STATUS_ID difieren por pipeline -> resolver por nombre)
+    // Mismo cuidado que con los enum de aquí abajo: si esta llamada falla, TODAS las
+    // unidades de ese pipeline quedaban con la etapa en blanco y el caché guardaba
+    // esa nada como si fuera un dato. Se reutiliza el mapa bueno del caché anterior
+    // antes que escribir vacío.
     $stageName = [];
     foreach (array_keys($proyectos) as $cid) {
         $st = bx('crm.status.list', ['filter' => ['ENTITY_ID' => 'DYNAMIC_' . SPA_ENTITY . '_STAGE_' . $cid]]);
-        foreach (($st['result'] ?? []) as $s) $stageName[(string)$s['STATUS_ID']] = strtoupper((string)$s['NAME']);
+        if (!$st['ok'] || !($st['result'] ?? [])) {
+            sellog("status.list fallo cat=$cid -> se conservan los nombres del cache anterior");
+            continue;
+        }
+        foreach ($st['result'] as $s) $stageName[(string)$s['STATUS_ID']] = strtoupper((string)$s['NAME']);
     }
+    $viejoSt = cache_leer()['stages'] ?? [];
+    if ($viejoSt) $stageName += $viejoSt;      // lo nuevo manda, lo viejo rellena
 
     // Etiquetas de los enum (torre/piso): la unidad guarda el ID interno (1881),
     // no el texto ("A"). OJO: crm.item.fields devuelve las opciones de forma
@@ -337,7 +347,10 @@ function catalogo(bool $force = false): array {
 
     // el orden natural por código se aplica al agrupar por proyecto en la vista
     // se guarda `enum` para poder reutilizarlo si Bitrix devuelve las opciones vacías
-    $out = ['units' => $units, 'proyectos' => $proyectos, 'enum' => $enum, 'built' => time()];
+    // El mapa de etapas se guarda para que unidadlib no tenga que pedirlo en cada
+    // evento: era 1 llamada por evento y, cuando fallaba, dejaba la unidad sin etapa.
+    $out = ['units' => $units, 'proyectos' => $proyectos, 'enum' => $enum,
+            'stages' => $stageName, 'built' => time()];
     @file_put_contents($path, json_encode($out));
     flock($fh, LOCK_UN); fclose($fh);
     return $out;

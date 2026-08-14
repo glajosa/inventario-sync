@@ -248,13 +248,25 @@ function unidad_evento(string $event, int $unitId, int $etid): string {
     }
 
     // Nombre de la etapa: los STATUS_ID difieren por pipeline, se resuelve por nombre.
-    $st = u_bx('crm.status.list', ['filter' => ['ENTITY_ID' => 'DYNAMIC_' . SPA_ENTITY . '_STAGE_' . $cid]]);
-    $stage = '';
-    foreach (($st['result'] ?? []) as $s) {
-        if ((string)$s['STATUS_ID'] === (string)($it['stageId'] ?? '')) {
-            $stage = strtoupper((string)$s['NAME']);
-            break;
+    // El mapa viene en el caché, así que lo normal es CERO llamadas. Solo se pregunta
+    // a Bitrix si aparece un STATUS_ID que el mapa no conoce — etapa recién creada.
+    $sid   = (string)($it['stageId'] ?? '');
+    $mapa  = $cache['stages'] ?? [];
+    $stage = $mapa[$sid] ?? '';
+    if ($stage === '' && $sid !== '') {
+        $st = u_bx('crm.status.list', ['filter' => ['ENTITY_ID' => 'DYNAMIC_' . SPA_ENTITY . '_STAGE_' . $cid]]);
+        foreach (($st['result'] ?? []) as $s) {
+            if ((string)$s['STATUS_ID'] === $sid) { $stage = strtoupper((string)$s['NAME']); break; }
         }
+    }
+    if ($stage === '') {
+        // No se pudo resolver. Se CONSERVA la etapa que ya tenía en vez de escribir
+        // vacío: así fue como 21 unidades quedaron sin etapa y desaparecieron de los
+        // conteos. Un dato viejo es mejor que ninguno, y el barrido lo corrige.
+        foreach (($cache['units'] ?? []) as $vu) {
+            if ((int)($vu['id'] ?? 0) === $unitId) { $stage = (string)($vu['stage'] ?? ''); break; }
+        }
+        ulog("u=$unitId etapa sin resolver (sid=$sid) -> se conserva '" . $stage . "'");
     }
 
     $enum  = $cache['enum'] ?? [];
