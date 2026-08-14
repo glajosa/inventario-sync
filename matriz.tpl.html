@@ -171,6 +171,18 @@
     .simconf input{padding:7px 10px;border:0.5px solid var(--bds);border-radius:8px;
       background:var(--surf);color:var(--t1);font:inherit;font-size:13px}
     .simconf input.nota{flex:1 1 220px;min-width:0}
+    .simhist{margin-top:12px;padding-top:11px;border-top:0.5px solid var(--bd)}
+    .simhist .hl{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--t3);
+      margin-bottom:7px}
+    .simhist ul{list-style:none;display:flex;flex-direction:column;gap:5px}
+    .simhist li{display:flex;gap:10px;align-items:baseline;font-size:12.5px;color:var(--t2);
+      flex-wrap:wrap}
+    .simhist b{color:var(--t1);font-variant-numeric:tabular-nums}
+    .simhist .fecha{color:var(--t3);font-size:11.5px}
+    .simhist .undo{margin-left:auto;font-size:11.5px;color:var(--pri);cursor:pointer;
+      background:none;border:0;padding:0;text-decoration:underline}
+    .simhist .undo:hover{color:var(--pri2)}
+    .simhist .vacio{font-size:12.5px;color:var(--t3)}
     .simres{margin-top:10px;font-size:12.5px;line-height:1.55}
     .simres.ok{color:#0f6e56} .simres.err{color:#a4331f}
     .simjson{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--t2);
@@ -238,6 +250,7 @@
     <div class="simout" id="sim-out"></div>
     <div class="simnota" id="sim-nota"></div>
     <div class="simjson" id="sim-json" hidden></div>
+    <div class="simhist" id="sim-hist"></div>
     <div class="simconf" id="sim-conf" hidden>
       <p id="sim-conf-txt"></p>
       <div class="row">
@@ -900,6 +913,51 @@ function simAplicable() {
   if (!b) return;
   b.hidden = !(AJ.val && e.n);
   b.textContent = `Aplicar en Bitrix — ${e.n} unidad${e.n === 1 ? '' : 'es'}`;
+}
+
+/* El historico es lo que hace util el deshacer: sin ver que se subio y cuando,
+   nadie se atreve a revertir nada. */
+function renderHist() {
+  const h = document.getElementById('sim-hist');
+  if (!h) return;
+  const A = DATA.ajustes || [];
+  if (!A.length) {
+    h.innerHTML = '<div class="hl">Subidas aplicadas</div>'
+                + '<div class="vacio">Ninguna todavía. Los precios están tal cual la matriz original.</div>';
+    return;
+  }
+  const q = a => a.aplica_a === '*' ? 'todo el proyecto' : a.aplica_a;
+  const cu = a => a.pct != null ? (a.pct > 0 ? '+' : '') + a.pct + '%'
+                                : (a.monto > 0 ? '+' : '−') + '$' + Math.abs(a.monto).toLocaleString('en-US');
+  h.innerHTML = '<div class="hl">Subidas aplicadas</div><ul>' + A.map((a, i) => {
+    const det = [a.nivel !== '*' ? DATA.niv?.[a.nivel] || a.nivel : null,
+                 a.categoria !== '*' ? DATA.cat_nom?.[a.categoria] || a.categoria : null]
+                .filter(Boolean).join(' · ');
+    return `<li><b>${cu(a)}</b> a ${q(a)}${det ? ' — ' + det : ''}`
+      + (a.escritas != null ? ` <span class="fecha">· ${a.escritas} unidades</span>` : '')
+      + (a.fecha ? ` <span class="fecha">· ${a.fecha}</span>` : '')
+      + (a.nota ? ` <span class="fecha">· ${a.nota}</span>` : '')
+      + (i === A.length - 1 && a.respaldo
+          ? ` <button class="undo" type="button" onclick="simDeshacer()">deshacer</button>` : '')
+      + '</li>';
+  }).join('') + '</ul>';
+}
+
+/* Solo se puede deshacer la ULTIMA. Deshacer una del medio dejaria las siguientes
+   calculadas sobre un precio que ya no existe. */
+function simDeshacer() {
+  const clave = prompt('Se va a quitar la última subida y devolver los precios anteriores.\n\nClave de autorización:');
+  if (!clave) return;
+  const body = new URLSearchParams({token: DATA.token, cat: DATA.cat, accion: 'deshacer', clave});
+  fetch(location.pathname, {method: 'POST', body,
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'}})
+    .then(r => r.json())
+    .then(j => {
+      alert(j.ok ? `Listo: ${j.restauradas} precios devueltos a su valor anterior.`
+                 : (j.error || 'No se pudo deshacer.'));
+      if (j.ok) location.reload();
+    })
+    .catch(e => alert('Falló la conexión: ' + e.message));
 }
 
 function simConfirmar() {

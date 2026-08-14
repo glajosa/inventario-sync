@@ -88,15 +88,24 @@ if ($accion === 'aplicar') {
     $cfg2 = mz_cfg($cat);
     mz_cache_borrar($cfg2);                 // tras escribir, la foto vieja miente
     $filas = mz_plan($cfg2, mz_unidades($cfg2));
-    [$ok, $err] = mz_aplicar($cfg2, $filas);
+    [$ok, $err, $respaldo] = mz_aplicar($cfg2, $filas);
     mz_cache_borrar($cfg2);
     $n = count(array_filter($filas, fn($r) => $r['cambia']));
 
+    // El respaldo queda apuntado en el propio ajuste: así "deshacer" sabe qué
+    // archivo restaurar sin que nadie tenga que elegirlo de una lista.
+    $lista = mz_ajustes($cat);
+    if ($lista) { $lista[count($lista) - 1]['respaldo'] = $respaldo;
+                  $lista[count($lista) - 1]['escritas'] = $ok;
+                  mz_ajustes_guardar($cat, $lista); }
+
     logline("MATRIZ cat=$cat ajuste=" . json_encode($aj, JSON_UNESCAPED_UNICODE)
-          . " · {$ok}/{$n} unidades escritas" . ($err ? ' · errores: ' . implode('; ', $err) : ''));
+          . " · {$ok}/{$n} unidades escritas · respaldo={$respaldo}"
+          . ($err ? ' · errores: ' . implode('; ', $err) : ''));
 
     exit(json_encode(['ok' => true, 'escritas' => $ok, 'previstas' => $n,
-                      'errores' => $err, 'ajuste' => $aj], JSON_UNESCAPED_UNICODE));
+                      'errores' => $err, 'ajuste' => $aj, 'respaldo' => $respaldo],
+                     JSON_UNESCAPED_UNICODE));
 }
 
 // ── deshacer el último ajuste ───────────────────────────────────────────────
@@ -111,11 +120,20 @@ if ($accion === 'deshacer') {
     if (!$lista) exit(json_encode(['ok' => false, 'error' => 'No hay ajustes que deshacer.']));
     $fuera = array_pop($lista);
     mz_ajustes_guardar($cat, $lista);
-    // Deshacer NO reescribe Bitrix solo: bajar precios ya publicados es una
-    // decisión comercial, no un rollback técnico. Queda la matriz corregida y el
-    // plan mostrará la diferencia para que alguien la aplique a conciencia.
-    logline("MATRIZ cat=$cat DESHECHO " . json_encode($fuera, JSON_UNESCAPED_UNICODE));
-    exit(json_encode(['ok' => true, 'fuera' => $fuera], JSON_UNESCAPED_UNICODE));
+
+    // Se quita el ajuste de la matriz Y se devuelven los precios que tenían las
+    // unidades antes. Estas son unidades reales que el equipo está cotizando: dejar
+    // la matriz corregida pero Bitrix con el precio nuevo sería lo peor de los dos
+    // mundos, porque nadie sabría cuál de los dos manda.
+    $rest = [0, []];
+    if (!empty($fuera['respaldo'])) {
+        $rest = mz_restaurar($cfg, (string)$fuera['respaldo']);
+        mz_cache_borrar($cfg);
+    }
+    logline("MATRIZ cat=$cat DESHECHO " . json_encode($fuera, JSON_UNESCAPED_UNICODE)
+          . " · {$rest[0]} precios restaurados");
+    exit(json_encode(['ok' => true, 'fuera' => $fuera, 'restauradas' => $rest[0],
+                      'errores' => $rest[1]], JSON_UNESCAPED_UNICODE));
 }
 
 // ── ver ─────────────────────────────────────────────────────────────────────
@@ -169,6 +187,8 @@ $datos = [
     'm2'         => $m2,
     // lo que necesita el panel de aplicar
     'ajustes'    => mz_ajustes($cat),
+    'niv'        => array_map(fn($n) => $n['etiqueta'] ?? '', $cfg['niveles']),
+    'cat_nom'    => array_map(fn($c) => $c['etiqueta'] ?? '', $cfg['categorias']),
     'proyectos'  => array_map(fn($c) => $c['proyecto'] ?? '', $proyectos),
     'token'      => $tok,
 ];

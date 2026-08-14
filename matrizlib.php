@@ -256,13 +256,36 @@ function mz_plan(array $cfg, array $unidades, ?array $px = null): array {
     return $filas;
 }
 
+/** Respaldos de precios, del más nuevo al más viejo. */
+function mz_respaldos(int $cat): array {
+    $g = glob((getenv('DATA_DIR') ?: '/data') . "/respaldo_{$cat}_*.json") ?: [];
+    rsort($g);
+    return $g;
+}
+
 /**
- * Escribe en Bitrix las unidades que cambian. Devuelve [escritas, errores].
+ * Escribe en Bitrix las unidades que cambian. Devuelve [escritas, errores, respaldo].
  * No decide nada: recibe el plan ya calculado, para que lo que se muestra en la
  * vista previa sea literalmente lo que se escribe.
+ *
+ * ANTES de tocar nada guarda el PVP anterior de cada unidad. Estos son precios de
+ * unidades reales que el equipo comercial esta cotizando: sin el respaldo, una
+ * subida equivocada solo se deshace a mano, ficha por ficha, adivinando cual era
+ * el numero de antes. Con el, se restaura exacto.
  */
 function mz_aplicar(array $cfg, array $filas): array {
     $campo = $cfg['bitrix']['campo_pvp'];
+    $cat   = (int)$cfg['bitrix']['categoryId'];
+
+    $previo = [];
+    foreach ($filas as $r) {
+        if ($r['cambia']) $previo[$r['u']] = ['id' => $r['id'], 'pvp' => $r['actual']];
+    }
+    if (!$previo) return [0, [], null];
+
+    $ruta = (getenv('DATA_DIR') ?: '/data') . "/respaldo_{$cat}_" . gmdate('Ymd-His') . '.json';
+    file_put_contents($ruta, json_encode($previo, JSON_UNESCAPED_UNICODE), LOCK_EX);
+
     $ok = 0; $err = [];
     foreach ($filas as $r) {
         if (!$r['cambia']) continue;
@@ -273,6 +296,30 @@ function mz_aplicar(array $cfg, array $filas): array {
         ]);
         if ($res['ok']) $ok++;
         else $err[] = "{$r['u']}: {$res['error']}";
+    }
+    return [$ok, $err, basename($ruta)];
+}
+
+/**
+ * Devuelve los precios al valor que tenian antes de una subida.
+ * Restaura EXACTO lo guardado, no recalcula: si se recalculara volveria a salir el
+ * precio nuevo y no se desharia nada.
+ */
+function mz_restaurar(array $cfg, string $archivo): array {
+    $ruta = (getenv('DATA_DIR') ?: '/data') . '/' . basename($archivo);
+    $j = json_decode((string)@file_get_contents($ruta), true);
+    if (!is_array($j) || !$j) return [0, ['No se encontró el respaldo.']];
+    $campo = $cfg['bitrix']['campo_pvp'];
+    $ok = 0; $err = [];
+    foreach ($j as $u => $d) {
+        if ($d['pvp'] === null) continue;      // no tenia precio: se deja como esta
+        $res = bx('crm.item.update', [
+            'entityTypeId' => $cfg['bitrix']['entityTypeId'],
+            'id'     => (int)$d['id'],
+            'fields' => [$campo => ((int)round((float)$d['pvp'])) . '|USD'],
+        ]);
+        if ($res['ok']) $ok++;
+        else $err[] = "$u: {$res['error']}";
     }
     return [$ok, $err];
 }
