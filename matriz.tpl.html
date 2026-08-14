@@ -250,15 +250,16 @@
   <div class="sec-lbl">Simulador — subir precios por bloque</div>
   <div id="sim">
     <div class="simrow">
-      <div class="simf"><label for="sim-dest">A quién le sube</label><select id="sim-dest"></select>
+      <div class="simf"><label for="sim-dest">A quién le sube</label><select id="sim-dest" autocomplete="off"></select>
         <span class="pista">todo el proyecto, un grupo o un edificio</span></div>
-      <div class="simf"><label for="sim-niv">Solo estos pisos</label><select id="sim-niv"></select>
+      <div class="simf"><label for="sim-niv">Solo estos pisos</label><select id="sim-niv" autocomplete="off"></select>
         <span class="pista">o todos</span></div>
-      <div class="simf"><label for="sim-cat">Solo esta categoría</label><select id="sim-cat"></select>
+      <div class="simf"><label for="sim-cat">Solo esta categoría</label><select id="sim-cat" autocomplete="off"></select>
         <span class="pista">medianero, esquinero…</span></div>
-      <div class="simf"><label for="sim-tipo">Tipo</label><select id="sim-tipo">
+      <div class="simf"><label for="sim-tipo">Tipo</label><select id="sim-tipo" autocomplete="off">
         <option value="monto">Monto fijo USD</option><option value="pct">Porcentaje</option></select></div>
-      <div class="simf"><label for="sim-val">Cuánto</label><input id="sim-val" type="number" value="0" step="500"></div>
+      <div class="simf"><label for="sim-val">Cuánto</label><input id="sim-val" type="number" value="0" step="500"
+          inputmode="numeric" autocomplete="off" data-lpignore="true" data-1p-ignore></div>
       <button class="simbtn" id="sim-reset" type="button">Volver a cero</button>
       <button class="simbtn prim" id="sim-aplicar" type="button" hidden>Aplicar en Bitrix</button>
     </div>
@@ -269,9 +270,11 @@
     <div class="simhist" id="sim-hist"></div>
     <div class="simconf" id="sim-conf" hidden>
       <p id="sim-conf-txt"></p>
-      <div class="row">
-        <input type="password" id="sim-clave" placeholder="Clave de autorización" autocomplete="off">
-        <input type="text" id="sim-nota" class="nota" placeholder="Motivo — queda en el histórico">
+      <div class="row" id="sim-row-clave">
+        <input type="password" id="sim-clave" placeholder="Clave de autorización"
+               autocomplete="new-password" data-lpignore="true" data-1p-ignore>
+        <input type="text" id="sim-nota" class="nota" placeholder="Motivo — queda en el histórico"
+               autocomplete="off" data-lpignore="true" data-1p-ignore>
         <button class="simbtn prim" id="sim-ok" type="button">Confirmar y escribir</button>
         <button class="simbtn" id="sim-cancel" type="button">Cancelar</button>
       </div>
