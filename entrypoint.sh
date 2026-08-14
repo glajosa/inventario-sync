@@ -25,7 +25,6 @@ cron
   php /var/www/html/rebuild.php   >> /data/cron.log 2>&1
   php /var/www/html/reconcile.php >> /data/cron.log 2>&1
   php /var/www/html/mapa48.php    >> /data/cron.log 2>&1
-  php /var/www/html/warm-precios.php >> /data/cron.log 2>&1
 ) &
 
 exec "$@"

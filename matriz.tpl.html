@@ -37,8 +37,9 @@
     .hdr-left p{font-size:11px;opacity:.65;margin-top:2px}
 
     /* Wrap */
-    .main{max-width:none;margin:0;padding:16px 20px 28px}
+    .main{max-width:1240px;margin:0 auto;padding:20px 24px 44px}
     body{font-size:14px}
+    .sec-lbl{margin:26px 0 10px}
 
     /* Building tabs */
     .btabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1rem}
@@ -144,7 +145,7 @@
     #sim{background:var(--surf);border:1px solid var(--bd);border-radius:10px;
       padding:16px 18px;margin-bottom:1rem;box-shadow:0 1px 2px rgba(0,0,0,.04)}
     #sim.act{border-color:var(--pri);box-shadow:inset 0 0 0 1px var(--pri)}
-    .simrow{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+    .simrow{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
     .simf{flex:1 1 140px;min-width:0}
     .simf label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.07em;
       color:var(--t3);margin-bottom:5px}
@@ -155,10 +156,11 @@
     .simbtn{padding:8px 16px;border-radius:8px;border:0.5px solid var(--bds);background:var(--surf2);
       color:var(--t2);cursor:pointer;font-size:12px;font-weight:500;white-space:nowrap}
     .simbtn:hover{background:var(--bg)}
-    .simout{display:flex;gap:1.75rem;flex-wrap:wrap;margin-top:14px;padding-top:12px;
+    .simout{display:flex;gap:2.6rem;flex-wrap:wrap;margin-top:16px;padding-top:15px;
       border-top:0.5px solid var(--bd)}
     .simo .sl{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--t3)}
-    .simo .sv{font-size:19px;font-weight:500;margin-top:3px;font-variant-numeric:tabular-nums}
+    .simo .sv{font-size:27px;font-weight:600;margin-top:5px;font-variant-numeric:tabular-nums;
+      letter-spacing:-.025em;line-height:1.05}
     .simo .sv.up{color:#0f6e56} .simo .sv.dn{color:#a4331f}
     .simnota{font-size:11px;color:var(--t3);margin-top:10px;line-height:1.5}
     .simbtn.prim{background:var(--pri);color:#fff;border-color:var(--pri);font-weight:500}
@@ -253,7 +255,6 @@
     </div>
     <div class="simout" id="sim-out"></div>
     <div class="simnota" id="sim-nota"></div>
-    <div class="simjson" id="sim-json" hidden></div>
     <div class="simviejo" id="sim-viejo" hidden></div>
     <div class="simhist" id="sim-hist"></div>
     <div class="simconf" id="sim-conf" hidden>
@@ -287,18 +288,8 @@
   <div class="sec-lbl">Precios de referencia — Grupo <span id="grp-lbl"></span> <span style="font-size:10px;font-weight:400;opacity:.7">(referencia PDF)</span></div>
   <div class="pt-wrap"><table class="pt" id="ptable"></table></div>
 
-  <div class="combo" id="combo"></div>
 
-  <div id="comwrap" style="margin-top:1.5rem">
-    <div class="sec-lbl">Lista de precios comercial — la que ve el cliente</div>
-    <div id="comercial"></div>
-  </div>
 
-  <div id="planwrap" style="margin-top:1.5rem">
-    <div class="sec-lbl">Plan de corrección — solo unidades disponibles</div>
-    <div id="plansum"></div>
-    <div class="pt-wrap"><table class="pt" id="plan"></table></div>
-  </div>
 </div>
 
 <script>
@@ -598,88 +589,14 @@ function renderPriceTable() {
 
 function all() {
   renderTabs(); renderInfo(); renderFilter();
-  renderFloors(); renderDetail(); renderPriceTable(); renderCombo(); renderPlan();
-  renderResumen(); renderComercial();
+  renderFloors(); renderDetail(); renderPriceTable(); renderResumen();
 }
 
 /* ── ACTIONS ─────────────────────────────────────────────────────── */
 function selBldg(b) { cur=b; sel=null; onlyFixed=false; all(); }
 function setCat(c)  { curCat=c; renderFilter(); renderFloors(); }
-function renderCombo() {
-  const g = BD[cur].g, c = COMBOS[g];
-  const el = document.getElementById('combo');
-  if (!c) { el.style.display='none'; return; }
-  el.style.display='block';
-  el.innerHTML = `
-    <h4>Unidades unidas — ${c.m2} m²</h4>
-    <p>Cuando un cliente compra dos departamentos contiguos, se unen en una sola unidad
-       de ${c.m2} m² con 2 parqueos y patio doble. El valor es la suma de los dos.
-       No son una categoría aparte: en la lista de precios aparecen como filas
-       “DESDE” y “3 DORM”, y por eso quedan fuera de la matriz de arriba.</p>
-    <div class="cr">
-      <div class="cc"><div class="cl">Planta baja</div><div class="cv">${fmt(c.pb)}</div></div>
-      <div class="cc"><div class="cl">Pisos 2 y 3</div><div class="cv">${fmt(c.pa)}</div></div>
-      <div class="cc"><div class="cl">4to piso</div><div class="cv">${fmt(c.p4)}</div></div>
-    </div>`;
-}
-
 /* Plan de corrección: recorre solo las DISPONIBLES del edificio actual y
    compara el PVP vigente en Bitrix contra el objetivo de la matriz. */
-function planRows(b) {
-  const out = [];
-  FLOORS.forEach(fl => {
-    for (let p=1;p<=8;p++) {
-      if (p > (DATA.uxp[b] || 8)) continue;
-      const u = `${b}-${fl.num}-${p}`;
-      if (ST[u] !== 'D' && ST[u] !== 'N') continue;
-      const c = getCat(p,b,fl.num);
-      out.push({u, fl, cat:c, m2:BXM2[u]||null, act:BX[u] ?? null, tgt:target(b,fl.grp,c,u)});
-    }
-  });
-  return out;
-}
-
-function renderPlan() {
-  const rows = planRows(cur);
-  const cambian = rows.filter(r => r.act!=null && r.tgt!=null && r.tgt!==r.act);
-  const iguales = rows.filter(r => r.act!=null && r.tgt!=null && r.tgt===r.act);
-  const sinRef  = rows.filter(r => r.tgt==null);
-  const neto = cambian.reduce((s,r)=>s+(r.tgt-r.act),0);
-  const sube = cambian.filter(r=>r.tgt>r.act).length;
-  const baja = cambian.filter(r=>r.tgt<r.act).length;
-
-  document.getElementById('plansum').innerHTML = `
-    <div class="ibar" style="margin-bottom:10px">
-      <div class="ii"><div class="il">Disponibles</div><div class="iv">${rows.length}</div></div>
-      <div class="ii"><div class="il">Cambian</div><div class="iv">${cambian.length}</div></div>
-      <div class="ii"><div class="il">Suben · bajan</div>
-        <div class="iv"><span style="color:#0f6e56">${sube}</span> · <span style="color:#a4331f">${baja}</span></div></div>
-      <div class="ii"><div class="il">Ya correctas</div><div class="iv">${iguales.length}</div></div>
-      <div class="ii"><div class="il">Sin precio objetivo</div><div class="iv">${sinRef.length}</div></div>
-      <div class="ii"><div class="il">Efecto neto en cartera</div>
-        <div class="iv" style="color:${neto>0?'#0f6e56':neto<0?'#a4331f':'var(--t2)'}">${neto>=0?'+':'−'}$${Math.abs(neto).toLocaleString('en-US')}</div></div>
-    </div>`;
-
-  document.getElementById('plan').innerHTML = `
-    <thead><tr><th class="L">Unidad</th><th class="L">Piso</th><th>Categoría</th><th>m²</th>
-      <th>PVP hoy</th><th>Objetivo</th><th>Diferencia</th></tr></thead>
-    <tbody>${rows.map(r => {
-      const d = (r.act!=null && r.tgt!=null) ? r.tgt-r.act : null;
-      const col = d==null ? 'var(--t3)' : d>0 ? '#0f6e56' : d<0 ? '#a4331f' : 'var(--t3)';
-      const cd = CATS[r.cat];
-      return `<tr${sel===r.u?' style="background:var(--surf2)"':''}>
-        <td class="pl" style="cursor:pointer" onclick="selUnit('${r.u}')">${r.u}</td>
-        <td class="pl" style="font-weight:400;color:var(--t3)">${r.fl.name}</td>
-        <td style="text-align:center"><span class="dt-pill" style="${pillSt(cd.pfx)};font-size:10px">${cd.label}</span></td>
-        <td class="val">${r.m2 ?? '—'}</td>
-        <td class="val">${r.act!=null?'$'+r.act.toLocaleString('en-US'):'—'}</td>
-        <td class="val">${r.tgt!=null?'$'+r.tgt.toLocaleString('en-US'):'<span style="color:var(--t3)">sin definir</span>'}</td>
-        <td class="val" style="color:${col};font-weight:${d?600:400}">${
-          d==null ? '—' : d===0 ? 'sin cambio' : (d>0?'▲ +':'▼ −')+'$'+Math.abs(d).toLocaleString('en-US')}</td>
-      </tr>`;
-    }).join('')}</tbody>`;
-}
-
 /* ── RESUMEN DE PROYECTO ─────────────────────────────────────────── */
 function resumenEdificio(b) {
   const r = planRows(b);
@@ -702,89 +619,20 @@ function renderResumen() {
   const listos = R.filter(x=>x.cambian===0 && x.pend===0).map(x=>x.b);
 
   document.getElementById('resumen').innerHTML = `
-    <div class="sec-lbl">Noral Apartments — estado del proyecto</div>
     <div class="rgrid">
       <div class="rcard"><div class="rl">Disponibles</div><div class="rv">${t.disp}</div>
-        <div class="rs">de ${t.disp+t.resv+t.vend} unidades (A–I)</div></div>
-      <div class="rcard"><div class="rl">Reservadas · Vendidas</div><div class="rv">${t.resv} · ${t.vend}</div>
-        <div class="rs">no se tocan</div></div>
-      <div class="rcard"><div class="rl">Por corregir</div>
+        <div class="rs">las únicas que se reprecean</div></div>
+      <div class="rcard"><div class="rl">Reservadas · vendidas</div><div class="rv">${t.resv} · ${t.vend}</div>
+        <div class="rs">conservan su precio</div></div>
+      <div class="rcard"><div class="rl">Fuera de matriz</div>
         <div class="rv ${t.cambian?'pend':'ok'}">${t.cambian}</div>
-        <div class="rs">${t.cambian?'unidades fuera de matriz':'todo alineado'}</div></div>
-      <div class="rcard"><div class="rl">Efecto pendiente</div>
-        <div class="rv" style="color:${t.neto>0?'#0f6e56':t.neto<0?'#a4331f':'var(--t2)'}">${t.neto>=0?'+':'−'}$${Math.abs(t.neto).toLocaleString('en-US')}</div>
-        <div class="rs">si se aplica todo</div></div>
-      <div class="rcard"><div class="rl">Sin categoría</div>
-        <div class="rv ${t.pend?'pend':'ok'}">${t.pend}</div>
-        <div class="rs">${t.pend?'bloquean su edificio':'ninguna'}</div></div>
-      <div class="rcard"><div class="rl">Edificios al día</div>
-        <div class="rv ok">${listos.length}<span style="font-size:13px;color:var(--t3)"> / ${BLDGS.length}</span></div>
-        <div class="rs">${listos.join(' · ') || '—'}</div></div>
-    </div>
-
-    <div class="rtoggle" onclick="const d=document.getElementById('rdetalle');d.hidden=!d.hidden;this.firstChild.textContent=d.hidden?'▸ ':'▾ ';">
-      <span>▸ </span>Ver desglose por edificio
-    </div>
-    <div id="rdetalle" hidden>
-      <div class="pt-wrap"><table class="pt">
-        <thead><tr><th class="L">Edificio</th><th>Disponibles</th><th>Por corregir</th>
-          <th>Sin categoría</th><th>Efecto</th><th class="L">Estado</th></tr></thead>
-        <tbody>${R.map(x => {
-          const ok = x.cambian===0 && x.pend.length===0;
-          return `<tr>
-            <td class="pl" style="cursor:pointer" onclick="selBldg('${x.b}')">${x.b}</td>
-            <td class="val">${x.disp}</td>
-            <td class="val ${x.cambian?'pend':''}">${x.cambian || '—'}</td>
-            <td class="val ${x.pend.length?'pend':''}">${x.pend.length ? x.pend.join(', ') : '—'}</td>
-            <td class="val" style="color:${x.neto>0?'#0f6e56':x.neto<0?'#a4331f':'var(--t3)'}">${
-              x.neto ? (x.neto>0?'+':'−')+'$'+Math.abs(x.neto).toLocaleString('en-US') : '—'}</td>
-            <td class="pl" style="font-weight:400">${ok
-              ? '<span class="ok">al día</span>'
-              : x.pend.length ? 'falta definir categoría' : 'pendiente de aplicar'}</td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table></div>
+        <div class="rs">${t.cambian?'faltan por aplicar':'todo alineado'}</div></div>
     </div>`;
 }
 
 /* ── LISTA COMERCIAL ─────────────────────────────────────────────── */
 /* Lo que ve el cliente: precios por categoría, nunca por unidad.
    Los edificios que comparten matriz salen en un mismo bloque. */
-function renderComercial() {
-  const firma = b => JSON.stringify(DATA.precios[b]);
-  const orden = [], bloq = {};
-  BLDGS.forEach(b => {
-    const f = firma(b);
-    if (bloq[f]) bloq[f].push(b); else { bloq[f] = [b]; orden.push(f); }
-  });
-
-  const NIV = [['PB','Planta Baja'],['PA','Pisos 2 y 3'],['4P','4to Piso']];
-  document.getElementById('comercial').innerHTML = orden.map(f => {
-    const eds = bloq[f], g = DATA.grupos[eds[0]], me = DATA.metraje[g];
-    const px = DATA.precios[eds[0]], cb = DATA.combos[g];
-    return `<div class="lc">
-      <h4>Edificio${eds.length>1?'s':''} ${eds.join(' · ')}</h4>
-      <div class="lcsub">${DATA.grupoNota[g]} · Planta baja ${me.base} m² + ${me.patio_pb} m² de patio
-        · Plantas altas ${me.base}${me.mayor!==me.base?' y '+me.mayor:''} m²</div>
-      <div class="pt-wrap"><table class="pt">
-        <thead><tr><th class="L">Piso</th>
-          <th style="background:var(--m-bg);color:var(--m-tx);border-color:var(--m-bd)">Medianero</th>
-          <th style="background:var(--e1-bg);color:var(--e1-tx);border-color:var(--e1-bd)">Esquinero 1</th>
-          <th style="background:var(--e2-bg);color:var(--e2-tx);border-color:var(--e2-bd)">Esquinero 2</th>
-          <th style="background:var(--e3-bg);color:var(--e3-tx);border-color:var(--e3-bd)">Esquinero 3</th>
-        </tr></thead>
-        <tbody>${NIV.map(([k,et]) => `<tr><td class="pl">${et}</td>` +
-          ['M','E1','E2','E3'].map(c => `<td class="val">${fmt(px[k]?.[c])}</td>`).join('') +
-          `</tr>`).join('')}
-        ${cb ? `<tr><td class="pl" style="font-weight:400;color:var(--t3)">Unidades unidas · ${cb.m2} m²</td>` +
-          NIV.map(([k]) => `<td class="val" style="color:var(--t2)">${fmt(cb[k])}</td>`).join('') +
-          `<td class="val">—</td></tr>` : ''}
-        </tbody>
-      </table></div>
-    </div>`;
-  }).join('');
-}
-
 /* ── SIMULADOR ────────────────────────────────────────────────────────
    Toda la pantalla lee de DATA.precios. Se guarda una copia intacta y se
    recalcula la matriz aplicando el ajuste: al volver a pintar, las fichas,
@@ -859,13 +707,7 @@ function renderSim() {
       + (noLanz.length ? `, y ${noLanz.join(', ')} queda fuera por no estar lanzado.` : '.')
       + ' Esto es una simulación: no escribe nada en Bitrix.'
     : 'Elige a quién le subes y cuánto. Las fichas de abajo se recalculan solas.';
-  const j = document.getElementById('sim-json');
-  j.hidden = !AJ.val;
-  if (AJ.val) {
-    const o = {aplica_a: AJ.dest === '*' ? '*' : AJ.dest.slice(2), nivel: AJ.niv, categoria: AJ.cat};
-    o[AJ.tipo] = AJ.val; o.nota = 'subida gerencia';
-    j.textContent = 'En el sistema real es una línea de ajustes:  ' + JSON.stringify(o);
-  }
+
   document.getElementById('sim').classList.toggle('act', !!AJ.val);
   const conf = document.getElementById('sim-conf');
   if (conf && !AJ.val) conf.hidden = true;
@@ -1007,7 +849,7 @@ function simEscribir() {
 
 function toggleFixed(){ onlyFixed=!onlyFixed; renderFilter(); renderFloors(); }
 function toggleAvail(){ onlyAvail=!onlyAvail; renderTabs(); renderInfo(); renderFilter(); renderFloors(); }
-function selUnit(uid){ sel = sel===uid ? null : uid; renderFloors(); renderDetail(); renderPriceTable(); renderPlan(); }
+function selUnit(uid){ sel = sel===uid ? null : uid; renderFloors(); renderDetail(); renderPriceTable(); }
 
 /* ── INIT ────────────────────────────────────────────────────────── */
 all();

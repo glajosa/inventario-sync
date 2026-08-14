@@ -21,9 +21,6 @@ RUN rm -f /var/www/html/Dockerfile /var/www/html/README.md
 #  - warm-catalogo cada 30 min (~26 llamadas): refresca el catálogo de unidades
 #    que dibuja el campo. Sin esto una unidad NUEVA del SPA no aparecía nunca en
 #    la lista (medido: caché de 5.4 h con TTL de 15 min).
-#  - warm-precios cada 10 min (~7 llamadas): mantiene fresca la foto del inventario
-#    que usa el cotizador madre. Sin esto la pantalla lee Bitrix al abrirse, tarda
-#    ~12 s y se cae con QUERY_LIMIT_EXCEEDED cuando el portal esta ocupado.
 #  - mapa48 cada 6 h (~50 llamadas): conserje del mapa deal48 -> unidad, que es lo
 #    que le permite al evento resolver la unidad con CERO llamadas. Desfasado 20 min
 #    del rebuild para no pedir dos pipelines completos en el mismo minuto.
@@ -31,12 +28,11 @@ RUN rm -f /var/www/html/Dockerfile /var/www/html/README.md
 #    propósito: el evento ONCRMDEALADD la mantiene fresca en vivo; esto solo limpia
 #    deals borrados. Espaciado para NO saturar el API de Bitrix.
 RUN apt-get update && apt-get install -y --no-install-recommends cron && rm -rf /var/lib/apt/lists/* \
- && printf '%s\n%s\n%s\n%s\n%s\n' \
+ && printf '%s\n%s\n%s\n%s\n' \
     '*/15 * * * * root . /data/env.sh; php /var/www/html/reconcile.php >> /data/cron.log 2>&1' \
     '0 */6 * * * root . /data/env.sh; php /var/www/html/rebuild.php >> /data/cron.log 2>&1' \
     '*/30 * * * * root . /data/env.sh; php /var/www/html/warm-catalogo.php >> /data/cron.log 2>&1' \
     '20 */6 * * * root . /data/env.sh; php /var/www/html/mapa48.php >> /data/cron.log 2>&1' \
-    '*/10 * * * * root . /data/env.sh; php /var/www/html/warm-precios.php >> /data/cron.log 2>&1' \
     > /etc/cron.d/inv-cron \
  && chmod 0644 /etc/cron.d/inv-cron
 

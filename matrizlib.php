@@ -200,54 +200,49 @@ function mz_unidades(array $cfg): array {
     return $out;
 }
 
-function mz_ruta_cache(array $cfg): string {
-    return (getenv('DATA_DIR') ?: '/data') . '/unidades_' . $cfg['bitrix']['categoryId'] . '.json';
-}
-
 /**
- * La pantalla NO lee Bitrix: lee este archivo. Un cron lo mantiene fresco.
+ * Las unidades salen del caché que YA mantiene el resto del servicio.
  *
- * Leer 304 unidades son 7 páginas paginadas, y el portal vive cerca de su techo de
- * llamadas. Haciéndolo al abrir la pantalla pasaban las dos cosas malas a la vez:
- * ~12 s de espera, y un QUERY_LIMIT_EXCEEDED que dejaba al usuario sin nada.
+ * `selector_cache.json` guarda id, código, categoría, etapa, m² y PVP de cada
+ * unidad, y lo actualizan los eventos del SPA en cuanto algo cambia en Bitrix
+ * (más warm-catalogo cada 30 min como red). O sea: la información ya está aquí y
+ * ya se pagó. Leerla otra vez desde Bitrix para esta pantalla eran 7 llamadas por
+ * apertura, o 42 por hora con un cron — llamadas duplicadas contra un portal que
+ * vive cerca de su techo.
  *
- * Si la copia está vencida se intenta refrescar, pero si Bitrix falla se SIRVE LA
- * VIEJA con su edad a la vista. Precios de ayer marcados como de ayer son útiles;
- * una pantalla de error no le sirve a nadie.
+ * Coste de esta pantalla ahora: CERO llamadas.
  *
- * @param array $info devuelve ['edad' => segundos, 'fresco' => bool, 'error' => string]
+ * La etapa viene como NOMBRE ('DISPONIBLE'), no como STATUS_ID, porque los ids
+ * difieren por pipeline. Por eso se compara por nombre.
+ *
+ * @param array $info ['edad' => segundos del caché, 'fresco' => bool]
  */
-function mz_unidades_cache(array $cfg, int $ttl = 600, ?array &$info = null): array {
-    $f = mz_ruta_cache($cfg);
-    $hay = is_file($f);
-    $edad = $hay ? time() - (int)@filemtime($f) : PHP_INT_MAX;
-    $viejo = null;
-    if ($hay) {
-        $j = json_decode((string)@file_get_contents($f), true);
-        if (is_array($j) && $j) $viejo = $j;
+function mz_unidades_cache(array $cfg, int $ttl = 0, ?array &$info = null): array {
+    $f = (getenv('DATA_DIR') ?: '/data') . '/selector_cache.json';
+    $j = json_decode((string)@file_get_contents($f), true);
+    $edad = is_file($f) ? time() - (int)@filemtime($f) : PHP_INT_MAX;
+    if (!is_array($j) || empty($j['units'])) {
+        throw new RuntimeException('El catálogo de unidades todavía no está listo. '
+            . 'Se arma solo en unos minutos; vuelve a abrir.');
     }
-    if ($viejo !== null && $edad < $ttl) {
-        $info = ['edad' => $edad, 'fresco' => true, 'error' => ''];
-        return $viejo;
+    $cat = (int)$cfg['bitrix']['categoryId'];
+    $out = [];
+    foreach ($j['units'] as $u) {
+        if ((int)($u['cat'] ?? 0) !== $cat) continue;
+        $cod = strtoupper(trim((string)($u['codigo'] ?? '')));
+        if (!preg_match('/^([A-Z])-(\d)-(\d)/', $cod, $m)) continue;
+        $out["{$m[1]}-{$m[2]}-{$m[3]}"] = [
+            'id'    => (int)($u['id'] ?? 0),
+            'etapa' => strtoupper((string)($u['stage'] ?? '')),
+            'pvp'   => mz_money($u['pvp'] ?? null),
+            'm2'    => $u['m2'] ?? null,
+        ];
     }
-    try {
-        $u = mz_unidades($cfg);
-        @file_put_contents($f . '.tmp', json_encode($u), LOCK_EX);
-        @rename($f . '.tmp', $f);
-        $info = ['edad' => 0, 'fresco' => true, 'error' => ''];
-        return $u;
-    } catch (Throwable $e) {
-        if ($viejo !== null) {
-            $info = ['edad' => $edad, 'fresco' => false, 'error' => $e->getMessage()];
-            return $viejo;                 // vale más lo viejo fechado que nada
-        }
-        throw $e;                          // sin copia previa no hay qué mostrar
-    }
+    if (!$out) throw new RuntimeException("El catálogo no trae unidades del proyecto $cat.");
+    $info = ['edad' => $edad, 'fresco' => $edad < 3600];
+    return $out;
 }
 
-function mz_cache_borrar(array $cfg): void {
-    @unlink((getenv('DATA_DIR') ?: '/data') . '/unidades_' . $cfg['bitrix']['categoryId'] . '.json');
-}
 
 function mz_money($v): ?float {
     if ($v === null || $v === '') return null;
@@ -263,7 +258,8 @@ function mz_money($v): ?float {
 function mz_plan(array $cfg, array $unidades, ?array $px = null): array {
     $px = $px ?? mz_precios_vigentes($cfg);
     $lanzados = mz_edificios($cfg, true);
-    $disp = (string)$cfg['bitrix']['etapa_disponible'];
+    // El caché guarda el NOMBRE de la etapa, no el STATUS_ID.
+    $disp = 'DISPONIBLE';
     $exentas = $cfg['exentas'] ?? [];
     $filas = [];
     foreach ($unidades as $u => $d) {

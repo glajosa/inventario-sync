@@ -146,7 +146,7 @@ $cacheInfo = null;
 try {
     // La pantalla lee el archivo que deja warm-precios.php; solo intenta refrescar
     // si está vencido, y si Bitrix falla sirve la copia anterior fechada.
-    $unid = mz_unidades_cache($cfg, (int)($_REQUEST['recargar'] ?? 0) ? 0 : 900, $cacheInfo);
+    $unid = mz_unidades_cache($cfg, 0, $cacheInfo);
 } catch (Throwable $e) {
     // Mejor no mostrar nada que mostrar la mitad: con datos parciales los totales
     // mienten y una subida se calcularía sobre un inventario incompleto.
@@ -158,12 +158,13 @@ try {
        . '<p style="color:#52514e">Suele ser el límite de llamadas del portal. Espera un minuto y '
        . 'vuelve a abrir.</p></div>');
 }
-$LETRA = ['PREPARATION' => 'D', 'CLIENT' => 'R', 'UC_FIRMAD' => 'F', 'NEW' => 'N'];
+// El caché compartido guarda el NOMBRE de la etapa: los STATUS_ID cambian por
+// pipeline y el nombre no.
+$LETRA = ['DISPONIBLE' => 'D', 'RESERVADO' => 'R', 'FIRMADO' => 'F', 'VENDIDO' => 'F', 'BLOQUEADO' => 'N'];
 
 $estado = []; $pvp = []; $m2 = [];
 foreach ($unid as $u => $d) {
-    $suf = substr((string)strrchr($d['etapa'], ':'), 1);
-    $estado[$u] = $LETRA[$suf] ?? '?';
+    $estado[$u] = $LETRA[$d['etapa']] ?? '?';
     if ($d['pvp'] !== null) $pvp[$u] = (int)round($d['pvp']);
     if ($d['m2'] !== null && $d['m2'] !== '') $m2[$u] = str_replace(',', '.', (string)$d['m2']);
 }
