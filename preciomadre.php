@@ -49,6 +49,29 @@ if (!$cfg) {
 
 $accion = (string)($_REQUEST['accion'] ?? 'ver');
 
+/**
+ * Quién está aplicando la subida.
+ * Bitrix manda AUTH_ID al abrir el placement; con eso se le pregunta su nombre. Si
+ * la pantalla se abrió por URL suelta ese dato no existe, y entonces vale el nombre
+ * que la persona escriba. Una subida de precios sin responsable no sirve de nada:
+ * dentro de un mes nadie va a saber quién la decidió.
+ */
+function pm_quien(string $auth, string $escrito): string {
+    $escrito = trim($escrito);
+    if ($auth !== '') {
+        $dom = (string)(getenv('BITRIX_DOMINIO') ?: 'galjosa.bitrix24.com');
+        $ch = curl_init("https://{$dom}/rest/user.current?auth=" . rawurlencode($auth));
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8]);
+        $j = json_decode((string)curl_exec($ch), true);
+        $u = $j['result'] ?? null;
+        if (is_array($u)) {
+            $nom = trim(($u['NAME'] ?? '') . ' ' . ($u['LAST_NAME'] ?? ''));
+            if ($nom !== '') return $nom;
+        }
+    }
+    return $escrito !== '' ? $escrito : 'sin identificar';
+}
+
 /** Nombre legible del proyecto, por si el JSON no lo trae. */
 function pm_nombre(array $cfg, int $cat): string {
     return (string)($cfg['proyecto'] ?? "Proyecto $cat");
@@ -71,6 +94,7 @@ if ($accion === 'aplicar') {
         'nivel'     => (string)($_POST['niv'] ?? '*'),
         'categoria' => (string)($_POST['cat_f'] ?? '*'),
         'nota'      => trim((string)($_POST['nota'] ?? '')) ?: 'subida desde el cotizador madre',
+        'quien'     => pm_quien((string)($_POST['auth'] ?? ''), (string)($_POST['quien'] ?? '')),
         'fecha'     => gmdate('Y-m-d H:i') . ' UTC',
     ];
     $val  = (float)($_POST['val'] ?? 0);
@@ -119,6 +143,7 @@ if ($accion === 'deshacer') {
     $lista = mz_ajustes($cat);
     if (!$lista) exit(json_encode(['ok' => false, 'error' => 'No hay ajustes que deshacer.']));
     $fuera = array_pop($lista);
+    $fuera['deshecho_por'] = pm_quien((string)($_POST['auth'] ?? ''), (string)($_POST['quien'] ?? ''));
     mz_ajustes_guardar($cat, $lista);
 
     // Se quita el ajuste de la matriz Y se devuelven los precios que tenían las
@@ -193,6 +218,9 @@ $datos = [
     'cat_nom'    => array_map(fn($c) => $c['etiqueta'] ?? '', $cfg['categorias']),
     'proyectos'  => array_map(fn($c) => $c['proyecto'] ?? '', $proyectos),
     'token'      => $tok,
+    // Bitrix lo manda al abrir el placement. Sirve para saber quién aplica sin
+    // pedirle que se identifique a mano.
+    'auth'       => (string)($_REQUEST['AUTH_ID'] ?? ''),
     'edad'       => (int)($cacheInfo['edad'] ?? 0),
     'fresco'     => (bool)($cacheInfo['fresco'] ?? true),
 ];

@@ -295,6 +295,8 @@
       <div class="row" id="sim-row-clave">
         <input type="password" id="sim-clave" placeholder="Clave de autorización"
                autocomplete="new-password" data-lpignore="true" data-1p-ignore>
+        <input type="text" id="sim-quien" placeholder="Tu nombre" autocomplete="off"
+               data-lpignore="true" data-1p-ignore hidden>
         <input type="text" id="sim-nota" class="nota" placeholder="Motivo — queda en el histórico"
                autocomplete="off" data-lpignore="true" data-1p-ignore>
         <button class="simbtn prim" id="sim-ok" type="button">Confirmar y escribir</button>
@@ -872,7 +874,8 @@ function renderHist() {
   const A = DATA.ajustes || [];
   if (!A.length) {
     h.innerHTML = '<div class="hl">Subidas aplicadas</div>'
-                + '<div class="vacio">Ninguna todavía. Los precios están tal cual la matriz original.</div>';
+                + '<div class="vacio">Ninguna todavía. Cuando apliques una, queda aquí con quién la hizo, '
+                + 'cuándo y cuántas unidades tocó — y se puede deshacer.</div>';
     return;
   }
   const q = a => a.aplica_a === '*' ? 'todo el proyecto' : a.aplica_a;
@@ -884,10 +887,13 @@ function renderHist() {
                 .filter(Boolean).join(' · ');
     return `<li><b>${cu(a)}</b> a ${q(a)}${det ? ' — ' + det : ''}`
       + (a.escritas != null ? ` <span class="fecha">· ${a.escritas} unidades</span>` : '')
+      + (a.quien ? ` <span class="fecha">· por ${a.quien}</span>` : '')
       + (a.fecha ? ` <span class="fecha">· ${a.fecha}</span>` : '')
       + (a.nota ? ` <span class="fecha">· ${a.nota}</span>` : '')
-      + (i === A.length - 1 && a.respaldo
-          ? ` <button class="undo" type="button" onclick="simDeshacer()">deshacer</button>` : '')
+      + (i === A.length - 1
+          ? (a.respaldo ? ` <button class="undo" type="button" onclick="simDeshacer()">deshacer</button>`
+                        : ` <span class="fecha">· sin respaldo, no se puede deshacer</span>`)
+          : ` <span class="fecha" title="Solo se deshace la última: quitar una del medio dejaría las siguientes calculadas sobre un precio que ya no existe">·  bloqueada</span>`)
       + '</li>';
   }).join('') + '</ul>';
 }
@@ -897,7 +903,9 @@ function renderHist() {
 function simDeshacer() {
   const clave = prompt('Se va a quitar la última subida y devolver los precios anteriores.\n\nClave de autorización:');
   if (!clave) return;
-  const body = new URLSearchParams({token: DATA.token, cat: DATA.cat, accion: 'deshacer', clave});
+  let quien = DATA.auth ? '' : (prompt('¿Quién lo deshace?') || '');
+  const body = new URLSearchParams({token: DATA.token, cat: DATA.cat, accion: 'deshacer',
+                                    clave, auth: DATA.auth || '', quien});
   fetch(location.pathname, {method: 'POST', body,
       headers: {'Content-Type': 'application/x-www-form-urlencoded'}})
     .then(r => r.json())
@@ -917,6 +925,10 @@ function simConfirmar() {
     + `(${d >= 0 ? '+' : '−'}$${Math.abs(d).toLocaleString('en-US')}). `
     + `Lo reservado y lo vendido no se toca.`;
   document.getElementById('sim-res').textContent = '';
+  // Si Bitrix no dijo quién es (pantalla abierta por URL suelta), se le pregunta.
+  // Una subida sin responsable no sirve: en un mes nadie sabrá quién la decidió.
+  const q = document.getElementById('sim-quien');
+  q.hidden = !!DATA.auth;
   document.getElementById('sim-conf').hidden = false;
   document.getElementById('sim-clave').focus();
 }
