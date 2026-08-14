@@ -37,7 +37,7 @@
     .hdr-left p{font-size:11px;opacity:.65;margin-top:2px}
 
     /* Wrap */
-    .main{max-width:1240px;margin:0 auto;padding:20px 24px 44px}
+    .main{max-width:1100px;margin:0 auto;padding:18px 22px 44px}
     body{font-size:14px}
     .sec-lbl{margin:26px 0 10px}
 
@@ -149,6 +149,7 @@
     .simf{flex:1 1 140px;min-width:0}
     .simf label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.07em;
       color:var(--t3);margin-bottom:5px}
+    .simf .pista{display:block;font-size:11px;color:var(--t3);margin-top:4px;line-height:1.35}
     .simf select,.simf input{width:100%;padding:7px 10px;border:0.5px solid var(--bds);
       border-radius:8px;background:var(--surf2);color:var(--t1);font:inherit;font-size:13px;
       font-weight:500}
@@ -156,8 +157,10 @@
     .simbtn{padding:8px 16px;border-radius:8px;border:0.5px solid var(--bds);background:var(--surf2);
       color:var(--t2);cursor:pointer;font-size:12px;font-weight:500;white-space:nowrap}
     .simbtn:hover{background:var(--bg)}
-    .simout{display:flex;gap:2.6rem;flex-wrap:wrap;margin-top:16px;padding-top:15px;
-      border-top:0.5px solid var(--bd)}
+    .simfrase{margin-top:15px;padding-top:14px;border-top:0.5px solid var(--bd);
+      font-size:15px;line-height:1.5;color:var(--t2)}
+    .simfrase b{color:var(--t1)}
+    .simout{display:flex;gap:2.6rem;flex-wrap:wrap;margin-top:14px}
     .simo .sl{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--t3)}
     .simo .sv{font-size:27px;font-weight:600;margin-top:5px;font-variant-numeric:tabular-nums;
       letter-spacing:-.025em;line-height:1.05}
@@ -244,15 +247,19 @@
   <div class="sec-lbl">Simulador — subir precios por bloque</div>
   <div id="sim">
     <div class="simrow">
-      <div class="simf"><label for="sim-dest">A quién</label><select id="sim-dest"></select></div>
-      <div class="simf"><label for="sim-niv">Nivel</label><select id="sim-niv"></select></div>
-      <div class="simf"><label for="sim-cat">Categoría</label><select id="sim-cat"></select></div>
+      <div class="simf"><label for="sim-dest">A quién le sube</label><select id="sim-dest"></select>
+        <span class="pista">todo el proyecto, un grupo o un edificio</span></div>
+      <div class="simf"><label for="sim-niv">Solo estos pisos</label><select id="sim-niv"></select>
+        <span class="pista">o todos</span></div>
+      <div class="simf"><label for="sim-cat">Solo esta categoría</label><select id="sim-cat"></select>
+        <span class="pista">medianero, esquinero…</span></div>
       <div class="simf"><label for="sim-tipo">Tipo</label><select id="sim-tipo">
         <option value="monto">Monto fijo USD</option><option value="pct">Porcentaje</option></select></div>
       <div class="simf"><label for="sim-val">Cuánto</label><input id="sim-val" type="number" value="0" step="500"></div>
       <button class="simbtn" id="sim-reset" type="button">Volver a cero</button>
       <button class="simbtn prim" id="sim-aplicar" type="button" hidden>Aplicar en Bitrix</button>
     </div>
+    <div class="simfrase" id="sim-frase"></div>
     <div class="simout" id="sim-out"></div>
     <div class="simnota" id="sim-nota"></div>
     <div class="simviejo" id="sim-viejo" hidden></div>
@@ -598,6 +605,23 @@ function setCat(c)  { curCat=c; renderFilter(); renderFloors(); }
 /* Plan de corrección: recorre solo las DISPONIBLES del edificio actual y
    compara el PVP vigente en Bitrix contra el objetivo de la matriz. */
 /* ── RESUMEN DE PROYECTO ─────────────────────────────────────────── */
+/* Las unidades de un edificio que se pueden reprecear, con su precio de hoy y el
+   que les tocaría. La usa el resumen. Se habia borrado junto con la tabla de plan
+   y el resumen quedo reventando: 'planRows is not defined' cortaba all() antes de
+   llegar a simInit, y por eso los desplegables salian vacios. */
+function planRows(b) {
+  const out = [];
+  FLOORS.forEach(fl => {
+    for (let p = 1; p <= (DATA.uxp[b] || 8); p++) {
+      const u = `${b}-${fl.num}-${p}`;
+      if (ST[u] !== 'D' && ST[u] !== 'N') continue;
+      const c = getCat(p, b, fl.num);
+      out.push({u, fl, cat: c, act: BX[u] ?? null, tgt: target(b, fl.grp, c, u)});
+    }
+  });
+  return out;
+}
+
 function resumenEdificio(b) {
   const r = planRows(b);
   const cam = r.filter(x => x.act!=null && x.tgt!=null && x.tgt!==x.act);
@@ -691,6 +715,25 @@ function simEfecto() {
 
 function renderSim() {
   const e = simEfecto(), d = e.desp - e.antes;
+  /* La frase va antes que los numeros: primero se entiende QUE se va a hacer, y
+     recien despues cuanto cuesta. Al reves hay que descifrarlo. */
+  const fr = document.getElementById('sim-frase');
+  if (fr) {
+    if (!AJ.val) {
+      fr.innerHTML = 'Elige a quién le subes y cuánto. Abajo se ve el efecto y las fichas se recalculan solas.';
+    } else {
+      const aq = AJ.dest === '*' ? 'todo el proyecto'
+               : AJ.dest.charAt(0) === 'g' ? `el grupo ${AJ.dest.slice(2)} (${(GRUPOS[AJ.dest.slice(2)]||[]).join(', ')})`
+               : `el edificio ${AJ.dest.slice(2)}`;
+      const cu = AJ.tipo === 'pct' ? `${AJ.val > 0 ? '+' : ''}${AJ.val}%`
+                                   : `${AJ.val > 0 ? '+' : '−'}$${Math.abs(AJ.val).toLocaleString('en-US')}`;
+      const fi = [AJ.niv !== '*' ? NIVN[AJ.niv] : null,
+                  AJ.cat !== '*' ? CATN[AJ.cat] : null].filter(Boolean);
+      fr.innerHTML = `Subir <b>${cu}</b> a <b>${aq}</b>`
+        + (fi.length ? `, solo <b>${fi.join(' · ')}</b>` : ', todos los pisos y categorías')
+        + `. Alcanza a <b>${e.n}</b> unidad${e.n === 1 ? '' : 'es'} disponible${e.n === 1 ? '' : 's'}.`;
+    }
+  }
   const sg = d > 0 ? 'up' : d < 0 ? 'dn' : '';
   document.getElementById('sim-out').innerHTML = `
     <div class="simo"><div class="sl">Unidades que cambian</div>
