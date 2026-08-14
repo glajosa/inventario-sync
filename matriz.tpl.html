@@ -299,6 +299,18 @@
     <div class="simnota" id="sim-nota"></div>
     <div class="simviejo" id="sim-viejo" hidden></div>
     <div class="simhist" id="sim-hist" hidden></div>
+    <div class="simconf" id="sim-undo" hidden>
+      <p>Se va a quitar la última subida y <b>devolver los precios anteriores</b> en Bitrix.</p>
+      <div class="row">
+        <input type="password" id="sim-undo-clave" placeholder="Clave de autorización"
+               autocomplete="new-password" data-lpignore="true" data-1p-ignore>
+        <input type="text" id="sim-undo-quien" placeholder="Tu nombre" autocomplete="off"
+               data-lpignore="true" data-1p-ignore hidden>
+        <button class="simbtn prim" id="sim-undo-ok" type="button">Devolver los precios</button>
+        <button class="simbtn" id="sim-undo-cancel" type="button">Cancelar</button>
+      </div>
+      <div class="simres" id="sim-undo-res"></div>
+    </div>
     <div class="simconf" id="sim-conf" hidden>
       <p id="sim-conf-txt"></p>
       <div class="row" id="sim-row-clave">
@@ -539,13 +551,12 @@ function renderFloors() {
         const cur_ = BX[uid] ?? null;
         const price = cur_ ?? tgt;
         const delta = (st==='D' && cur_ != null && tgt != null) ? tgt - cur_ : null;
-        // Con una subida en curso, lo que NO entra en ella se atenua. Si no, se
-        // marca "solo Medianero" y siguen igual de presentes las otras 28 fichas.
-        const simActiva = typeof AJ !== 'undefined' && AJ.val;
+        // El alcance se resalta en cuanto se elige a quien, SIN esperar a la cifra:
+        // eso es lo que deja ver a que le vas a subir antes de decidir cuanto.
         const dim = (curCat !== 'all' && cat !== curCat)
                  || (onlyFixed && !fx)
                  || (onlyAvail && st && st !== 'D')
-                 || (simActiva && !delta);
+                 || (simFiltrando() && !simAlcanza(cur, fl.grp, cat, st));
         const isSel = sel === uid;
         const stCls = st === 'F' ? ' sold' : st === 'R' ? ' resv' : '';
         return `<div class="unit${dim?' dim':''}${isSel?' sel':''}" onclick="selUnit('${uid}')">
@@ -646,8 +657,8 @@ function all() {
 }
 
 /* ── ACTIONS ─────────────────────────────────────────────────────── */
-function selBldg(b) { cur=b; sel=null; onlyFixed=false; all(); }
-function setCat(c)  { curCat=c; renderFilter(); renderFloors(); }
+function selBldg(b) { cur=b; sel=null; onlyFixed=false; all(); simGuardarEstado(); }
+function setCat(c)  { curCat=c; renderFilter(); renderFloors(); simGuardarEstado(); }
 /* Plan de corrección: recorre solo las DISPONIBLES del edificio actual y
    compara el PVP vigente en Bitrix contra el objetivo de la matriz. */
 /* ── RESUMEN DE PROYECTO ─────────────────────────────────────────── */
@@ -703,6 +714,25 @@ function renderResumen() {
 /* ── LISTA COMERCIAL ─────────────────────────────────────────────── */
 /* Lo que ve el cliente: precios por categoría, nunca por unidad.
    Los edificios que comparten matriz salen en un mismo bloque. */
+/* ¿Hay algo elegido en el simulador? Basta con destino, piso o categoria: no hace
+   falta poner el monto para querer ver a que le va a caer. */
+function simFiltrando() {
+  return typeof AJ !== 'undefined' &&
+         (AJ.dest !== '*' || AJ.niv !== '*' || AJ.cat !== '*' || !!AJ.val);
+}
+
+/* ¿Esta unidad entra en lo que se eligio arriba? */
+function simAlcanza(b, nivel, cat, st) {
+  if (typeof AJ === 'undefined') return true;
+  if (st !== 'D') return false;                       // solo se reprecean disponibles
+  const d = AJ.dest;
+  const okDest = d === '*' ? true
+               : d.charAt(0) === 'g' ? DATA.grupos[b] === d.slice(2)
+               : b === d.slice(2);
+  return okDest && (AJ.niv === '*' || nivel === AJ.niv)
+                && (AJ.cat === '*' || cat === AJ.cat);
+}
+
 /* ── SIMULADOR ────────────────────────────────────────────────────────
    Toda la pantalla lee de DATA.precios. Se guarda una copia intacta y se
    recalcula la matriz aplicando el ajuste: al volver a pintar, las fichas,
@@ -827,6 +857,28 @@ function formatearMonto() {
   el.setSelectionRange(i, i);
 }
 
+/* Tras aplicar, la pantalla se recarga para mostrar los precios nuevos. Sin esto se
+   perdia el edificio y el filtro, justo cuando uno quiere mirar el resultado. */
+function simGuardarEstado() {
+  try {
+    sessionStorage.setItem('pm_estado', JSON.stringify({
+      cur, curCat, onlyAvail,
+      dest: AJ.dest, niv: AJ.niv, cat: AJ.cat, tipo: AJ.tipo,
+    }));
+  } catch (e) { /* modo privado: se sigue sin recordar, no es critico */ }
+}
+
+function simRestaurarEstado() {
+  let e = null;
+  try { e = JSON.parse(sessionStorage.getItem('pm_estado') || 'null'); } catch (x) {}
+  if (!e) return;
+  if (e.cur && BLDGS.indexOf(e.cur) >= 0) cur = e.cur;
+  if (e.curCat) curCat = e.curCat;
+  if (typeof e.onlyAvail === 'boolean') onlyAvail = e.onlyAvail;
+  const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+  set('sim-dest', e.dest); set('sim-niv', e.niv); set('sim-cat', e.cat); set('sim-tipo', e.tipo);
+}
+
 function simCambio() {
   formatearMonto();
   AJ = {dest: document.getElementById('sim-dest').value,
@@ -837,6 +889,7 @@ function simCambio() {
   // El simbolo sigue al tipo: $ para monto fijo, % para porcentaje.
   const sig = document.getElementById('sim-sig');
   if (sig) sig.textContent = AJ.tipo === 'pct' ? '%' : '$';
+  simGuardarEstado();
   simMatriz(); all(); renderSim();
 }
 
@@ -863,6 +916,10 @@ function simInit() {
     h.hidden = !h.hidden;
     hb.classList.toggle('prim', !h.hidden);
   });
+  document.getElementById('sim-undo-ok').addEventListener('click', simDeshacerConfirmar);
+  document.getElementById('sim-undo-cancel').addEventListener('click', () => {
+    document.getElementById('sim-undo').hidden = true;
+  });
   const ap = document.getElementById('sim-aplicar');
   if (ap) {
     ap.addEventListener('click', simConfirmar);
@@ -871,7 +928,8 @@ function simInit() {
       document.getElementById('sim-conf').hidden = true;
     });
   }
-  renderSim();
+  simRestaurarEstado();
+  simCambio();          // aplica lo restaurado a AJ y repinta con el alcance marcado
   renderHist();
 }
 
@@ -924,25 +982,40 @@ function renderHist() {
 }
 
 /* Solo se puede deshacer la ULTIMA. Deshacer una del medio dejaria las siguientes
-   calculadas sobre un precio que ya no existe. */
+   calculadas sobre un precio que ya no existe.
+   La clave se pide DENTRO de la pagina, no con prompt() del navegador: el cuadro del
+   navegador aparece encima de todo, sin contexto de que se va a deshacer, y en un
+   iframe de Bitrix ni siquiera se ve de donde sale. */
 function simDeshacer() {
-  const clave = prompt('Se va a quitar la última subida y devolver los precios anteriores.\n\nClave de autorización:');
-  if (!clave) return;
-  let quien = DATA.auth ? '' : (prompt('¿Quién lo deshace?') || '');
+  const d = document.getElementById('sim-undo');
+  d.hidden = false;
+  document.getElementById('sim-undo-quien').hidden = !!DATA.auth;
+  document.getElementById('sim-undo-res').textContent = '';
+  document.getElementById('sim-undo-clave').value = '';
+  document.getElementById('sim-undo-clave').focus();
+}
+
+function simDeshacerConfirmar() {
+  const res = document.getElementById('sim-undo-res');
+  const clave = document.getElementById('sim-undo-clave').value;
+  if (!clave) { res.className = 'simres err'; res.textContent = 'Falta la clave.'; return; }
+  const btn = document.getElementById('sim-undo-ok');
+  btn.disabled = true; res.className = 'simres'; res.textContent = 'Devolviendo los precios…';
   const body = new URLSearchParams({token: DATA.token, cat: DATA.cat, accion: 'deshacer',
-                                    clave, auth: DATA.auth || '', quien});
+      clave, auth: DATA.auth || '', quien: document.getElementById('sim-undo-quien').value});
   fetch(location.pathname, {method: 'POST', body,
       headers: {'Content-Type': 'application/x-www-form-urlencoded'}})
-    .then(r => r.json())
-    .then(j => {
-      if (!j.ok) { alert(j.error || 'No se pudo deshacer.'); return; }
-      // Se recarga para que la matriz, las fichas y los totales se recalculen con
-      // los precios ya restaurados. Dejar la pantalla como estaba mostraria unos
-      // numeros que en Bitrix ya no existen.
-      alert(`Listo: ${j.restauradas} precios devueltos a su valor anterior.`);
-      location.reload();
+    .then(r => r.text())
+    .then(t => {
+      let j; try { j = JSON.parse(t); }
+      catch (x) { throw new Error('el servidor respondió: ' + t.replace(/<[^>]*>/g, ' ').trim().slice(0, 180)); }
+      btn.disabled = false;
+      if (!j.ok) { res.className = 'simres err'; res.textContent = j.error || 'No se pudo deshacer.'; return; }
+      res.className = 'simres ok';
+      res.textContent = `Listo: ${j.restauradas} precios devueltos a su valor anterior. Recargando…`;
+      setTimeout(() => location.reload(), 1400);
     })
-    .catch(e => alert('Falló la conexión: ' + e.message));
+    .catch(e => { btn.disabled = false; res.className = 'simres err'; res.textContent = 'Falló: ' + e.message; });
 }
 
 function simConfirmar() {
@@ -975,8 +1048,12 @@ function simEscribir() {
   });
   fetch(location.pathname, {method: 'POST', body,
       headers: {'Content-Type': 'application/x-www-form-urlencoded'}})
-    .then(r => r.json())
-    .then(j => {
+    .then(r => r.text())
+    .then(t => {
+      // Si el servidor devuelve HTML en vez de JSON es un error de PHP: se muestra
+      // tal cual en vez de "Unexpected token '<'", que no le dice nada a nadie.
+      let j; try { j = JSON.parse(t); }
+      catch (x) { throw new Error('el servidor respondió: ' + t.replace(/<[^>]*>/g, ' ').trim().slice(0, 180)); }
       btn.disabled = false;
       if (!j.ok) { res.className = 'simres err'; res.textContent = j.error || 'No se pudo aplicar.'; return; }
       res.className = 'simres ok';
