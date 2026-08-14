@@ -198,6 +198,11 @@
     .simconf .row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
     .simconf input{padding:7px 10px;border:0.5px solid var(--bds);border-radius:8px;
       background:var(--surf);color:var(--t1);font:inherit;font-size:13px}
+    /* Enmascarado por CSS en vez de type="password": asi Chrome no lo reconoce como
+       credencial y deja de ofrecer "¿guardar la contraseña?" cada vez que se aplica
+       o se deshace algo. */
+    .simconf input.oculto{-webkit-text-security:disc;text-security:disc;
+      letter-spacing:.12em;font-family:ui-monospace,Menlo,monospace}
     .simconf input.nota{flex:1 1 220px;min-width:0}
     .simviejo{margin-top:11px;padding:8px 12px;border-radius:8px;font-size:12.5px;
       background:#fdf5e4;border:0.5px solid #e6c98a;color:#7a5a0a}
@@ -302,8 +307,8 @@
     <div class="simconf" id="sim-undo" hidden>
       <p>Se va a quitar la última subida y <b>devolver los precios anteriores</b> en Bitrix.</p>
       <div class="row">
-        <input type="password" id="sim-undo-clave" placeholder="Clave de autorización"
-               autocomplete="new-password" data-lpignore="true" data-1p-ignore>
+        <input type="text" id="sim-undo-clave" class="oculto" placeholder="Clave de autorización"
+               autocomplete="off" data-lpignore="true" data-1p-ignore>
         <input type="text" id="sim-undo-quien" placeholder="Tu nombre" autocomplete="off"
                data-lpignore="true" data-1p-ignore hidden>
         <button class="simbtn prim" id="sim-undo-ok" type="button">Devolver los precios</button>
@@ -314,8 +319,8 @@
     <div class="simconf" id="sim-conf" hidden>
       <p id="sim-conf-txt"></p>
       <div class="row" id="sim-row-clave">
-        <input type="password" id="sim-clave" placeholder="Clave de autorización"
-               autocomplete="new-password" data-lpignore="true" data-1p-ignore>
+        <input type="text" id="sim-clave" class="oculto" placeholder="Clave de autorización"
+               autocomplete="off" data-lpignore="true" data-1p-ignore>
         <input type="text" id="sim-quien" placeholder="Tu nombre" autocomplete="off"
                data-lpignore="true" data-1p-ignore hidden>
         <input type="text" id="sim-nota" class="nota" placeholder="Motivo — queda en el histórico"
@@ -1001,6 +1006,7 @@ function simDeshacerConfirmar() {
   if (!clave) { res.className = 'simres err'; res.textContent = 'Falta la clave.'; return; }
   const btn = document.getElementById('sim-undo-ok');
   btn.disabled = true; res.className = 'simres'; res.textContent = 'Devolviendo los precios…';
+  document.getElementById('sim-undo-clave').value = '';
   const body = new URLSearchParams({token: DATA.token, cat: DATA.cat, accion: 'deshacer',
       clave, auth: DATA.auth || '', quien: document.getElementById('sim-undo-quien').value});
   fetch(location.pathname, {method: 'POST', body,
@@ -1040,6 +1046,7 @@ function simEscribir() {
   const clave = document.getElementById('sim-clave').value;
   if (!clave) { res.className = 'simres err'; res.textContent = 'Falta la clave.'; return; }
   btn.disabled = true; res.className = 'simres'; res.textContent = 'Escribiendo…';
+  document.getElementById('sim-clave').value = '';   // no se queda escrita en pantalla
   const body = new URLSearchParams({
     token: DATA.token, cat: DATA.cat, accion: 'aplicar', clave: clave,
     dest: AJ.dest === '*' ? '*' : AJ.dest.slice(2),
