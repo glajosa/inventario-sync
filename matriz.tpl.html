@@ -102,6 +102,10 @@
     .ucat{font-size:13px;font-weight:700;letter-spacing:.02em;font-variant-numeric:tabular-nums}
     .um2{font-size:10px;opacity:.72}
     .uprice{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:3px;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,.07)}
+    /* Con una subida simulada la ficha muestra en cuanto QUEDA, no solo cuanto sube:
+       ver "+1,223" sin el total obliga a hacer la cuenta mental unidad por unidad. */
+    .uprice.cambia{display:flex;gap:5px;align-items:baseline}
+    .uprice.cambia s{font-weight:500;opacity:.45;text-decoration-thickness:1px}
     @media(prefers-color-scheme:dark){.uprice{background:rgba(255,255,255,.13)}}
     /* Estado comercial */
     .ubox.sold{opacity:.28;filter:saturate(.25)}
@@ -525,7 +529,9 @@ function renderFloors() {
           <div class="ubox ubox-${cd.pfx}${fx?' fixed':''}${stCls}" title="${uid} · ${cd.label} · ${STL[st]||'—'}${fx?' · '+(fx.nota||'regla propia'):''}">
             <div class="ucat">${uid}</div>
             ${m2v ? `<div class="um2">${m2v}m²${fl.grp==='PB'?' +p':''}</div>` : ''}
-            ${price ? `<div class="uprice">${Math.round(price/1000)}k</div>` : ''}
+            ${price ? (delta
+                ? `<div class="uprice cambia"><s>${Math.round(cur_/1000)}k</s> ${Math.round(tgt/1000)}k</div>`
+                : `<div class="uprice">${Math.round(price/1000)}k</div>`) : ''}
             ${delta ? `<div class="udelta ${delta>0?'up':'dn'}">${delta>0?'▲':'▼'}${Math.abs(delta).toLocaleString('en-US')}</div>` : ''}
             ${st && st!=='D' ? `<div class="ustate"><span>${st==='F'?'vendido':'reserv'}</span></div>` : ''}
           </div>
