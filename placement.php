@@ -52,6 +52,27 @@ function mostrar(): void {
     }
 }
 
+/** Los códigos DISPONIBLES del portal, filtrados. Sirve para no adivinar dónde
+ *  puede vivir un botón: placement.list los devuelve todos (cientos). */
+if (($_GET['accion'] ?? '') === 'disponibles') {
+    $r = app_bx('placement.list');
+    $q = strtoupper((string)($_GET['q'] ?? ''));
+    $todos = $r['result'] ?? [];
+    if (!is_array($todos)) { echo "no se pudo listar\n"; exit; }
+    $vistos = [];
+    foreach ($todos as $x) {
+        $c = is_array($x) ? ($x['placement'] ?? ($x[0] ?? '')) : (string)$x;
+        if ($c === '' || isset($vistos[$c])) continue;
+        $vistos[$c] = true;
+    }
+    $lista = array_keys($vistos);
+    sort($lista);
+    $hit = $q === '' ? $lista : array_values(array_filter($lista, fn($c) => str_contains($c, $q)));
+    echo count($lista) . " placements en el portal · " . count($hit) . " coinciden con '{$q}'\n\n";
+    foreach ($hit as $c) echo "  {$c}\n";
+    exit;
+}
+
 echo "Antes:\n"; mostrar();
 
 if ($accion === 'poner') {
