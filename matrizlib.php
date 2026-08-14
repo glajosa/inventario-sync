@@ -239,7 +239,36 @@ function mz_unidades_cache(array $cfg, int $ttl = 0, ?array &$info = null): arra
         ];
     }
     if (!$out) throw new RuntimeException("El catálogo no trae unidades del proyecto $cat.");
-    $info = ['edad' => $edad, 'fresco' => $edad < 3600];
+
+    // El caché compartido a veces guarda la etapa vacía: cuando unidadlib no logró
+    // resolver el nombre, deja ''. Son pocas, pero rompen los totales — 21 firmadas
+    // desaparecían del conteo y la pantalla decía 134 donde hay 155.
+    // Si aparece alguna, se relee de Bitrix esta vez. Cuesta 7 llamadas, pasa rara
+    // vez, y es preferible a mostrar un inventario que no cuadra.
+    $conocidas = ['DISPONIBLE', 'BLOQUEADO', 'RESERVADO', 'FIRMADO', 'VENDIDO', 'PERDIDO'];
+    $huecos = 0;
+    foreach ($out as $d) if (!in_array($d['etapa'], $conocidas, true)) $huecos++;
+    if ($huecos > 0) {
+        logline("MATRIZ cat=$cat · $huecos unidades sin etapa en el caché compartido, releyendo de Bitrix");
+        $bx = mz_unidades($cfg);                       // por stageId, siempre exacto
+        $nom = mz_nombres_etapa($cfg);
+        foreach ($bx as $u => $d) {
+            $bx[$u]['etapa'] = $nom[$d['etapa']] ?? '';
+        }
+        $info = ['edad' => 0, 'fresco' => true, 'huecos' => $huecos];
+        return $bx;
+    }
+
+    $info = ['edad' => $edad, 'fresco' => $edad < 3600, 'huecos' => 0];
+    return $out;
+}
+
+/** STATUS_ID -> NOMBRE de las etapas del pipeline. 1 llamada. */
+function mz_nombres_etapa(array $cfg): array {
+    $r = bx('crm.status.list', ['filter' => ['ENTITY_ID' =>
+        'DYNAMIC_' . $cfg['bitrix']['entityTypeId'] . '_STAGE_' . $cfg['bitrix']['categoryId']]]);
+    $out = [];
+    foreach (($r['result'] ?? []) as $s) $out[(string)$s['STATUS_ID']] = strtoupper((string)$s['NAME']);
     return $out;
 }
 
