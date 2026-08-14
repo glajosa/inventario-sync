@@ -263,6 +263,27 @@ function mz_unidades_cache(array $cfg, int $ttl = 0, ?array &$info = null): arra
     return $out;
 }
 
+/**
+ * Deja el caché compartido al día tras escribir precios, sin pedirle nada a Bitrix:
+ * los valores nuevos ya se conocen. Los eventos del SPA también lo actualizarían,
+ * pero tardan segundos y la pantalla se recarga antes — mostraría los precios viejos
+ * justo después de subirlos, que es cuando más desconfianza genera.
+ */
+function mz_cache_actualizar(array $cfg, array $filas): void {
+    $f = (getenv('DATA_DIR') ?: '/data') . '/selector_cache.json';
+    $j = json_decode((string)@file_get_contents($f), true);
+    if (!is_array($j) || empty($j['units'])) return;
+    $nuevo = [];
+    foreach ($filas as $r) if ($r['cambia'] && $r['objetivo'] !== null) $nuevo[(int)$r['id']] = (int)round($r['objetivo']);
+    if (!$nuevo) return;
+    foreach ($j['units'] as $i => $u) {
+        $id = (int)($u['id'] ?? 0);
+        if (isset($nuevo[$id])) $j['units'][$i]['pvp'] = $nuevo[$id] . '|USD';
+    }
+    @file_put_contents($f . '.tmp', json_encode($j), LOCK_EX);
+    @rename($f . '.tmp', $f);
+}
+
 /** STATUS_ID -> NOMBRE de las etapas del pipeline. 1 llamada. */
 function mz_nombres_etapa(array $cfg): array {
     $r = bx('crm.status.list', ['filter' => ['ENTITY_ID' =>
@@ -357,12 +378,12 @@ function mz_aplicar(array $cfg, array $filas): array {
  * Restaura EXACTO lo guardado, no recalcula: si se recalculara volveria a salir el
  * precio nuevo y no se desharia nada.
  */
-function mz_restaurar(array $cfg, string $archivo): array {
+function mz_restaurar(array $cfg, string $archivo, ?array $cfgCache = null): array {
     $ruta = (getenv('DATA_DIR') ?: '/data') . '/' . basename($archivo);
     $j = json_decode((string)@file_get_contents($ruta), true);
     if (!is_array($j) || !$j) return [0, ['No se encontró el respaldo.']];
     $campo = $cfg['bitrix']['campo_pvp'];
-    $ok = 0; $err = [];
+    $ok = 0; $err = []; $vuelta = [];
     foreach ($j as $u => $d) {
         if ($d['pvp'] === null) continue;      // no tenia precio: se deja como esta
         $res = bx('crm.item.update', [
@@ -370,8 +391,11 @@ function mz_restaurar(array $cfg, string $archivo): array {
             'id'     => (int)$d['id'],
             'fields' => [$campo => ((int)round((float)$d['pvp'])) . '|USD'],
         ]);
-        if ($res['ok']) $ok++;
-        else $err[] = "$u: {$res['error']}";
+        if ($res['ok']) {
+            $ok++;
+            $vuelta[] = ['id' => (int)$d['id'], 'objetivo' => (float)$d['pvp'], 'cambia' => true];
+        } else $err[] = "$u: {$res['error']}";
     }
+    if ($cfgCache && !empty($vuelta)) mz_cache_actualizar($cfgCache, $vuelta);
     return [$ok, $err];
 }

@@ -120,7 +120,7 @@ if ($accion === 'aplicar') {
     // de escribir. El precio de hoy que hace falta para el plan ya está ahí.
     $filas = mz_plan($cfg2, mz_unidades_cache($cfg2));
     [$ok, $err, $respaldo] = mz_aplicar($cfg2, $filas);
-    mz_cache_borrar($cfg2);
+    mz_cache_actualizar($cfg2, $filas);
     $n = count(array_filter($filas, fn($r) => $r['cambia']));
 
     // El respaldo queda apuntado en el propio ajuste: así "deshacer" sabe qué
@@ -163,8 +163,7 @@ if ($accion === 'deshacer') {
     // mundos, porque nadie sabría cuál de los dos manda.
     $rest = [0, []];
     if (!empty($fuera['respaldo'])) {
-        $rest = mz_restaurar($cfg, (string)$fuera['respaldo']);
-        mz_cache_borrar($cfg);
+        $rest = mz_restaurar($cfg, (string)$fuera['respaldo'], $cfg);
     }
     logline("MATRIZ cat=$cat DESHECHO " . json_encode($fuera, JSON_UNESCAPED_UNICODE)
           . " · {$rest[0]} precios restaurados");
