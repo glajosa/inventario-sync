@@ -6,10 +6,12 @@
   <title>Noral Apartments — Explorador</title>
   <style>
     :root{
-      --bg:#f8f7f4;--surf:#fff;--surf2:#f2f0ec;
-      --bd:rgba(0,0,0,.09);--bds:rgba(0,0,0,.16);
-      --t1:#1a1a18;--t2:#52514e;--t3:#898781;
-      --pri:#0f4c75;--pri2:#0b3c5e;
+      /* Colores de Bitrix24: la pantalla vive dentro de su slider y tiene que
+         parecer parte de la herramienta, no una pagina pegada encima. */
+      --bg:#eef2f4;--surf:#fff;--surf2:#f5f7f8;
+      --bd:#e3e7ea;--bds:#c6cdd3;
+      --t1:#333;--t2:#6a737b;--t3:#a8b0b8;
+      --pri:#2fc7f7;--pri2:#12a9d9;
       --m-bg:#f1efe8;--m-bd:#5f5e5a;--m-tx:#2c2c2a;
       --e1-bg:#e6f1fb;--e1-bd:#185fa5;--e1-tx:#042c53;
       --e2-bg:#e1f5ee;--e2-bd:#0f6e56;--e2-tx:#04342c;
@@ -17,9 +19,9 @@
       --p-bg:#f5f5f3;--p-bd:#c3c2b7;--p-tx:#898781;
     }
     @media(prefers-color-scheme:dark){:root{
-      --bg:#1a1a19;--surf:#242423;--surf2:#2c2c2a;
-      --bd:rgba(255,255,255,.09);--bds:rgba(255,255,255,.16);
-      --t1:#f0efeb;--t2:#c3c2b7;--t3:#898781;--pri:#3987e5;--pri2:#2a78d6;
+      --bg:#12161c;--surf:#1c222b;--surf2:#232a34;
+      --bd:#2b333e;--bds:#3a4553;
+      --t1:#eaeef2;--t2:#a3adb8;--t3:#6f7a86;--pri:#2fc7f7;--pri2:#59d4fa;
       --m-bg:#444441;--m-bd:#b4b2a9;--m-tx:#d3d1c7;
       --e1-bg:#0c447c;--e1-bd:#85b7eb;--e1-tx:#b5d4f4;
       --e2-bg:#085041;--e2-bd:#5dcaa5;--e2-tx:#9fe1cb;
@@ -35,7 +37,8 @@
     .hdr-left p{font-size:11px;opacity:.65;margin-top:2px}
 
     /* Wrap */
-    .main{max-width:1100px;margin:0 auto;padding:1.5rem 2rem}
+    .main{max-width:none;margin:0;padding:16px 20px 28px}
+    body{font-size:14px}
 
     /* Building tabs */
     .btabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1rem}
@@ -138,8 +141,8 @@
     #resumen{margin-bottom:1.25rem}
 
     /* Simulador de subida de precios */
-    #sim{background:var(--surf);border:0.5px solid var(--bd);border-radius:10px;
-      padding:14px 16px;margin-bottom:1.25rem}
+    #sim{background:var(--surf);border:1px solid var(--bd);border-radius:10px;
+      padding:16px 18px;margin-bottom:1rem;box-shadow:0 1px 2px rgba(0,0,0,.04)}
     #sim.act{border-color:var(--pri);box-shadow:inset 0 0 0 1px var(--pri)}
     .simrow{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
     .simf{flex:1 1 140px;min-width:0}
@@ -217,12 +220,7 @@
 </head>
 <body>
 
-<header>
-  <div class="hdr-left">
-    <h1>Noral Apartments — Explorador de Edificios</h1>
-    <p>Numeración de derecha a izquierda (1 → 8) vista de frente · Selecciona edificio, filtra por categoría, haz clic en una unidad</p>
-  </div>
-</header>
+
 
 <div class="main">
   <div class="sec-lbl">Simulador — subir precios por bloque</div>

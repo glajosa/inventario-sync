@@ -161,10 +161,18 @@ function mz_precio_de(array $cfg, array $px, string $ed, int $piso, int $pos): a
     return [$cat, $px[$fuente][MZ_NIVEL_DE_PISO[$piso]][$cat] ?? null];
 }
 
-/** Lee TODAS las unidades del pipeline, con su etapa y su PVP. */
+/**
+ * Lee TODAS las unidades del pipeline, con su etapa y su PVP.
+ *
+ * Lanza si el API se corta a medias. Antes devolvía lo que alcanzara a leer, y eso
+ * es lo peor que puede hacer: con un QUERY_LIMIT_EXCEEDED en la página 2 la
+ * pantalla mostró "27 de 50 unidades" en vez de 110 de 304 — números falsos con
+ * cara de verdaderos, y una subida de precios calculada sobre ellos habría tocado
+ * solo el primer edificio.
+ */
 function mz_unidades(array $cfg): array {
     $bx = $cfg['bitrix'];
-    $out = []; $start = 0;
+    $out = []; $start = 0; $paginas = 0;
     do {
         $r = bx('crm.item.list', [
             'entityTypeId' => $bx['entityTypeId'],
@@ -172,9 +180,12 @@ function mz_unidades(array $cfg): array {
             'select' => ['id', 'title', 'stageId', $bx['campo_pvp'], $bx['campo_m2']],
             'start'  => $start,
         ]);
-        if (!$r['ok']) return $out;
-        $items = $r['result']['items'] ?? [];
-        foreach ($items as $it) {
+        if (!$r['ok']) {
+            throw new RuntimeException("Bitrix cortó la lectura en la página " . ($paginas + 1)
+                . " ({$r['error']}). No se muestra nada antes que mostrar la mitad.");
+        }
+        $paginas++;
+        foreach (($r['result']['items'] ?? []) as $it) {
             $t = strtoupper(trim((string)($it['title'] ?? '')));
             if (!preg_match('/^([A-Z])-(\d)-(\d)/', $t, $m)) continue;
             $out["{$m[1]}-{$m[2]}-{$m[3]}"] = [
@@ -187,6 +198,28 @@ function mz_unidades(array $cfg): array {
         $start = $r['next'] ?? null;
     } while ($start !== null);
     return $out;
+}
+
+/**
+ * Igual, pero con caché corta en disco. La pantalla se abre en un slider y leer
+ * 304 unidades son 7 páginas paginadas con freno: ~4 s cada vez que alguien la
+ * abre, y encima gasta presupuesto de API del portal para nada.
+ * Se invalida sola, y al aplicar una subida se borra para no mostrar lo viejo.
+ */
+function mz_unidades_cache(array $cfg, int $ttl = 180): array {
+    $f = (getenv('DATA_DIR') ?: '/data') . '/unidades_' . $cfg['bitrix']['categoryId'] . '.json';
+    if (is_file($f) && (time() - (int)@filemtime($f)) < $ttl) {
+        $j = json_decode((string)@file_get_contents($f), true);
+        if (is_array($j) && $j) return $j;
+    }
+    $u = mz_unidades($cfg);            // si falla, revienta: no se cachea basura
+    @file_put_contents($f . '.tmp', json_encode($u), LOCK_EX);
+    @rename($f . '.tmp', $f);
+    return $u;
+}
+
+function mz_cache_borrar(array $cfg): void {
+    @unlink((getenv('DATA_DIR') ?: '/data') . '/unidades_' . $cfg['bitrix']['categoryId'] . '.json');
 }
 
 function mz_money($v): ?float {

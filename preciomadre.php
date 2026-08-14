@@ -86,8 +86,10 @@ if ($accion === 'aplicar') {
     mz_ajustes_guardar($cat, $lista);
 
     $cfg2 = mz_cfg($cat);
+    mz_cache_borrar($cfg2);                 // tras escribir, la foto vieja miente
     $filas = mz_plan($cfg2, mz_unidades($cfg2));
     [$ok, $err] = mz_aplicar($cfg2, $filas);
+    mz_cache_borrar($cfg2);
     $n = count(array_filter($filas, fn($r) => $r['cambia']));
 
     logline("MATRIZ cat=$cat ajuste=" . json_encode($aj, JSON_UNESCAPED_UNICODE)
@@ -121,8 +123,22 @@ header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 
-$px    = mz_precios_vigentes($cfg);
-$unid  = mz_unidades($cfg);
+$px = mz_precios_vigentes($cfg);
+try {
+    // Caché corta: la pantalla se abre en un slider y leer 304 unidades son 7
+    // páginas con freno. Sin esto tarda ~4 s cada vez que alguien la abre.
+    $unid = mz_unidades_cache($cfg, (int)($_REQUEST['recargar'] ?? 0) ? 0 : 180);
+} catch (Throwable $e) {
+    // Mejor no mostrar nada que mostrar la mitad: con datos parciales los totales
+    // mienten y una subida se calcularía sobre un inventario incompleto.
+    http_response_code(503);
+    $msg = htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
+    exit('<!doctype html><meta charset="utf-8"><div style="font:15px/1.6 -apple-system,system-ui;'
+       . 'padding:40px;max-width:52ch;color:#1a1a18"><h2 style="font-size:17px;margin:0 0 10px">'
+       . 'No se pudo leer el inventario completo</h2><p style="color:#52514e">' . $msg . '</p>'
+       . '<p style="color:#52514e">Suele ser el límite de llamadas del portal. Espera un minuto y '
+       . 'vuelve a abrir.</p></div>');
+}
 $LETRA = ['PREPARATION' => 'D', 'CLIENT' => 'R', 'UC_FIRMAD' => 'F', 'NEW' => 'N'];
 
 $estado = []; $pvp = []; $m2 = [];
