@@ -463,6 +463,17 @@ declare(strict_types=1);
   var ctxCargando = false;
   var ctxCola = [];        // lo que quedó esperando la precarga
 
+  /**
+   * TODO lo que hace falta, en UN SOLO viaje.
+   *
+   * Antes eran cuatro seguidos —historial, deal, contacto y recién ahí el
+   * alta— y cada uno esperaba al anterior: el vendedor veía "Registrando…"
+   * varios segundos. Con `batch` los tres de lectura van juntos, y el contacto
+   * se resuelve dentro del mismo lote con $result[deal][CONTACT_ID].
+   *
+   * Quedan dos viajes en vez de cuatro, y el segundo es el que de verdad
+   * importa (crear la actividad).
+   */
   function precargar() {
     if (ctx || ctxCargando || !dealId) return;
     ctxCargando = true;
@@ -473,37 +484,44 @@ declare(strict_types=1);
       for (var i = 0; i < cola.length; i++) cola[i]();
     }
 
-    // el historial de salientes viaja junto con el deal: sirve para saber en
-    // qué peldaño de la escalera va y, por lo tanto, qué día toca
-    BX24.callMethod('crm.activity.list', {
-      filter: { OWNER_TYPE_ID:2, OWNER_ID:dealId, TYPE_ID:2, DIRECTION:2 },
-      select: ['ID','CREATED','SUBJECT'], order: { CREATED:'ASC' }
-    }, function (rl) {
+    BX24.callBatch({
+      deal: ['crm.deal.get', { id: dealId }],
+      cont: ['crm.contact.get', { id: '$result[deal][CONTACT_ID]' }],
+      // ⚠ Sin paginar se leerían solo 50 y en un deal trabajado las llamadas
+      // recientes quedan fuera: el escalón saldría mal. 200 cubre de sobra —
+      // el deal más cargado de la base tiene 93.
+      hist: ['crm.activity.list', {
+        filter: { OWNER_TYPE_ID:2, OWNER_ID:dealId, TYPE_ID:2, DIRECTION:2 },
+        select: ['ID','CREATED','SUBJECT'], order: { ID:'ASC' }, start: -1
+      }]
+    }, function (r) {
+      // ── historial → escalón
       var l = [];
-      if (!rl.error()) {
-        var d = rl.data() || [];
+      try {
+        var d = (r.hist && !r.hist.error()) ? (r.hist.data() || []) : [];
         for (var i = 0; i < d.length; i++)
           l.push({ contesto: String(d[i].SUBJECT || '').indexOf('1234') >= 0 });
-      }
+      } catch (e) {}
       protocolo = calcularProtocolo(l);
-      redibujar();
-      autoRegistrar();   // apretar la pestaña ES la acción
-    });
 
-    BX24.callMethod('crm.deal.get', { id: dealId }, function (rd) {
-      if (rd.error()) { listo(null); return; }
-      var deal = rd.data();
-      var cid  = parseInt(deal.CONTACT_ID || 0, 10);
-      var base = { resp: deal.ASSIGNED_BY_ID, contactId: cid > 0 ? cid : 0, nombre:null, tel:null };
-      if (!base.contactId) { listo(base); return; }
-      BX24.callMethod('crm.contact.get', { id: base.contactId }, function (rc) {
-        if (!rc.error()) {
-          var c = rc.data();
-          base.nombre = [c.NAME, c.LAST_NAME].filter(Boolean).join(' ').trim() || null;
-          base.tel = (c.PHONE && c.PHONE[0] && c.PHONE[0].VALUE) || null;
+      // ── deal + contacto → responsable y teléfono
+      var base = null;
+      try {
+        if (r.deal && !r.deal.error()) {
+          var deal = r.deal.data();
+          var cid  = parseInt(deal.CONTACT_ID || 0, 10);
+          base = { resp: deal.ASSIGNED_BY_ID, contactId: cid > 0 ? cid : 0, nombre:null, tel:null };
+          if (r.cont && !r.cont.error()) {
+            var c = r.cont.data() || {};
+            base.nombre = [c.NAME, c.LAST_NAME].filter(Boolean).join(' ').trim() || null;
+            base.tel = (c.PHONE && c.PHONE[0] && c.PHONE[0].VALUE) || null;
+          }
         }
-        listo(base);
-      });
+      } catch (e) {}
+
+      listo(base);        // libera lo que estuviera esperando
+      redibujar();
+      autoRegistrar();    // apretar la pestaña ES la acción
     });
   }
 
