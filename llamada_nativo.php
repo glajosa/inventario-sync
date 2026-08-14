@@ -248,12 +248,20 @@ declare(strict_types=1);
    * sí se ve es un símbolo en el título, así que "No contestó" lleva una cruz
    * roja para que se lea como lo negativo de un vistazo.
    */
-  function botones(activos) {
+  /**
+   * La franja de botones de Bitrix mide 56 px SIEMPRE y no se puede ocultar
+   * (probado: `visible:false` sale como atributo HTML y no hace nada). Como
+   * está ahí a la fuerza, se usa para lo único que hace falta después de
+   * registrar: DESHACER. El secundario va vacío — es `ui-btn-link`, sin fondo,
+   * así que vacío no se ve.
+   */
+  function botones() {
     return {
-      primaryButton:   { title:'S\u00ed, contest\u00f3',    state: activos ? 'normal' : 'disabled' },
-      secondaryButton: { title:'\u274c No contest\u00f3', state: activos ? 'normal' : 'disabled' }
+      primaryButton:   { title: registrado ? 'Deshacer' : '', state: registrado ? 'normal' : 'disabled' },
+      secondaryButton: { title: '' }
     };
   }
+
 
   /**
    * Hora en UN SOLO campo, 24 h — el mismo formato del reloj que Bitrix ya
@@ -283,6 +291,9 @@ declare(strict_types=1);
     return h12 + ':' + hhmm.slice(3) + ' ' + (h < 12 ? 'a.m.' : 'p.m.');
   }
 
+  /** "el vie 14 de agosto", pero "hoy"/"mañana" van sin artículo. */
+  function conEl(t) { return (t === 'hoy' || t === 'ma\u00f1ana') ? t : 'el ' + t; }
+
   /** "vie 14 de agosto" — o "hoy"/"mañana" cuando corresponde. */
   function textoFecha(f) {
     var h = hoy(), d = new Date(f.y, f.m, f.d);
@@ -300,101 +311,17 @@ declare(strict_types=1);
   }
 
 
+  /**
+   * UNA sola caja. El vendedor no elige nada: apretar la pestaña YA registró
+   * la llamada sin contestar, y esto solo le dice qué pasó y para cuándo quedó.
+   *
+   * Lo que se sacó a propósito, y por qué:
+   *   · el botón "Sí contestó"        → ese flujo sigue siendo manual, aparte
+   *   · "el cliente pidió otra fecha" → pertenece al flujo del que sí contestó
+   *   · el calendario y la hora       → la fecha la pone la escalera, no él
+   *   · el comentario                 → la actividad ya se creó antes de escribir
+   */
   function layout() {
-    // Mientras el vendedor no toque nada, día y hora se mantienen al día solos:
-    // si deja la pestaña abierta media hora, no registra con la hora vieja.
-    if (!horaManual) hhmm = ahoraHHMM();
-    if (!diaManual)  { var hy = hoy(); sel = { y:hy.y, m:hy.m, d:hy.d }; }
-
-    // UN SOLO ESTADO. Antes había un paso previo con un enlace para abrir, y
-    // sobraba: la pestaña "Registrar llamada" de la barra YA es el botón que
-    // abre esto. Sin enlaces propios de abrir/cerrar no se repite ningún
-    // rótulo y no sobra ni una línea en blanco.
-    var y = vista.getFullYear(), m = vista.getMonth();
-    var blocks = {};
-
-    // ── encabezado: ◀  agosto 2026  ▶
-    var cal = {};
-    cal.nav = { type:'lineOfBlocks', properties:{ blocks:{
-      ant: { type:'link', properties:{ text: SANG_NAV + '\u25c0', action:{ type:'layoutEvent', value:'mes:-1' } } },
-      tit: { type:'text', properties:{
-        value: EC + RELLENO[MESES[m]][0] + MESES[m] + ' ' + y + RELLENO[MESES[m]][1] + EC,
-        bold:true } },
-      sig: { type:'link', properties:{ text:'▶', action:{ type:'layoutEvent', value:'mes:1' } } }
-    }}};
-
-    // ── fila de días de la semana (2 caracteres, igual que los números)
-    var cab = {};
-    // Sáb y Dom en rojo, como el selector nativo. Acá SÍ se puede porque el
-    // encabezado es `text` -- medido: color danger = rgb(255,87,82). En los
-    // días no se puede: ahí son `link`, y `link` ignora color (probado en el
-    // DOM: el sábado salía con el mismo azul que el viernes).
-    cab.sang = { type:'text', properties:{ value: SANG_FILA_CAB, size:'xs' } };
-    for (var i = 0; i < 7; i++) cab['h'+i] = { type:'text', properties:{
-      value: centrar(DOW[i], ANCHO_DOW[DOW[i]], E12),
-      size:'xs', color: (i >= 5 ? 'danger' : 'base_50') } };
-    cal.dow = { type:'lineOfBlocks', properties:{ blocks: cab } };
-    // raya bajo los días, como el selector nativo
-    cal.raya = { type:'text', properties:{ value: SANG_RAYA + RAYA, color:'base_50' } };
-
-    // ── celdas del mes, lunes primero.
-    // La grilla se rellena con los días del mes anterior y del siguiente, en
-    // gris, igual que el selector nativo de Bitrix: un bloque completo se lee
-    // mucho mejor que uno con huecos. Además así toda fila tiene 7 números.
-    var offset   = (new Date(y, m, 1).getDay() + 6) % 7;
-    var total    = new Date(y, m + 1, 0).getDate();
-    var totalAnt = new Date(y, m, 0).getDate();
-
-    var celdas = [];
-    for (var o = offset; o > 0; o--) celdas.push({ d: totalAnt - o + 1, otro:true });
-    for (var d = 1; d <= total; d++)  celdas.push({ d: d, otro:false });
-    var sig = 1;
-    while (celdas.length < 42) celdas.push({ d: sig++, otro:true });
-
-    for (var s = 0; s < 6; s++) {
-      // La sangría de centrado va en su PROPIO bloque, no dentro de la primera
-      // celda: si esa celda cae en negrita (el día elegido), sus espacios
-      // también engordan y la fila entera se corre. Medido: +17 px.
-      var fila = { sang: { type:'text', properties:{ value: SANG_FILA } } };
-      for (var c = 0; c < 7; c++) {
-        var cel = celdas[s*7 + c], key = 'c' + c, dia = cel.d;
-        if (cel.otro || esPasado(y, m, dia)) {
-          // gris: ni de este mes, o ya pasó. No se puede planificar ahí.
-          fila[key] = { type:'text', properties:{ value: celda(dia), color:'base_50' } };
-        } else if (sel && sel.y===y && sel.m===m && sel.d===dia) {
-          // el elegido va como TEXTO oscuro y en negrita: contra el azul de
-          // los links se distingue de un vistazo, sin cambiar de ancho.
-          fila[key] = { type:'text', properties:{ value: celda(dia, true), bold:true } };
-        } else {
-          // Sábado y domingo NO se pueden pintar de rojo: `color` solo existe
-          // en el bloque `text`, y ahí el día deja de ser clickeable. Probado
-          // en el DOM: mandando color:'danger' en el link, el sábado sale con
-          // el mismo rgb(32,102,176) que el viernes, sin clase ni atributo.
-          fila[key] = { type:'link', properties:{
-            text: celda(dia),
-            action:{ type:'layoutEvent', value:'dia:'+y+'-'+pad(m+1)+'-'+pad(dia) }
-          }};
-        }
-      }
-      cal['sem'+s] = { type:'lineOfBlocks', properties:{ blocks: fila } };
-    }
-
-    // ── hora: dos ruedas, hora y minuto, como el control nativo de Bitrix.
-    // Reemplaza al campo de texto: se va el rectángulo de ancho completo y de
-    // paso todos los enredos de teclear. El minuto va de 5 en 5 porque así lo
-    // hacen: de 400 llamadas leídas, TODOS los minutos son múltiplo de 5.
-    // ── comentario. Antes tenian que saltar a la pestana "Comentario" para
-    // esto; ahora va en el mismo panel y se manda solo o junto con la llamada.
-    blocks.coment = { type:'textarea', properties:{
-      title:'Comentario', value: comentario, placeholder:'Qué pasó en la llamada' } };
-    if (comentario.replace(/\s/g,'')) {
-      blocks.enviar = { type:'link', properties:{ text:'Enviar comentario', size:'sm',
-        action:{ type:'layoutEvent', value:'coment' } } };
-    }
-
-    // ── Lo que toca, según la escalera ──────────────────────────────────
-    // Sin calendario: el vendedor no elige fecha. Solo aparece si el cliente
-    // pactó una, que es el único caso en que la fecha significa algo.
     var TOCA = {
       'NUEVO':        'Primer contacto',
       'ESCALERA-1':   '2\u00ba intento',
@@ -402,109 +329,36 @@ declare(strict_types=1);
       'MANTENIMIENTO':'Mantenimiento',
       'CONTACTADO':   'Devolver la llamada'
     };
+    var blocks = {};
 
-    if (!modoPacto) {
-      var linea = protocolo
-        ? (TOCA[protocolo.estado] || protocolo.estado) + '  \u00b7  ' + protocolo.estado
-        : 'Leyendo el historial\u2026';
-      blocks.estado = { type:'text', properties:{ value: linea, color:'base_70', size:'sm' } };
-
-      if (protocolo) {
-        var pNo = fechaMas(diasProxima(false)), pSi = fechaMas(diasProxima(true));
-        blocks.plan = { type:'section', properties:{ type:'primary', blocks:{
-          a: { type:'text', properties:{ bold:true,
-               value: 'No contest\u00f3  \u2192  vuelvo a llamar el ' + textoFecha(pNo) } },
-          b: { type:'text', properties:{ size:'sm', color:'base_70',
-               value: 'S\u00ed contest\u00f3  \u2192  ' + textoFecha(pSi) + ', salvo que pacten otra' } }
-        }}};
-        blocks.pacto = { type:'link', properties:{ size:'sm',
-          text:'El cliente pidi\u00f3 otra fecha \u203a',
-          action:{ type:'layoutEvent', value:'pacto' } } };
-      }
-
-      var b0 = botones(!!protocolo);
-      b0.blocks = blocks;
-      return b0;
+    if (aviso && aviso.indexOf('No se pudo') === 0) {
+      blocks.err = { type:'section', properties:{ type:'danger', blocks:{
+        a: { type:'text', properties:{ value: aviso, bold:true } } }}};
+      return { blocks: blocks, primaryButton:{title:''}, secondaryButton:{title:''} };
     }
 
-    // ── Modo pacto: acá sí el calendario, porque la fecha la puso el cliente
-    blocks.volver = { type:'link', properties:{ size:'sm',
-      text:'\u2039 Volver', action:{ type:'layoutEvent', value:'sinpacto' } } };
-
-    blocks.cal  = { type:'section', properties:{ type:'withBorder', blocks: cal } };
-
-    var hh = hhmm.slice(0,2), mi = hhmm.slice(3);
-
-    var ruedas = { type:'lineOfBlocks', properties:{ blocks:{
-      hmen: { type:'link', properties:{ text: SANG_RUE+EC+'\u2212'+EC, size:'xl', bold:true,
-              action:{ type:'layoutEvent', value:'h-1' } } },
-      hval: { type:'text', properties:{ value: EC + hh + EC, bold:true, size:'xl' } },
-      hmas: { type:'link', properties:{ text: EC+'+'+EC, size:'xl', bold:true,
-              action:{ type:'layoutEvent', value:'h+1' } } },
-      dos:  { type:'text', properties:{ value: EC + ':' + EC, bold:true, size:'xl' } },
-      mmen: { type:'link', properties:{ text: EC+'\u2212'+EC, size:'xl', bold:true,
-              action:{ type:'layoutEvent', value:'m-5' } } },
-      mval: { type:'text', properties:{ value: EC + mi + EC, bold:true, size:'xl' } },
-      mmas: { type:'link', properties:{ text: EC+'+'+EC, size:'xl', bold:true,
-              action:{ type:'layoutEvent', value:'m+5' } } }
-    }}};
-
-    // withTitle con inline: la columna del rótulo la arma Bitrix (100 px).
-    function conRotulo(titulo, bloque) {
-      return { type:'withTitle', properties:{
-        title: titulo, inline:true, titleWidth:'sm', block: bloque } };
+    if (!protocolo) {
+      blocks.esp = { type:'text', properties:{ value:'Registrando\u2026', color:'base_50' } };
+      var b = botones(); b.blocks = blocks; return b;
     }
 
-    // La sangría de centrado va en su PROPIO bloque: dentro de una celda que
-    // caiga en negrita, sus espacios engordan y la fila entera se corre.
-    function filaAtajos(pre, pares, actual, evento, sangria) {
-      var f = { sang: { type:'text', properties:{ value: sangria || '', size:'sm' } } };
-      for (var i = 0; i < pares.length; i++) {
-        var val = pares[i][0], txt = pares[i][1];
-        var activo = (pad(val) === actual);
-        var cel = celda(txt, activo);
-        f[pre+val] = activo
-          ? { type:'text', properties:{ value: cel, bold:true, size:'sm' } }
-          : { type:'link', properties:{ text: cel, size:'sm',
-                action:{ type:'layoutEvent', value: evento + pad(val) } } };
-      }
-      return { type:'lineOfBlocks', properties:{ blocks: f } };
+    // Renglón de arriba: en qué escalón quedó. Es lo que pediste ver.
+    blocks.estado = { type:'text', properties:{ size:'sm', color:'base_70',
+      value: (TOCA[protocolo.estado] || protocolo.estado) + '  \u00b7  ' + protocolo.estado } };
+
+    if (deshecho) {
+      blocks.caja = { type:'section', properties:{ type:'warning', blocks:{
+        a: { type:'text', properties:{ bold:true, value:'Deshecho. No qued\u00f3 registrada.' } } }}};
+      var b2 = botones(); b2.blocks = blocks; return b2;
     }
 
-    blocks.caja = { type:'section', properties:{ type:'withBorder', blocks:{
-      ruedas:  conRotulo('Tiempo', ruedas),
-      manana:  conRotulo('Ma\u00f1ana', filaAtajos('h', MANANA, hh, 'hora:', SANG_MANANA)),
-      tarde:   conRotulo('Tarde',   filaAtajos('t', TARDE,  hh, 'hora:', SANG_TARDE)),
-      minutos: conRotulo('Minuto',  filaAtajos('m', MINUTOS, mi, 'min:', SANG_MIN))
+    var prox = fechaMas(diasProxima(false));
+    blocks.caja = { type:'section', properties:{ type:'primary', blocks:{
+      a: { type:'text', properties:{ bold:true,
+           value:'No contest\u00f3  \u2192  vuelvo a llamar ' + conEl(textoFecha(prox)) } }
     }}};
 
-    // Confirmación en tarjeta celeste (#E5F9FF medido): es el bloque de aviso
-    // que usa Bitrix en sus propias pantallas, y separa lo que se va a guardar
-    // de los controles de arriba.
-    // La tarjeta cambia de color según el estado: celeste mientras se decide,
-    // verde al guardar, roja si algo falló. Colores medidos: primary #E5F9FF,
-    // success #F1FBD0, danger #FFE8E8.
-    var tipo = 'primary', linea = resumenTxt();
-    if (aviso) {
-      var malo = /no se pudo/i.test(aviso);
-      tipo  = malo ? 'danger' : 'success';
-      linea = aviso;
-    }
-    blocks.resumen = { type:'section', properties:{ type:tipo, blocks:{
-      t: { type:'text', properties:{ value: linea, bold:true } }
-    }}};
-    // Importante y Cerrar comparten fila: el fuego de Bitrix es PRIORITY 3
-    // ("high", confirmado con crm.enum.activitypriority) y algunos vendedores
-    // lo usan -- de 400 llamadas leídas, 5 venían marcadas.
-    blocks.pie = { type:'lineOfBlocks', properties:{ blocks:{
-      imp: { type:'link', properties:{
-        text: SANG_PIE + (importante ? '\u2611 Importante \ud83d\udd25' : '\u2610 Importante'), size:'sm',
-        action:{ type:'layoutEvent', value:'imp' } } },
-    }}};
-
-    var out = botones(true);
-    out.blocks = blocks;
-    return out;
+    var b3 = botones(); b3.blocks = blocks; return b3;
   }
 
   function redibujar() { BX24.placement.call('setLayout', layout(), function(){}); }
@@ -555,11 +409,23 @@ declare(strict_types=1);
   // El estado se calcula recorriendo las salientes en orden de CREATED, no
   // sumando contadores: dos deals con los mismos números pueden estar en
   // estados opuestos según el ORDEN. Contestada = SUBJECT contiene "1234".
-  var PLAZO = { 1:2, 2:7, 3:30 };        // sin contestar consecutivas -> días
+  // Días hasta la PRÓXIMA llamada, contados desde ésta.
+  //
+  // La secuencia del spec, medida desde que entra el deal, es:
+  //     día 0  ·  día 1  ·  día 7  ·  día 37  ·  y de ahí cada 100
+  // O sea los saltos entre una llamada y la siguiente son +1, +6, +30, +100.
+  //
+  // Antes decía {1:2}: tras la primera fallida mandaba a los DOS días, cuando
+  // la regla es "2do intento AL DÍA SIGUIENTE". Un día de más en el escalón
+  // más caro — el 39% de las ventas cierra en la primera semana.
+  var PLAZO = { 1:1, 2:6, 3:30 };        // sin contestar consecutivas -> días
   var PLAZO_MANT = 100;
   var PLAZO_CONTESTO = 3;
   var HORA_AGENDA = '10:00';             // 10 h es de las más usadas (11,7%)
 
+  var registrado = 0;      // id de la actividad recién creada (0 = todavía nada)
+  var yaIntento  = false;  // el auto-registro corre UNA sola vez por apertura
+  var deshecho   = false;
   var protocolo = null;    // { estado, sinContestar }
   var modoPacto = false;   // el cliente dijo una fecha -> ahí sí calendario
 
@@ -620,6 +486,7 @@ declare(strict_types=1);
       }
       protocolo = calcularProtocolo(l);
       redibujar();
+      autoRegistrar();   // apretar la pestaña ES la acción
     });
 
     BX24.callMethod('crm.deal.get', { id: dealId }, function (rd) {
@@ -654,7 +521,7 @@ declare(strict_types=1);
   }
 
   function registrar(contesto) {
-    if (!dealId || !sel) return;
+    if (!dealId) return;
     BX24.placement.call('lock');
     // Si nunca tocó la hora, se sella la de ESTE momento, no la del render.
     if (!horaManual) hhmm = ahoraHHMM();
@@ -681,6 +548,7 @@ declare(strict_types=1);
       BX24.callMethod('crm.activity.add', { fields: fields }, function (ra) {
         BX24.placement.call('unlock');
         if (ra.error()) { aviso = 'No se pudo guardar: ' + ra.error(); redibujar(); return; }
+        registrado = parseInt(ra.data(), 10) || 0;   // para poder deshacerlo
         // Sin texto de "Guardado": la actividad recien creada YA sale ahi
         // abajo en la linea de tiempo con su fecha limite.
         aviso = 'Guardado \u2713  ' + (contesto ? 'contest\u00f3' : 'no contest\u00f3')
@@ -704,6 +572,37 @@ declare(strict_types=1);
     // rápido que la precarga, se encola y arranca sola en cuanto llegue.
     if (ctx) guardar();
     else { ctxCola.push(guardar); precargar(); }
+  }
+
+  /**
+   * Apretar la pestaña ES la acción: no hay un segundo botón que buscar.
+   *
+   * Corre UNA vez por apertura (yaIntento). El seguro de verdad es el
+   * "Deshacer" de la franja de botones: si alguien entró sin querer, un clic
+   * borra la actividad y deja el deal como estaba.
+   */
+  function autoRegistrar() {
+    if (yaIntento || !protocolo || !dealId) return;
+    yaIntento = true;
+    registrar(false);
+  }
+
+  /** Borra la actividad recién creada y devuelve el protocolo a como estaba. */
+  function deshacer() {
+    if (!registrado) return;
+    BX24.placement.call('lock');
+    var id = registrado;
+    BX24.callMethod('crm.activity.delete', { id: id }, function (r) {
+      BX24.placement.call('unlock');
+      if (r.error()) { aviso = 'No se pudo deshacer: ' + r.error(); redibujar(); return; }
+      registrado = 0; deshecho = true;
+      if (protocolo && protocolo.sinContestar > 0) {
+        protocolo = { estado: protocolo.sinContestar === 1 ? 'CONTACTADO'
+                        : (protocolo.sinContestar === 2 ? 'ESCALERA-1' : 'ESCALERA-2'),
+                      sinContestar: protocolo.sinContestar - 1 };
+      }
+      redibujar();
+    });
   }
 
   BX24.init(function () {
@@ -752,12 +651,8 @@ declare(strict_types=1);
       if (antes !== !!comentario.replace(/\s/g,'')) redibujar();
     });
 
-    BX24.placement.call('bindPrimaryButtonClickCallback',   null, function(){
-      registrar(true);
-    });
-    BX24.placement.call('bindSecondaryButtonClickCallback', null, function(){
-      registrar(false);
-    });
+    BX24.placement.call('bindPrimaryButtonClickCallback',   null, deshacer);
+    BX24.placement.call('bindSecondaryButtonClickCallback', null, function(){});
   });
 })();
 </script>

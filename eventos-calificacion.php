@@ -46,6 +46,9 @@ const EVENTOS = [
     'ONCRMACTIVITYUPDATE',   // la marca completada / la reprograma
     'ONCRMDEALUPDATE',       // cambia de etapa → semáforo
     'ONCRMDEALADD',          // nace el deal → NUEVO
+    // El "Deshacer" del panel BORRA la actividad. Sin este evento el puntaje
+    // se quedaría con la llamada fantasma hasta la pasada de la madrugada.
+    'ONCRMACTIVITYDELETE',
 ];
 
 function mostrar(): void {
