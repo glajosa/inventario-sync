@@ -70,7 +70,14 @@
     .cbtn-e3 {background:var(--e3-bg);border-color:var(--e3-bd);color:var(--e3-tx)}
 
     /* Legend */
-    .legend{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:1rem}
+    .legwrap{margin-bottom:1rem}
+    .legwrap summary{cursor:pointer;font-size:12px;color:var(--t3);list-style:none;
+      display:inline-flex;align-items:center;gap:6px;padding:2px 0}
+    .legwrap summary::-webkit-details-marker{display:none}
+    .legwrap summary::before{content:'›';display:inline-block;transition:transform .15s;font-size:14px}
+    .legwrap[open] summary::before{transform:rotate(90deg)}
+    .legwrap summary:hover{color:var(--t2)}
+    .legend{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 0}
     .leg{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)}
     .sw{width:10px;height:10px;border-radius:2px;flex-shrink:0}
 
@@ -302,6 +309,7 @@
   <div class="ibar"  id="ibar"></div>
   <div class="cfilter" id="cfilter"></div>
   <div class="detail" id="detail"></div>
+  <details class="legwrap"><summary>Qué significan los colores y las marcas</summary>
   <div class="legend">
     <div class="leg"><div class="sw" style="background:var(--m-bg);border:1px solid var(--m-bd)"></div>Medianero — pos. 2, 3, 6, 7</div>
     <div class="leg"><div class="sw" style="background:var(--e1-bg);border:1px solid var(--e1-bd)"></div>Esq. interno (1) — pos. 4, 5 (junto al núcleo)</div>
@@ -311,9 +319,9 @@
     <div class="leg"><div class="sw" style="background:repeating-linear-gradient(45deg,var(--surf2),var(--surf2) 3px,var(--bg) 3px,var(--bg) 6px);border:1px solid var(--bds)"></div>Núcleo: ascensor y escaleras</div>
     <div class="leg"><div class="sw" style="background:transparent;border:2.5px solid var(--t2);position:relative"></div>Borde grueso + punto = unidad con regla propia</div>
     <div class="leg"><div class="sw" style="background:repeating-linear-gradient(135deg,transparent,transparent 2px,var(--t3) 2px,var(--t3) 3px);border:1px solid var(--bd)"></div>Rayado = vendida · atenuada = reservada</div>
-  </div>
+  </div></details>
   <div class="floors" id="floors"></div>
-  <div class="sec-lbl">Precios de referencia — Grupo <span id="grp-lbl"></span> <span style="font-size:10px;font-weight:400;opacity:.7">(referencia PDF)</span></div>
+  <div class="sec-lbl">Precios de referencia — Grupo <span id="grp-lbl"></span> <span style="font-size:10px;font-weight:400;opacity:.7">precio de la matriz</span></div>
   <div class="pt-wrap"><table class="pt" id="ptable"></table></div>
 
 
@@ -448,14 +456,14 @@ function renderInfo() {
   const s = getStates(cur);
   document.getElementById('ibar').innerHTML = `
     <div class="ii"><div class="il">Edificio</div><div class="iv">${cur}</div></div>
-    <div class="ii"><div class="il">Grupo de precio</div><div class="iv">${d.g}</div></div>
-    <div class="ii"><div class="il">Planta baja</div><div class="iv">${pb}</div></div>
-    <div class="ii"><div class="il">Plantas altas</div><div class="iv">${altas}</div></div>
-    <div class="ii"><div class="il">Nivel</div><div class="iv">${d.t}</div></div>
+    <div class="ii"><div class="il">Grupo de precio</div>
+      <div class="iv" title="${d.t}">${d.g}</div></div>
     <div class="ii"><div class="il">Disponibles</div>
       <div class="iv" style="color:var(--pri)">${s.D} <span style="font-weight:400;color:var(--t3)">de ${(DATA.uxp[cur]||8)*4}</span></div></div>
     <div class="ii"><div class="il">Reservadas · Vendidas</div>
       <div class="iv" style="font-weight:400;color:var(--t2)">${s.R} · ${s.F}</div></div>
+    <div class="ii"><div class="il">Metraje</div>
+      <div class="iv" style="font-weight:400;color:var(--t2)">${pb} · altas ${altas}</div></div>
   `;
 }
 
