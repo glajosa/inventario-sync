@@ -171,6 +171,10 @@
     .simconf input{padding:7px 10px;border:0.5px solid var(--bds);border-radius:8px;
       background:var(--surf);color:var(--t1);font:inherit;font-size:13px}
     .simconf input.nota{flex:1 1 220px;min-width:0}
+    .simviejo{margin-top:11px;padding:8px 12px;border-radius:8px;font-size:12.5px;
+      background:#fdf5e4;border:0.5px solid #e6c98a;color:#7a5a0a}
+    @media(prefers-color-scheme:dark){.simviejo{background:#2a2213;border-color:#5c4a1c;color:#e8b64c}}
+    .simviejo a{color:inherit;font-weight:500}
     .simhist{margin-top:12px;padding-top:11px;border-top:0.5px solid var(--bd)}
     .simhist .hl{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--t3);
       margin-bottom:7px}
@@ -250,6 +254,7 @@
     <div class="simout" id="sim-out"></div>
     <div class="simnota" id="sim-nota"></div>
     <div class="simjson" id="sim-json" hidden></div>
+    <div class="simviejo" id="sim-viejo" hidden></div>
     <div class="simhist" id="sim-hist"></div>
     <div class="simconf" id="sim-conf" hidden>
       <p id="sim-conf-txt"></p>

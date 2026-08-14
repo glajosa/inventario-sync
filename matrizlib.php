@@ -200,22 +200,49 @@ function mz_unidades(array $cfg): array {
     return $out;
 }
 
+function mz_ruta_cache(array $cfg): string {
+    return (getenv('DATA_DIR') ?: '/data') . '/unidades_' . $cfg['bitrix']['categoryId'] . '.json';
+}
+
 /**
- * Igual, pero con caché corta en disco. La pantalla se abre en un slider y leer
- * 304 unidades son 7 páginas paginadas con freno: ~4 s cada vez que alguien la
- * abre, y encima gasta presupuesto de API del portal para nada.
- * Se invalida sola, y al aplicar una subida se borra para no mostrar lo viejo.
+ * La pantalla NO lee Bitrix: lee este archivo. Un cron lo mantiene fresco.
+ *
+ * Leer 304 unidades son 7 páginas paginadas, y el portal vive cerca de su techo de
+ * llamadas. Haciéndolo al abrir la pantalla pasaban las dos cosas malas a la vez:
+ * ~12 s de espera, y un QUERY_LIMIT_EXCEEDED que dejaba al usuario sin nada.
+ *
+ * Si la copia está vencida se intenta refrescar, pero si Bitrix falla se SIRVE LA
+ * VIEJA con su edad a la vista. Precios de ayer marcados como de ayer son útiles;
+ * una pantalla de error no le sirve a nadie.
+ *
+ * @param array $info devuelve ['edad' => segundos, 'fresco' => bool, 'error' => string]
  */
-function mz_unidades_cache(array $cfg, int $ttl = 180): array {
-    $f = (getenv('DATA_DIR') ?: '/data') . '/unidades_' . $cfg['bitrix']['categoryId'] . '.json';
-    if (is_file($f) && (time() - (int)@filemtime($f)) < $ttl) {
+function mz_unidades_cache(array $cfg, int $ttl = 600, ?array &$info = null): array {
+    $f = mz_ruta_cache($cfg);
+    $hay = is_file($f);
+    $edad = $hay ? time() - (int)@filemtime($f) : PHP_INT_MAX;
+    $viejo = null;
+    if ($hay) {
         $j = json_decode((string)@file_get_contents($f), true);
-        if (is_array($j) && $j) return $j;
+        if (is_array($j) && $j) $viejo = $j;
     }
-    $u = mz_unidades($cfg);            // si falla, revienta: no se cachea basura
-    @file_put_contents($f . '.tmp', json_encode($u), LOCK_EX);
-    @rename($f . '.tmp', $f);
-    return $u;
+    if ($viejo !== null && $edad < $ttl) {
+        $info = ['edad' => $edad, 'fresco' => true, 'error' => ''];
+        return $viejo;
+    }
+    try {
+        $u = mz_unidades($cfg);
+        @file_put_contents($f . '.tmp', json_encode($u), LOCK_EX);
+        @rename($f . '.tmp', $f);
+        $info = ['edad' => 0, 'fresco' => true, 'error' => ''];
+        return $u;
+    } catch (Throwable $e) {
+        if ($viejo !== null) {
+            $info = ['edad' => $edad, 'fresco' => false, 'error' => $e->getMessage()];
+            return $viejo;                 // vale más lo viejo fechado que nada
+        }
+        throw $e;                          // sin copia previa no hay qué mostrar
+    }
 }
 
 function mz_cache_borrar(array $cfg): void {

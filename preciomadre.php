@@ -142,10 +142,11 @@ header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 
 $px = mz_precios_vigentes($cfg);
+$cacheInfo = null;
 try {
-    // Caché corta: la pantalla se abre en un slider y leer 304 unidades son 7
-    // páginas con freno. Sin esto tarda ~4 s cada vez que alguien la abre.
-    $unid = mz_unidades_cache($cfg, (int)($_REQUEST['recargar'] ?? 0) ? 0 : 180);
+    // La pantalla lee el archivo que deja warm-precios.php; solo intenta refrescar
+    // si está vencido, y si Bitrix falla sirve la copia anterior fechada.
+    $unid = mz_unidades_cache($cfg, (int)($_REQUEST['recargar'] ?? 0) ? 0 : 900, $cacheInfo);
 } catch (Throwable $e) {
     // Mejor no mostrar nada que mostrar la mitad: con datos parciales los totales
     // mienten y una subida se calcularía sobre un inventario incompleto.
@@ -191,6 +192,8 @@ $datos = [
     'cat_nom'    => array_map(fn($c) => $c['etiqueta'] ?? '', $cfg['categorias']),
     'proyectos'  => array_map(fn($c) => $c['proyecto'] ?? '', $proyectos),
     'token'      => $tok,
+    'edad'       => (int)($cacheInfo['edad'] ?? 0),
+    'fresco'     => (bool)($cacheInfo['fresco'] ?? true),
 ];
 
 $tpl = (string)file_get_contents(__DIR__ . '/matriz.tpl.html');
