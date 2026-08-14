@@ -158,8 +158,10 @@
     .simval{position:relative;display:flex;align-items:center}
     .simval .simsig{position:absolute;left:11px;font-size:14px;font-weight:600;color:var(--t3);
       pointer-events:none}
-    .simval input{padding-left:26px;font-variant-numeric:tabular-nums;font-size:15px;
-      font-weight:600;letter-spacing:.01em}
+    /* .simf select,.simf input impone padding:7px 10px y le ganaba por especificidad:
+       el numero arrancaba encima del simbolo y se leia "$" pisado por el "1". */
+    .simf .simval input{padding:7px 10px 7px 27px;font-variant-numeric:tabular-nums;
+      font-size:15px;font-weight:600;letter-spacing:.01em}
     .simf select,.simf input{width:100%;padding:7px 10px;border:0.5px solid var(--bds);
       border-radius:8px;background:var(--surf2);color:var(--t1);font:inherit;font-size:13px;
       font-weight:500}
