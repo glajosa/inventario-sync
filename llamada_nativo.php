@@ -423,6 +423,7 @@ declare(strict_types=1);
   var PLAZO_CONTESTO = 3;
   var HORA_AGENDA = '10:00';             // 10 h es de las más usadas (11,7%)
 
+  var F_PROTOCOLO = 'UF_CRM_1786279719022';   // ESTADO DE PROTOCOLO
   var registrado = 0;      // id de la actividad recién creada (0 = todavía nada)
   var yaIntento  = false;  // el auto-registro corre UNA sola vez por apertura
   var deshecho   = false;
@@ -602,6 +603,17 @@ declare(strict_types=1);
                       sinContestar: protocolo.sinContestar - 1 };
       }
       redibujar();
+
+      // Borrar la actividad NO alcanza: el puntaje ya se había recalculado con
+      // ella. Y el evento de borrado no sirve para arreglarlo, porque cuando
+      // llega la actividad ya no existe y no hay forma de saber de qué deal era.
+      //
+      // Acá sí se sabe. Escribir el estado corregido dispara ONCRMDEALUPDATE,
+      // y ese evento sí recalcula todo lo demás — puntaje, contadores y días.
+      if (protocolo) {
+        var campos = {}; campos[F_PROTOCOLO] = protocolo.estado;
+        BX24.callMethod('crm.deal.update', { id: dealId, fields: campos }, function(){});
+      }
     });
   }
 

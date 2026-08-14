@@ -32,12 +32,14 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
 
 const PLACEMENT = 'CRM_DEAL_DETAIL_ACTIVITY';
 const HANDLER   = 'https://galjosa-inventario-sync.pwluu1.easypanel.host/llamada_nativo.php';
-// La pestaña NO se llama "Registrar llamada" a propósito: ese es el rótulo del
-// botón que aparece adentro, y quedaban dos textos iguales pegados. Como la
-// pestaña del header no se puede ocultar (es DOM de Bitrix y además es el
-// contenedor de todo lo de adentro), lo único que se puede es que no repita.
-// "Seguimiento" cae natural al lado de Llamada / Comentario / Reunión.
-const TITULO    = 'Seguimiento';
+// La pestaña se llama "No contestó" porque APRETARLA ES LA ACCIÓN: no hay un
+// botón adentro que buscar. Adentro solo se muestra en qué escalón quedó y
+// para cuándo se agendó la próxima.
+//
+// ⚠ Re-registrar el placement manda el botón de vuelta al menú "Más": el
+// vendedor tiene que arrastrarlo otra vez a la barra desde
+// Más → Configuración de menú. Es ajuste de usuario, no código.
+const TITULO    = 'No contestó';
 
 // Handler viejo (HTML propio dentro del panel deslizante de Bitrix). Se
 // desenlaza junto con el nuevo para que no queden los dos botones.
