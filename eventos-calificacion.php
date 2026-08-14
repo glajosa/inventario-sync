@@ -28,7 +28,19 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
     http_response_code(403); exit('forbidden');
 }
 
-const HANDLER = 'https://galjosa-dashboardbitrix.pwluu1.easypanel.host/api/recalificar.php';
+// El secreto va EN LA URL registrada, no en el cuerpo del evento.
+//
+// Bitrix manda auth[application_token], que lo genera ÉL: compararlo contra un
+// token propio no puede funcionar nunca (probado el 13-ago: los eventos
+// llegaban y el handler los rechazaba con 403). Con el token en la URL, cada
+// POST de Bitrix lo trae consigo y el handler lo valida sin depender de nada
+// más. Se pasa por querystring al llamar a este script para no guardarlo acá.
+const HANDLER_BASE = 'https://galjosa-dashboardbitrix.pwluu1.easypanel.host/api/recalificar.php';
+$RECALIF = (string)($_GET['recalif'] ?? '');
+if ($RECALIF === '' && ($_GET['accion'] ?? '') === 'poner') {
+    http_response_code(400); exit("falta &recalif=<token del endpoint>\n");
+}
+define('HANDLER', HANDLER_BASE . ($RECALIF !== '' ? '?token=' . rawurlencode($RECALIF) : ''));
 const EVENTOS = [
     'ONCRMACTIVITYADD',      // el vendedor registra una llamada  ← el importante
     'ONCRMACTIVITYUPDATE',   // la marca completada / la reprograma
