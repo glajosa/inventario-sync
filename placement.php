@@ -69,7 +69,9 @@ function mostrar(): void {
  *  única forma de saber si Bitrix manda AUTH_ID era pedirle al usuario que probara
  *  y contara qué vio. */
 if (($_GET['accion'] ?? '') === 'log') {
-    $f = (getenv('DATA_DIR') ?: '/data') . '/sync.log';
+    // web.log lo escribe Apache (logline de campolib); sync.log lo escribe el cron.
+    $cual = ($_GET['f'] ?? 'web') === 'sync' ? 'sync.log' : 'web.log';
+    $f = (getenv('DATA_DIR') ?: '/data') . '/' . $cual;
     $n = max(1, min(200, (int)($_GET['n'] ?? 40)));
     $q = (string)($_GET['q'] ?? 'MATRIZ');
     $todas = @file($f, FILE_IGNORE_NEW_LINES) ?: [];
