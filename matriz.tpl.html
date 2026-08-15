@@ -228,6 +228,7 @@
     .simhist .pend{font-size:11px;font-weight:700;color:#a4331f;background:#fbeceb;
       border-radius:99px;padding:2px 9px}
     @media(prefers-color-scheme:dark){.simhist .pend{background:#2b1618;color:#ff8e93}}
+    .simconf .firma{font-size:12.5px;color:var(--t2);margin:-4px 0 9px}
     .simres{margin-top:10px;font-size:12.5px;line-height:1.55}
     .simres.ok{color:#0f6e56} .simres.err{color:#a4331f}
     .simjson{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--t2);
@@ -280,7 +281,9 @@
 
 
 <div class="main">
-  <div class="sec-lbl">Simulador — subir precios por bloque</div>
+  <div class="sec-lbl">Simulador — subir precios por bloque
+    <span style="float:right;font-size:9.5px;opacity:.45;letter-spacing:.04em"
+          id="sim-build"></span></div>
   <div id="sim">
     <div class="simrow">
       <div class="simf"><label for="sim-dest">A quién le sube</label><select id="sim-dest" autocomplete="off"></select>
@@ -318,6 +321,7 @@
     </div>
     <div class="simconf" id="sim-conf" hidden>
       <p id="sim-conf-txt"></p>
+      <p class="firma" id="sim-firma"></p>
       <div class="row" id="sim-row-clave">
         <input type="text" id="sim-clave" class="oculto" placeholder="Clave de autorización"
                autocomplete="off" data-lpignore="true" data-1p-ignore>
@@ -936,6 +940,8 @@ function simInit() {
   simRestaurarEstado();
   simCambio();          // aplica lo restaurado a AJ y repinta con el alcance marcado
   renderHist();
+  const bd = document.getElementById('sim-build');
+  if (bd) bd.textContent = 'build ' + (DATA.build || '?');
 }
 
 /* ── APLICAR ──────────────────────────────────────────────────────────
@@ -994,7 +1000,7 @@ function renderHist() {
 function simDeshacer() {
   const d = document.getElementById('sim-undo');
   d.hidden = false;
-  document.getElementById('sim-undo-quien').hidden = !!DATA.auth;
+  document.getElementById('sim-undo-quien').hidden = !!DATA.yo;
   document.getElementById('sim-undo-res').textContent = '';
   document.getElementById('sim-undo-clave').value = '';
   document.getElementById('sim-undo-clave').focus();
@@ -1012,7 +1018,8 @@ function simDeshacerConfirmar() {
   btn.disabled = true; res.className = 'simres'; res.textContent = 'Devolviendo los precios…';
   document.getElementById('sim-undo-clave').value = '';
   const body = new URLSearchParams({token: DATA.token, cat: DATA.cat, accion: 'deshacer',
-      clave, auth: DATA.auth || '', quien: document.getElementById('sim-undo-quien').value});
+      clave, auth: DATA.auth || '',
+      quien: DATA.yo || document.getElementById('sim-undo-quien').value});
   fetch(location.pathname, {method: 'POST', body,
       headers: {'Content-Type': 'application/x-www-form-urlencoded'}})
     .then(r => r.text())
@@ -1039,8 +1046,11 @@ function simConfirmar() {
   // Si Bitrix no dijo quién es (pantalla abierta por URL suelta), se le pregunta.
   // Una subida sin responsable no sirve: en un mes nadie sabrá quién la decidió.
   const q = document.getElementById('sim-quien');
-  q.hidden = !!DATA.auth;
+  q.hidden = !!DATA.yo;                        // Bitrix ya dijo quien eres
   if (!q.hidden) q.placeholder = 'Tu nombre (obligatorio)';
+  const f = document.getElementById('sim-firma');
+  f.textContent = DATA.yo ? `Va a quedar registrada a nombre de ${DATA.yo}.`
+                          : 'Bitrix no dijo quién eres, así que escribe tu nombre.';
   document.getElementById('sim-conf').hidden = false;
   document.getElementById('sim-clave').focus();
 }
@@ -1051,7 +1061,7 @@ function simEscribir() {
   const clave = document.getElementById('sim-clave').value;
   if (!clave) { res.className = 'simres err'; res.textContent = 'Falta la clave.'; return; }
   const qEl = document.getElementById('sim-quien');
-  if (!qEl.hidden && !qEl.value.trim()) {
+  if (!DATA.yo && !qEl.value.trim()) {
     res.className = 'simres err';
     res.textContent = 'Falta tu nombre: sin responsable la subida no sirve como registro.';
     qEl.focus(); return;
@@ -1064,7 +1074,7 @@ function simEscribir() {
     niv: AJ.niv, cat_f: AJ.cat, tipo: AJ.tipo, val: String(AJ.val),
     nota: document.getElementById('sim-nota').value,
     auth: DATA.auth || '',                                    // sesion de Bitrix
-    quien: document.getElementById('sim-quien').value,        // o el nombre escrito
+    quien: DATA.yo || document.getElementById('sim-quien').value,
   });
   fetch(location.pathname, {method: 'POST', body,
       headers: {'Content-Type': 'application/x-www-form-urlencoded'}})

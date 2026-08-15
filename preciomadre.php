@@ -75,7 +75,7 @@ function pm_quien(string $auth, string $escrito): string {
             if ($nom !== '') return $nom;
         }
     }
-    return $escrito !== '' ? $escrito : 'sin identificar';
+    return $escrito;      // vacio = no se pudo saber; quien llama decide que hacer
 }
 
 /** Nombre legible del proyecto, por si el JSON no lo trae. */
@@ -100,7 +100,7 @@ if ($accion === 'aplicar') {
         'nivel'     => (string)($_POST['niv'] ?? '*'),
         'categoria' => (string)($_POST['cat_f'] ?? '*'),
         'nota'      => trim((string)($_POST['nota'] ?? '')) ?: 'subida desde el cotizador madre',
-        'quien'     => pm_quien((string)($_POST['auth'] ?? ''), (string)($_POST['quien'] ?? '')),
+        'quien'     => pm_quien((string)($_POST['auth'] ?? ''), (string)($_POST['quien'] ?? '')) ?: 'sin identificar',
         'fecha'     => gmdate('Y-m-d H:i') . ' UTC',
     ];
     $val  = (float)($_POST['val'] ?? 0);
@@ -160,7 +160,7 @@ if ($accion === 'deshacer') {
     $lista = mz_ajustes($cat);
     if (!$lista) exit(json_encode(['ok' => false, 'error' => 'No hay ajustes que deshacer.']));
     $fuera = array_pop($lista);
-    $fuera['deshecho_por'] = pm_quien((string)($_POST['auth'] ?? ''), (string)($_POST['quien'] ?? ''));
+    $fuera['deshecho_por'] = pm_quien((string)($_POST['auth'] ?? ''), (string)($_POST['quien'] ?? '')) ?: 'sin identificar';
     mz_ajustes_guardar($cat, $lista);
 
     // Se quita el ajuste de la matriz Y se devuelven los precios que tenían las
@@ -179,7 +179,12 @@ if ($accion === 'deshacer') {
 
 // ── ver ─────────────────────────────────────────────────────────────────────
 header('Content-Type: text/html; charset=utf-8');
-header('Cache-Control: no-store');
+// no-store solo no bastaba: dentro del iframe de Bitrix el navegador seguia
+// sirviendo la version anterior del JS despues de desplegar, y las subidas salian
+// con el comportamiento viejo sin que nadie entendiera por que.
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
 header('X-Content-Type-Options: nosniff');
 
 $px = mz_precios_vigentes($cfg);
@@ -237,6 +242,11 @@ $datos = [
     // Bitrix lo manda al abrir el placement. Sirve para saber quién aplica sin
     // pedirle que se identifique a mano.
     'auth'       => (string)($_REQUEST['AUTH_ID'] ?? ''),
+    // Se resuelve aqui y no al aplicar: asi la pantalla puede decir "vas a firmar
+    // como X" ANTES de escribir, en vez de descubrirlo despues en el historico.
+    'yo'         => pm_quien((string)($_REQUEST['AUTH_ID'] ?? ''), ''),
+    'build'      => substr((string)@shell_exec('git -C ' . escapeshellarg(__DIR__) . ' rev-parse --short HEAD 2>/dev/null'), 0, 7)
+                    ?: gmdate('md-Hi'),
     'edad'       => (int)($cacheInfo['edad'] ?? 0),
     'fresco'     => (bool)($cacheInfo['fresco'] ?? true),
 ];
