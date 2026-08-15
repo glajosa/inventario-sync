@@ -52,7 +52,8 @@ $accion = (string)($_REQUEST['accion'] ?? 'ver');
 // Diagnóstico de una línea: qué campos manda Bitrix al abrir el placement. Solo los
 // nombres — AUTH_ID es una credencial y no se escribe en ningún log.
 if ($accion === 'ver' && !empty($_POST)) {
-    logline('MATRIZ placement POST: ' . implode(',', array_keys($_POST)));
+    logline('MATRIZ placement POST: ' . implode(',', array_keys($_POST))
+          . ' · scope=' . (string)($_POST['APPLICATION_SCOPE'] ?? '-'));
 }
 
 /**
@@ -68,12 +69,21 @@ function pm_quien(string $auth, string $escrito): string {
         $dom = (string)(getenv('BITRIX_DOMINIO') ?: 'galjosa.bitrix24.com');
         $ch = curl_init("https://{$dom}/rest/user.current?auth=" . rawurlencode($auth));
         curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8]);
-        $j = json_decode((string)curl_exec($ch), true);
+        $raw = (string)curl_exec($ch);
+        $errno = curl_errno($ch);
+        $j = json_decode($raw, true);
         $u = $j['result'] ?? null;
         if (is_array($u)) {
             $nom = trim(($u['NAME'] ?? '') . ' ' . ($u['LAST_NAME'] ?? ''));
             if ($nom !== '') return $nom;
+            // Hay usuario pero sin nombre cargado en su ficha: vale el correo antes
+            // que pedirle que se identifique a mano.
+            if (!empty($u['EMAIL'])) return (string)$u['EMAIL'];
         }
+        // Se anota POR QUE fallo. Sin esto solo se veia "sin identificar" y no habia
+        // forma de saber si era la sesion, el permiso de la app o la red.
+        logline('MATRIZ user.current -> ' . ($errno ? "curl:$errno"
+              : ('error=' . (string)($j['error'] ?? '-') . ' desc=' . (string)($j['error_description'] ?? '-'))));
     }
     return $escrito;      // vacio = no se pudo saber; quien llama decide que hacer
 }
