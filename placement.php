@@ -86,6 +86,17 @@ if (($_GET['accion'] ?? '') === 'disponibles') {
     exit;
 }
 
+/** Permisos que la app tiene concedidos. user.current necesita el scope 'user'. */
+if (($_GET['accion'] ?? '') === 'scope') {
+    $r = app_bx('scope');
+    echo "scope de la app:\n  " . implode(', ', (array)($r['result'] ?? [])) . "\n";
+    $u = app_bx('user.current');
+    echo "\nuser.current con el token de la app: " . json_encode(
+        isset($u['result']) ? ['NAME' => $u['result']['NAME'] ?? '', 'LAST_NAME' => $u['result']['LAST_NAME'] ?? '']
+                            : $u, JSON_UNESCAPED_UNICODE) . "\n";
+    exit;
+}
+
 echo "Antes:\n"; mostrar();
 
 if ($accion === 'poner') {
