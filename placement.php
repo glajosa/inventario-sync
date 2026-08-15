@@ -65,6 +65,19 @@ function mostrar(): void {
     }
 }
 
+/** Las últimas líneas del log que dejan las pantallas del placement. Sin esto la
+ *  única forma de saber si Bitrix manda AUTH_ID era pedirle al usuario que probara
+ *  y contara qué vio. */
+if (($_GET['accion'] ?? '') === 'log') {
+    $f = (getenv('DATA_DIR') ?: '/data') . '/sync.log';
+    $n = max(1, min(200, (int)($_GET['n'] ?? 40)));
+    $q = (string)($_GET['q'] ?? 'MATRIZ');
+    $todas = @file($f, FILE_IGNORE_NEW_LINES) ?: [];
+    $hit = $q === '' ? $todas : array_values(array_filter($todas, fn($l) => str_contains($l, $q)));
+    echo implode("\n", array_slice($hit, -$n)), "\n";
+    exit;
+}
+
 /** Los códigos DISPONIBLES del portal, filtrados. Sirve para no adivinar dónde
  *  puede vivir un botón: placement.list los devuelve todos (cientos). */
 if (($_GET['accion'] ?? '') === 'disponibles') {

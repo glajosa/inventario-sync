@@ -65,12 +65,16 @@ if ($accion === 'ver' && !empty($_POST)) {
  */
 function pm_quien(string $auth, string $escrito): string {
     $escrito = trim($escrito);
+    if ($auth === '') {
+        // Distinguir "Bitrix no mando AUTH_ID" de "AUTH_ID llego pero profile fallo":
+        // son dos averias distintas y antes las dos se veian igual desde afuera.
+        logline('MATRIZ sin AUTH_ID (pantalla abierta fuera del placement)');
+    }
     if ($auth !== '') {
         $dom = (string)(getenv('BITRIX_DOMINIO') ?: 'galjosa.bitrix24.com');
-        // 'profile', no 'user.current': este ultimo exige el permiso 'user', que la
-        // app no tiene (scope crm+placement) y ampliarlo obliga a reinstalarla.
-        // 'profile' es de la base, devuelve al usuario que esta usando la pantalla
-        // y funciona con los permisos que ya estan concedidos.
+        // 'profile' devuelve al usuario cuya sesion abrio la pantalla y es de la
+        // base: no depende del permiso 'user' (que la app ya tiene desde el
+        // 2026-08-15, pero que un reinstall futuro podria dejar fuera).
         $ch = curl_init("https://{$dom}/rest/profile?auth=" . rawurlencode($auth));
         curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8]);
         $raw = (string)curl_exec($ch);
