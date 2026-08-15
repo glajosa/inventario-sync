@@ -67,7 +67,11 @@ function pm_quien(string $auth, string $escrito): string {
     $escrito = trim($escrito);
     if ($auth !== '') {
         $dom = (string)(getenv('BITRIX_DOMINIO') ?: 'galjosa.bitrix24.com');
-        $ch = curl_init("https://{$dom}/rest/user.current?auth=" . rawurlencode($auth));
+        // 'profile', no 'user.current': este ultimo exige el permiso 'user', que la
+        // app no tiene (scope crm+placement) y ampliarlo obliga a reinstalarla.
+        // 'profile' es de la base, devuelve al usuario que esta usando la pantalla
+        // y funciona con los permisos que ya estan concedidos.
+        $ch = curl_init("https://{$dom}/rest/profile?auth=" . rawurlencode($auth));
         curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8]);
         $raw = (string)curl_exec($ch);
         $errno = curl_errno($ch);
@@ -82,7 +86,7 @@ function pm_quien(string $auth, string $escrito): string {
         }
         // Se anota POR QUE fallo. Sin esto solo se veia "sin identificar" y no habia
         // forma de saber si era la sesion, el permiso de la app o la red.
-        logline('MATRIZ user.current -> ' . ($errno ? "curl:$errno"
+        logline('MATRIZ profile -> ' . ($errno ? "curl:$errno"
               : ('error=' . (string)($j['error'] ?? '-') . ' desc=' . (string)($j['error_description'] ?? '-'))));
     }
     return $escrito;      // vacio = no se pudo saber; quien llama decide que hacer
