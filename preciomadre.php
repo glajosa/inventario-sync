@@ -49,6 +49,12 @@ if (!$cfg) {
 
 $accion = (string)($_REQUEST['accion'] ?? 'ver');
 
+// Diagnóstico de una línea: qué campos manda Bitrix al abrir el placement. Solo los
+// nombres — AUTH_ID es una credencial y no se escribe en ningún log.
+if ($accion === 'ver' && !empty($_POST)) {
+    logline('MATRIZ placement POST: ' . implode(',', array_keys($_POST)));
+}
+
 /**
  * Quién está aplicando la subida.
  * Bitrix manda AUTH_ID al abrir el placement; con eso se le pregunta su nombre. Si
