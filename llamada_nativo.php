@@ -358,10 +358,13 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
       var b2 = botones(); b2.blocks = blocks; return b2;
     }
 
-    var prox = fechaMas(diasProxima(false));
+    // Lo que se muestra es lo que se guard\u00f3, no un rec\u00e1lculo: ver calcularProxima().
+    // Si todav\u00eda no se registr\u00f3 (no deber\u00eda pasar ac\u00e1), se calcula al vuelo.
+    var pr = proxAgendada || calcularProxima(false);
     blocks.caja = { type:'section', properties:{ type:'primary', blocks:{
       a: { type:'text', properties:{ bold:true,
-           value:'No contest\u00f3  \u2192  vuelvo a llamar ' + conEl(textoFecha(prox)) } }
+           value:'No contest\u00f3  \u2192  vuelvo a llamar ' + conEl(textoFecha(pr.f))
+                 + ' a las ' + pr.hm } }
     }}};
 
     var b3 = botones(); b3.blocks = blocks; return b3;
@@ -385,14 +388,33 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
    * ②: empujar del sábado al lunes baja de 10 a 6 puntos por un día que la
    * empresa no trabaja — un castigo que el vendedor no se ganó.
    */
+  /**
+   * ⭐ UNA SOLA VERDAD para la próxima llamada.
+   *
+   * Antes había dos cálculos y no coincidían:
+   *   · el que se GUARDABA, hecho antes de registrar
+   *   · el que se MOSTRABA en la caja azul, hecho después de registrar — y por
+   *     eso con `protocolo.sinContestar` ya incrementado, o sea corrido un
+   *     escalón entero.
+   *
+   * Verificado en el deal 401877 (sin llamadas previas): guardaba el deadline a
+   * +1 día y la caja decía "vuelvo a llamar el jue 20", que es +6. El vendedor
+   * leía una fecha y en Bitrix quedaba otra.
+   *
+   * Ahora se calcula UNA vez, antes de guardar, y queda en `proxAgendada`. La
+   * caja muestra exactamente eso.
+   */
+  var proxAgendada = null;    // { f:{y,m,d}, hm:'HH:MM' }
+
+  function calcularProxima(contesto) {
+    if (modoPacto && sel) return { f: sel, hm: hhmm };
+    return { f: habilCercano(fechaMas(diasProxima(contesto))), hm: horaProxima(contesto) };
+  }
+
   function inicioIso(contesto) {
-    var f, hm;
-    if (modoPacto && sel) { f = sel; hm = hhmm; }
-    else {
-      f  = habilCercano(fechaMas(diasProxima(contesto)));
-      hm = horaProxima(contesto);
-    }
-    return f.y + '-' + pad(f.m+1) + '-' + pad(f.d) + 'T' + hm + ':00-05:00';
+    proxAgendada = calcularProxima(contesto);
+    var f = proxAgendada.f;
+    return f.y + '-' + pad(f.m+1) + '-' + pad(f.d) + 'T' + proxAgendada.hm + ':00-05:00';
   }
 
   /**
@@ -478,14 +500,22 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
   // estados opuestos según el ORDEN. Contestada = SUBJECT contiene "1234".
   // Días hasta la PRÓXIMA llamada, contados desde ésta.
   //
-  // La secuencia del spec, medida desde que entra el deal, es:
-  //     día 0  ·  día 1  ·  día 7  ·  día 37  ·  y de ahí cada 100
-  // O sea los saltos entre una llamada y la siguiente son +1, +6, +30, +100.
+  // Los plazos son los del DOCUMENTO, contados DESDE LA LLAMADA ANTERIOR:
   //
-  // Antes decía {1:2}: tras la primera fallida mandaba a los DOS días, cuando
-  // la regla es "2do intento AL DÍA SIGUIENTE". Un día de más en el escalón
-  // más caro — el 39% de las ventas cierra en la primera semana.
-  var PLAZO = { 1:1, 2:6, 3:30 };        // sin contestar consecutivas -> días
+  //     "ESCALERA-1: 1 intento sin contestar -> 2o en 2 dias"
+  //     "ESCALERA-2: 2 intentos sin contestar -> 3er en 7 dias"
+  //     momento 4: mantenimiento 1o, plazo 30 · 4b: los siguientes, cada 100
+  //
+  // (spec-original/reglas_calificacion.json — el mismo criterio que CAL_REGLAS
+  // del motor de puntaje, que mide el gap entre una llamada y la siguiente.)
+  //
+  // ⚠ Acá hubo una interpretación equivocada mía: había dejado {1:1, 2:6} para
+  // que la secuencia cayera en "día 0 · día 1 · día 7" contando desde que entra
+  // el deal. El documento NO dice eso: dice 2 y 7 días desde la llamada
+  // anterior. El costo de volver al documento es que se usa toda la tolerancia
+  // de la escala —un día de atraso ya cuesta puntos, antes quedaba un día de
+  // holgura— pero manda el documento.
+  var PLAZO = { 1:2, 2:7, 3:30 };        // sin contestar consecutivas -> días
   var PLAZO_MANT = 100;
   var PLAZO_CONTESTO = 3;
   var HORA_AGENDA = '10:00';             // 10 h es de las más usadas (11,7%)
