@@ -509,13 +509,22 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
   // (spec-original/reglas_calificacion.json — el mismo criterio que CAL_REGLAS
   // del motor de puntaje, que mide el gap entre una llamada y la siguiente.)
   //
-  // ⚠ Acá hubo una interpretación equivocada mía: había dejado {1:1, 2:6} para
-  // que la secuencia cayera en "día 0 · día 1 · día 7" contando desde que entra
-  // el deal. El documento NO dice eso: dice 2 y 7 días desde la llamada
-  // anterior. El costo de volver al documento es que se usa toda la tolerancia
-  // de la escala —un día de atraso ya cuesta puntos, antes quedaba un día de
-  // holgura— pero manda el documento.
-  var PLAZO = { 1:2, 2:7, 3:30 };        // sin contestar consecutivas -> días
+  // ⭐ EL PLAZO DEL DOCUMENTO ES UN TECHO, NO UNA CITA. Ahí está la clave:
+  //
+  //     regla ②  plazo 2 días   escala {0-2: 10, 3-5: 6, 6-10: 3, 11+: 0}
+  //     regla ③  plazo 7 días   escala {0-7: 10, 8-15: 6, ...}
+  //
+  // Con 0, 1 o 2 días la ② paga los 10 completos. O sea que el documento dice
+  // "tienes hasta 2 días", no "llama al segundo día". Entonces se agenda UN DÍA
+  // ANTES del techo, y así le queda un día de colchón al vendedor:
+  //
+  //     agendado a +1 → si se le corre un día, sigue en 10/10
+  //     agendado a +2 → si se le corre un día, cae a 6/10
+  //
+  // Los dos cumplen el documento; el primero no castiga por un desliz mínimo.
+  // (El 17-ago lo puse en {1:2, 2:7} leyendo ese número como objetivo. Era el
+  // techo. Revertido.)
+  var PLAZO = { 1:1, 2:6, 3:30 };        // sin contestar consecutivas -> días
   var PLAZO_MANT = 100;
   var PLAZO_CONTESTO = 3;
   var HORA_AGENDA = '10:00';             // 10 h es de las más usadas (11,7%)
