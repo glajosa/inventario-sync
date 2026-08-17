@@ -456,14 +456,13 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
       return { y:d.getFullYear(), m:d.getMonth(), d:d.getDate() };
     }
     if (esHabil(f)) return f;
-    var manana = corrida(fechaMas(0), 1);                   // piso: no agendar en el pasado
-    var pisoIso = iso(manana);
-    for (var i = 1; i <= 10; i++) {                         // hacia atrás
-      var a = corrida(f, -i);
-      if (iso(a) < pisoIso) break;
-      if (esHabil(a)) return a;
-    }
-    for (var j = 1; j <= 15; j++) {                         // si no, hacia adelante
+    // ⭐ HACIA ADELANTE, nunca hacia atrás.
+    //
+    // Adelantar la llamada parecía gratis en puntos, pero ACUMULA: si todo lo
+    // que cae sábado y domingo se empuja al viernes, el viernes le queda una
+    // montaña al vendedor. Se corre al siguiente día hábil, y el colchón de un
+    // día que deja PLAZO absorbe el corrimiento sin costar puntos.
+    for (var j = 1; j <= 15; j++) {
       var b = corrida(f, j);
       if (esHabil(b)) return b;
     }
@@ -524,8 +523,15 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
   // Los dos cumplen el documento; el primero no castiga por un desliz mínimo.
   // (El 17-ago lo puse en {1:2, 2:7} leyendo ese número como objetivo. Era el
   // techo. Revertido.)
-  var PLAZO = { 1:1, 2:6, 3:30 };        // sin contestar consecutivas -> días
-  var PLAZO_MANT = 100;
+  //     techo del documento:  2 · 7 · 30 · 100
+  //     se agenda a:          1 · 6 · 29 ·  99   ← siempre un día antes
+  //
+  // El colchón importa porque la fecha se puede correr hacia adelante para
+  // esquivar un feriado, y sin colchón ese corrimiento cuesta puntos: en la
+  // regla ④ el techo son 30 y la escala cae a 8 en el día 31, o sea 7 puntos
+  // por un día. Con 29 el corrimiento sale gratis.
+  var PLAZO = { 1:1, 2:6, 3:29 };        // sin contestar consecutivas -> días
+  var PLAZO_MANT = 99;
   var PLAZO_CONTESTO = 3;
   var HORA_AGENDA = '10:00';             // 10 h es de las más usadas (11,7%)
 
