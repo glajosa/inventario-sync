@@ -434,10 +434,19 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
    */
   function horaProxima(contesto) {
     if (contesto) return HORA_AGENDA;
-    var k = (protocolo ? protocolo.sinContestar : 0) + 1;   // el intento que se agenda
-    if (k >= 3) return '19:00';        // ya falló mañana, tarde y almuerzo
-    if (k === 2) return '12:30';       // almuerzo
-    return new Date().getHours() < 12 ? '16:00' : '09:30';  // la opuesta a la de ahora
+    // La franja rota SEGÚN LA HORA DE ESTA LLAMADA, no según el número de
+    // intento: lo que importa es no repetir la hora en que el cliente no pudo
+    // atender. El ciclo recorre el día y vuelve a empezar:
+    //
+    //     mañana 09:30 → almuerzo 12:30 → tarde 16:00 → noche 19:00 → mañana…
+    //
+    // Las 19:00 son el TECHO: nunca se agenda más tarde. Después de esa hora el
+    // ciclo vuelve a la mañana del día siguiente.
+    var h = new Date().getHours();
+    if (h < 11) return '12:30';        // llamó temprano  → almuerzo
+    if (h < 14) return '16:00';        // llamó al mediodía → tarde
+    if (h < 18) return '19:00';        // llamó en la tarde → fuera de jornada
+    return '09:30';                    // llamó de noche  → mañana siguiente
   }
 
   /**
