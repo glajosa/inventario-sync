@@ -29,6 +29,12 @@
  * ---------------------------------------------------------------------------
  */
 declare(strict_types=1);
+require_once __DIR__ . '/feriados.php';
+
+// Los feriados se calculan en PHP (la Pascua mueve Carnaval y Viernes Santo) y
+// viajan al navegador como una lista plana. Una sola fuente de verdad: el mismo
+// archivo lo puede usar después el motor de puntaje.
+$FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
 ?>
 <!doctype html>
 <html>
@@ -368,17 +374,78 @@ declare(strict_types=1);
 
 
   /**
-   * La fecha que se guarda.
+   * La fecha Y LA HORA que se guardan.
    *
-   * Sin pacto la pone la escalera; con pacto, lo que eligió el vendedor
-   * porque el cliente lo dijo. La hora de agenda es fija (10 h, de las más
-   * usadas): lo que califica el protocolo es el DÍA, no la hora.
+   * Sin pacto las pone la escalera; con pacto, lo que eligió el vendedor
+   * porque el cliente lo dijo.
+   *
+   * La fecha se corre al día hábil más cercano PREFIRIENDO HACIA ATRÁS. Ver
+   * feriados.php: adelantar la llamada no cuesta puntos (el atraso es
+   * max(0, gap - plazo) y no baja de cero), retrasarla sí. Medido en la regla
+   * ②: empujar del sábado al lunes baja de 10 a 6 puntos por un día que la
+   * empresa no trabaja — un castigo que el vendedor no se ganó.
    */
   function inicioIso(contesto) {
     var f, hm;
     if (modoPacto && sel) { f = sel; hm = hhmm; }
-    else { f = fechaMas(diasProxima(contesto)); hm = HORA_AGENDA; }
+    else {
+      f  = habilCercano(fechaMas(diasProxima(contesto)));
+      hm = horaProxima(contesto);
+    }
     return f.y + '-' + pad(f.m+1) + '-' + pad(f.d) + 'T' + hm + ':00-05:00';
+  }
+
+  /**
+   * ⭐ LA FRANJA ROTA — no insistir a la hora que ya falló.
+   *
+   * Si el cliente no contestó a las 4 de la tarde, volver a marcarle a las 4 de
+   * la tarde del día siguiente es repetir el experimento que salió mal: a esa
+   * hora está ocupado. Cada intento se corre a una franja distinta, y los
+   * últimos salen del horario de oficina, que es donde queda gente que trabaja
+   * todo el día.
+   *
+   *   2º intento  → la franja OPUESTA a la de ahora (tarde ↔ mañana)
+   *   3º intento  → hora de almuerzo, 12:30
+   *   4º y sigs.  → 19:00, fuera de jornada
+   *
+   * Con pacto no aplica: ahí manda la hora que dijo el cliente.
+   */
+  function horaProxima(contesto) {
+    if (contesto) return HORA_AGENDA;
+    var k = (protocolo ? protocolo.sinContestar : 0) + 1;   // el intento que se agenda
+    if (k >= 3) return '19:00';        // ya falló mañana, tarde y almuerzo
+    if (k === 2) return '12:30';       // almuerzo
+    return new Date().getHours() < 12 ? '16:00' : '09:30';  // la opuesta a la de ahora
+  }
+
+  /**
+   * Corre la fecha al día hábil más cercano, hacia atrás y si no hacia
+   * adelante. Los feriados los calcula PHP (la Pascua mueve Carnaval y Viernes
+   * Santo) y llegan acá como lista.
+   */
+  function habilCercano(f) {
+    function iso(x){ return x.y + '-' + pad(x.m+1) + '-' + pad(x.d); }
+    function esHabil(x){
+      var d = new Date(x.y, x.m, x.d), n = d.getDay();     // 0 dom · 6 sab
+      return n !== 0 && n !== 6 && FERIADOS.indexOf(iso(x)) === -1;
+    }
+    function corrida(x, dias){
+      var d = new Date(x.y, x.m, x.d); d.setDate(d.getDate() + dias);
+      return { y:d.getFullYear(), m:d.getMonth(), d:d.getDate() };
+    }
+    if (esHabil(f)) return f;
+    var manana = corrida(fechaMas(0), 1);                   // piso: no agendar en el pasado
+    var pisoIso = iso(manana);
+    for (var i = 1; i <= 10; i++) {                         // hacia atrás
+      var a = corrida(f, -i);
+      if (iso(a) < pisoIso) break;
+      if (esHabil(a)) return a;
+    }
+    for (var j = 1; j <= 15; j++) {                         // si no, hacia adelante
+      var b = corrida(f, j);
+      if (esHabil(b)) return b;
+    }
+    return f;
   }
 
   /** +1h a mano: Date() rompería el offset fijo -05:00. */
@@ -422,6 +489,10 @@ declare(strict_types=1);
   var PLAZO_MANT = 100;
   var PLAZO_CONTESTO = 3;
   var HORA_AGENDA = '10:00';             // 10 h es de las más usadas (11,7%)
+
+  // Días no laborables (fines de semana aparte): los calcula feriados.php en
+  // PHP, incluidos los movibles que dependen de la Pascua, y viajan como lista.
+  var FERIADOS = <?= $FERIADOS_JS ?>;
 
   var F_PROTOCOLO = 'UF_CRM_1786279719022';   // ESTADO DE PROTOCOLO
   var registrado = 0;      // id de la actividad recién creada (0 = todavía nada)
