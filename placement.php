@@ -140,6 +140,10 @@ if ($accion === 'poner') {
     echo "\nbind: " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
 } elseif ($accion === 'poner-precios') {
     foreach (PM_SITIOS as $sitio) {
+        // Se desengancha tambien la URL VIEJA (la que traia &cat=39 clavado). El
+        // unbind busca por handler exacto, asi que sin esto quedarian los dos
+        // botones y el de antes seguiria abriendo Noral Apartments directo.
+        app_bx('placement.unbind', ['PLACEMENT' => $sitio, 'HANDLER' => pm_handler() . '&cat=39']);
         app_bx('placement.unbind', ['PLACEMENT' => $sitio, 'HANDLER' => pm_handler()]);
         $r = app_bx('placement.bind', [
             'PLACEMENT'   => $sitio,
