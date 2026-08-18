@@ -41,46 +41,93 @@ if ($esperado === '' || !hash_equals($esperado, $tok)) {
 
 $proyectos = mz_proyectos();
 
+// ── descarga de la matriz (la fuente de verdad del proyecto) ────────────────
+if (($_REQUEST['accion'] ?? '') === 'matriz') {
+    $c = (int)($_REQUEST['cat'] ?? 0);
+    $j = $proyectos[$c] ?? null;
+    if (!$j) { http_response_code(404); exit('sin matriz'); }
+    header('Content-Type: application/json; charset=utf-8');
+    header('Content-Disposition: attachment; filename="proyecto_' . $c . '.json"');
+    exit(json_encode($j, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+}
+
 // ── portada: sin proyecto elegido, se muestran todos ────────────────────────
 // Se descubren solos de matrices/proyecto_<cat>.json: agregar un JSON basta para
 // que el proyecto aparezca aca, sin tocar esta pantalla.
 if (($_REQUEST['accion'] ?? 'ver') === 'ver' && ($_REQUEST['cat'] ?? '') === '') {
     header('Content-Type: text/html; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-    $tarjetas = '';
+    $COLOR = ['#2f6df6', '#5aa02c', '#12a594', '#b0871f', '#9b59b6'];
+    $tarjetas = ''; $i = 0; $totProy = 0;
     foreach ($proyectos as $c => $j) {
-        $nom = htmlspecialchars((string)($j['proyecto'] ?? "Proyecto $c"), ENT_QUOTES);
-        // Los conteos salen del catalogo compartido: cero llamadas al API.
+        $nom = strtoupper((string)($j['proyecto'] ?? "Proyecto $c"));
+        $col = $COLOR[$i++ % count($COLOR)];
         $tot = $dis = 0; $err = '';
         try {
             foreach (mz_unidades_cache($j) as $d) { $tot++; if ($d['etapa'] === 'DISPONIBLE') $dis++; }
-        } catch (Throwable $e) { $err = 'catálogo aún no disponible'; }
-        $eds = implode(', ', mz_edificios($j));
-        $sub = $err ?: "$tot unidades · $dis disponibles · edificios $eds";
-        $tarjetas .= '<a class="p" href="?token=' . urlencode($tok) . '&cat=' . $c . '">'
-                  . '<div class="n">' . $nom . '</div>'
-                  . '<div class="s">' . htmlspecialchars($sub, ENT_QUOTES) . '</div>'
-                  . '<div class="v">Subir precios →</div></a>';
+        } catch (Throwable $e) { $err = 'el catálogo todavía se está armando'; }
+        $eds  = mz_edificios($j);
+        $ne   = count($eds);
+        $meta = $err ?: "$tot unidades · $dis disponibles · " . ($ne === 1 ? '1 edificio' : "$ne edificios");
+        $nivs = implode(', ', array_values(array_map(fn($n) => $n['etiqueta'] ?? '', $j['niveles'] ?? [])));
+        $cats = count($j['categorias'] ?? []);
+        $totProy++;
+        $tarjetas .= '<section class="pc">
+          <header class="ph">
+            <span class="bdg" style="background:' . $col . '">' . htmlspecialchars($nom, ENT_QUOTES) . '</span>
+            <span class="meta">' . htmlspecialchars($meta, ENT_QUOTES) . '</span>
+          </header>
+          <div class="cols">
+            <div class="col">
+              <div class="ct">Explorador de precios <span class="tag">INTERNO</span></div>
+              <p>Los edificios con sus pisos y unidades. Categorías, precio de hoy contra
+                 el de la matriz, y el simulador para subir por bloque.</p>
+              <div class="acts"><a class="b pri" href="?token=' . urlencode($tok) . '&cat=' . $c . '">Abrir</a></div>
+            </div>
+            <div class="col">
+              <div class="ct">Configuración <span class="tag">FUENTE DE VERDAD</span></div>
+              <p>' . $cats . ' categorías · ' . htmlspecialchars($nivs, ENT_QUOTES) . '.
+                 Matriz, mapa de posiciones y overrides. De acá sale cada precio.</p>
+              <div class="acts"><a class="b" href="?token=' . urlencode($tok) . '&cat=' . $c . '&accion=matriz">↓ JSON</a></div>
+            </div>
+          </div>
+        </section>';
     }
-    echo '<!doctype html><meta charset="utf-8"><title>Precios por proyecto</title>
+    echo '<!doctype html><meta charset="utf-8"><title>GALJOSA — Sistemas de precios</title>
 <style>
- :root{--bg:#0f1319;--sf:#161c24;--bd:#232c37;--t1:#e8ecf1;--t2:#98a2b0;--ac:#4ea1ff}
- @media(prefers-color-scheme:light){:root{--bg:#f6f7f9;--sf:#fff;--bd:#e3e7ec;--t1:#12161c;--t2:#5a6472;--ac:#1f6feb}}
+ :root{--bg:#0d1014;--sf:#151a20;--sf2:#1b222a;--bd:#252d37;--t1:#e9edf2;--t2:#98a2b0;--t3:#6b7683;--ac:#4ea1ff}
+ @media(prefers-color-scheme:light){:root{--bg:#f4f6f8;--sf:#fff;--sf2:#f7f9fb;--bd:#e2e7ec;--t1:#12161c;--t2:#5a6472;--t3:#8b95a1;--ac:#1f6feb}}
  html,body{overflow-x:clip}
- body{background:var(--bg);color:var(--t1);margin:0;font:16px/1.5 -apple-system,"Segoe UI",Roboto,sans-serif}
- .c{max-width:880px;margin:0 auto;padding:48px 22px 70px}
- h1{font-size:26px;margin:0 0 4px;letter-spacing:-.02em}
- .sb{color:var(--t2);margin:0 0 30px;font-size:14.5px}
- .g{display:grid;gap:12px}
- .p{display:block;background:var(--sf);border:1px solid var(--bd);border-radius:14px;
-    padding:20px 22px;text-decoration:none;color:inherit}
- .p:hover{border-color:var(--ac)}
- .n{font-size:19px;font-weight:600}
- .s{color:var(--t2);font-size:14px;margin-top:4px}
- .v{color:var(--ac);font-size:14px;font-weight:600;margin-top:12px}
-</style><div class="c"><h1>Precios por proyecto</h1>
-<p class="sb">Elegí el proyecto para ver su matriz y simular una subida.</p>
-<div class="g">' . $tarjetas . '</div></div>';
+ body{background:var(--bg);color:var(--t1);margin:0;font:16px/1.55 -apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+ .w{max-width:1180px;margin:0 auto;padding:46px 24px 80px}
+ h1{font-size:31px;margin:0 0 5px;letter-spacing:-.025em;overflow-wrap:anywhere;min-width:0}
+ .sb{color:var(--t2);margin:0 0 34px;font-size:15px}
+ .pc{background:var(--sf);border:1px solid var(--bd);border-radius:16px;overflow:hidden;margin-bottom:20px}
+ .ph{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:16px 22px;border-bottom:1px solid var(--bd)}
+ .bdg{color:#fff;font-size:11.5px;font-weight:700;letter-spacing:.07em;padding:4px 11px;border-radius:6px}
+ .meta{color:var(--t2);font-size:14px}
+ .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+ .col{padding:20px 22px 22px;border-right:1px solid var(--bd)}
+ .col:last-child{border-right:0}
+ .ct{font-size:17px;font-weight:600;margin-bottom:7px}
+ .tag{font-size:10px;letter-spacing:.08em;font-weight:600;color:var(--t3);
+      border:1px solid var(--bd);border-radius:5px;padding:2px 6px;vertical-align:2px;margin-left:5px}
+ .col p{color:var(--t2);font-size:14px;margin:0 0 15px;max-width:46ch}
+ .acts{display:flex;gap:8px;flex-wrap:wrap}
+ .b{display:inline-block;background:var(--sf2);border:1px solid var(--bd);border-radius:9px;
+    padding:8px 17px;font-size:14px;font-weight:600;color:var(--t1);text-decoration:none;white-space:nowrap}
+ .b:hover{border-color:var(--ac);color:var(--ac)}
+ .b.pri{background:var(--t1);color:var(--bg);border-color:var(--t1)}
+ .b.pri:hover{opacity:.88;color:var(--bg)}
+ .pie{color:var(--t3);font-size:13px;border-top:1px solid var(--bd);padding-top:16px;margin-top:30px}
+ @media(max-width:620px){h1{font-size:24px}.w{padding:28px 15px 60px}.col{border-right:0;border-bottom:1px solid var(--bd)}}
+</style>
+<div class="w"><h1>GALJOSA — Sistemas de precios</h1>
+<p class="sb">Elegí el proyecto para ver su inventario y subir precios por bloque.</p>'
+    . $tarjetas
+    . '<p class="pie">' . $totProy . ' proyecto(s) con matriz. Los precios se leen del catálogo
+       compartido, sin llamadas al API. Ver no escribe nada: aplicar exige clave y solo toca
+       unidades disponibles.</p></div>';
     exit;
 }
 

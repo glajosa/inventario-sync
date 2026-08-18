@@ -43,7 +43,10 @@ const PM_DESC   = 'Matriz de precios: simula una subida por bloque y aplícala';
 const PM_SITIOS = ['CRM_DYNAMIC_1072_LIST_MENU', 'LEFT_MENU'];
 
 function pm_handler(): string {
-    return PM_BASE . '?token=' . rawurlencode((string)getenv('OUTBOUND_TOKEN')) . '&cat=39';
+    // SIN &cat: el boton abre la portada y la persona elige el proyecto. Con el
+    // proyecto clavado en la URL siempre caia en Noral Apartments y no habia forma
+    // de llegar a los demas desde Bitrix.
+    return PM_BASE . '?token=' . rawurlencode((string)getenv('OUTBOUND_TOKEN'));
 }
 
 $accion = (string)($_GET['accion'] ?? 'ver');
