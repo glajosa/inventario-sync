@@ -667,10 +667,9 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
   function registrar(contesto) {
     if (!dealId) return;
     BX24.placement.call('lock');
-    // ⚠ La bandera vive ACÁ, no dentro de guardar(): el reintento vuelve a
-    // llamar a guardar(), y si la bandera se declarara ahí se reiniciaría en
-    // cada vuelta — bucle infinito golpeando el API.
-    var yaReintento = false;
+    // Una sola consulta del motivo por registro. Vive ACÁ y no dentro de
+    // guardar() para que no se reinicie si se vuelve a entrar.
+    var yaPreguntoMotivo = false;
     // Si nunca tocó la hora, se sella la de ESTE momento, no la del render.
     if (!horaManual) hhmm = ahoraHHMM();
 
@@ -693,39 +692,52 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
       if (ctx.contactId && ctx.tel) {
         fields.COMMUNICATIONS = [{ VALUE:ctx.tel, ENTITY_ID:ctx.contactId, ENTITY_TYPE_ID:3, TYPE:'PHONE' }];
       }
-      // ⭐ AUTO-ARREGLO DEL "ACCESS DENIED".
+      // ⭐ EL ERROR TIENE QUE DECIR EL MOTIVO, y NADA se arregla solo.
       //
-      // Si el deal es de un asesor y el contacto de otro, Bitrix rechaza la
-      // actividad: se liga al contacto y el rol es "solo los propios". El asesor
-      // no puede arreglarlo —tampoco puede reasignar un contacto ajeno— así que
-      // el servidor alinea el contacto con el dueño del deal y se reintenta UNA
-      // vez. El vendedor no ve nada: se guarda y sigue trabajando.
-      //
-      // Si el reintento vuelve a fallar, entonces la causa era otra y ahí sí se
-      // muestra el error completo con los campos, para no seguir adivinando.
-      function alinearYReintentar(cb) {
+      // Hubo una version que alineaba el responsable del contacto y reintentaba
+      // sin avisar. Se quito por decision del usuario (18-ago): reasignar el
+      // dueno de un cliente es tocar la cartera de otro asesor, y eso lo decide
+      // una persona, no el panel. Ahora se explica y el vendedor actua.
+      function pedirMotivo(cb) {
         var a = '';
         try { a = (BX24.getAuth() || {}).access_token || ''; } catch (e) {}
-        if (!a) { cb(false); return; }
+        if (!a) { cb(null); return; }
         var x = new XMLHttpRequest();
-        x.open('POST', 'alinear.php', true);
+        x.open('POST', 'motivo.php', true);
         x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
         x.timeout = 12000;
-        x.onload  = function () { cb(x.status === 200); };
-        x.onerror = function () { cb(false); };
-        x.ontimeout = function () { cb(false); };
+        x.onload = function () {
+          var j = null;
+          try { j = JSON.parse(x.responseText); } catch (e) {}
+          cb(j);
+        };
+        x.onerror = function () { cb(null); };
+        x.ontimeout = function () { cb(null); };
         x.send('deal=' + encodeURIComponent(dealId) + '&auth=' + encodeURIComponent(a));
       }
 
       BX24.callMethod('crm.activity.add', { fields: fields }, function (ra) {
         BX24.placement.call('unlock');
-        if (ra.error() && !yaReintento) {
-          yaReintento = true;
-          aviso = 'Ajustando permisos del cliente\u2026'; redibujar();
-          alinearYReintentar(function (ok) {
-            if (!ok) { aviso = 'No se pudo guardar (no se pudo ajustar el cliente)'; redibujar(); return; }
-            BX24.placement.call('lock');
-            guardar();          // segundo y último intento
+        if (ra.error() && !yaPreguntoMotivo) {
+          yaPreguntoMotivo = true;
+          aviso = 'No se pudo guardar. Averiguando por qu\u00e9\u2026'; redibujar();
+          pedirMotivo(function (j) {
+            if (j && j.motivo === 'contacto_ajeno') {
+              aviso = 'NO SE GUARD\u00d3  \u00b7  el cliente est\u00e1 a nombre de '
+                    + j.dueno + ', y el CRM no deja registrar actividades en un '
+                    + 'contacto de otro asesor. Pide que te lo transfieran y volv\u00e9 a intentar.';
+            } else {
+              // No era el contacto: se muestra el detalle crudo para no adivinar.
+              var cod = '', des = '';
+              try { cod = ra.error() ? String(ra.error()) : ''; } catch (e) {}
+              try { des = ra.error_description ? String(ra.error_description()) : ''; } catch (e) {}
+              aviso = 'NO SE GUARD\u00d3  \u00b7  cod: ' + (cod || '(vac\u00edo)')
+                    + (des && des !== cod ? '  \u00b7  ' + des : '')
+                    + '  \u00b7  resp:' + (fields.RESPONSIBLE_ID || '?')
+                    + ' contacto:' + (ctx.contactId || 'sin')
+                    + ' prov:' + fields.PROVIDER_ID;
+            }
+            redibujar();
           });
           return;
         }
