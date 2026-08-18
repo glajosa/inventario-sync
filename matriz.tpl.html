@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Noral Apartments — Explorador</title>
+  <title>Explorador de precios</title>
   <style>
     :root{
       /* Colores de Bitrix24: la pantalla vive dentro de su slider y tiene que
@@ -395,11 +395,13 @@ const FLOORS = (DATA.pisos || []).map(p => ({
   sub:  p.sub  || ''
 }));
 
+const EDITABLES = DATA.editables || ['D','N'];
 const CAT_COD = Object.keys(CATS).filter(c => c !== '?');
 /* El nivel con patio: es el mas bajo, y solo si la matriz declara patio_pb.
    Las oficinas de Plaza no tienen ninguno, y antes salia 'undefined patio'. */
 const NIV_PATIO = Object.values(DATA.metraje).some(v => v.patio_pb != null)
   ? (DATA.pisos.length ? DATA.pisos[DATA.pisos.length-1].grp : null) : null;
+document.title = (DATA.proyecto || 'Explorador') + ' — Explorador';
 const BLDGS = DATA.edificios;
 const ST    = DATA.estado;
 const BX    = DATA.pvp;
@@ -503,7 +505,9 @@ function renderTabs() {
 function renderInfo() {
   const d = BD[cur];
   const altas = [...new Set(Object.values(d.m).filter(v=>v!==null))].sort((a,b)=>a-b).join(' · ')+' m²';
-  const pb = `${M_PB[d.g]} m² + ${String(PATIO_PB[d.g]).replace('.',',')} patio`;
+  const pb = PATIO_PB[d.g] != null
+    ? `${M_PB[d.g]} m² + ${String(PATIO_PB[d.g]).replace('.',',')} patio`
+    : `${M_PB[d.g]} m²`;
   const s = getStates(cur);
   document.getElementById('ibar').innerHTML = `
     <div class="ii"><div class="il">Edificio</div><div class="iv">${cur}</div></div>
@@ -691,7 +695,9 @@ function planRows(b) {
   FLOORS.forEach(fl => {
     for (let p = 1; p <= (DATA.uxp[b] || 8); p++) {
       const u = `${b}-${fl.num}-${p}`;
-      if (ST[u] !== 'D' && ST[u] !== 'N') continue;
+      // Antes: D y N a mano. N (bloqueado) es repreciable en Apartments pero NO
+      // en las oficinas de Plaza; lo dice cada proyecto en etapas_editables.
+      if (!EDITABLES.includes(ST[u])) continue;
       const c = getCat(p, b, fl.num);
       out.push({u, fl, cat: c, act: BX[u] ?? null, tgt: target(b, fl.grp, c, u)});
     }

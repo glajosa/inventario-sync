@@ -161,6 +161,24 @@ function pm_pisos(array $cfg): array {
     return $out;
 }
 
+/**
+ * Las letras de estado que la pantalla puede reprecear, sacadas de
+ * `etapas_editables` del proyecto. Se resuelven contra los nombres reales de las
+ * etapas del pipeline: el mismo stageId significa cosas distintas segun el
+ * proyecto — ':NEW' es DISPONIBLE en Plaza y otra cosa en Apartments.
+ */
+function pm_editables(array $cfg): array {
+    $L = ['DISPONIBLE'=>'D','RESERVADO'=>'R','FIRMADO'=>'F','VENDIDO'=>'F','BLOQUEADO'=>'N'];
+    $nombres = mz_nombres_etapa($cfg);          // stageId => NOMBRE
+    $out = [];
+    $etapas = (array)($cfg['bitrix']['etapas_editables'] ?? [$cfg['bitrix']['etapa_disponible'] ?? '']);
+    foreach ($etapas as $e) {
+        $n = strtoupper((string)($nombres[$e] ?? ''));
+        if (isset($L[$n])) $out[] = $L[$n];
+    }
+    return array_values(array_unique($out ?: ['D']));
+}
+
 /** Nombre legible del proyecto, por si el JSON no lo trae. */
 function pm_nombre(array $cfg, int $cat): string {
     return (string)($cfg['proyecto'] ?? "Proyecto $cat");
@@ -329,6 +347,10 @@ $datos = [
         'posiciones' => $c['posiciones'] ?? [],
     ], $cfg['categorias']),
     'pisos'      => pm_pisos($cfg),
+    // Que estados se pueden reprecear. En Apartments el bloqueado tambien entra
+    // (retencion gerencial que igual se cotiza); en las oficinas de Plaza NO, y
+    // por eso el resumen contaba 68 disponibles donde hay 50.
+    'editables'  => pm_editables($cfg),
     'proyectos'  => array_map(fn($c) => $c['proyecto'] ?? '', $proyectos),
     'token'      => $tok,
     // Bitrix lo manda al abrir el placement. Sirve para saber quién aplica sin
