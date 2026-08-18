@@ -413,6 +413,20 @@ $datos = [
 ];
 
 $tpl = (string)file_get_contents(__DIR__ . '/matriz.tpl.html');
+
+// Camino de vuelta a la portada. Sin esto se entra a un proyecto y no hay salida:
+// dentro de Bitrix el slider no tiene barra de direcciones ni boton de atras.
+// Solo aparece si hay mas de un proyecto — con uno solo la portada no aporta.
+if (count($proyectos) > 1) {
+    $volver = '<div style="max-width:1180px;margin:0 auto;padding:14px 22px 0">'
+        . '<a href="?token=' . urlencode($tok) . '" style="display:inline-flex;align-items:center;'
+        . 'gap:7px;font:600 14px/1 -apple-system,\'Segoe UI\',Roboto,sans-serif;text-decoration:none;'
+        . 'color:#8b95a1;border:1px solid rgba(128,140,155,.35);border-radius:9px;padding:8px 14px">'
+        . '&#8592; Todos los proyectos</a>'
+        . '<span style="margin-left:12px;color:#8b95a1;font:14px -apple-system,sans-serif">'
+        . htmlspecialchars(pm_nombre($cfg, $cat), ENT_QUOTES) . '</span></div>';
+    $tpl = preg_replace('/<body>/', '<body>' . $volver, $tpl, 1);
+}
 echo str_replace('/*__DATOS__*/',
     'const DATA = ' . json_encode($datos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';',
     $tpl);
