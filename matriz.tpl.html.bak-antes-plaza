@@ -344,6 +344,8 @@
   <details class="legwrap"><summary>Qué significan los colores y las marcas</summary>
   <div class="legend">
     <div class="leg"><div class="sw" style="background:var(--m-bg);border:1px solid var(--m-bd)"></div>Medianero — pos. 2, 3, 6, 7</div>
+    <div class="leg"><div class="sw" style="background:var(--e1-bg);border:1px solid var(--e1-bd)"></div>Esq. interno (1) — pos. 4, 5 (junto al núcleo)</div>
+    <div class="leg"><div class="sw" style="background:var(--e2-bg);border:1px solid var(--e2-bd)"></div>Esquinero 2 — mayor metraje PA</div>
     <div class="leg"><div class="sw" style="background:var(--e3-bg);border:1px solid var(--e3-bd)"></div>Esquinero 3 ★ — mayor metraje y valor</div>
     <div class="leg"><div class="sw" style="background:var(--p-bg);border:1px dashed var(--p-bd)"></div>Pendiente</div>
     <div class="leg"><div class="sw" style="background:repeating-linear-gradient(45deg,var(--surf2),var(--surf2) 3px,var(--bg) 3px,var(--bg) 6px);border:1px solid var(--bds)"></div>Núcleo: ascensor y escaleras</div>
@@ -367,39 +369,21 @@
 
 const GRP_COLOR = {A:'#185fa5', BCDE:'#0f6e56', F:'#854f0b', GH:'#5f5e5a', I:'#3b6d11'};
 
-/* Las categorias y los pisos los trae el proyecto, no estan escritos aca: Plaza
-   tiene EC/MC/EL/ML y tres pisos sueltos, Apartments M/E1/E2/E3 con PB, PA y 4P.
-   Los cuatro colores del CSS se reparten por PRECIO, de menor a mayor, asi el mas
-   barato queda siempre en el tono neutro y el mas caro en el destacado. En
-   Apartments eso reproduce exactamente el reparto de antes (M < E1 < E2 < E3). */
-const PFX = ['m','e1','e2','e3'];
-const CATS = (() => {
-  const nivTop = Object.keys(DATA.niv).slice(-1)[0];
-  const refPx  = Object.values(DATA.precios)[0]?.[nivTop] || {};
-  const codigos = Object.keys(DATA.cats || {})
-    .sort((a,b) => (refPx[a] ?? 0) - (refPx[b] ?? 0));
-  const out = {};
-  codigos.forEach((c,i) => {
-    const d = DATA.cats[c];
-    const pos = (d.posiciones || []).join(', ');
-    out[c] = {pfx: PFX[i] || 'p', short: c, label: d.etiqueta || c,
-              desc: d.nota || (pos ? 'pos. ' + pos : '')};
-  });
-  out['?'] = {pfx:'p', short:'?', label:'Pendiente', desc:'por confirmar'};
-  return out;
-})();
+const CATS = {
+  M:  {pfx:'m',   short:'Med',   label:'Medianero',        desc:'pos. 2, 3, 6, 7'},
+  E1: {pfx:'e1',  short:'E\u00b71',   label:'Esq. interno (1)', desc:'pos. 4 y 5 \u2014 junto al n\u00facleo'},
+  E2: {pfx:'e2',  short:'E\u00b72',   label:'Esquinero 2',      desc:'esquinero externo'},
+  E3: {pfx:'e3',  short:'E\u00b73\u2605',  label:'Esquinero 3',      desc:'mayor metraje y mayor valor'},
+  '?':{pfx:'p',   short:'?',     label:'Pendiente',        desc:'por confirmar'},
+};
 
-const FLOORS = (DATA.pisos || []).map(p => ({
-  num: p.num, grp: p.grp,
-  name: p.name || ('Piso ' + p.num),
-  sub:  p.sub  || ''
-}));
+const FLOORS = [
+  {num:4,grp:'4P',name:'4to Piso',  sub:'Piso 4'},
+  {num:3,grp:'PA',name:'Piso 3',    sub:'Planta Alta'},
+  {num:2,grp:'PA',name:'Piso 2',    sub:'Planta Alta'},
+  {num:1,grp:'PB',name:'Planta Baja',sub:'PB \u00b7 con patio'},
+];
 
-const CAT_COD = Object.keys(CATS).filter(c => c !== '?');
-/* El nivel con patio: es el mas bajo, y solo si la matriz declara patio_pb.
-   Las oficinas de Plaza no tienen ninguno, y antes salia 'undefined patio'. */
-const NIV_PATIO = Object.values(DATA.metraje).some(v => v.patio_pb != null)
-  ? (DATA.pisos.length ? DATA.pisos[DATA.pisos.length-1].grp : null) : null;
 const BLDGS = DATA.edificios;
 const ST    = DATA.estado;
 const BX    = DATA.pvp;
@@ -410,15 +394,13 @@ const COMBOS = DATA.combos;
 const BD = {};
 BLDGS.forEach(b => {
   const g = DATA.grupos[b], me = DATA.metraje[g];
-  // El metraje mayor lo declara la matriz en cats_mayor; antes estaba escrito
-  // "E2 y E3" y en Plaza los que crecen son EC y EL.
-  const mayores = me.cats_mayor || [];
-  const m = {};
-  Object.keys(DATA.cats || {}).forEach(c => { m[c] = mayores.includes(c) ? me.mayor : me.base; });
-  BD[b] = {g, t: DATA.grupoNota[g], m};
+  BD[b] = {g, t: DATA.grupoNota[g],
+           m: {M:me.base, E1:me.base,
+               E2: me.cats_mayor.includes('E2') ? me.mayor : me.base,
+               E3: me.cats_mayor.includes('E3') ? me.mayor : null}};
 });
 const M_PB     = {}, PATIO_PB = {};
-Object.entries(DATA.metraje).forEach(([g,v]) => { M_PB[g]=v.base; if (v.patio_pb != null) PATIO_PB[g]=v.patio_pb; });
+Object.entries(DATA.metraje).forEach(([g,v]) => { M_PB[g]=v.base; PATIO_PB[g]=v.patio_pb; });
 
 /* PX se conserva por grupo solo para la tabla de referencia; el precio
    real de cada unidad sale de DATA.precios, que es por edificio. */
@@ -435,8 +417,7 @@ let cur = 'A', curCat = 'all', sel = null, onlyFixed = false, onlyAvail = true;
    metraje propio (edificio J: 72,6 m2). */
 function m2Of(b, flGrp, cat) {
   const g = DATA.grupos[b], me = DATA.metraje[g];
-  // Antes preguntaba por el literal 'PB'. Ahora: hay patio si la matriz lo declara.
-  if (PATIO_PB[BD[cur].g] != null && flGrp === NIV_PATIO) return me.base;
+  if (flGrp === 'PB') return me.base;
   if (me.cats_mayor.includes(cat)) return me.mayor;
   return DATA.m2paMed[b] != null ? DATA.m2paMed[b] : me.base;
 }
@@ -520,12 +501,14 @@ function renderInfo() {
 
 function renderFilter() {
   const counts = getCounts(cur);
-  // Un boton por categoria del proyecto y el total salen de los datos: estaban
-  // escritos a mano con las 4 de Apartments y un 32 fijo que en Plaza es 36.
-  const cods = Object.keys(CATS).filter(c => c !== '?');
-  const total = cods.reduce((n,c) => n + (counts[c]||0), 0);
-  const btns = [{cat:'all', cls:'cbtn-all', label:'Todas', cnt:total}].concat(
-    cods.map(c => ({cat:c, cls:'cbtn-'+CATS[c].pfx, label:CATS[c].label, cnt:counts[c]||0})));
+  const total = 32;
+  const btns = [
+    {cat:'all',  cls:'cbtn-all', label:'Todas',              cnt:total},
+    {cat:'M',    cls:'cbtn-m',   label:'Medianero',          cnt:counts.M},
+    {cat:'E1',   cls:'cbtn-e1',  label:'Esq. interno (1)',   cnt:counts.E1},
+    {cat:'E2',   cls:'cbtn-e2',  label:'Esquinero 2',        cnt:counts.E2},
+    {cat:'E3',   cls:'cbtn-e3',  label:'Esquinero 3 ★',     cnt:counts.E3},
+  ];
   document.getElementById('cfilter').innerHTML =
     '<span class="lbl">Filtrar:</span>' +
     btns.map(b => {
@@ -588,7 +571,7 @@ function renderFloors() {
         return `<div class="unit${dim?' dim':''}${isSel?' sel':''}" onclick="selUnit('${uid}')">
           <div class="ubox ubox-${cd.pfx}${fx?' fixed':''}${stCls}" title="${uid} · ${cd.label} · ${STL[st]||'—'}${fx?' · '+(fx.nota||'regla propia'):''}">
             <div class="ucat">${uid}</div>
-            ${m2v ? `<div class="um2">${m2v}m²${fl.grp===NIV_PATIO?' +p':''}</div>` : ''}
+            ${m2v ? `<div class="um2">${m2v}m²${fl.grp==='PB'?' +p':''}</div>` : ''}
             ${price ? (delta
                 ? `<div class="uprice cambia"><s>${Math.round(cur_/1000)}k</s> ${Math.round(tgt/1000)}k</div>`
                 : `<div class="uprice">${Math.round(price/1000)}k</div>`) : ''}
@@ -637,7 +620,7 @@ function renderDetail() {
       <div class="dt-item"><div class="dl">Piso</div><div class="dv">${fl.name}</div></div>
       <div class="dt-item"><div class="dl">Posición</div><div class="dv">${pos} de 8</div></div>
       <div class="dt-item"><div class="dl">Metros</div><div class="dv">${m2v ? m2v+' m²' : 'Por definir'}</div></div>
-      ${fl.grp===NIV_PATIO && PATIO_PB[grp]!=null ? `<div class="dt-item"><div class="dl">Patio</div><div class="dv">${PATIO_PB[grp]} m²</div></div>` : ''}
+      ${fl.grp==='PB' ? `<div class="dt-item"><div class="dl">Patio</div><div class="dv">${PATIO_PB[grp]} m²</div></div>` : ''}
       <div class="dt-item"><div class="dl">${act!=null?'PVP hoy en Bitrix':'Precio ref.'}</div><div class="dp">${price ? '$'+price.toLocaleString('en-US') : '—'}</div></div>
       ${st==='D' ? `<div class="dt-item"><div class="dl">Objetivo (lista)</div>
         <div class="dp" style="color:${delta==null?'var(--t3)':delta>0?'#0f6e56':delta<0?'#a4331f':'var(--t2)'}">${tgt ? '$'+tgt.toLocaleString('en-US') : '—'}</div>
@@ -661,12 +644,18 @@ function renderPriceTable() {
   document.getElementById('ptable').innerHTML = `
     <thead><tr>
       <th class="L">Piso</th>
-      ${CAT_COD.map(c => `<th style="background:var(--${CATS[c].pfx}-bg);color:var(--${CATS[c].pfx}-tx);border-color:var(--${CATS[c].pfx}-bd)">${CATS[c].label}</th>`).join('')}
+      <th style="background:var(--m-bg);color:var(--m-tx);border-color:var(--m-bd)">Medianero</th>
+      <th style="background:var(--e1-bg);color:var(--e1-tx);border-color:var(--e1-bd)">Esq. 1</th>
+      <th style="background:var(--e2-bg);color:var(--e2-tx);border-color:var(--e2-bd)">Esq. 2</th>
+      <th style="background:var(--e3-bg);color:var(--e3-tx);border-color:var(--e3-bd)">Esq. 3 ★</th>
     </tr></thead>
-    <tbody>${Object.entries(DATA.niv).map(([k,n])=>
+    <tbody>${[['PB','Planta Baja'],['PA','Pisos 2 y 3'],['4P','4to Piso']].map(([k,n])=>
       `<tr${hlFloor===k?' class="hlrow"':''}>
-        <td class="pl">${n||k}</td>
-        ${CAT_COD.map(c => `<td class="${px[k]&&px[k][c]?'val':'tbd'}">${fmt(px[k]?px[k][c]:null)}</td>`).join('')}
+        <td class="pl">${n}</td>
+        <td class="${px[k].M?'val':'tbd'}">${fmt(px[k].M)}</td>
+        <td class="${px[k].E1?'val':'tbd'}">${fmt(px[k].E1)}</td>
+        <td class="${px[k].E2?'val':'tbd'}">${fmt(px[k].E2)}</td>
+        <td class="${px[k].E3?'val':'tbd'}">${fmt(px[k].E3)}</td>
       </tr>`
     ).join('')}</tbody>`;
 }
@@ -761,7 +750,7 @@ const BASE = JSON.parse(JSON.stringify(DATA.precios));
 const LANZADOS = DATA.lanzados || BLDGS;
 const GRUPOS = {};
 BLDGS.forEach(b => { (GRUPOS[DATA.grupos[b]] = GRUPOS[DATA.grupos[b]] || []).push(b); });
-const NIVN = DATA.niv;   // los nombres de nivel los trae el proyecto
+const NIVN = {PB:'Planta baja', PA:'Pisos 2 y 3', '4P':'4to piso'};
 const CATN = {M:'Medianero', E1:'Esquinero interno', E2:'Esquinero externo', E3:'Esquinero 3'};
 let AJ = {dest:'*', niv:'*', cat:'*', tipo:'monto', val:0};
 

@@ -40,6 +40,50 @@ if ($esperado === '' || !hash_equals($esperado, $tok)) {
 }
 
 $proyectos = mz_proyectos();
+
+// ── portada: sin proyecto elegido, se muestran todos ────────────────────────
+// Se descubren solos de matrices/proyecto_<cat>.json: agregar un JSON basta para
+// que el proyecto aparezca aca, sin tocar esta pantalla.
+if (($_REQUEST['accion'] ?? 'ver') === 'ver' && ($_REQUEST['cat'] ?? '') === '') {
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    $tarjetas = '';
+    foreach ($proyectos as $c => $j) {
+        $nom = htmlspecialchars((string)($j['proyecto'] ?? "Proyecto $c"), ENT_QUOTES);
+        // Los conteos salen del catalogo compartido: cero llamadas al API.
+        $tot = $dis = 0; $err = '';
+        try {
+            foreach (mz_unidades_cache($j) as $d) { $tot++; if ($d['etapa'] === 'DISPONIBLE') $dis++; }
+        } catch (Throwable $e) { $err = 'catálogo aún no disponible'; }
+        $eds = implode(', ', mz_edificios($j));
+        $sub = $err ?: "$tot unidades · $dis disponibles · edificios $eds";
+        $tarjetas .= '<a class="p" href="?token=' . urlencode($tok) . '&cat=' . $c . '">'
+                  . '<div class="n">' . $nom . '</div>'
+                  . '<div class="s">' . htmlspecialchars($sub, ENT_QUOTES) . '</div>'
+                  . '<div class="v">Subir precios →</div></a>';
+    }
+    echo '<!doctype html><meta charset="utf-8"><title>Precios por proyecto</title>
+<style>
+ :root{--bg:#0f1319;--sf:#161c24;--bd:#232c37;--t1:#e8ecf1;--t2:#98a2b0;--ac:#4ea1ff}
+ @media(prefers-color-scheme:light){:root{--bg:#f6f7f9;--sf:#fff;--bd:#e3e7ec;--t1:#12161c;--t2:#5a6472;--ac:#1f6feb}}
+ html,body{overflow-x:clip}
+ body{background:var(--bg);color:var(--t1);margin:0;font:16px/1.5 -apple-system,"Segoe UI",Roboto,sans-serif}
+ .c{max-width:880px;margin:0 auto;padding:48px 22px 70px}
+ h1{font-size:26px;margin:0 0 4px;letter-spacing:-.02em}
+ .sb{color:var(--t2);margin:0 0 30px;font-size:14.5px}
+ .g{display:grid;gap:12px}
+ .p{display:block;background:var(--sf);border:1px solid var(--bd);border-radius:14px;
+    padding:20px 22px;text-decoration:none;color:inherit}
+ .p:hover{border-color:var(--ac)}
+ .n{font-size:19px;font-weight:600}
+ .s{color:var(--t2);font-size:14px;margin-top:4px}
+ .v{color:var(--ac);font-size:14px;font-weight:600;margin-top:12px}
+</style><div class="c"><h1>Precios por proyecto</h1>
+<p class="sb">Elegí el proyecto para ver su matriz y simular una subida.</p>
+<div class="g">' . $tarjetas . '</div></div>';
+    exit;
+}
+
 $cat = (int)($_REQUEST['cat'] ?? array_key_first($proyectos) ?? 0);
 $cfg = mz_cfg($cat);
 if (!$cfg) {
@@ -94,6 +138,27 @@ function pm_quien(string $auth, string $escrito): string {
               : ('error=' . (string)($j['error'] ?? '-') . ' desc=' . (string)($j['error_description'] ?? '-'))));
     }
     return $escrito;      // vacio = no se pudo saber; quien llama decide que hacer
+}
+
+/**
+ * Los pisos del proyecto, del ultimo al primero, con el nivel al que pertenecen.
+ * Sale de `niveles`: cada uno declara que pisos abarca. Asi la pantalla no necesita
+ * saber de antemano si el proyecto tiene planta baja o cuantos pisos tiene.
+ */
+function pm_pisos(array $cfg): array {
+    $out = [];
+    foreach (($cfg['niveles'] ?? []) as $grp => $n) {
+        foreach (($n['pisos'] ?? []) as $piso) {
+            $out[] = [
+                'num'  => (int)$piso,
+                'grp'  => (string)$grp,
+                'name' => (string)($n['etiqueta'] ?? ('Piso ' . $piso)),
+                'sub'  => (string)($n['nota'] ?? ''),
+            ];
+        }
+    }
+    usort($out, fn($a, $b) => $b['num'] <=> $a['num']);
+    return $out;
 }
 
 /** Nombre legible del proyecto, por si el JSON no lo trae. */
@@ -255,6 +320,15 @@ $datos = [
     'ajustes'    => mz_ajustes($cat),
     'niv'        => array_map(fn($n) => $n['etiqueta'] ?? '', $cfg['niveles']),
     'cat_nom'    => array_map(fn($c) => $c['etiqueta'] ?? '', $cfg['categorias']),
+    // La plantilla dibujaba las categorias y los pisos de Noral Apartments escritos
+    // a mano. Van aca para que cada proyecto traiga los suyos: Plaza tiene EC/MC/EL/ML
+    // y tres pisos sueltos, Apartments M/E1/E2/E3 con PB, PA y 4P.
+    'cats'       => array_map(fn($c) => [
+        'etiqueta'   => $c['etiqueta'] ?? '',
+        'nota'       => $c['nota'] ?? '',
+        'posiciones' => $c['posiciones'] ?? [],
+    ], $cfg['categorias']),
+    'pisos'      => pm_pisos($cfg),
     'proyectos'  => array_map(fn($c) => $c['proyecto'] ?? '', $proyectos),
     'token'      => $tok,
     // Bitrix lo manda al abrir el placement. Sirve para saber quién aplica sin
