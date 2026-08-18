@@ -435,7 +435,10 @@ BLDGS.forEach(b => { PX[DATA.grupos[b]] = DATA.precios[b]; });
 
 /* ── STATE ─────────────────────────────────────────────────────── */
 const STL = {D:'Disponible', R:'Reservado', F:'Firmado / vendido'};
-let cur = 'A', curCat = 'all', sel = null, onlyFixed = false, onlyAvail = true;
+// El primer edificio lo dicen los datos. Estaba fijo en 'A' y Sun Bay empieza en 'B',
+// asi que BD['A'] era undefined y la pantalla moria antes de dibujar la grilla.
+let cur = (DATA.edificios && DATA.edificios[0]) || 'A',
+    curCat = 'all', sel = null, onlyFixed = false, onlyAvail = true;
 
 /* ── HELPERS ───────────────────────────────────────────────────── */
 /* Metraje de respaldo cuando Bitrix no lo trae cargado.
@@ -893,7 +896,7 @@ function formatearMonto() {
    perdia el edificio y el filtro, justo cuando uno quiere mirar el resultado. */
 function simGuardarEstado() {
   try {
-    sessionStorage.setItem('pm_estado', JSON.stringify({
+    sessionStorage.setItem('pm_estado_' + DATA.cat, JSON.stringify({
       cur, curCat, onlyAvail,
       dest: AJ.dest, niv: AJ.niv, cat: AJ.cat, tipo: AJ.tipo,
     }));
@@ -902,7 +905,7 @@ function simGuardarEstado() {
 
 function simRestaurarEstado() {
   let e = null;
-  try { e = JSON.parse(sessionStorage.getItem('pm_estado') || 'null'); } catch (x) {}
+  try { e = JSON.parse(sessionStorage.getItem('pm_estado_' + DATA.cat) || 'null'); } catch (x) {}
   if (!e) return;
   if (e.cur && BLDGS.indexOf(e.cur) >= 0) cur = e.cur;
   if (e.curCat) curCat = e.curCat;
