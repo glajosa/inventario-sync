@@ -243,7 +243,15 @@ function mz_unidades_cache(array $cfg, int $ttl = 0, ?array &$info = null): arra
     foreach ($j['units'] as $u) {
         if ((int)($u['cat'] ?? 0) !== $cat) continue;
         $cod = strtoupper(trim((string)($u['codigo'] ?? '')));
-        if (!preg_match('/^([A-Z])-(\d)-(\d)/', $cod, $m)) continue;
+        // (\d+) y no (\d): con un solo digito A-2-10 colapsaba sobre A-2-1 y una
+        // unidad se comia a la otra. En Apartments no se veia porque ningun edificio
+        // pasa de 8 por piso; las oficinas de Plaza son 12.
+        if (!preg_match('/^([A-Z])-(\d+)-(\d+)$/', $cod, $m)) continue;
+        // Un pipeline puede mezclar familias: el 33 tiene oficinas, departamentos y
+        // locales juntos. La matriz solo manda sobre lo suyo — si el edificio no es
+        // de la matriz o el piso no tiene nivel, la unidad no es de este cotizador.
+        if (!in_array($m[1], mz_edificios($cfg), true)) continue;
+        if (mz_nivel_de_piso($cfg, (int)$m[2]) === null) continue;
         $out["{$m[1]}-{$m[2]}-{$m[3]}"] = [
             'id'    => (int)($u['id'] ?? 0),
             'etapa' => strtoupper((string)($u['stage'] ?? '')),
