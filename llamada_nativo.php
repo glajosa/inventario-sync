@@ -691,7 +691,29 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
       }
       BX24.callMethod('crm.activity.add', { fields: fields }, function (ra) {
         BX24.placement.call('unlock');
-        if (ra.error()) { aviso = 'No se pudo guardar: ' + ra.error(); redibujar(); return; }
+        if (ra.error()) {
+          // ⚠ EL MENSAJE TIENE QUE DECIR QUÉ FALLÓ.
+          //
+          // El 18-ago a Andrea le salió "No se pudo guardar: : Access denied.
+          // (400)" — con el código VACÍO, así que no se sabía qué campo ni qué
+          // permiso. Se perdieron dos diagnósticos equivocados por eso.
+          //
+          // Ahora se muestra el código, la descripción, y los campos que Bitrix
+          // podría estar rechazando por permisos: el responsable que se le
+          // asigna, el contacto al que se liga, y el proveedor de telefonía
+          // (VOXIMPLANT_CALL exige permisos de telefonía aparte).
+          var cod = '';
+          var des = '';
+          try { cod = ra.error() ? String(ra.error()) : ''; } catch (e) {}
+          try { des = ra.error_description ? String(ra.error_description()) : ''; } catch (e) {}
+          aviso = 'No se pudo guardar'
+                + (cod ? '  ·  cod: ' + cod : '  ·  cod: (vacío)')
+                + (des && des !== cod ? '  ·  ' + des : '')
+                + '  ·  resp:' + (fields.RESPONSIBLE_ID || '?')
+                + ' contacto:' + (ctx.contactId || 'sin')
+                + ' prov:' + fields.PROVIDER_ID;
+          redibujar(); return;
+        }
         registrado = parseInt(ra.data(), 10) || 0;   // para poder deshacerlo
         // Sin texto de "Guardado": la actividad recien creada YA sale ahi
         // abajo en la linea de tiempo con su fecha limite.
