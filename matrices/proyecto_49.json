@@ -1,0 +1,280 @@
+{
+  "_lea_esto_primero": [
+    "MATRIZ — SUN BAY ENGABAO. 166 solares de 144 m2, sin pisos.",
+    "",
+    "OJO: aca NO todo tiene categoria. Solo las manzanas F, H y B tienen tipologia",
+    "definida; D, J y L NO — cada solar tiene su precio y nadie clasifico cual es",
+    "esquinero. Esas quedan SIN categoria a proposito: la pantalla las muestra pero",
+    "no propone objetivo. Inventarles una categoria seria dar un boton capaz de",
+    "mover mal 90 solares.",
+    "",
+    "REGLA INVIOLABLE (del handoff): un precio NUNCA baja por escasez. Una manzana",
+    "que se agota se encarece, jamas se abarata.",
+    "",
+    "Fuente: sunbay_reglas.json (franjas + tipologias). Verificado contra Bitrix."
+  ],
+  "version": "2026-08-18",
+  "vigente_desde": "2026-08-18",
+  "proyecto": "Sun Bay Engabao",
+  "grupos": {
+    "B": {
+      "edificios": [
+        "B"
+      ],
+      "nota": "Franjas por tramo: interior, salida al mar y esquina premium."
+    },
+    "D": {
+      "edificios": [
+        "D"
+      ],
+      "nota": "Sin tipologia definida. Precio propio por solar."
+    },
+    "F": {
+      "edificios": [
+        "F"
+      ],
+      "nota": "Escalera completa y validada."
+    },
+    "H": {
+      "edificios": [
+        "H"
+      ],
+      "nota": "Sostiene precios por encima de F y B. Piso subido de 41.960 a 42.320."
+    },
+    "J": {
+      "edificios": [
+        "J"
+      ],
+      "nota": "Sin tipologia definida. Precio propio por solar."
+    },
+    "L": {
+      "edificios": [
+        "L"
+      ],
+      "nota": "Sin tipologia definida. Precio propio por solar."
+    }
+  },
+  "_niveles_nota": [
+    "Los solares no tienen pisos. Se usa un unico nivel."
+  ],
+  "niveles_por_piso": {
+    "1": "U"
+  },
+  "niveles": {
+    "U": {
+      "pisos": [
+        1
+      ],
+      "etiqueta": "Solares"
+    }
+  },
+  "_posiciones_nota": [
+    "Tres factores acumulables que encarecen, y ninguno justifica una rebaja:",
+    "  1. UBICACION  cercania a la salida al mar, areas sociales, parqueos y parques",
+    "  2. ESQUINERO  mas frente, mas luz, mejor implantacion de la casa",
+    "  3. ESCASEZ    cuanto menos queda en la manzana, mas vale el saldo",
+    "",
+    "D, J y L no figuran: no tienen tipologia y por eso no se les propone precio."
+  ],
+  "categorias": {
+    "MED": {
+      "etiqueta": "Medianero",
+      "nota": "Sin vista privilegiada. El piso de la manzana."
+    },
+    "VIS": {
+      "etiqueta": "Con vista",
+      "nota": "Mira al parque o a la salida al mar, sin ser esquinero."
+    },
+    "ESQ": {
+      "etiqueta": "Esquinero",
+      "nota": "Mas frente y mejor implantacion."
+    },
+    "TOP": {
+      "etiqueta": "Esquinero premium",
+      "nota": "El techo de la manzana: esquina + vista."
+    }
+  },
+  "posiciones": {
+    "F": {
+      "1": "TOP",
+      "2": "VIS",
+      "10": "ESQ",
+      "11": "ESQ",
+      "14": "ESQ",
+      "9": "MED",
+      "12": "MED",
+      "13": "MED"
+    },
+    "H": {
+      "4": "TOP",
+      "6": "ESQ",
+      "7": "ESQ",
+      "16": "ESQ",
+      "17": "ESQ",
+      "5": "MED",
+      "15": "MED",
+      "18": "MED",
+      "19": "MED",
+      "20": "MED",
+      "21": "MED"
+    },
+    "B": {
+      "34": "TOP",
+      "25": "VIS",
+      "26": "VIS",
+      "27": "VIS",
+      "28": "VIS",
+      "29": "VIS",
+      "30": "VIS",
+      "31": "VIS",
+      "32": "VIS",
+      "33": "VIS",
+      "15": "MED",
+      "16": "MED",
+      "17": "MED",
+      "18": "MED",
+      "19": "MED",
+      "20": "MED",
+      "21": "MED",
+      "22": "MED",
+      "23": "MED",
+      "24": "MED"
+    },
+    "D": {},
+    "J": {},
+    "L": {}
+  },
+  "unidades_por_piso": {
+    "B": 34,
+    "D": 14,
+    "F": 15,
+    "H": 27,
+    "J": 37,
+    "L": 39
+  },
+  "metraje": {
+    "B": {
+      "base": 144,
+      "mayor": 144,
+      "cats_mayor": []
+    },
+    "D": {
+      "base": 144,
+      "mayor": 144,
+      "cats_mayor": []
+    },
+    "F": {
+      "base": 144,
+      "mayor": 144,
+      "cats_mayor": []
+    },
+    "H": {
+      "base": 144,
+      "mayor": 144,
+      "cats_mayor": []
+    },
+    "J": {
+      "base": 144,
+      "mayor": 144,
+      "cats_mayor": []
+    },
+    "L": {
+      "base": 144,
+      "mayor": 144,
+      "cats_mayor": []
+    }
+  },
+  "_precios_nota": [
+    "Valores de las franjas y tipologias del handoff. Un null significa que esa",
+    "categoria no existe en esa manzana, no que falte el dato."
+  ],
+  "precios": {
+    "B": {
+      "U": {
+        "MED": 41960,
+        "VIS": 45760,
+        "ESQ": null,
+        "TOP": 59900
+      }
+    },
+    "F": {
+      "U": {
+        "MED": 41960,
+        "VIS": 45640,
+        "ESQ": 44960,
+        "TOP": 49640
+      }
+    },
+    "H": {
+      "U": {
+        "MED": 42320,
+        "VIS": null,
+        "ESQ": 46320,
+        "TOP": 49640
+      }
+    },
+    "D": {
+      "U": {
+        "MED": null,
+        "VIS": null,
+        "ESQ": null,
+        "TOP": null
+      }
+    },
+    "J": {
+      "U": {
+        "MED": null,
+        "VIS": null,
+        "ESQ": null,
+        "TOP": null
+      }
+    },
+    "L": {
+      "U": {
+        "MED": null,
+        "VIS": null,
+        "ESQ": null,
+        "TOP": null
+      }
+    }
+  },
+  "_excepciones_nota": [
+    "Decisiones de gerencia que se apartan de la regla. No 'corregirlas'."
+  ],
+  "overrides_unidad": {
+    "L-1-5": {
+      "_nota": "Unica baja autorizada del proyecto: 44.960, alineado a la lista por decision expresa de gerencia."
+    },
+    "L-1-35": {
+      "_nota": "Se mantiene en 49.900, por encima de la lista de julio."
+    }
+  },
+  "ajustes": {},
+  "exentas": [],
+  "_sin_clasificar": {
+    "H": [
+      3,
+      12,
+      26,
+      27
+    ],
+    "manzanas": [
+      "D",
+      "J",
+      "L"
+    ],
+    "nota": "Falta mirar la implantacion y decir cual es esquinero. Hasta entonces no se les propone precio."
+  },
+  "bitrix": {
+    "entityTypeId": 1072,
+    "categoryId": 49,
+    "campo_pvp": "ufCrm25_1784563253861",
+    "campo_m2": "ufCrm25_1782615822688",
+    "campo_precio_m2": "ufCrm25_1784563957669",
+    "etapa_disponible": "DT1072_49:PREPARATION",
+    "_nota": "OJO: aca BLOQUEADO es ':NEW'. Bitrix acepta un stageId invalido SIN error y no cambia nada: verificar releyendo.",
+    "etapas_editables": [
+      "DT1072_49:PREPARATION"
+    ]
+  }
+}

@@ -397,6 +397,12 @@ const FLOORS = (DATA.pisos || []).map(p => ({
 
 const EDITABLES = DATA.editables || ['D','N'];
 const CAT_COD = Object.keys(CATS).filter(c => c !== '?');
+/* Codigo tal como lo escribe Bitrix. Los solares de Sun Bay son 'B-15': no tienen
+   piso, y el motor les pone un piso 1 sintetico para poder razonar igual que en
+   los edificios. Ese 1 no debe verse en pantalla. */
+const SIN_PISO = (DATA.pisos || []).length === 1 && (DATA.pisos[0]||{}).num === 1
+                 && Object.keys(DATA.niv || {}).length === 1;
+const codVis = uid => SIN_PISO ? uid.replace(/^([A-Z])-1-/, '$1-') : uid;
 /* El nivel con patio: es el mas bajo, y solo si la matriz declara patio_pb.
    Las oficinas de Plaza no tienen ninguno, y antes salia 'undefined patio'. */
 const NIV_PATIO = Object.values(DATA.metraje).some(v => v.patio_pb != null)
@@ -590,8 +596,8 @@ function renderFloors() {
         const isSel = sel === uid;
         const stCls = st === 'F' ? ' sold' : st === 'R' ? ' resv' : '';
         return `<div class="unit${dim?' dim':''}${isSel?' sel':''}" onclick="selUnit('${uid}')">
-          <div class="ubox ubox-${cd.pfx}${fx?' fixed':''}${stCls}" title="${uid} · ${cd.label} · ${STL[st]||'—'}${fx?' · '+(fx.nota||'regla propia'):''}">
-            <div class="ucat">${uid}</div>
+          <div class="ubox ubox-${cd.pfx}${fx?' fixed':''}${stCls}" title="${codVis(uid)} · ${cd.label} · ${STL[st]||'—'}${fx?' · '+(fx.nota||'regla propia'):''}">
+            <div class="ucat">${codVis(uid)}</div>
             ${m2v ? `<div class="um2">${m2v}m²${fl.grp===NIV_PATIO?' +p':''}</div>` : ''}
             ${price ? (delta
                 ? `<div class="uprice cambia"><s>${Math.round(cur_/1000)}k</s> ${Math.round(tgt/1000)}k</div>`
@@ -625,7 +631,7 @@ function renderDetail() {
 
   el.innerHTML = `
     <div class="dt-head">
-      <div class="dt-id">${sel}</div>
+      <div class="dt-id">${codVis(sel)}</div>
       <div class="dt-pill" style="${pillSt(cd.pfx)}">${cd.label}</div>
       ${(() => {
         const v = st;

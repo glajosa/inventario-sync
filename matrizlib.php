@@ -246,7 +246,11 @@ function mz_unidades_cache(array $cfg, int $ttl = 0, ?array &$info = null): arra
         // (\d+) y no (\d): con un solo digito A-2-10 colapsaba sobre A-2-1 y una
         // unidad se comia a la otra. En Apartments no se veia porque ningun edificio
         // pasa de 8 por piso; las oficinas de Plaza son 12.
-        if (!preg_match('/^([A-Z])-(\d+)-(\d+)$/', $cod, $m)) continue;
+        // Sun Bay son solares sin piso: 'B-15', no 'B-1-15'. Se les asigna el piso 1
+        // como piso unico para que el resto del motor —que razona en
+        // edificio/piso/posicion— no tenga que saber de esta diferencia.
+        if (preg_match('/^([A-Z])-(\d+)$/', $cod, $m2)) $m = [$m2[0], $m2[1], '1', $m2[2]];
+        elseif (!preg_match('/^([A-Z])-(\d+)-(\d+)$/', $cod, $m)) continue;
         // Un pipeline puede mezclar familias: el 33 tiene oficinas, departamentos y
         // locales juntos. La matriz solo manda sobre lo suyo — si el edificio no es
         // de la matriz o el piso no tiene nivel, la unidad no es de este cotizador.
