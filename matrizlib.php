@@ -27,6 +27,18 @@
 declare(strict_types=1);
 
 const MZ_NIVEL_DE_PISO = [1 => 'PB', 2 => 'PA', 3 => 'PA', 4 => '4P'];
+
+/**
+ * Piso -> nivel de la matriz. Noral Apartments agrupa los pisos 2 y 3 en un solo
+ * nivel; Noral Plaza NO, porque cada piso de oficinas tiene su propio precio. Por
+ * eso el mapa dejo de ser fijo: si el proyecto trae `niveles_por_piso`, manda el
+ * suyo. Sin esa clave se comporta igual que siempre.
+ */
+function mz_nivel_de_piso(array $cfg, int $piso): ?string {
+    $m = $cfg['niveles_por_piso'] ?? null;
+    if (is_array($m)) return $m[(string)$piso] ?? ($m[$piso] ?? null);
+    return MZ_NIVEL_DE_PISO[$piso] ?? null;
+}
 /** Diferencia mínima para considerar que un precio cambió. Por debajo es ruido. */
 const MZ_TOLERANCIA = 1.0;
 
@@ -143,7 +155,7 @@ function mz_metraje_de(array $cfg, string $ed, int $piso, ?string $cat): ?float 
     $g = mz_grupo_de($cfg, $ed);
     $m = $cfg['metraje'][$g] ?? null;
     if (!$m) return null;
-    if (MZ_NIVEL_DE_PISO[$piso] === 'PB') return (float)$m['base'];
+    if (mz_nivel_de_piso($cfg, $piso) === 'PB') return (float)$m['base'];
     if ($cat !== null && in_array($cat, $m['cats_mayor'] ?? [], true)) return (float)$m['mayor'];
     return (float)($cfg['metraje_pa_medianero'][$ed] ?? $m['base']);
 }
@@ -158,7 +170,8 @@ function mz_precio_de(array $cfg, array $px, string $ed, int $piso, int $pos): a
     $cat = mz_categoria_de($cfg, $ed, $pos, $u);
     if ($cat === null) return [null, null];
     $fuente = (string)($cfg['overrides_unidad'][$u]['sigue_a'] ?? $ed);
-    return [$cat, $px[$fuente][MZ_NIVEL_DE_PISO[$piso]][$cat] ?? null];
+    $niv = mz_nivel_de_piso($cfg, $piso);
+    return [$cat, $niv === null ? null : ($px[$fuente][$niv][$cat] ?? null)];
 }
 
 /**

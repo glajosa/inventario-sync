@@ -1,0 +1,114 @@
+{
+  "_lea_esto_primero": [
+    "MATRIZ DE PRECIOS — NORAL PLAZA · OFICINAS (edificios A, B y C, pisos 2 a 4).",
+    "",
+    "OJO: en Plaza los codigos A-3-5 de los pisos 2/3/4 son OFICINAS, no departamentos.",
+    "Los departamentos de Plaza son los de D, E y F. Las plantas bajas y el 1er piso",
+    "son locales comerciales y tampoco entran aca.",
+    "",
+    "OJO 2: en el pipeline 33 la etapa DISPONIBLE es ':NEW'. ':PREPARATION' es",
+    "RESERVADO — al reves que en Noral Apartments. Escribir sobre PREPARATION aca",
+    "seria tocar unidades reservadas.",
+    "",
+    "Verificada el 2026-08-18 contra Bitrix: las 50 oficinas disponibles cuadran",
+    "exacto con esta matriz, sin una sola diferencia."
+  ],
+  "version": "2026-08-18",
+  "vigente_desde": "2026-08-18",
+  "proyecto": "Noral Plaza — Oficinas",
+
+  "grupos": {
+    "ABC": {
+      "edificios": ["A", "B", "C"],
+      "nota": "Los tres edificios comparten exactamente la misma matriz. Verificado: A-4-1 y B-4-6 valen lo mismo."
+    }
+  },
+
+  "_niveles_nota": [
+    "Cada piso es su propio nivel: el 3ro sube sobre el 2do y el 4to sobre el 3ro.",
+    "No se agrupan como en Apartments, donde el 2 y el 3 comparten precio."
+  ],
+  "niveles_por_piso": { "2": "P2", "3": "P3", "4": "P4" },
+  "niveles": {
+    "P2": { "pisos": [2], "etiqueta": "2do Piso" },
+    "P3": { "pisos": [3], "etiqueta": "3er Piso" },
+    "P4": { "pisos": [4], "etiqueta": "4to Piso" }
+  },
+
+  "_posiciones_nota": [
+    "Dos ejes que se cruzan y definen las cuatro categorias.",
+    "",
+    "  POSICION -> tamano.  Las esquinas son 1, 6, 7 y 12 (58 m2).",
+    "                       Las intermedias, medianeros (50 m2).",
+    "  POSICION -> vista.   Las 1 a 6 miran al PARQUE CENTRAL.",
+    "                       Las 7 a 12 miran al PARQUE LINEAL.",
+    "",
+    "Las dos caras del edificio van espalda con espalda. En ambas, el extremo",
+    "izquierdo da a la GARITA (posiciones 1 y 7) y el derecho al EDIFICIO",
+    "COLINDANTE (posiciones 6 y 12).",
+    "",
+    "A igual piso y vista, el esquinero y el medianero comparten el mismo",
+    "precio por m2: la diferencia de precio es solo de tamano."
+  ],
+  "categorias": {
+    "EC": { "etiqueta": "Esquinero · central", "posiciones": [1, 6],  "nota": "58 m2, vista al parque central. El techo del piso." },
+    "MC": { "etiqueta": "Medianero · central", "posiciones": [2, 3, 4, 5], "nota": "50 m2, vista al parque central." },
+    "EL": { "etiqueta": "Esquinero · lineal",  "posiciones": [7, 12], "nota": "58 m2, vista al parque lineal." },
+    "ML": { "etiqueta": "Medianero · lineal",  "posiciones": [8, 9, 10, 11], "nota": "50 m2, vista al parque lineal. El piso de precio." }
+  },
+  "posiciones": {
+    "A": {"1":"EC","2":"MC","3":"MC","4":"MC","5":"MC","6":"EC","7":"EL","8":"ML","9":"ML","10":"ML","11":"ML","12":"EL"},
+    "B": {"1":"EC","2":"MC","3":"MC","4":"MC","5":"MC","6":"EC","7":"EL","8":"ML","9":"ML","10":"ML","11":"ML","12":"EL"},
+    "C": {"1":"EC","2":"MC","3":"MC","4":"MC","5":"MC","6":"EC","7":"EL","8":"ML","9":"ML","10":"ML","11":"ML","12":"EL"}
+  },
+  "unidades_por_piso": { "A": 12, "B": 12, "C": 12 },
+
+  "metraje": {
+    "ABC": { "base": 50, "mayor": 58, "cats_mayor": ["EC", "EL"] }
+  },
+
+  "_precios_nota": [
+    "La vista al parque central vale mas que la del lineal en los tres pisos,",
+    "y cada piso sube sobre el anterior. Ninguna categoria baja nunca."
+  ],
+  "precios": {
+    "ABC": {
+      "P2": { "EC": 153700, "MC": 132500, "EL": 144420, "ML": 125500 },
+      "P3": { "EC": 156020, "MC": 134500, "EL": 150220, "ML": 129500 },
+      "P4": { "EC": 167620, "MC": 144500, "EL": 161820, "ML": 139500 }
+    }
+  },
+
+  "_nucleo_entre_nota": [
+    "El ascensor y las escaleras parten cada cara por el medio: entre la 3 y la 4",
+    "del lado central, y entre la 9 y la 10 del lineal. Por eso esos dos pares NO",
+    "se pueden unir."
+  ],
+  "nucleo_entre": [[3, 4], [9, 10]],
+
+  "_combos_nota": [
+    "Oficinas de 100 m2: salen de unir DOS MEDIANEROS CONTIGUOS del mismo lado del",
+    "nucleo. Solo hay cuatro pares posibles por piso — 2+3, 4+5, 8+9 y 10+11 —",
+    "porque el nucleo corta entre la 3 y la 4 y entre la 9 y la 10."
+  ],
+  "combos": {
+    "pares_validos": [[2,3],[4,5],[8,9],[10,11]],
+    "metraje": 100,
+    "precio": { "P2": 249000, "P3": 259000, "P4": 279000 }
+  },
+
+  "overrides_unidad": {},
+  "ajustes": {},
+  "exentas": [],
+
+  "bitrix": {
+    "entityTypeId": 1072,
+    "categoryId": 33,
+    "campo_pvp": "ufCrm25_1784563253861",
+    "campo_m2": "ufCrm25_1782615822688",
+    "campo_precio_m2": "ufCrm25_1784563957669",
+    "etapa_disponible": "DT1072_33:NEW",
+    "_nota": "En el pipeline 33 DISPONIBLE es ':NEW'. ':PREPARATION' es RESERVADO. Solo se escribe sobre disponibles.",
+    "etapas_editables": ["DT1072_33:NEW"]
+  }
+}
