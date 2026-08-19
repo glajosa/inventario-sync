@@ -1,0 +1,261 @@
+{
+  "_lea_esto_primero": [
+    "GALERO TORRE D — 40 unidades, 10 pisos x 4. Del JSON de Javier del 18-ago-2026.",
+    "",
+    "El precio NO es un numero suelto: sale de una formula de tres palancas",
+    "   PVP = m2 x tarifa del piso x factor de la categoria x (1 + ajuste global)",
+    "",
+    "Aca la matriz se expresa POR POSICION (1 a 4) y no por categoria, porque dos",
+    "unidades de la misma categoria tienen metrajes distintos: en el piso 2 la 1 mide",
+    "72,00 y la 4 mide 79,85, y las dos son esquineras. Guardar el precio ya calculado",
+    "por posicion conserva la escalera exacta.",
+    "",
+    "Las posiciones 1 y 4 son ESQUINERAS; la 2 y la 3, MEDIANERAS.",
+    "",
+    "OJO: el PISO 6 es una excepcion REAL, no un error. D6-1 y D6-2 miden 4,65 y 1,55 m2",
+    "mas que sus equivalentes (canje con CADMECORP). Los planos del arquitecto NO son la",
+    "autoridad: se apartan en tres celdas. Manda el cotizador del usuario.",
+    "",
+    "Los dos LOFTS duplex del piso 10 llevan tarifa propia (D10-2 a 1.850 y D10-4 a 1.870)",
+    "pero estan DENTRO de la matriz, asi que las palancas tambien los alcanzan.",
+    "",
+    "Nomenclatura en Bitrix SIN guion tras la D: D1-1, D10-4."
+  ],
+  "version": "2026-08-19",
+  "vigente_desde": "2026-08-19",
+  "proyecto": "Galero Torre D",
+  "grupos": {
+    "D": {
+      "edificios": [
+        "D"
+      ],
+      "nota": "Torre unica. La escalera de tarifas sube piso a piso, de 1.800 a 2.075 $/m2."
+    }
+  },
+  "niveles_por_piso": {
+    "1": "P1",
+    "2": "P2",
+    "3": "P3",
+    "4": "P4",
+    "5": "P5",
+    "6": "P6",
+    "7": "P7",
+    "8": "P8",
+    "9": "P9",
+    "10": "P10"
+  },
+  "niveles": {
+    "P1": {
+      "pisos": [
+        1
+      ],
+      "etiqueta": "Planta Baja",
+      "nota": "tarifa 1800 $/m²"
+    },
+    "P2": {
+      "pisos": [
+        2
+      ],
+      "etiqueta": "Piso 2",
+      "nota": "tarifa 1800 $/m²"
+    },
+    "P3": {
+      "pisos": [
+        3
+      ],
+      "etiqueta": "Piso 3",
+      "nota": "tarifa 1825 $/m²"
+    },
+    "P4": {
+      "pisos": [
+        4
+      ],
+      "etiqueta": "Piso 4",
+      "nota": "tarifa 1825 $/m²"
+    },
+    "P5": {
+      "pisos": [
+        5
+      ],
+      "etiqueta": "Piso 5",
+      "nota": "tarifa 1875 $/m²"
+    },
+    "P6": {
+      "pisos": [
+        6
+      ],
+      "etiqueta": "Piso 6",
+      "nota": "tarifa 1900 $/m²"
+    },
+    "P7": {
+      "pisos": [
+        7
+      ],
+      "etiqueta": "Piso 7",
+      "nota": "tarifa 1975 $/m²"
+    },
+    "P8": {
+      "pisos": [
+        8
+      ],
+      "etiqueta": "Piso 8",
+      "nota": "tarifa 2025 $/m²"
+    },
+    "P9": {
+      "pisos": [
+        9
+      ],
+      "etiqueta": "Piso 9",
+      "nota": "tarifa 2050 $/m²"
+    },
+    "P10": {
+      "pisos": [
+        10
+      ],
+      "etiqueta": "Piso 10",
+      "nota": "tarifa 2075 $/m²"
+    }
+  },
+  "categorias": {
+    "1": {
+      "etiqueta": "Pos. 1 · Esquinero",
+      "posiciones": [
+        1
+      ],
+      "nota": "2 dormitorios"
+    },
+    "2": {
+      "etiqueta": "Pos. 2 · Medianero",
+      "posiciones": [
+        2
+      ],
+      "nota": "3 dormitorios"
+    },
+    "3": {
+      "etiqueta": "Pos. 3 · Medianero",
+      "posiciones": [
+        3
+      ],
+      "nota": "2 dormitorios"
+    },
+    "4": {
+      "etiqueta": "Pos. 4 · Esquinero",
+      "posiciones": [
+        4
+      ],
+      "nota": "3 dormitorios"
+    }
+  },
+  "posiciones": {
+    "D": {
+      "1": "1",
+      "2": "2",
+      "3": "3",
+      "4": "4"
+    }
+  },
+  "unidades_por_piso": {
+    "D": 4
+  },
+  "metraje": {
+    "D": {
+      "base": 70,
+      "mayor": 81.1,
+      "cats_mayor": [
+        "2",
+        "4"
+      ]
+    }
+  },
+  "_precios_nota": [
+    "Cada celda es m2 x tarifa del piso, ya resuelto. Los factores de categoria estan",
+    "en 1.0 y el ajuste global en 0.0 porque la escalera ya refleja los precios reales."
+  ],
+  "precios": {
+    "D": {
+      "P1": {
+        "1": 126000,
+        "2": 135000,
+        "3": 126000,
+        "4": 143730
+      },
+      "P2": {
+        "1": 129600,
+        "2": 145980,
+        "3": 126000,
+        "4": 143730
+      },
+      "P3": {
+        "1": 131400,
+        "2": 148008,
+        "3": 127750,
+        "4": 145726
+      },
+      "P4": {
+        "1": 131400,
+        "2": 148008,
+        "3": 127750,
+        "4": 145726
+      },
+      "P5": {
+        "1": 135000,
+        "2": 152062,
+        "3": 131250,
+        "4": 149719
+      },
+      "P6": {
+        "1": 145635,
+        "2": 157035,
+        "3": 133000,
+        "4": 151715
+      },
+      "P7": {
+        "1": 142200,
+        "2": 160172,
+        "3": 138250,
+        "4": 157704
+      },
+      "P8": {
+        "1": 145800,
+        "2": 164228,
+        "3": 141750,
+        "4": 161696
+      },
+      "P9": {
+        "1": 147600,
+        "2": 166255,
+        "3": 143500,
+        "4": 163692
+      },
+      "P10": {
+        "1": 149400,
+        "2": 256354,
+        "3": 145250,
+        "4": 264268
+      }
+    }
+  },
+  "overrides_unidad": {
+    "D8-3": {
+      "nota": "BLOQUEADA 18-ago-2026: negocio en curso con Karen Dayanara Triviño Muso, sin concretar. Figuraba DISPONIBLE en el SPA mientras el cotizador la daba vendida."
+    }
+  },
+  "ajustes": {},
+  "exentas": {},
+  "bitrix": {
+    "entityTypeId": 1072,
+    "categoryId": 51,
+    "campo_pvp": "ufCrm25_1784563253861",
+    "campo_m2": "ufCrm25_1782615822688",
+    "campo_precio_m2": "ufCrm25_1784563957669",
+    "etapa_disponible": "DT1072_51:PREPARATION",
+    "_nota": "Galero usa PREPARATION=DISPONIBLE y NEW=BLOQUEADO, al reves que Noral Plaza.",
+    "etapas_editables": [
+      "DT1072_51:PREPARATION"
+    ]
+  },
+  "_financiamiento_nota": [
+    "30% de entrada: 10% a la firma, 15% en mensuales, 5% en extraordinarias.",
+    "Entrega mayo 2027. El plazo se DERIVA de esa fecha, no se escribe a mano."
+  ]
+}
