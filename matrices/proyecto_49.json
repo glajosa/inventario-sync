@@ -1,280 +1,539 @@
 {
   "_lea_esto_primero": [
-    "MATRIZ — SUN BAY ENGABAO. 166 solares de 144 m2, sin pisos.",
+    "Sun Bay Engabao · categoria 49. 145 solares vendibles en 6 manzanas.",
     "",
-    "OJO: aca NO todo tiene categoria. Solo las manzanas F, H y B tienen tipologia",
-    "definida; D, J y L NO — cada solar tiene su precio y nadie clasifico cual es",
-    "esquinero. Esas quedan SIN categoria a proposito: la pantalla las muestra pero",
-    "no propone objetivo. Inventarles una categoria seria dar un boton capaz de",
-    "mover mal 90 solares.",
+    "🔴 AQUI NO HAY MATRIZ DE CATEGORIAS COMO EN NORAL. Lo dice el propio archivo de",
+    "reglas del director: 'cada solar tiene precio propio segun su ubicacion; lo que si",
+    "hay son FRANJAS con precio definido y ZONAS no vendibles'. Un intento anterior de",
+    "encajarlo en las categorias de Noral (MED/VIS/ESQ/TOP) solo calzo en B, F y H y",
+    "dejo 90 solares 'sin clasificar' — el hueco era del modelo, no del trabajo del",
+    "director. Sus precios estaban completos desde el 18-ago.",
     "",
-    "REGLA INVIOLABLE (del handoff): un precio NUNCA baja por escasez. Una manzana",
-    "que se agota se encarece, jamas se abarata.",
+    "Lo que hay aca son ESCALONES POR MANZANA, que es como habla el propio director:",
+    "'el piso de la manzana' y 'el techo de la manzana'. T1 es el mas barato de esa",
+    "manzana y va subiendo. Cada manzana tiene su propia escalera: el piso de B son",
+    "$41.960 y el de H son $42.320, y eso es deliberado.",
     "",
-    "Fuente: sunbay_reglas.json (franjas + tipologias). Verificado contra Bitrix."
+    "Los 63 precios salen de 'Lista de Precios - Sun Bay Engabao' del 18-ago-2026 y",
+    "cuadran 63 de 63 contra Bitrix. Las manzanas D, J y L no tienen tipologia escrita:",
+    "se sabe CUANTO vale cada solar, no POR QUE. Para subir 'todos los esquineros' hace",
+    "falta esa lectura del plano; para cotizar hoy, no.",
+    "",
+    "REGLA INVIOLABLE del director: un precio NUNCA baja por escasez. Una manzana que se",
+    "agota se encarece, jamas se abarata. Unica baja autorizada del proyecto: L-5.",
+    "",
+    "OJO con la etapa: BLOQUEADO es ':NEW' y DISPONIBLE es ':PREPARATION'. Bitrix acepta",
+    "un stageId invalido SIN error y no cambia nada: verificar releyendo."
   ],
-  "version": "2026-08-18",
-  "vigente_desde": "2026-08-18",
   "proyecto": "Sun Bay Engabao",
-  "grupos": {
-    "B": {
-      "edificios": [
-        "B"
-      ],
-      "nota": "Franjas por tramo: interior, salida al mar y esquina premium."
-    },
-    "D": {
-      "edificios": [
-        "D"
-      ],
-      "nota": "Sin tipologia definida. Precio propio por solar."
-    },
-    "F": {
-      "edificios": [
-        "F"
-      ],
-      "nota": "Escalera completa y validada."
-    },
-    "H": {
-      "edificios": [
-        "H"
-      ],
-      "nota": "Sostiene precios por encima de F y B. Piso subido de 41.960 a 42.320."
-    },
-    "J": {
-      "edificios": [
-        "J"
-      ],
-      "nota": "Sin tipologia definida. Precio propio por solar."
-    },
-    "L": {
-      "edificios": [
-        "L"
-      ],
-      "nota": "Sin tipologia definida. Precio propio por solar."
-    }
-  },
-  "_niveles_nota": [
-    "Los solares no tienen pisos. Se usa un unico nivel."
-  ],
-  "niveles_por_piso": {
-    "1": "U"
-  },
-  "niveles": {
-    "U": {
-      "pisos": [
-        1
-      ],
-      "etiqueta": "Solares"
-    }
-  },
-  "_posiciones_nota": [
-    "Tres factores acumulables que encarecen, y ninguno justifica una rebaja:",
-    "  1. UBICACION  cercania a la salida al mar, areas sociales, parqueos y parques",
-    "  2. ESQUINERO  mas frente, mas luz, mejor implantacion de la casa",
-    "  3. ESCASEZ    cuanto menos queda en la manzana, mas vale el saldo",
-    "",
-    "D, J y L no figuran: no tienen tipologia y por eso no se les propone precio."
-  ],
-  "categorias": {
-    "MED": {
-      "etiqueta": "Medianero",
-      "nota": "Sin vista privilegiada. El piso de la manzana."
-    },
-    "VIS": {
-      "etiqueta": "Con vista",
-      "nota": "Mira al parque o a la salida al mar, sin ser esquinero."
-    },
-    "ESQ": {
-      "etiqueta": "Esquinero",
-      "nota": "Mas frente y mejor implantacion."
-    },
-    "TOP": {
-      "etiqueta": "Esquinero premium",
-      "nota": "El techo de la manzana: esquina + vista."
-    }
-  },
-  "posiciones": {
-    "F": {
-      "1": "TOP",
-      "2": "VIS",
-      "10": "ESQ",
-      "11": "ESQ",
-      "14": "ESQ",
-      "9": "MED",
-      "12": "MED",
-      "13": "MED"
-    },
-    "H": {
-      "4": "TOP",
-      "6": "ESQ",
-      "7": "ESQ",
-      "16": "ESQ",
-      "17": "ESQ",
-      "5": "MED",
-      "15": "MED",
-      "18": "MED",
-      "19": "MED",
-      "20": "MED",
-      "21": "MED"
-    },
-    "B": {
-      "34": "TOP",
-      "25": "VIS",
-      "26": "VIS",
-      "27": "VIS",
-      "28": "VIS",
-      "29": "VIS",
-      "30": "VIS",
-      "31": "VIS",
-      "32": "VIS",
-      "33": "VIS",
-      "15": "MED",
-      "16": "MED",
-      "17": "MED",
-      "18": "MED",
-      "19": "MED",
-      "20": "MED",
-      "21": "MED",
-      "22": "MED",
-      "23": "MED",
-      "24": "MED"
-    },
-    "D": {},
-    "J": {},
-    "L": {}
-  },
-  "unidades_por_piso": {
-    "B": 34,
-    "D": 14,
-    "F": 15,
-    "H": 27,
-    "J": 37,
-    "L": 39
-  },
-  "metraje": {
-    "B": {
-      "base": 144,
-      "mayor": 144,
-      "cats_mayor": []
-    },
-    "D": {
-      "base": 144,
-      "mayor": 144,
-      "cats_mayor": []
-    },
-    "F": {
-      "base": 144,
-      "mayor": 144,
-      "cats_mayor": []
-    },
-    "H": {
-      "base": 144,
-      "mayor": 144,
-      "cats_mayor": []
-    },
-    "J": {
-      "base": 144,
-      "mayor": 144,
-      "cats_mayor": []
-    },
-    "L": {
-      "base": 144,
-      "mayor": 144,
-      "cats_mayor": []
-    }
-  },
-  "_precios_nota": [
-    "Valores de las franjas y tipologias del handoff. Un null significa que esa",
-    "categoria no existe en esa manzana, no que falte el dato."
-  ],
-  "precios": {
-    "B": {
-      "U": {
-        "MED": 41960,
-        "VIS": 45760,
-        "ESQ": null,
-        "TOP": 59900
-      }
-    },
-    "F": {
-      "U": {
-        "MED": 41960,
-        "VIS": 45640,
-        "ESQ": 44960,
-        "TOP": 49640
-      }
-    },
-    "H": {
-      "U": {
-        "MED": 42320,
-        "VIS": null,
-        "ESQ": 46320,
-        "TOP": 49640
-      }
-    },
-    "D": {
-      "U": {
-        "MED": null,
-        "VIS": null,
-        "ESQ": null,
-        "TOP": null
-      }
-    },
-    "J": {
-      "U": {
-        "MED": null,
-        "VIS": null,
-        "ESQ": null,
-        "TOP": null
-      }
-    },
-    "L": {
-      "U": {
-        "MED": null,
-        "VIS": null,
-        "ESQ": null,
-        "TOP": null
-      }
-    }
-  },
-  "_excepciones_nota": [
-    "Decisiones de gerencia que se apartan de la regla. No 'corregirlas'."
-  ],
-  "overrides_unidad": {
-    "L-1-5": {
-      "_nota": "Unica baja autorizada del proyecto: 44.960, alineado a la lista por decision expresa de gerencia."
-    },
-    "L-1-35": {
-      "_nota": "Se mantiene en 49.900, por encima de la lista de julio."
-    }
-  },
-  "ajustes": {},
-  "exentas": [],
-  "_sin_clasificar": {
-    "H": [
-      3,
-      12,
-      26,
-      27
-    ],
-    "manzanas": [
-      "D",
-      "J",
-      "L"
-    ],
-    "nota": "Falta mirar la implantacion y decir cual es esquinero. Hasta entonces no se les propone precio."
-  },
+  "version": "2026-08-19",
   "bitrix": {
     "entityTypeId": 1072,
     "categoryId": 49,
     "campo_pvp": "ufCrm25_1784563253861",
-    "campo_m2": "ufCrm25_1782615822688",
-    "campo_precio_m2": "ufCrm25_1784563957669",
-    "etapa_disponible": "DT1072_49:PREPARATION",
-    "_nota": "OJO: aca BLOQUEADO es ':NEW'. Bitrix acepta un stageId invalido SIN error y no cambia nada: verificar releyendo.",
-    "etapas_editables": [
-      "DT1072_49:PREPARATION"
-    ]
+    "campo_m2": "ufCrm25_1782615822688"
+  },
+  "piso_sin_numero": 1,
+  "grupos": {
+    "B": {
+      "etiqueta": "Manzana B",
+      "edificios": [
+        "B"
+      ]
+    },
+    "D": {
+      "etiqueta": "Manzana D",
+      "edificios": [
+        "D"
+      ]
+    },
+    "F": {
+      "etiqueta": "Manzana F",
+      "edificios": [
+        "F"
+      ]
+    },
+    "H": {
+      "etiqueta": "Manzana H",
+      "edificios": [
+        "H"
+      ]
+    },
+    "J": {
+      "etiqueta": "Manzana J",
+      "edificios": [
+        "J"
+      ]
+    },
+    "L": {
+      "etiqueta": "Manzana L",
+      "edificios": [
+        "L"
+      ]
+    }
+  },
+  "niveles": {
+    "U": {
+      "etiqueta": "Solares",
+      "pisos": [
+        1
+      ]
+    }
+  },
+  "niveles_por_piso": {
+    "1": "U"
+  },
+  "categorias": {
+    "T1": {
+      "etiqueta": "T1",
+      "nota": "Piso de la manzana — medianero sin vista privilegiada. El director lo describe como: \"Tramo interior de la manzana B\"; \"Medianeros. Piso de la manzana, subido desde 41.960.\""
+    },
+    "T2": {
+      "etiqueta": "T2",
+      "nota": "Segundo escalón. El director lo describe como: \"Esquineros. El 10 y el 11 son esquineros internos porque colindan con el mini parque de la manzana; el 14 es esquinero de borde.\"; \"Mucho mas cercanos a la salida al mar\""
+    },
+    "T3": {
+      "etiqueta": "T3",
+      "nota": "Tercer escalón. El director lo describe como: \"Mira al parque pero no es esquinero. Por encima de los medianeros, por debajo del F-1.\""
+    },
+    "T4": {
+      "etiqueta": "T4",
+      "nota": "Cuarto escalón. El director lo describe como: \"Esquineros internos.\"; \"Esquinero + vista al parque infantil y area verde. El techo de la manzana.\""
+    },
+    "T5": {
+      "etiqueta": "T5",
+      "nota": "Quinto escalón. Sin descripción del director: el escalón sale del precio de lista, no de una tipología escrita."
+    },
+    "T6": {
+      "etiqueta": "T6",
+      "nota": "Sexto escalón. El director lo describe como: \"Esquinero. El techo de la manzana.\""
+    },
+    "T7": {
+      "etiqueta": "T7",
+      "nota": "Séptimo escalón. Sin descripción del director: el escalón sale del precio de lista, no de una tipología escrita."
+    },
+    "T8": {
+      "etiqueta": "T8",
+      "nota": "Techo de la manzana. Sin descripción del director: el escalón sale del precio de lista, no de una tipología escrita."
+    }
+  },
+  "unidades_por_piso": {
+    "B": 34,
+    "D": 11,
+    "F": 14,
+    "H": 27,
+    "J": 37,
+    "L": 39
+  },
+  "precios": {
+    "B": {
+      "U": {
+        "T1": 41960,
+        "T2": 45760
+      }
+    },
+    "D": {
+      "U": {
+        "T1": 56720
+      }
+    },
+    "F": {
+      "U": {
+        "T1": 41960,
+        "T2": 44960,
+        "T3": 45640,
+        "T4": 49640
+      }
+    },
+    "H": {
+      "U": {
+        "T1": 42320,
+        "T2": 44960,
+        "T3": 45640,
+        "T4": 46320,
+        "T5": 47960,
+        "T6": 49640
+      }
+    },
+    "J": {
+      "U": {
+        "T1": 41960,
+        "T2": 42320,
+        "T3": 43960,
+        "T4": 44320,
+        "T5": 45960,
+        "T6": 46320,
+        "T7": 46640,
+        "T8": 50640
+      }
+    },
+    "L": {
+      "U": {
+        "T1": 44960,
+        "T2": 46960,
+        "T3": 48640,
+        "T4": 48960,
+        "T5": 49900
+      }
+    }
+  },
+  "posiciones": {
+    "B": {
+      "15": "T1",
+      "16": "T1",
+      "17": "T1",
+      "18": "T1",
+      "19": "T1",
+      "20": "T1",
+      "22": "T1",
+      "28": "T2"
+    },
+    "D": {
+      "6": "T1"
+    },
+    "F": {
+      "1": "T4",
+      "2": "T3",
+      "9": "T1",
+      "10": "T2",
+      "11": "T2",
+      "12": "T1",
+      "13": "T1",
+      "14": "T2"
+    },
+    "H": {
+      "3": "T3",
+      "4": "T6",
+      "5": "T1",
+      "6": "T4",
+      "7": "T4",
+      "12": "T2",
+      "15": "T1",
+      "16": "T4",
+      "17": "T4",
+      "18": "T1",
+      "19": "T1",
+      "20": "T1",
+      "21": "T1",
+      "26": "T5",
+      "27": "T5"
+    },
+    "J": {
+      "2": "T7",
+      "3": "T7",
+      "4": "T8",
+      "7": "T5",
+      "8": "T2",
+      "9": "T2",
+      "10": "T2",
+      "11": "T2",
+      "16": "T1",
+      "17": "T3",
+      "19": "T6",
+      "22": "T2",
+      "26": "T1",
+      "28": "T5",
+      "33": "T4",
+      "34": "T4"
+    },
+    "L": {
+      "3": "T3",
+      "5": "T1",
+      "7": "T4",
+      "8": "T1",
+      "9": "T1",
+      "10": "T1",
+      "11": "T1",
+      "13": "T4",
+      "14": "T2",
+      "15": "T2",
+      "24": "T1",
+      "25": "T1",
+      "26": "T1",
+      "31": "T2",
+      "35": "T5"
+    }
+  },
+  "metraje": {
+    "_nota": "Area estandar del proyecto: 144 m2. F-8 figura con 131,80 en la implantacion y 144 en Bitrix (FIRMADO, Sosa).",
+    "B": {
+      "por_categoria": {
+        "T1": 144,
+        "T2": 144
+      },
+      "base": 144,
+      "mayor": 144,
+      "cats_mayor": []
+    },
+    "D": {
+      "por_categoria": {
+        "T1": 144
+      },
+      "base": 144,
+      "mayor": 144,
+      "cats_mayor": []
+    },
+    "F": {
+      "por_categoria": {
+        "T1": 144,
+        "T2": 144,
+        "T3": 144,
+        "T4": 144
+      },
+      "base": 144,
+      "mayor": 144,
+      "cats_mayor": []
+    },
+    "H": {
+      "por_categoria": {
+        "T1": 144,
+        "T2": 144,
+        "T3": 144,
+        "T4": 144,
+        "T5": 144,
+        "T6": 144
+      },
+      "base": 144,
+      "mayor": 144,
+      "cats_mayor": []
+    },
+    "J": {
+      "por_categoria": {
+        "T1": 144,
+        "T2": 144,
+        "T3": 144,
+        "T4": 144,
+        "T5": 144,
+        "T6": 144,
+        "T7": 144,
+        "T8": 144
+      },
+      "base": 144,
+      "mayor": 144,
+      "cats_mayor": []
+    },
+    "L": {
+      "por_categoria": {
+        "T1": 144,
+        "T2": 144,
+        "T3": 144,
+        "T4": 144,
+        "T5": 144
+      },
+      "base": 144,
+      "mayor": 144,
+      "cats_mayor": []
+    }
+  },
+  "overrides_unidad": {
+    "L-5": {
+      "nota": "UNICA baja autorizada del proyecto: de $46.960 a $44.960, por decision expresa de gerencia, apartandose de la regla de no bajar precios."
+    },
+    "L-35": {
+      "nota": "Se mantiene por ENCIMA de la lista de julio ($48.460). Gerencia confirmo cobrarlo a $49.900."
+    }
+  },
+  "exentas": {},
+  "etapas_editables": [
+    "DISPONIBLE"
+  ],
+  "zonas_no_vendibles": [
+    {
+      "id": "B-reserva-organizacion",
+      "manzana": "B",
+      "solares": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "motivo": "Sombreados en la implantacion. Reservados para uso futuro de la organizacion."
+    },
+    {
+      "id": "F-reserva-organizacion",
+      "manzana": "F",
+      "solares": [
+        3,
+        4,
+        5,
+        6
+      ],
+      "motivo": "Sombreados en la implantacion. Reservados para uso futuro de la organizacion."
+    },
+    {
+      "id": "F-fuera-de-manzana",
+      "manzana": "F",
+      "solares": [
+        15
+      ],
+      "motivo": "La manzana F termina en el F-14. El F-15 no existe como solar vendible."
+    },
+    {
+      "id": "D-fuera-del-lindero",
+      "manzana": "D",
+      "solares": [
+        12,
+        13,
+        14
+      ],
+      "motivo": "La extension legal del terreno llega hasta el D-11. Del D-12 en adelante no es nuestro.",
+      "alerta": "D-13 esta FIRMADO a nombre de Elena Pumayugra. Pendiente de reubicacion o de salida del proyecto por incumplimiento de pagos. Si se libera debe ir a BLOQUEADO, nunca a DISPONIBLE."
+    },
+    {
+      "id": "D-canje",
+      "manzana": "D",
+      "solares": [
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "motivo": "Canje con gerencia. No existen en Bitrix y no deben crearse."
+    }
+  ],
+  "tipologias_del_director": {
+    "H": {
+      "_nota": "Manzana H. Sostiene precios por encima de F y B porque tiene mayor colocacion en proporcion. El piso de medianeros subio de 41.960 a 42.320.",
+      "49640": {
+        "solares": [
+          4
+        ],
+        "tipo": "Esquinero. El techo de la manzana."
+      },
+      "46320": {
+        "solares": [
+          6,
+          7,
+          16,
+          17
+        ],
+        "tipo": "Esquineros internos."
+      },
+      "42320": {
+        "solares": [
+          5,
+          15,
+          18,
+          19,
+          20,
+          21
+        ],
+        "tipo": "Medianeros. Piso de la manzana, subido desde 41.960."
+      },
+      "_sin_clasificar": {
+        "solares": [
+          3,
+          12,
+          26,
+          27
+        ],
+        "nota": "Quedaron en su precio actual (45.640, 44.960, 47.960 y 47.960). Falta definir su tipologia."
+      }
+    },
+    "F": {
+      "_nota": "Manzana F, escalera completa y validada.",
+      "49640": {
+        "solares": [
+          1
+        ],
+        "tipo": "Esquinero + vista al parque infantil y area verde. El techo de la manzana."
+      },
+      "45640": {
+        "solares": [
+          2
+        ],
+        "tipo": "Mira al parque pero no es esquinero. Por encima de los medianeros, por debajo del F-1."
+      },
+      "44960": {
+        "solares": [
+          10,
+          11,
+          14
+        ],
+        "tipo": "Esquineros. El 10 y el 11 son esquineros internos porque colindan con el mini parque de la manzana; el 14 es esquinero de borde."
+      },
+      "41960": {
+        "solares": [
+          9,
+          12,
+          13
+        ],
+        "tipo": "Medianeros sin vista privilegiada. Piso de la manzana."
+      }
+    }
+  },
+  "franjas_del_director": [
+    {
+      "id": "B-interior",
+      "manzana": "B",
+      "solares": [
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24
+      ],
+      "precio": 41960,
+      "motivo": "Tramo interior de la manzana B. Lejos de la salida al mar y sin frente a area verde: es el piso de precio del proyecto. Corre desde el B-15 hasta el B-24, donde empieza la franja de salida al mar.",
+      "validacion": "B-21, B-23 y B-25 ya se colocaron a este precio."
+    },
+    {
+      "id": "B-salida-al-mar",
+      "manzana": "B",
+      "solares": [
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33
+      ],
+      "precio": 45760,
+      "motivo": "Mucho mas cercanos a la salida al mar. Desde el B-25 en adelante miran hacia un area verde amplia y quedan cerca de la playa.",
+      "validacion": "B-29 a B-33 ya se vendieron exactamente a este precio."
+    },
+    {
+      "id": "B-esquina-premium",
+      "manzana": "B",
+      "solares": [
+        34
+      ],
+      "precio": 59900,
+      "motivo": "El mejor ubicado de la manzana B: esquina, salida al mar y vista al area verde.",
+      "validacion": "Se vendio a 48.200; si se libera sale a 59.900."
+    }
+  ],
+  "financiamiento": {
+    "entrada_pct": 70,
+    "separa_con": 1000,
+    "firma_pct": 20,
+    "cuotas_pct": 30,
+    "extraordinaria_pct": 4,
+    "extraordinarias_n": 5,
+    "contra_entrega_pct": 30,
+    "vigencia_horas": 48,
+    "nota_legal": "La fachada de cada casa debera respetarse. Financiamiento del terreno SIN INTERESES.",
+    "fecha_entrega": "2030-09",
+    "_plazo_nota": "La fecha de entrega manda; el plazo se deriva de ella. Fijada en 2030-09 el 18-ago-2026, cuando faltaban 49 meses, para que desde septiembre de 2026 corran exactamente 48. Cada mes que pasa es un mes menos y la cuota mensual sube aunque el precio no cambie; ventas lo sabe. NO escribir 'meses' a mano: se calcula.",
+    "meses_al_fijarla": 49
   }
 }
