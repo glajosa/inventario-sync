@@ -245,9 +245,17 @@ if ($vExtraMes2 >= 1 && $vExtraMes2 <= 12) $opts['extraMes2'] = $vExtraMes2;
 // 30 y la cotización salía 35/65 con un préstamo menor al que de verdad necesita.
 $repartoFijo = !empty($modelo['banco']);
 if ($vFinanciar !== '' && !$repartoFijo) $opts['financiarPct'] = (float)$vFinanciar;
-// Parqueo: en una compra de 2+ suites se puede perdonar UNO solo. Apagado por
-// defecto — lo decide el asesor, no se descuenta a espaldas de nadie.
-$sinParqueo = (($_GET['sinparq'] ?? '') === '1');
+// Parqueo: en una compra de 2+ suites se perdona UNO solo. ENCENDIDO por defecto.
+//
+// Estaba apagado, con el argumento de que lo decidiera el asesor. Estaba mal: no es
+// una concesion que se negocia, es la regla del negocio, y el campo del deal ya la
+// venia aplicando sola en `autollenar_ficha`. O sea que el deal decia $138.178 y la
+// cotizacion impresa decia $158.178 por la misma compra. La que estaba fuera de
+// norma era esta pantalla.
+//
+// La casilla sigue existiendo para DESACTIVARLO en el caso raro en que el cliente
+// se lleve los dos parqueos. `sinparq=0` lo apaga; cualquier otra cosa lo deja.
+$sinParqueo = (($_GET['sinparq'] ?? '1') !== '0');
 $dctoParq   = cot_descuento_parqueo($suites, $sinParqueo);
 $pvpFinal   = max(0.0, $pvp - $dctoParq);
 
@@ -795,6 +803,10 @@ $hoy  = new DateTimeImmutable('now');
     <!-- Solo aparece con 2+ suites de Noral Plaza: es el único caso donde la regla existe. -->
     <div class="col2" style="align-self:center">
       <label class="chk-linea">
+        <!-- Va un hidden en 0 delante: un checkbox desmarcado NO se envia, asi que sin
+             esto el formulario no tendria como decir "apagalo" y el descuento seria
+             imposible de quitar. -->
+        <input type="hidden" name="sinparq" value="0">
         <input type="checkbox" name="sinparq" value="1" <?= $sinParqueo ? 'checked' : '' ?>>
         Una unidad sin parqueo <b>(−<?= h(cot_money((float)COT_PARQUEO)) ?>)</b>
       </label>

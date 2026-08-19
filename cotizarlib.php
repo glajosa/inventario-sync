@@ -99,9 +99,15 @@ const COT_PARQUEO = 20000;    // valor de un parqueo de Noral Plaza Suites
  *  parqueo. Se decide por el TIPO DE BIEN, no por el código: los edificios E y F
  *  tienen locales comerciales Y suites, y un local de $237.000 no puede llevarse
  *  el descuento de $20.000 solo por empezar con «E-». */
+// Hoy las 219 suites de Plaza estan tipificadas como "Departamento" y ninguna como
+// "Suite", pero las dos opciones existen en la lista y basta que alguien elija la
+// otra para que esta pantalla dejara de contarla. El campo del deal la contaria
+// igual —el mira el PROYECTO, no el tipo— y las dos cifras se separarian sin que
+// nadie se entere. Se aceptan los dos tipos.
 const COT_TIPO_DEPARTAMENTO = 1793;
+const COT_TIPO_SUITE        = 1797;
 function cot_es_suite(int $categoryId, int $tipo): bool {
-    return $categoryId === 33 && $tipo === COT_TIPO_DEPARTAMENTO;
+    return $categoryId === 33 && in_array($tipo, [COT_TIPO_DEPARTAMENTO, COT_TIPO_SUITE], true);
 }
 
 /** Descuento por parqueo NO obligatorio.
