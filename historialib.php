@@ -36,6 +36,22 @@ function hist_libreta_guardar(array $l): void {
 }
 
 /**
+ * Olvida lo generado para un deal. Se llama al SOLTAR una unidad.
+ *
+ * Sin esto quedaba un hueco: si a un deal se le quita una unidad y despues se le
+ * vuelve a poner la misma, la huella regresa al valor anterior, la libreta dice
+ * "ya generada" y no se genera nada -- pero la historia vieja ya fue retirada del
+ * buzon al desmarcar. Resultado: reserva viva y ninguna historia en ninguna parte.
+ */
+function hist_libreta_olvidar(int $dealId): void {
+    $l = hist_libreta();
+    if (!array_key_exists((string)$dealId, $l)) return;
+    unset($l[(string)$dealId]);
+    hist_libreta_guardar($l);
+    logline("HISTORIA libreta olvida deal=$dealId (se solto una unidad)");
+}
+
+/**
  * Le pide al generador la historia de una unidad. Devuelve la URL o null.
  * El generador traduce el código a su propia nomenclatura y estampa el sello.
  */

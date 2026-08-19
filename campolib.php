@@ -1037,6 +1037,18 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
             $suelta ? 'desmarcar' : 'marcar'
         );
 
+        // Al soltar, el generador retira la historia de esa unidad. Hay que olvidar
+        // la huella del deal o una re-reserva de la MISMA unidad no regeneraria
+        // nada: la libreta diria "ya generada" y la vieja ya no existe.
+        if ($suelta) {
+            try {
+                require_once __DIR__ . '/historialib.php';
+                hist_libreta_olvidar($dealId);
+            } catch (Throwable $e) {
+                logline("deal=$dealId libreta olvidar FALLO: " . $e->getMessage());
+            }
+        }
+
         $campos = [];
         $nuevoStage = null;
 
