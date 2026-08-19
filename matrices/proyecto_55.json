@@ -349,5 +349,64 @@
       "31": "PELICANO_3",
       "32": "PELICANO_3"
     }
+  },
+  "metraje": {
+    "_nota": "m2 de CONSTRUCCION de cada modelo Pelicano. El area del SOLAR es otra cosa y vive en `terreno.areas`: es la que multiplica la tarifa.",
+    "A": {
+      "U": {
+        "PELICANO_3": 100,
+        "PELICANO_1": 114,
+        "PELICANO_2": 120,
+        "PELICANO_4": 150
+      }
+    },
+    "C": {
+      "U": {
+        "PELICANO_3": 100,
+        "PELICANO_1": 114,
+        "PELICANO_2": 120,
+        "PELICANO_4": 150
+      }
+    },
+    "D": {
+      "U": {
+        "PELICANO_3": 100,
+        "PELICANO_1": 114,
+        "PELICANO_2": 120,
+        "PELICANO_4": 150
+      }
+    },
+    "E": {
+      "U": {
+        "PELICANO_3": 100,
+        "PELICANO_1": 114,
+        "PELICANO_2": 120,
+        "PELICANO_4": 150
+      }
+    },
+    "F": {
+      "U": {
+        "PELICANO_3": 100,
+        "PELICANO_1": 114,
+        "PELICANO_2": 120,
+        "PELICANO_4": 150
+      }
+    },
+    "G": {
+      "U": {
+        "PELICANO_3": 100,
+        "PELICANO_1": 114,
+        "PELICANO_2": 120,
+        "PELICANO_4": 150
+      }
+    },
+    "H": {
+      "U": {
+        "PELICANO_3": 100,
+        "PELICANO_1": 114,
+        "PELICANO_2": 120,
+        "PELICANO_4": 150
+      }
+    }
   }
 }

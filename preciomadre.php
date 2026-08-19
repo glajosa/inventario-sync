@@ -371,7 +371,10 @@ $datos = [
     'lanzados'   => mz_edificios($cfg, true),
     'grupos'     => array_combine(mz_edificios($cfg), array_map(fn($e) => mz_grupo_de($cfg, $e), mz_edificios($cfg))),
     'grupoNota'  => array_map(fn($d) => $d['nota'] ?? '', $cfg['grupos']),
-    'metraje'    => array_diff_key($cfg['metraje'], ['_nota' => 1]),
+    // ?? [] y no a secas: Galero Casas no cotiza por metraje de categoria y sin esto
+    // la pantalla entera moria con un TypeError en vez de abrir sin esa columna.
+    'metraje'    => array_diff_key($cfg['metraje'] ?? [], ['_nota' => 1]),
+    'terreno'    => $cfg['terreno'] ?? new stdClass(),
     'precios'    => $px,
     'posiciones' => $cfg['posiciones'],
     'ovUnidad'   => $cfg['overrides_unidad'] ?? new stdClass(),
