@@ -140,10 +140,19 @@ function mz_precios_vigentes(array $cfg): array {
 }
 
 /** Un override de unidad manda sobre el mapa de posiciones. null = sin definir. */
-function mz_categoria_de(array $cfg, string $ed, int $pos, string $unidad = ''): ?string {
+function mz_categoria_de(array $cfg, string $ed, int $pos, string $unidad = '', ?string $niv = null): ?string {
     $ov = $cfg['overrides_unidad'][$unidad] ?? [];
     if (!empty($ov['categoria'])) return (string)$ov['categoria'];
-    $c = $cfg['posiciones'][$ed][(string)$pos] ?? null;
+    $m = $cfg['posiciones'][$ed] ?? [];
+    // La misma posicion significa cosas distintas segun el piso: en Noral Plaza la 6
+    // es oficina en el 2do, local de 30 m2 en el 1ro y local de 69 m2 en planta baja.
+    // Si el edificio trae mapa por nivel, manda ese; si no, el mapa plano de siempre.
+    if ($niv !== null && isset($m[$niv]) && is_array($m[$niv])) {
+        $c = $m[$niv][(string)$pos] ?? null;
+    } else {
+        $c = $m[(string)$pos] ?? null;
+        if (is_array($c)) $c = null;      // mapa por nivel pero sin nivel pedido
+    }
     return $c === null ? null : (string)$c;
 }
 
@@ -167,10 +176,10 @@ function mz_metraje_de(array $cfg, string $ed, int $piso, ?string $cat): ?float 
  */
 function mz_precio_de(array $cfg, array $px, string $ed, int $piso, int $pos): array {
     $u   = "$ed-$piso-$pos";
-    $cat = mz_categoria_de($cfg, $ed, $pos, $u);
+    $niv = mz_nivel_de_piso($cfg, $piso);
+    $cat = mz_categoria_de($cfg, $ed, $pos, $u, $niv);
     if ($cat === null) return [null, null];
     $fuente = (string)($cfg['overrides_unidad'][$u]['sigue_a'] ?? $ed);
-    $niv = mz_nivel_de_piso($cfg, $piso);
     return [$cat, $niv === null ? null : ($px[$fuente][$niv][$cat] ?? null)];
 }
 
@@ -249,7 +258,8 @@ function mz_unidades_cache(array $cfg, int $ttl = 0, ?array &$info = null): arra
         // Sun Bay son solares sin piso: 'B-15', no 'B-1-15'. Se les asigna el piso 1
         // como piso unico para que el resto del motor —que razona en
         // edificio/piso/posicion— no tenga que saber de esta diferencia.
-        if (preg_match('/^([A-Z])-(\d+)$/', $cod, $m2)) $m = [$m2[0], $m2[1], '1', $m2[2]];
+        if (preg_match('/^([A-Z])-(\d+)$/', $cod, $m2))
+            $m = [$m2[0], $m2[1], (string)($cfg['piso_sin_numero'] ?? 1), $m2[2]];
         elseif (!preg_match('/^([A-Z])-(\d+)-(\d+)$/', $cod, $m)) continue;
         // Un pipeline puede mezclar familias: el 33 tiene oficinas, departamentos y
         // locales juntos. La matriz solo manda sobre lo suyo — si el edificio no es
