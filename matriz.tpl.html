@@ -454,10 +454,19 @@ function m2Of(b, flGrp, cat) {
 
 /* Categoria de una unidad. Un override de unidad manda sobre el mapa
    de posiciones del edificio. null en el mapa = aun sin definir. */
+/* El mapa de posiciones puede venir PLANO (una categoria por posicion) o POR NIVEL,
+   cuando la misma posicion significa cosas distintas segun el piso: en Noral Plaza la
+   6 es oficina en el 2do, local de 30 m2 en el 1ro y local de 69 m2 en planta baja. */
+function mapaPos(b, floor) {
+  const m = DATA.posiciones[b] || {};
+  const niv = (FLOORS.find(f => f.num === Number(floor)) || {}).grp;
+  return (niv && m[niv] && typeof m[niv] === 'object') ? m[niv] : m;
+}
 function getCat(pos, b, floor) {
   const ov = DATA.ovUnidad[`${b}-${floor}-${pos}`];
   if (ov && ov.categoria) return ov.categoria;
-  return DATA.posiciones[b][String(pos)] || '?';
+  const c = mapaPos(b, floor)[String(pos)];
+  return (typeof c === 'string' ? c : null) || '?';
 }
 
 /* Precio objetivo. 'sigue_a' hace que la unidad herede la matriz de otro
@@ -538,7 +547,12 @@ function renderFilter() {
   // Solo las categorias que USA el edificio abierto. Noral Plaza tiene 11 en total
   // —4 de oficinas y 7 de monoambientes— y mostrarlas todas en cada edificio llena
   // la barra de filtros que no aplican.
-  const usadas = new Set(Object.values(DATA.posiciones[cur] || {}));
+  const pm = DATA.posiciones[cur] || {};
+  const usadas = new Set();
+  Object.values(pm).forEach(v => {
+    if (typeof v === 'string') usadas.add(v);
+    else if (v && typeof v === 'object') Object.values(v).forEach(x => usadas.add(x));
+  });
   const cods = Object.keys(CATS).filter(c => c !== '?' && (!usadas.size || usadas.has(c)));
   const total = cods.reduce((n,c) => n + (counts[c]||0), 0);
   const btns = [{cat:'all', cls:'cbtn-all', label:'Todas', cnt:total}].concat(
