@@ -1,0 +1,141 @@
+{
+  "_lea_esto_primero": [
+    "GALERO SUITES — condominio G-8. 3 pisos x 8, todas de 30 m2. Entrega inmediata.",
+    "",
+    "El handoff decia 'sin matriz'. Deducida de los precios en Bitrix aparece un patron",
+    "de tres categorias que el piso 3 muestra limpio y el piso 2 repite:",
+    "   posiciones 1 y 5  ·  posiciones 4 y 8  ·  posiciones 2, 3, 6 y 7",
+    "El piso 1 esta por encima porque es el unico CON PATIO.",
+    "",
+    "OJO: solo hay 3 disponibles, asi que la matriz se apoya sobre todo en unidades ya",
+    "colocadas, que conservan su precio de venta. Es una reconstruccion razonable, no",
+    "una regla confirmada por nadie. Antes de aplicar una subida conviene validarla.",
+    "",
+    "Del handoff: las que terminan en 1 no tienen registro de vista y llevan un ventanal",
+    "con distribucion distinta; las que terminan en 8 son esquineras.",
+    "",
+    "Cada celda la define la unidad DISPONIBLE si la hay: refleja la lista vigente. Lo colocado conserva su precio de venta y arrastraria la referencia."
+  ],
+  "version": "2026-08-19",
+  "vigente_desde": "2026-08-19",
+  "proyecto": "Galero Suites",
+  "grupos": {
+    "S": {
+      "edificios": [
+        "S"
+      ],
+      "nota": "Condominio unico de 24 suites."
+    }
+  },
+  "niveles_por_piso": {
+    "1": "P1",
+    "2": "P2",
+    "3": "P3"
+  },
+  "niveles": {
+    "P1": {
+      "pisos": [
+        1
+      ],
+      "etiqueta": "Planta Baja",
+      "nota": "la unica con patio"
+    },
+    "P2": {
+      "pisos": [
+        2
+      ],
+      "etiqueta": "Piso 2"
+    },
+    "P3": {
+      "pisos": [
+        3
+      ],
+      "etiqueta": "Piso 3"
+    }
+  },
+  "categorias": {
+    "VIS": {
+      "etiqueta": "Posiciones 1 y 5",
+      "posiciones": [
+        1,
+        5
+      ],
+      "nota": "La 1 no tiene registro de vista: ventanal y distribución distinta."
+    },
+    "ESQ": {
+      "etiqueta": "Posiciones 4 y 8",
+      "posiciones": [
+        4,
+        8
+      ],
+      "nota": "La 8 es esquinera."
+    },
+    "INT": {
+      "etiqueta": "Interiores",
+      "posiciones": [
+        2,
+        3,
+        6,
+        7
+      ]
+    }
+  },
+  "posiciones": {
+    "S": {
+      "1": "VIS",
+      "2": "INT",
+      "3": "INT",
+      "4": "ESQ",
+      "5": "VIS",
+      "6": "INT",
+      "7": "INT",
+      "8": "ESQ"
+    }
+  },
+  "unidades_por_piso": {
+    "S": 8
+  },
+  "metraje": {
+    "S": {
+      "base": 30,
+      "mayor": 30,
+      "cats_mayor": []
+    }
+  },
+  "precios": {
+    "S": {
+      "P1": {
+        "VIS": 66500,
+        "ESQ": 67050,
+        "INT": 66500
+      },
+      "P2": {
+        "VIS": 65050,
+        "ESQ": 65050,
+        "INT": 60050
+      },
+      "P3": {
+        "VIS": 64500,
+        "ESQ": 65050,
+        "INT": 60050
+      }
+    }
+  },
+  "overrides_unidad": {},
+  "ajustes": {},
+  "exentas": {},
+  "bitrix": {
+    "entityTypeId": 1072,
+    "categoryId": 53,
+    "campo_pvp": "ufCrm25_1784563253861",
+    "campo_m2": "ufCrm25_1782615822688",
+    "campo_precio_m2": "ufCrm25_1784563957669",
+    "etapa_disponible": "DT1072_53:PREPARATION",
+    "etapas_editables": [
+      "DT1072_53:PREPARATION"
+    ]
+  },
+  "_financiamiento_nota": [
+    "30% de entrada + 70% a 20 anios al 7,35%. Entrega inmediata."
+  ]
+}
