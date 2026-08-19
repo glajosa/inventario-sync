@@ -494,14 +494,27 @@ function terrenoDe(uid) {
   return null;   // sin tarifa o sin area no hay precio: no se inventa
 }
 
-function target(b, flGrp, cat, uid) {
-  const ov = uid ? DATA.ovUnidad[uid] : null;
+/* Un solo camino para calcular un precio, parametrizado por la tabla de la que
+   se lee. El simulador compara "antes" (BASE, la matriz intacta) contra "ahora"
+   (DATA.precios, ya simulada): si cada lado usara su propia formula la resta no
+   significa nada. Paso justo eso — el "antes" salia sin el terreno y las 15
+   disponibles de Casas figuraban como si todas fueran a cambiar. */
+function precioCon(px, b, flGrp, cat, uid) {
+  const ov = uid ? (DATA.ovUnidad[uid] || DATA.ovUnidad[cortaDe(uid)]) : null;
   const fuente = (ov && ov.sigue_a) || b;
-  const base = DATA.precios[fuente]?.[flGrp]?.[cat] ?? null;
+  const base = px[fuente]?.[flGrp]?.[cat] ?? null;
   if (base === null || !DATA.terreno || !DATA.terreno.tarifas) return base;
   const suelo = terrenoDe(uid);
   return suelo === null ? null : base + suelo;
 }
+
+/* 'A-1-2' -> 'A-2': la forma corta con que Bitrix nombra los solares. */
+function cortaDe(uid) {
+  const p = String(uid || '').split('-');
+  return p.length === 3 ? `${p[0]}-${p[2]}` : uid;
+}
+
+function target(b, flGrp, cat, uid) { return precioCon(DATA.precios, b, flGrp, cat, uid); }
 
 function fmt(v) {
   return v ? '$'+v.toLocaleString('en-US') : '<span style="color:var(--t3);font-style:italic">\u2014</span>';
@@ -558,7 +571,7 @@ function renderInfo() {
     <div class="ii"><div class="il">Grupo de precio</div>
       <div class="iv" title="${d.t}">${d.g}</div></div>
     <div class="ii"><div class="il">Disponibles</div>
-      <div class="iv" style="color:var(--pri)">${s.D} <span style="font-weight:400;color:var(--t3)">de ${(DATA.uxp[cur]||8)*4}</span></div></div>
+      <div class="iv" style="color:var(--pri)">${s.D} <span style="font-weight:400;color:var(--t3)">de ${(DATA.uxp[cur]||8)*FLOORS.length}</span></div></div>
     <div class="ii"><div class="il">Reservadas · Vendidas</div>
       <div class="iv" style="font-weight:400;color:var(--t2)">${s.R} · ${s.F}</div></div>
     <div class="ii"><div class="il">Metraje</div>
@@ -854,9 +867,7 @@ function simEfecto() {
         const u = `${b}-${fl.num}-${p}`;
         if (ST[u] !== 'D') continue;
         const c = getCat(p, b, fl.num);
-        const ov = DATA.ovUnidad[u] || {};
-        const fuente = ov.sigue_a || b;
-        const base = BASE[fuente] && BASE[fuente][fl.grp] ? BASE[fuente][fl.grp][c] : null;
+        const base = precioCon(BASE, b, fl.grp, c, u);
         const now  = target(b, fl.grp, c, u);
         if (base == null || now == null) continue;
         if (LANZADOS.indexOf(b) < 0) { if (now !== base) fuera++; continue; }
