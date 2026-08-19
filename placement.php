@@ -42,6 +42,18 @@ const PM_TITULO = 'Precios del proyecto';
 const PM_DESC   = 'Matriz de precios: simula una subida por bloque y aplícala';
 const PM_SITIOS = ['CRM_DYNAMIC_1072_LIST_MENU', 'LEFT_MENU'];
 
+/** El buzon de historias. Vive en el servicio del generador (otro contenedor),
+ *  pero el boton se enlaza desde aca porque placement.bind exige contexto de
+ *  APLICACION: con webhook entrante responde WRONG_AUTH_TYPE.
+ *  Va SIN token: las imagenes de `salidas/` ya se sirven publicas por Apache, asi
+ *  que un token en la URL daria seguridad de mentira y ademas dejaria afuera a
+ *  quien abra el enlace directo (sin pasar por el placement, que no arrastra la
+ *  query). Son laminas de marketing, no datos del cliente. */
+const BZ_HANDLER = 'https://galjosa-noral-historias.pwluu1.easypanel.host/buzon.php';
+const BZ_TITULO  = 'Historias nuevas';
+const BZ_DESC    = 'Las historias que se generaron solas al reservar: verlas y descargarlas';
+const BZ_SITIOS  = ['CRM_DYNAMIC_1072_LIST_MENU', 'LEFT_MENU'];
+
 function pm_handler(): string {
     // SIN &cat: el boton abre la portada y la persona elige el proyecto. Con el
     // proyecto clavado en la URL siempre caia en Noral Apartments y no habia forma
@@ -165,6 +177,22 @@ if ($accion === 'poner') {
             'DESCRIPTION' => PM_DESC,
         ]);
         echo "\nbind {$sitio}: " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
+    }
+} elseif ($accion === 'poner-buzon') {
+    foreach (BZ_SITIOS as $sitio) {
+        app_bx('placement.unbind', ['PLACEMENT' => $sitio, 'HANDLER' => BZ_HANDLER]);
+        $r = app_bx('placement.bind', [
+            'PLACEMENT'   => $sitio,
+            'HANDLER'     => BZ_HANDLER,
+            'TITLE'       => BZ_TITULO,
+            'DESCRIPTION' => BZ_DESC,
+        ]);
+        echo "\nbind {$sitio}: " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
+    }
+} elseif ($accion === 'quitar-buzon') {
+    foreach (BZ_SITIOS as $sitio) {
+        $r = app_bx('placement.unbind', ['PLACEMENT' => $sitio, 'HANDLER' => BZ_HANDLER]);
+        echo "\nunbind {$sitio}: " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
     }
 } elseif ($accion === 'quitar-precios') {
     foreach (PM_SITIOS as $sitio) {
