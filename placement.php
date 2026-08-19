@@ -54,6 +54,14 @@ const BZ_TITULO  = 'Historias nuevas';
 const BZ_DESC    = 'Las historias que se generaron solas al reservar: verlas y descargarlas';
 const BZ_SITIOS  = ['CRM_DYNAMIC_1072_LIST_MENU', 'LEFT_MENU'];
 
+/** Ver disponibilidad: los planos con lo vendido, para mandarle al cliente.
+ *  Va aparte de "Precios del proyecto" a proposito: precios es interno y esta
+ *  pantalla es la que el vendedor abre delante del cliente. */
+const DP_HANDLER = 'https://galjosa-noral-historias.pwluu1.easypanel.host/disponibilidad.php';
+const DP_TITULO  = 'Ver disponibilidad';
+const DP_DESC    = 'Los planos con lo vendido al dia: elegir el plano y descargarlo';
+const DP_SITIOS  = ['CRM_DYNAMIC_1072_LIST_MENU', 'LEFT_MENU'];
+
 function pm_handler(): string {
     // SIN &cat: el boton abre la portada y la persona elige el proyecto. Con el
     // proyecto clavado en la URL siempre caia en Noral Apartments y no habia forma
@@ -188,6 +196,22 @@ if ($accion === 'poner') {
             'DESCRIPTION' => BZ_DESC,
         ]);
         echo "\nbind {$sitio}: " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
+    }
+} elseif ($accion === 'poner-disponibilidad') {
+    foreach (DP_SITIOS as $sitio) {
+        app_bx('placement.unbind', ['PLACEMENT' => $sitio, 'HANDLER' => DP_HANDLER]);
+        $r = app_bx('placement.bind', [
+            'PLACEMENT'   => $sitio,
+            'HANDLER'     => DP_HANDLER,
+            'TITLE'       => DP_TITULO,
+            'DESCRIPTION' => DP_DESC,
+        ]);
+        echo "\nbind {$sitio}: " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
+    }
+} elseif ($accion === 'quitar-disponibilidad') {
+    foreach (DP_SITIOS as $sitio) {
+        $r = app_bx('placement.unbind', ['PLACEMENT' => $sitio, 'HANDLER' => DP_HANDLER]);
+        echo "\nunbind {$sitio}: " . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n";
     }
 } elseif ($accion === 'quitar-buzon') {
     foreach (BZ_SITIOS as $sitio) {
