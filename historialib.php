@@ -114,10 +114,17 @@ function hist_al_reservar(string $dealId, ?array $deal = null, bool $forzar = fa
     if (!$forzar && ($lib[$dealId]['huella'] ?? '') === $huella)
         return ['ok' => true, 'motivo' => 'ya generada para estas unidades'];
 
-    $urls = [];
+    // Se deduplica por la CELDA que devuelve el generador, no por el codigo: un
+    // local unido (F-1-13 + F-1-14) son dos registros en Bitrix y una sola celda
+    // F1-13.14 en el plano. Sin esto llegaba la misma imagen dos veces.
+    $urls = []; $vistas = [];
     foreach ($unis as $u) {
         $r = hist_generar_una($u['proy'], $u['cod']);
-        if ($r) $urls[] = ['cod' => $u['cod'], 'url' => $r['url_abs']];
+        if (!$r) continue;
+        $celda = (string)($r['etiqueta'] ?? $u['cod']);
+        if (isset($vistas[$celda])) continue;
+        $vistas[$celda] = true;
+        $urls[] = ['cod' => $celda, 'url' => $r['url_abs']];
     }
     if (!$urls) return ['ok' => false, 'motivo' => 'el generador no devolvio ninguna imagen'];
 

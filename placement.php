@@ -83,6 +83,19 @@ if (($_GET['accion'] ?? '') === 'log') {
     exit;
 }
 
+/** Busca un usuario por correo. Sirve para saber a quien notificar sin pedirle
+ *  el ID a mano. Necesita el scope `user`, que la app tiene desde el 2026-08-15. */
+if (($_GET['accion'] ?? '') === 'quien') {
+    $mail = (string)($_GET['email'] ?? '');
+    $r = app_bx('user.get', ['FILTER' => ['EMAIL' => $mail]]);
+    foreach ((array)($r['result'] ?? []) as $u) {
+        printf("  ID %-8s %s %s  <%s>%s\n", $u['ID'] ?? '?', $u['NAME'] ?? '', $u['LAST_NAME'] ?? '',
+               $u['EMAIL'] ?? '', !empty($u['ACTIVE']) ? '' : '  (inactivo)');
+    }
+    if (isset($r['error'])) echo "  error: {$r['error']}\n";
+    exit;
+}
+
 /** Los códigos DISPONIBLES del portal, filtrados. Sirve para no adivinar dónde
  *  puede vivir un botón: placement.list los devuelve todos (cientos). */
 if (($_GET['accion'] ?? '') === 'disponibles') {
