@@ -771,9 +771,16 @@ function planRows(b) {
   return out;
 }
 
+/* Misma tolerancia que MZ_TOLERANCIA en el motor. Bitrix guarda el PVP redondeado
+   al dolar y la matriz calcula al centavo: comparando exacto, seis solares de
+   Galero Casas figuraban "fuera de matriz" por diferencias de 15 a 40 centavos y
+   el boton de aplicar proponia reescribirlos para no mover nada. */
+const TOL = 1.0;
+const difiere = (a, b) => a != null && b != null && Math.abs(a - b) >= TOL;
+
 function resumenEdificio(b) {
   const r = planRows(b);
-  const cam = r.filter(x => x.act!=null && x.tgt!=null && x.tgt!==x.act);
+  const cam = r.filter(x => difiere(x.tgt, x.act));
   return {
     b, disp: r.length, cambian: cam.length,
     neto: cam.reduce((s,x)=>s+(x.tgt-x.act),0),
@@ -870,9 +877,9 @@ function simEfecto() {
         const base = precioCon(BASE, b, fl.grp, c, u);
         const now  = target(b, fl.grp, c, u);
         if (base == null || now == null) continue;
-        if (LANZADOS.indexOf(b) < 0) { if (now !== base) fuera++; continue; }
+        if (LANZADOS.indexOf(b) < 0) { if (difiere(now, base)) fuera++; continue; }
         antes += base; desp += now;
-        if (now !== base) n++;
+        if (difiere(now, base)) n++;
       }
     });
   });
