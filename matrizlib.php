@@ -180,7 +180,43 @@ function mz_precio_de(array $cfg, array $px, string $ed, int $piso, int $pos): a
     $cat = mz_categoria_de($cfg, $ed, $pos, $u, $niv);
     if ($cat === null) return [null, null];
     $fuente = (string)($cfg['overrides_unidad'][$u]['sigue_a'] ?? $ed);
-    return [$cat, $niv === null ? null : ($px[$fuente][$niv][$cat] ?? null)];
+    $base = $niv === null ? null : ($px[$fuente][$niv][$cat] ?? null);
+    if ($base === null) return [$cat, null];
+    // En los proyectos sin bloque `terreno` esto es 0 y el precio es la celda pelada.
+    $suelo = isset($cfg['terreno']) ? mz_terreno_de($cfg, $ed, $pos, $u) : 0.0;
+    return [$cat, $suelo === null ? null : $base + $suelo];
+}
+
+/**
+ * Sumando propio de la unidad, para los proyectos donde el precio es
+ * `terreno + construccion` en vez de una celda de la matriz.
+ *
+ * Galero Casas: cada solar tiene su tarifa de $/m2 y su area, y encima va el monto
+ * FIJO del modelo de casa — que si vive en la matriz, porque es lo que la direccion
+ * sube o baja. Sin este sumando habria que inventar una categoria por solar (105) y
+ * la pantalla dejaria de servir para lo unico que sirve: mover precios por bloque.
+ *
+ * El area se guarda AQUI y no se lee del SPA a proposito: el campo m2 de Bitrix ya
+ * trajo `H-21` con 300 en vez de 159,40, y con ese dato el solar habria cotizado
+ * $215.000 en lugar de $155.245. La matriz no puede depender de un campo que ya
+ * demostro que se equivoca.
+ *
+ * Devuelve 0 en los proyectos que no declaran `terreno`, que son todos menos Casas.
+ */
+function mz_terreno_de(array $cfg, string $ed, int $pos, string $unidad): ?float {
+    $t = $cfg['terreno'] ?? null;
+    if (!is_array($t)) return 0.0;
+    // Se busca por el codigo del solar ('A-2', que es como lo escribe Bitrix y como
+    // lo lee una persona) y, si no, por la clave interna con piso ('A-1-2').
+    foreach (["$ed-$pos", $unidad] as $k) {
+        if (isset($t['tarifas'][$k], $t['areas'][$k]))
+            return round((float)$t['areas'][$k] * (float)$t['tarifas'][$k], 2);
+    }
+    // Sin tarifa o sin area NO hay precio. Devolver 0 aqui seria cotizar el solar en
+    // el puro monto de la casa: $87.500 por un terreno de $70.000, y con cara de
+    // numero calculado. Los colocados caen por aqui y no se recalculan, que es lo
+    // correcto: conservan su precio historico.
+    return null;
 }
 
 /**
@@ -258,8 +294,13 @@ function mz_unidades_cache(array $cfg, int $ttl = 0, ?array &$info = null): arra
         // Sun Bay son solares sin piso: 'B-15', no 'B-1-15'. Se les asigna el piso 1
         // como piso unico para que el resto del motor —que razona en
         // edificio/piso/posicion— no tenga que saber de esta diferencia.
+        // Las torres de Galero pegan el piso a la letra: 'C1-1' es edificio C, piso 1,
+        // posicion 1 — no 'C-1-1'. Las tres formas son disjuntas entre si (ninguna
+        // cadena calza con dos), asi que conviven sin bandera de configuracion.
         if (preg_match('/^([A-Z])-(\d+)$/', $cod, $m2))
             $m = [$m2[0], $m2[1], (string)($cfg['piso_sin_numero'] ?? 1), $m2[2]];
+        elseif (preg_match('/^([A-Z])(\d+)-(\d+)$/', $cod, $m3))
+            $m = [$m3[0], $m3[1], $m3[2], $m3[3]];
         elseif (!preg_match('/^([A-Z])-(\d+)-(\d+)$/', $cod, $m)) continue;
         // Un pipeline puede mezclar familias: el 33 tiene oficinas, departamentos y
         // locales juntos. La matriz solo manda sobre lo suyo — si el edificio no es

@@ -1,0 +1,353 @@
+{
+  "_lea_esto_primero": [
+    "Galero Casas · categoria 55. El precio NO es una celda de la matriz: es TERRENO + CASA.",
+    "  terreno = area del solar x su tarifa propia de $/m2  (bloque `terreno`, abajo)",
+    "  casa    = monto FIJO del modelo Pelicano             (bloque `precios`, la matriz)",
+    "Lo que se sube o baja desde esta pantalla es la CONSTRUCCION. El terreno es del solar",
+    "y no se mueve por bloque: cada uno tiene su tarifa, de $360 (A-2) a $430 (H-22).",
+    "",
+    "Todo solar disponible se vende CON casa, nunca pelado. El SPA guarda un solo PVP y el",
+    "precio real depende del modelo que elija el cliente, asi que por criterio de la direccion",
+    "se carga el total con PELICANO 3: la casa mas chica, o sea el piso real del solar. El",
+    "asesor nunca cotiza por debajo. Cuando existan en el SPA los campos 'Modelo de casa',",
+    "'Precio terreno' y 'Precio construccion', el PVP pasa a calcularse y esto se retira.",
+    "",
+    "Si un solar se vende con otro modelo, se le pone su categoria en `overrides_unidad`",
+    "y el precio se recalcula solo. F-7 y G-7 SOLO admiten Pelicano 3: su terreno no llega",
+    "a 18 m de profundidad. Estan bloqueados con override.",
+    "",
+    "Las AREAS viven aqui y no se leen del SPA: el campo m2 de Bitrix trajo H-21 con 300 en",
+    "vez de 159,40 y habria cotizado $215.000 en lugar de $155.245.",
+    "",
+    "El Pelicano 2 va a $860/m2 y no a $875 como los otros tres: no lleva el bano completo",
+    "extra de la Pelicano 1. El Pelicano 3 se sostiene en 875 pese a ser la mas chica. Son",
+    "DECISIONES de la direccion, no errores de redondeo. No 'corregirlas'.",
+    "",
+    "Solo hay tarifa de terreno para los solares DISPONIBLES: son los unicos que el motor",
+    "toca. Los colocados conservan su precio historico y no se recalculan.",
+    "No existe manzana B (ahi iran departamentos). G-8 son las Galero Suites, categoria 53."
+  ],
+  "proyecto": "Galero Casas",
+  "version": "2026-08-19",
+  "bitrix": {
+    "entityTypeId": 1072,
+    "categoryId": 55,
+    "campo_pvp": "ufCrm25_1784563253861",
+    "campo_m2": "ufCrm25_1782615822688"
+  },
+  "piso_sin_numero": 1,
+  "grupos": {
+    "A": {
+      "etiqueta": "Manzana A",
+      "edificios": [
+        "A"
+      ]
+    },
+    "C": {
+      "etiqueta": "Manzana C",
+      "edificios": [
+        "C"
+      ]
+    },
+    "D": {
+      "etiqueta": "Manzana D",
+      "edificios": [
+        "D"
+      ]
+    },
+    "E": {
+      "etiqueta": "Manzana E",
+      "edificios": [
+        "E"
+      ]
+    },
+    "F": {
+      "etiqueta": "Manzana F",
+      "edificios": [
+        "F"
+      ]
+    },
+    "G": {
+      "etiqueta": "Manzana G",
+      "edificios": [
+        "G"
+      ]
+    },
+    "H": {
+      "etiqueta": "Manzana H",
+      "edificios": [
+        "H"
+      ]
+    }
+  },
+  "niveles": {
+    "U": {
+      "etiqueta": "Solares",
+      "pisos": [
+        1
+      ]
+    }
+  },
+  "niveles_por_piso": {
+    "1": "U"
+  },
+  "categorias": {
+    "PELICANO_3": {
+      "etiqueta": "Pelícano 3",
+      "nota": "La mas pequenia. Se sostiene en 875 a proposito: siendo la mas chica se le puede sacar mas por m2."
+    },
+    "PELICANO_1": {
+      "etiqueta": "Pelícano 1",
+      "nota": "Tres dormitorios, dos plantas. Lleva un bano completo adicional que la 2 no tiene."
+    },
+    "PELICANO_2": {
+      "etiqueta": "Pelícano 2",
+      "nota": "La unica a 860 y no a 875. Es deliberado: no lleva el bano completo adicional de la 1, asi que cuesta menos por m2 construirla. NO es un error."
+    },
+    "PELICANO_4": {
+      "etiqueta": "Pelícano 4",
+      "nota": "La mas grande."
+    }
+  },
+  "unidades_por_piso": {
+    "A": 8,
+    "C": 14,
+    "D": 9,
+    "E": 18,
+    "F": 14,
+    "G": 10,
+    "H": 32
+  },
+  "precios": {
+    "A": {
+      "U": {
+        "PELICANO_3": 87500,
+        "PELICANO_1": 99750,
+        "PELICANO_2": 103200,
+        "PELICANO_4": 131250
+      }
+    },
+    "C": {
+      "U": {
+        "PELICANO_3": 87500,
+        "PELICANO_1": 99750,
+        "PELICANO_2": 103200,
+        "PELICANO_4": 131250
+      }
+    },
+    "D": {
+      "U": {
+        "PELICANO_3": 87500,
+        "PELICANO_1": 99750,
+        "PELICANO_2": 103200,
+        "PELICANO_4": 131250
+      }
+    },
+    "E": {
+      "U": {
+        "PELICANO_3": 87500,
+        "PELICANO_1": 99750,
+        "PELICANO_2": 103200,
+        "PELICANO_4": 131250
+      }
+    },
+    "F": {
+      "U": {
+        "PELICANO_3": 87500,
+        "PELICANO_1": 99750,
+        "PELICANO_2": 103200,
+        "PELICANO_4": 131250
+      }
+    },
+    "G": {
+      "U": {
+        "PELICANO_3": 87500,
+        "PELICANO_1": 99750,
+        "PELICANO_2": 103200,
+        "PELICANO_4": 131250
+      }
+    },
+    "H": {
+      "U": {
+        "PELICANO_3": 87500,
+        "PELICANO_1": 99750,
+        "PELICANO_2": 103200,
+        "PELICANO_4": 131250
+      }
+    }
+  },
+  "terreno": {
+    "_nota": "terreno = areas[solar] x tarifas[solar]. Solo los disponibles tienen tarifa.",
+    "tarifas": {
+      "A-2": 360,
+      "C-14": 380,
+      "D-6": 365,
+      "E-2": 385,
+      "E-5": 385,
+      "F-3": 390,
+      "F-4": 390,
+      "F-7": 410,
+      "G-6": 395,
+      "G-7": 395,
+      "H-11": 405,
+      "H-14": 405,
+      "H-20": 425,
+      "H-21": 425,
+      "H-22": 430
+    },
+    "areas": {
+      "A-2": 198.0,
+      "C-14": 204.34,
+      "D-6": 175.51,
+      "E-2": 176.0,
+      "E-5": 176.0,
+      "F-3": 176.0,
+      "F-4": 176.0,
+      "F-7": 143.14,
+      "G-6": 176.0,
+      "G-7": 143.13,
+      "H-11": 166.63,
+      "H-14": 171.8,
+      "H-20": 161.4,
+      "H-21": 159.4,
+      "H-22": 158.79
+    }
+  },
+  "overrides_unidad": {
+    "F-7": {
+      "categoria": "PELICANO_3",
+      "nota": "Solo admite Pelicano 3: ~143 m2 y menos de 18 m de profundidad."
+    },
+    "G-7": {
+      "categoria": "PELICANO_3",
+      "nota": "Solo admite Pelicano 3: ~143 m2 y menos de 18 m de profundidad."
+    }
+  },
+  "exentas": {
+    "H-32": "De Luis Barek (familia duenia), comprada en enero de 2020. No esta en venta. El 19-ago-2026 aparecia DISPONIBLE con PVP 0 en el SPA: el director la habia dejado FIRMADO el 18. La matriz no la toca hasta que alguien confirme la etapa."
+  },
+  "etapas_editables": [
+    "DISPONIBLE"
+  ],
+  "posiciones": {
+    "A": {
+      "1": "PELICANO_3",
+      "2": "PELICANO_3",
+      "3": "PELICANO_3",
+      "4": "PELICANO_3",
+      "5": "PELICANO_3",
+      "6": "PELICANO_3",
+      "7": "PELICANO_3",
+      "8": "PELICANO_3"
+    },
+    "C": {
+      "1": "PELICANO_3",
+      "2": "PELICANO_3",
+      "3": "PELICANO_3",
+      "4": "PELICANO_3",
+      "5": "PELICANO_3",
+      "6": "PELICANO_3",
+      "7": "PELICANO_3",
+      "8": "PELICANO_3",
+      "9": "PELICANO_3",
+      "10": "PELICANO_3",
+      "11": "PELICANO_3",
+      "12": "PELICANO_3",
+      "13": "PELICANO_3",
+      "14": "PELICANO_3"
+    },
+    "D": {
+      "1": "PELICANO_3",
+      "2": "PELICANO_3",
+      "3": "PELICANO_3",
+      "4": "PELICANO_3",
+      "5": "PELICANO_3",
+      "6": "PELICANO_3",
+      "7": "PELICANO_3",
+      "8": "PELICANO_3",
+      "9": "PELICANO_3"
+    },
+    "E": {
+      "1": "PELICANO_3",
+      "2": "PELICANO_3",
+      "3": "PELICANO_3",
+      "4": "PELICANO_3",
+      "5": "PELICANO_3",
+      "6": "PELICANO_3",
+      "7": "PELICANO_3",
+      "8": "PELICANO_3",
+      "9": "PELICANO_3",
+      "10": "PELICANO_3",
+      "11": "PELICANO_3",
+      "12": "PELICANO_3",
+      "13": "PELICANO_3",
+      "14": "PELICANO_3",
+      "15": "PELICANO_3",
+      "16": "PELICANO_3",
+      "17": "PELICANO_3",
+      "18": "PELICANO_3"
+    },
+    "F": {
+      "1": "PELICANO_3",
+      "2": "PELICANO_3",
+      "3": "PELICANO_3",
+      "4": "PELICANO_3",
+      "5": "PELICANO_3",
+      "6": "PELICANO_3",
+      "7": "PELICANO_3",
+      "8": "PELICANO_3",
+      "9": "PELICANO_3",
+      "10": "PELICANO_3",
+      "11": "PELICANO_3",
+      "12": "PELICANO_3",
+      "13": "PELICANO_3",
+      "14": "PELICANO_3"
+    },
+    "G": {
+      "1": "PELICANO_3",
+      "2": "PELICANO_3",
+      "3": "PELICANO_3",
+      "4": "PELICANO_3",
+      "5": "PELICANO_3",
+      "6": "PELICANO_3",
+      "7": "PELICANO_3",
+      "8": "PELICANO_3",
+      "9": "PELICANO_3",
+      "10": "PELICANO_3"
+    },
+    "H": {
+      "1": "PELICANO_3",
+      "2": "PELICANO_3",
+      "3": "PELICANO_3",
+      "4": "PELICANO_3",
+      "5": "PELICANO_3",
+      "6": "PELICANO_3",
+      "7": "PELICANO_3",
+      "8": "PELICANO_3",
+      "9": "PELICANO_3",
+      "10": "PELICANO_3",
+      "11": "PELICANO_3",
+      "12": "PELICANO_3",
+      "13": "PELICANO_3",
+      "14": "PELICANO_3",
+      "15": "PELICANO_3",
+      "16": "PELICANO_3",
+      "17": "PELICANO_3",
+      "18": "PELICANO_3",
+      "19": "PELICANO_3",
+      "20": "PELICANO_3",
+      "21": "PELICANO_3",
+      "22": "PELICANO_3",
+      "23": "PELICANO_3",
+      "24": "PELICANO_3",
+      "25": "PELICANO_3",
+      "26": "PELICANO_3",
+      "27": "PELICANO_3",
+      "28": "PELICANO_3",
+      "29": "PELICANO_3",
+      "30": "PELICANO_3",
+      "31": "PELICANO_3",
+      "32": "PELICANO_3"
+    }
+  }
+}
