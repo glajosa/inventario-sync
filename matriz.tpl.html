@@ -535,7 +535,11 @@ function renderFilter() {
   const counts = getCounts(cur);
   // Un boton por categoria del proyecto y el total salen de los datos: estaban
   // escritos a mano con las 4 de Apartments y un 32 fijo que en Plaza es 36.
-  const cods = Object.keys(CATS).filter(c => c !== '?');
+  // Solo las categorias que USA el edificio abierto. Noral Plaza tiene 11 en total
+  // —4 de oficinas y 7 de monoambientes— y mostrarlas todas en cada edificio llena
+  // la barra de filtros que no aplican.
+  const usadas = new Set(Object.values(DATA.posiciones[cur] || {}));
+  const cods = Object.keys(CATS).filter(c => c !== '?' && (!usadas.size || usadas.has(c)));
   const total = cods.reduce((n,c) => n + (counts[c]||0), 0);
   const btns = [{cat:'all', cls:'cbtn-all', label:'Todas', cnt:total}].concat(
     cods.map(c => ({cat:c, cls:'cbtn-'+CATS[c].pfx, label:CATS[c].label, cnt:counts[c]||0})));

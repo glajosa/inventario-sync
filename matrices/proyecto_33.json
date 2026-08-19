@@ -16,25 +16,63 @@
   "version": "2026-08-18",
   "vigente_desde": "2026-08-18",
   "proyecto": "Noral Plaza — Oficinas",
-
   "grupos": {
     "ABC": {
-      "edificios": ["A", "B", "C"],
+      "edificios": [
+        "A",
+        "B",
+        "C"
+      ],
       "nota": "Los tres edificios comparten exactamente la misma matriz. Verificado: A-4-1 y B-4-6 valen lo mismo."
+    },
+    "D": {
+      "edificios": [
+        "D"
+      ],
+      "nota": "Matriz del archivo _matriz_D.json de Javier. Edificio BLOQUEADO por directiva."
+    },
+    "E": {
+      "edificios": [
+        "E"
+      ],
+      "nota": "Deducida de los precios vigentes en Bitrix (87 de 126 unidades ya la siguen)."
+    },
+    "F": {
+      "edificios": [
+        "F"
+      ],
+      "nota": "Deducida de los precios vigentes en Bitrix. Sus esquineros coinciden con los de D."
     }
   },
-
   "_niveles_nota": [
     "Cada piso es su propio nivel: el 3ro sube sobre el 2do y el 4to sobre el 3ro.",
     "No se agrupan como en Apartments, donde el 2 y el 3 comparten precio."
   ],
-  "niveles_por_piso": { "2": "P2", "3": "P3", "4": "P4" },
-  "niveles": {
-    "P2": { "pisos": [2], "etiqueta": "2do Piso" },
-    "P3": { "pisos": [3], "etiqueta": "3er Piso" },
-    "P4": { "pisos": [4], "etiqueta": "4to Piso" }
+  "niveles_por_piso": {
+    "2": "P2",
+    "3": "P3",
+    "4": "P4"
   },
-
+  "niveles": {
+    "P2": {
+      "pisos": [
+        2
+      ],
+      "etiqueta": "2do Piso"
+    },
+    "P3": {
+      "pisos": [
+        3
+      ],
+      "etiqueta": "3er Piso"
+    },
+    "P4": {
+      "pisos": [
+        4
+      ],
+      "etiqueta": "4to Piso"
+    }
+  },
   "_posiciones_nota": [
     "Dos ejes que se cruzan y definen las cuatro categorias.",
     "",
@@ -51,56 +89,440 @@
     "precio por m2: la diferencia de precio es solo de tamano."
   ],
   "categorias": {
-    "EC": { "etiqueta": "Esquinero · central", "posiciones": [1, 6],  "nota": "58 m2, vista al parque central. El techo del piso." },
-    "MC": { "etiqueta": "Medianero · central", "posiciones": [2, 3, 4, 5], "nota": "50 m2, vista al parque central." },
-    "EL": { "etiqueta": "Esquinero · lineal",  "posiciones": [7, 12], "nota": "58 m2, vista al parque lineal." },
-    "ML": { "etiqueta": "Medianero · lineal",  "posiciones": [8, 9, 10, 11], "nota": "50 m2, vista al parque lineal. El piso de precio." }
+    "EC": {
+      "etiqueta": "Esquinero · central",
+      "posiciones": [
+        1,
+        6
+      ],
+      "nota": "58 m2, vista al parque central. El techo del piso."
+    },
+    "MC": {
+      "etiqueta": "Medianero · central",
+      "posiciones": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "nota": "50 m2, vista al parque central."
+    },
+    "EL": {
+      "etiqueta": "Esquinero · lineal",
+      "posiciones": [
+        7,
+        12
+      ],
+      "nota": "58 m2, vista al parque lineal."
+    },
+    "ML": {
+      "etiqueta": "Medianero · lineal",
+      "posiciones": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "nota": "50 m2, vista al parque lineal. El piso de precio."
+    },
+    "E3C": {
+      "etiqueta": "Esq. externo · central",
+      "posiciones": [
+        1
+      ],
+      "nota": "32,5 m². Esquina hacia la garita."
+    },
+    "E2C": {
+      "etiqueta": "Esq. externo 2 · central",
+      "posiciones": [
+        12
+      ],
+      "nota": "32,5 m². Esquina hacia el colindante."
+    },
+    "E1C": {
+      "etiqueta": "Esq. interno · central",
+      "posiciones": [
+        6,
+        7
+      ],
+      "nota": "31 m². Flanquean el núcleo."
+    },
+    "E3L": {
+      "etiqueta": "Esq. externo · lineal",
+      "posiciones": [
+        13
+      ],
+      "nota": "32,5 m²."
+    },
+    "E2L": {
+      "etiqueta": "Esq. externo 2 · lineal",
+      "posiciones": [
+        24
+      ],
+      "nota": "32,5 m²."
+    },
+    "E1L": {
+      "etiqueta": "Esq. interno · lineal",
+      "posiciones": [
+        18,
+        19
+      ],
+      "nota": "31 m²."
+    },
+    "U25": {
+      "etiqueta": "Unidad del vacío central",
+      "posiciones": [
+        25
+      ],
+      "nota": "35 m². Solo 4to piso."
+    }
   },
   "posiciones": {
-    "A": {"1":"EC","2":"MC","3":"MC","4":"MC","5":"MC","6":"EC","7":"EL","8":"ML","9":"ML","10":"ML","11":"ML","12":"EL"},
-    "B": {"1":"EC","2":"MC","3":"MC","4":"MC","5":"MC","6":"EC","7":"EL","8":"ML","9":"ML","10":"ML","11":"ML","12":"EL"},
-    "C": {"1":"EC","2":"MC","3":"MC","4":"MC","5":"MC","6":"EC","7":"EL","8":"ML","9":"ML","10":"ML","11":"ML","12":"EL"}
+    "A": {
+      "1": "EC",
+      "2": "MC",
+      "3": "MC",
+      "4": "MC",
+      "5": "MC",
+      "6": "EC",
+      "7": "EL",
+      "8": "ML",
+      "9": "ML",
+      "10": "ML",
+      "11": "ML",
+      "12": "EL"
+    },
+    "B": {
+      "1": "EC",
+      "2": "MC",
+      "3": "MC",
+      "4": "MC",
+      "5": "MC",
+      "6": "EC",
+      "7": "EL",
+      "8": "ML",
+      "9": "ML",
+      "10": "ML",
+      "11": "ML",
+      "12": "EL"
+    },
+    "C": {
+      "1": "EC",
+      "2": "MC",
+      "3": "MC",
+      "4": "MC",
+      "5": "MC",
+      "6": "EC",
+      "7": "EL",
+      "8": "ML",
+      "9": "ML",
+      "10": "ML",
+      "11": "ML",
+      "12": "EL"
+    },
+    "D": {
+      "1": "E3C",
+      "12": "E2C",
+      "6": "E1C",
+      "7": "E1C",
+      "13": "E3L",
+      "24": "E2L",
+      "18": "E1L",
+      "19": "E1L",
+      "25": "U25",
+      "2": "MC",
+      "3": "MC",
+      "4": "MC",
+      "5": "MC",
+      "8": "MC",
+      "9": "MC",
+      "10": "MC",
+      "11": "MC",
+      "14": "ML",
+      "15": "ML",
+      "16": "ML",
+      "17": "ML",
+      "20": "ML",
+      "21": "ML",
+      "22": "ML",
+      "23": "ML"
+    },
+    "E": {
+      "1": "E3C",
+      "12": "E2C",
+      "6": "E1C",
+      "7": "E1C",
+      "13": "E3L",
+      "24": "E2L",
+      "18": "E1L",
+      "19": "E1L",
+      "25": "U25",
+      "2": "MC",
+      "3": "MC",
+      "4": "MC",
+      "5": "MC",
+      "8": "MC",
+      "9": "MC",
+      "10": "MC",
+      "11": "MC",
+      "14": "ML",
+      "15": "ML",
+      "16": "ML",
+      "17": "ML",
+      "20": "ML",
+      "21": "ML",
+      "22": "ML",
+      "23": "ML"
+    },
+    "F": {
+      "1": "E3C",
+      "12": "E2C",
+      "6": "E1C",
+      "7": "E1C",
+      "13": "E3L",
+      "24": "E2L",
+      "18": "E1L",
+      "19": "E1L",
+      "25": "U25",
+      "2": "MC",
+      "3": "MC",
+      "4": "MC",
+      "5": "MC",
+      "8": "MC",
+      "9": "MC",
+      "10": "MC",
+      "11": "MC",
+      "14": "ML",
+      "15": "ML",
+      "16": "ML",
+      "17": "ML",
+      "20": "ML",
+      "21": "ML",
+      "22": "ML",
+      "23": "ML"
+    }
   },
-  "unidades_por_piso": { "A": 12, "B": 12, "C": 12 },
-
+  "unidades_por_piso": {
+    "A": 12,
+    "B": 12,
+    "C": 12,
+    "D": 25,
+    "E": 25,
+    "F": 25
+  },
   "metraje": {
-    "ABC": { "base": 50, "mayor": 58, "cats_mayor": ["EC", "EL"] }
+    "ABC": {
+      "base": 50,
+      "mayor": 58,
+      "cats_mayor": [
+        "EC",
+        "EL"
+      ]
+    },
+    "D": {
+      "base": 31,
+      "mayor": 32.5,
+      "cats_mayor": [
+        "E3C",
+        "E2C",
+        "E3L",
+        "E2L"
+      ]
+    },
+    "E": {
+      "base": 31,
+      "mayor": 32.5,
+      "cats_mayor": [
+        "E3C",
+        "E2C",
+        "E3L",
+        "E2L"
+      ]
+    },
+    "F": {
+      "base": 31,
+      "mayor": 32.5,
+      "cats_mayor": [
+        "E3C",
+        "E2C",
+        "E3L",
+        "E2L"
+      ]
+    }
   },
-
   "_precios_nota": [
     "La vista al parque central vale mas que la del lineal en los tres pisos,",
     "y cada piso sube sobre el anterior. Ninguna categoria baja nunca."
   ],
   "precios": {
     "ABC": {
-      "P2": { "EC": 153700, "MC": 132500, "EL": 144420, "ML": 125500 },
-      "P3": { "EC": 156020, "MC": 134500, "EL": 150220, "ML": 129500 },
-      "P4": { "EC": 167620, "MC": 144500, "EL": 161820, "ML": 139500 }
+      "P2": {
+        "EC": 153700,
+        "MC": 132500,
+        "EL": 144420,
+        "ML": 125500
+      },
+      "P3": {
+        "EC": 156020,
+        "MC": 134500,
+        "EL": 150220,
+        "ML": 129500
+      },
+      "P4": {
+        "EC": 167620,
+        "MC": 144500,
+        "EL": 161820,
+        "ML": 139500
+      }
+    },
+    "D": {
+      "P2": {
+        "E3C": 87088,
+        "E2C": 84088,
+        "E1C": 83345,
+        "MC": 82345,
+        "E3L": 76613,
+        "E2L": 76613,
+        "E1L": 75215,
+        "ML": 74215
+      },
+      "P3": {
+        "E3C": 91338,
+        "E2C": 87338,
+        "E1C": 86445,
+        "MC": 85445,
+        "E3L": 80863,
+        "E2L": 80863,
+        "E1L": 78315,
+        "ML": 77315
+      },
+      "P4": {
+        "E3C": 92338,
+        "E2C": 89338,
+        "E1C": 85445,
+        "MC": 84445,
+        "E3L": 84863,
+        "E2L": 82863,
+        "E1L": 80315,
+        "ML": 79315,
+        "U25": 93760
+      }
+    },
+    "E": {
+      "P2": {
+        "E3C": 79837,
+        "E2C": 80838,
+        "E1C": 83345,
+        "MC": 77245,
+        "E3L": 72990,
+        "E2L": 74337,
+        "E1L": 72990,
+        "ML": 70990
+      },
+      "P3": {
+        "E3C": 87338,
+        "E1C": 82345,
+        "MC": 80345,
+        "E3L": 80863,
+        "E2L": 80863,
+        "E1L": 77315,
+        "ML": 76315
+      },
+      "P4": {
+        "E3C": 88338,
+        "E2C": 85838,
+        "E1C": 85445,
+        "MC": 85445,
+        "E3L": 84863,
+        "E2L": 82863,
+        "E1L": 80315,
+        "ML": 78865,
+        "U25": 93760
+      }
+    },
+    "F": {
+      "P2": {
+        "E3C": 87088,
+        "E2C": 84088,
+        "E1C": 82345,
+        "MC": 76245,
+        "E3L": 76613,
+        "E2L": 76613,
+        "E1L": 75215,
+        "ML": 73215
+      },
+      "P3": {
+        "E3C": 91338,
+        "E2C": 87338,
+        "E1C": 86445,
+        "MC": 83450,
+        "E3L": 76613,
+        "E2L": 79863,
+        "E1L": 78315,
+        "ML": 76315
+      },
+      "P4": {
+        "E3C": 92338,
+        "E2C": 89338,
+        "E1C": 84445,
+        "MC": 85445,
+        "E3L": 83863,
+        "E2L": 82863,
+        "E1L": 80315,
+        "ML": 77315,
+        "U25": 92760
+      }
     }
   },
-
   "_nucleo_entre_nota": [
     "El ascensor y las escaleras parten cada cara por el medio: entre la 3 y la 4",
     "del lado central, y entre la 9 y la 10 del lineal. Por eso esos dos pares NO",
     "se pueden unir."
   ],
-  "nucleo_entre": [[3, 4], [9, 10]],
-
+  "nucleo_entre": [
+    [
+      3,
+      4
+    ],
+    [
+      9,
+      10
+    ]
+  ],
   "_combos_nota": [
     "Oficinas de 100 m2: salen de unir DOS MEDIANEROS CONTIGUOS del mismo lado del",
     "nucleo. Solo hay cuatro pares posibles por piso — 2+3, 4+5, 8+9 y 10+11 —",
     "porque el nucleo corta entre la 3 y la 4 y entre la 9 y la 10."
   ],
   "combos": {
-    "pares_validos": [[2,3],[4,5],[8,9],[10,11]],
+    "pares_validos": [
+      [
+        2,
+        3
+      ],
+      [
+        4,
+        5
+      ],
+      [
+        8,
+        9
+      ],
+      [
+        10,
+        11
+      ]
+    ],
     "metraje": 100,
-    "precio": { "P2": 249000, "P3": 259000, "P4": 279000 }
+    "precio": {
+      "P2": 249000,
+      "P3": 259000,
+      "P4": 279000
+    }
   },
-
   "overrides_unidad": {},
   "ajustes": {},
   "exentas": [],
-
   "bitrix": {
     "entityTypeId": 1072,
     "categoryId": 33,
@@ -109,6 +531,21 @@
     "campo_precio_m2": "ufCrm25_1784563957669",
     "etapa_disponible": "DT1072_33:NEW",
     "_nota": "En el pipeline 33 DISPONIBLE es ':NEW'. ':PREPARATION' es RESERVADO. Solo se escribe sobre disponibles.",
-    "etapas_editables": ["DT1072_33:NEW"]
-  }
+    "etapas_editables": [
+      "DT1072_33:NEW"
+    ]
+  },
+  "_monoambientes_nota": [
+    "Edificios D, E y F pisos 2-4: MONOAMBIENTES (31 / 32,5 / 35 m2), no oficinas.",
+    "",
+    "Cada edificio tiene su matriz propia. La de D viene del archivo de Javier; las de",
+    "E y F se DEDUJERON de los precios vigentes en Bitrix, no de un documento.",
+    "",
+    "Comparten estructura: los esquineros de D y F son identicos piso por piso. Las",
+    "diferencias estan en medianeros y esquineros internos. Falta que alguien decida",
+    "si los tres edificios deben compartir una sola matriz.",
+    "",
+    "OJO con los COMBOS: 62 m2 = 2 unidades unidas, 93 m2 = 3. Valen (N x base) - 20.000",
+    "por el parqueo que se pierde. No entran en la matriz: tienen su propio metraje."
+  ]
 }
