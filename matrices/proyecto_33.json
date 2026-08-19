@@ -29,7 +29,7 @@
       "edificios": [
         "D"
       ],
-      "nota": "Matriz del archivo _matriz_D.json de Javier. Edificio BLOQUEADO por directiva."
+      "nota": "SIN MATRIZ a proposito. El edificio esta BLOQUEADO por directiva y la matriz de _matriz_D.json es una PROPUESTA RECHAZADA: bajaba 67 de 73 unidades, y se decidio dejar los precios actuales. No cargarla."
     },
     "E": {
       "edificios": [
@@ -963,35 +963,35 @@
     },
     "D": {
       "P2": {
-        "E3C": 87088,
-        "E2C": 84088,
-        "E1C": 83345,
-        "MC": 82345,
-        "E3L": 76613,
-        "E2L": 76613,
-        "E1L": 75215,
-        "ML": 74215
+        "E3C": null,
+        "E2C": null,
+        "E1C": null,
+        "MC": null,
+        "E3L": null,
+        "E2L": null,
+        "E1L": null,
+        "ML": null
       },
       "P3": {
-        "E3C": 91338,
-        "E2C": 87338,
-        "E1C": 86445,
-        "MC": 85445,
-        "E3L": 80863,
-        "E2L": 80863,
-        "E1L": 78315,
-        "ML": 77315
+        "E3C": null,
+        "E2C": null,
+        "E1C": null,
+        "MC": null,
+        "E3L": null,
+        "E2L": null,
+        "E1L": null,
+        "ML": null
       },
       "P4": {
-        "E3C": 92338,
-        "E2C": 89338,
-        "E1C": 85445,
-        "MC": 84445,
-        "E3L": 84863,
-        "E2L": 82863,
-        "E1L": 80315,
-        "ML": 79315,
-        "U25": 93760
+        "E3C": null,
+        "E2C": null,
+        "E1C": null,
+        "MC": null,
+        "E3L": null,
+        "E2L": null,
+        "E1L": null,
+        "ML": null,
+        "U25": null
       }
     },
     "E": {
@@ -1148,15 +1148,21 @@
   "_monoambientes_nota": [
     "Edificios D, E y F pisos 2-4: MONOAMBIENTES (31 / 32,5 / 35 m2), no oficinas.",
     "",
-    "Cada edificio tiene su matriz propia. La de D viene del archivo de Javier; las de",
-    "E y F se DEDUJERON de los precios vigentes en Bitrix, no de un documento.",
+    "NO existe matriz oficial de monoambientes: el JSON de Javier",
+    "(noral_plaza_monoambientes.json) guarda solo el financiamiento y los pendientes,",
+    "y dice que la lista comercial sigue siendo un PDF estatico sin motor.",
     "",
-    "Comparten estructura: los esquineros de D y F son identicos piso por piso. Las",
-    "diferencias estan en medianeros y esquineros internos. Falta que alguien decida",
-    "si los tres edificios deben compartir una sola matriz.",
+    "Las de E y F se DEDUJERON de los precios vigentes en Bitrix el 18-ago-2026:",
+    "87 de 126 unidades ya las seguian, y de las disponibles cuadran 27 de 29.",
     "",
-    "OJO con los COMBOS: 62 m2 = 2 unidades unidas, 93 m2 = 3. Valen (N x base) - 20.000",
-    "por el parqueo que se pierde. No entran en la matriz: tienen su propio metraje."
+    "El edificio D queda SIN precios a proposito. La matriz de _matriz_D.json es una",
+    "PROPUESTA QUE SE RECHAZO porque bajaba 67 de sus 73 unidades.",
+    "",
+    "COMBOS: 62 m2 = 2 unidades unidas, 93 m2 = 3. Valen (N x base) - 20.000 por el",
+    "parqueo que se pierde. No entran en la matriz.",
+    "",
+    "Financiamiento: 40% de entrada, 10% de reserva, entrega 2031-02. El plazo NO se",
+    "escribe a mano: se deriva de la fecha de entrega (54 meses al 18-ago-2026)."
   ],
   "piso_sin_numero": 0,
   "overrides": {
