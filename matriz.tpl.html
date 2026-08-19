@@ -405,7 +405,7 @@ const SIN_PISO = (DATA.pisos || []).length === 1 && (DATA.pisos[0]||{}).num === 
 const codVis = uid => SIN_PISO ? uid.replace(/^([A-Z])-1-/, '$1-') : uid;
 /* El nivel con patio: es el mas bajo, y solo si la matriz declara patio_pb.
    Las oficinas de Plaza no tienen ninguno, y antes salia 'undefined patio'. */
-const NIV_PATIO = Object.values(DATA.metraje).some(v => v.patio_pb != null)
+const NIV_PATIO = Object.values(DATA.metraje || {}).some(v => v.patio_pb != null)
   ? (DATA.pisos.length ? DATA.pisos[DATA.pisos.length-1].grp : null) : null;
 document.title = (DATA.proyecto || 'Explorador') + ' — Explorador';
 const BLDGS = DATA.edificios;
@@ -417,16 +417,22 @@ const COMBOS = DATA.combos;
 /* Compatibilidad con el resto del render */
 const BD = {};
 BLDGS.forEach(b => {
-  const g = DATA.grupos[b], me = DATA.metraje[g];
+  const g = DATA.grupos[b], me = DATA.metraje[g] || {};
   // El metraje mayor lo declara la matriz en cats_mayor; antes estaba escrito
   // "E2 y E3" y en Plaza los que crecen son EC y EL.
+  // por_categoria: cuando cada categoria tiene su propia area y no hay un
+  // "base/mayor" que las resuma. Galero Casas son cuatro modelos de casa de
+  // 100, 114, 120 y 150 m2: ninguno es "el mayor" de otro.
   const mayores = me.cats_mayor || [];
+  const porCat  = me.por_categoria || null;
   const m = {};
-  Object.keys(DATA.cats || {}).forEach(c => { m[c] = mayores.includes(c) ? me.mayor : me.base; });
+  Object.keys(DATA.cats || {}).forEach(c => {
+    m[c] = porCat ? porCat[c] : (mayores.includes(c) ? me.mayor : me.base);
+  });
   BD[b] = {g, t: DATA.grupoNota[g], m};
 });
 const M_PB     = {}, PATIO_PB = {};
-Object.entries(DATA.metraje).forEach(([g,v]) => { M_PB[g]=v.base; if (v.patio_pb != null) PATIO_PB[g]=v.patio_pb; });
+Object.entries(DATA.metraje || {}).forEach(([g,v]) => { M_PB[g]=v.base; if (v.patio_pb != null) PATIO_PB[g]=v.patio_pb; });
 
 /* PX se conserva por grupo solo para la tabla de referencia; el precio
    real de cada unidad sale de DATA.precios, que es por edificio. */
@@ -445,10 +451,11 @@ let cur = (DATA.edificios && DATA.edificios[0]) || 'A',
    En PB todo es metraje base; en plantas altas el medianero puede tener
    metraje propio (edificio J: 72,6 m2). */
 function m2Of(b, flGrp, cat) {
-  const g = DATA.grupos[b], me = DATA.metraje[g];
+  const g = DATA.grupos[b], me = DATA.metraje[g] || {};
+  if (me.por_categoria) return me.por_categoria[cat];
   // Antes preguntaba por el literal 'PB'. Ahora: hay patio si la matriz lo declara.
   if (PATIO_PB[BD[cur].g] != null && flGrp === NIV_PATIO) return me.base;
-  if (me.cats_mayor.includes(cat)) return me.mayor;
+  if ((me.cats_mayor || []).includes(cat)) return me.mayor;
   return DATA.m2paMed[b] != null ? DATA.m2paMed[b] : me.base;
 }
 
@@ -463,7 +470,9 @@ function mapaPos(b, floor) {
   return (niv && m[niv] && typeof m[niv] === 'object') ? m[niv] : m;
 }
 function getCat(pos, b, floor) {
-  const ov = DATA.ovUnidad[`${b}-${floor}-${pos}`];
+  // Dos formas de la misma llave: 'F-1-7' (interna) y 'F-7' (como la escribe
+  // Bitrix en los proyectos sin piso). Igual que mz_claves_unidad en PHP.
+  const ov = DATA.ovUnidad[`${b}-${floor}-${pos}`] || DATA.ovUnidad[`${b}-${pos}`];
   if (ov && ov.categoria) return ov.categoria;
   const c = mapaPos(b, floor)[String(pos)];
   return (typeof c === 'string' ? c : null) || '?';
@@ -471,10 +480,27 @@ function getCat(pos, b, floor) {
 
 /* Precio objetivo. 'sigue_a' hace que la unidad herede la matriz de otro
    edificio (caso registro de vista). */
+/* Sumando propio del solar: area x tarifa. Solo Galero Casas lo declara.
+   Sin esto la pantalla cotizaba la casa sola ($87.500) y daba por "fuera de
+   matriz" a las 15 disponibles que en realidad cuadran al centavo. */
+function terrenoDe(uid) {
+  const t = DATA.terreno;
+  if (!t || !t.tarifas) return 0;
+  const p = String(uid || '').split('-');
+  const cands = p.length === 3 ? [`${p[0]}-${p[2]}`, uid] : [uid];
+  for (const k of cands)
+    if (t.tarifas[k] != null && t.areas[k] != null)
+      return Math.round(t.areas[k] * t.tarifas[k] * 100) / 100;
+  return null;   // sin tarifa o sin area no hay precio: no se inventa
+}
+
 function target(b, flGrp, cat, uid) {
   const ov = uid ? DATA.ovUnidad[uid] : null;
   const fuente = (ov && ov.sigue_a) || b;
-  return DATA.precios[fuente]?.[flGrp]?.[cat] ?? null;
+  const base = DATA.precios[fuente]?.[flGrp]?.[cat] ?? null;
+  if (base === null || !DATA.terreno || !DATA.terreno.tarifas) return base;
+  const suelo = terrenoDe(uid);
+  return suelo === null ? null : base + suelo;
 }
 
 function fmt(v) {

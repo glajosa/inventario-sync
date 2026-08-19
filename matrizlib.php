@@ -140,8 +140,8 @@ function mz_precios_vigentes(array $cfg): array {
 }
 
 /** Un override de unidad manda sobre el mapa de posiciones. null = sin definir. */
-function mz_categoria_de(array $cfg, string $ed, int $pos, string $unidad = '', ?string $niv = null): ?string {
-    $ov = $cfg['overrides_unidad'][$unidad] ?? [];
+function mz_categoria_de(array $cfg, string $ed, int $pos, string $unidad = '', ?string $niv = null, ?array $ov = null): ?string {
+    $ov = $ov ?? ($cfg['overrides_unidad'][$unidad] ?? []);
     if (!empty($ov['categoria'])) return (string)$ov['categoria'];
     $m = $cfg['posiciones'][$ed] ?? [];
     // La misma posicion significa cosas distintas segun el piso: en Noral Plaza la 6
@@ -174,12 +174,37 @@ function mz_metraje_de(array $cfg, string $ed, int $piso, ?string $cat): ?float 
  * edificio — es el caso del registro de vista: C-2-8 no lo tiene, así que sigue a
  * D, y una subida futura a D también la arrastra sin que nadie se acuerde.
  */
+/**
+ * Las dos formas de nombrar la misma unidad.
+ *
+ * En los proyectos sin piso (Sun Bay, Galero Casas) la persona escribe el solar como
+ * lo escribe Bitrix — 'H-32' — mientras que el motor razona internamente en
+ * edificio/piso/posicion y lo llama 'H-1-32'. Buscar por una sola forma hacia que
+ * `exentas` y `overrides_unidad` no dispararan nunca: H-32, que NO esta en venta,
+ * habria entrado igual al plan.
+ *
+ * @return string[] de la mas especifica a la mas corta
+ */
+function mz_claves_unidad(array $cfg, string $ed, int $piso, int $pos): array {
+    $k = ["$ed-$piso-$pos"];
+    if (isset($cfg['piso_sin_numero'])) $k[] = "$ed-$pos";
+    return $k;
+}
+
+/** El primer valor que exista bajo cualquiera de las dos formas. */
+function mz_por_unidad(array $cfg, array $mapa, string $ed, int $piso, int $pos) {
+    foreach (mz_claves_unidad($cfg, $ed, $piso, $pos) as $k)
+        if (isset($mapa[$k])) return $mapa[$k];
+    return null;
+}
+
 function mz_precio_de(array $cfg, array $px, string $ed, int $piso, int $pos): array {
     $u   = "$ed-$piso-$pos";
     $niv = mz_nivel_de_piso($cfg, $piso);
-    $cat = mz_categoria_de($cfg, $ed, $pos, $u, $niv);
+    $ov  = mz_por_unidad($cfg, $cfg['overrides_unidad'] ?? [], $ed, $piso, $pos) ?? [];
+    $cat = mz_categoria_de($cfg, $ed, $pos, $u, $niv, $ov);
     if ($cat === null) return [null, null];
-    $fuente = (string)($cfg['overrides_unidad'][$u]['sigue_a'] ?? $ed);
+    $fuente = (string)($ov['sigue_a'] ?? $ed);
     $base = $niv === null ? null : ($px[$fuente][$niv][$cat] ?? null);
     if ($base === null) return [$cat, null];
     // En los proyectos sin bloque `terreno` esto es 0 y el precio es la celda pelada.
@@ -392,7 +417,7 @@ function mz_plan(array $cfg, array $unidades, ?array $px = null): array {
         if ($d['etapa'] !== $disp) continue;
         [$ed, $piso, $pos] = explode('-', $u);
         if (!in_array($ed, $lanzados, true)) continue;
-        if (isset($exentas[$u])) continue;
+        if (mz_por_unidad($cfg, $exentas, $ed, (int)$piso, (int)$pos) !== null) continue;
         if ((int)$pos > mz_unidades_por_piso($cfg, $ed)) continue;
         [$cat, $tgt] = mz_precio_de($cfg, $px, $ed, (int)$piso, (int)$pos);
         $filas[] = [

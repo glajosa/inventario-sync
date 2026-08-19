@@ -353,60 +353,81 @@
   "metraje": {
     "_nota": "m2 de CONSTRUCCION de cada modelo Pelicano. El area del SOLAR es otra cosa y vive en `terreno.areas`: es la que multiplica la tarifa.",
     "A": {
-      "U": {
+      "por_categoria": {
         "PELICANO_3": 100,
         "PELICANO_1": 114,
         "PELICANO_2": 120,
         "PELICANO_4": 150
-      }
+      },
+      "base": 100,
+      "mayor": 150,
+      "cats_mayor": []
     },
     "C": {
-      "U": {
+      "por_categoria": {
         "PELICANO_3": 100,
         "PELICANO_1": 114,
         "PELICANO_2": 120,
         "PELICANO_4": 150
-      }
+      },
+      "base": 100,
+      "mayor": 150,
+      "cats_mayor": []
     },
     "D": {
-      "U": {
+      "por_categoria": {
         "PELICANO_3": 100,
         "PELICANO_1": 114,
         "PELICANO_2": 120,
         "PELICANO_4": 150
-      }
+      },
+      "base": 100,
+      "mayor": 150,
+      "cats_mayor": []
     },
     "E": {
-      "U": {
+      "por_categoria": {
         "PELICANO_3": 100,
         "PELICANO_1": 114,
         "PELICANO_2": 120,
         "PELICANO_4": 150
-      }
+      },
+      "base": 100,
+      "mayor": 150,
+      "cats_mayor": []
     },
     "F": {
-      "U": {
+      "por_categoria": {
         "PELICANO_3": 100,
         "PELICANO_1": 114,
         "PELICANO_2": 120,
         "PELICANO_4": 150
-      }
+      },
+      "base": 100,
+      "mayor": 150,
+      "cats_mayor": []
     },
     "G": {
-      "U": {
+      "por_categoria": {
         "PELICANO_3": 100,
         "PELICANO_1": 114,
         "PELICANO_2": 120,
         "PELICANO_4": 150
-      }
+      },
+      "base": 100,
+      "mayor": 150,
+      "cats_mayor": []
     },
     "H": {
-      "U": {
+      "por_categoria": {
         "PELICANO_3": 100,
         "PELICANO_1": 114,
         "PELICANO_2": 120,
         "PELICANO_4": 150
-      }
+      },
+      "base": 100,
+      "mayor": 150,
+      "cats_mayor": []
     }
   }
 }
