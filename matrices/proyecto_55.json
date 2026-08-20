@@ -429,5 +429,72 @@
       "mayor": 150,
       "cats_mayor": []
     }
+  },
+  "listas": {
+    "_lea_esto_primero": [
+      "El FORMATO es el de `lista.py` de la direccion: UNA TABLA POR MODELO Pelicano,",
+      "con los solares que admiten ese modelo. La lista es para el cliente, asi que NO",
+      "lleva el costo del terreno ni el precio por m2: eso es interno."
+    ],
+    "1799": {
+      "forma": "casa",
+      "titulo": "GALERO - CASAS",
+      "subtitulo": "LISTA DE PRECIOS - Financiamiento del 40% de la casa, hasta 36 meses",
+      "orden": [
+        "PELICANO_3",
+        "PELICANO_1",
+        "PELICANO_2",
+        "PELICANO_4"
+      ],
+      "nombre": {
+        "PELICANO_3": "PELÍCANO 3",
+        "PELICANO_1": "PELÍCANO 1",
+        "PELICANO_2": "PELÍCANO 2",
+        "PELICANO_4": "PELÍCANO 4"
+      },
+      "colores_manzana": {
+        "A": [
+          "#A9D08E",
+          "#000000"
+        ],
+        "C": [
+          "#E2EFDA",
+          "#000000"
+        ],
+        "D": [
+          "#F8CBAD",
+          "#000000"
+        ],
+        "E": [
+          "#FFD966",
+          "#000000"
+        ],
+        "F": [
+          "#D9E1F2",
+          "#000000"
+        ],
+        "G": [
+          "#00B0F0",
+          "#FFFFFF"
+        ],
+        "H": [
+          "#002060",
+          "#FFFFFF"
+        ]
+      },
+      "nota": "<b>Todas las casas son de tres dormitorios y dos plantas.</b> La fachada de cada casa deberá respetarse.<br>Los solares <em>F-7</em> y <em>G-7</em> solo admiten el Pelícano 3.<br>El saldo podrá ser cubierto contra entrega o con crédito hipotecario.",
+      "financiamiento": {
+        "meses": 24,
+        "separa": 1000,
+        "reserva_pct": 10,
+        "cuotas_pct": 20,
+        "extra_pct": 10,
+        "extra_n": 3,
+        "contra_pct": 60,
+        "vigencia_horas": 48,
+        "meses_rotulo": 36,
+        "_nota": "40% de entrada: 10% a la firma, 20% en 24 mensuales y 10% en 3 extraordinarias (una por anio). El rotulo dice 36 meses porque es el plazo de ENTREGA; las mensuales son 24."
+      }
+    }
   }
 }
