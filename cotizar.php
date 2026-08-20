@@ -565,7 +565,10 @@ $hoy  = new DateTimeImmutable('now');
   @page{ margin:0 }
   @media print{
     body{background:#fff;padding:14mm 12mm}
-    .barra,.ajustes,.tarjeta-opciones,.noimp{display:none !important}
+    /* .aviso son advertencias para el ASESOR — "Ojo, en el inventario esta E-4-23
+       (RESERVADO)", "este proyecto no tiene fecha de entrega configurada". Utiles en
+       pantalla, pero este documento se le entrega al cliente y ahi no van. */
+    .barra,.ajustes,.tarjeta-opciones,.noimp,.aviso{display:none !important}
     /* display:block obligatorio: en pantalla .envoltura es una rejilla de 2
        columnas, y al imprimir el documento tiene que ocupar la hoja completa. */
     .envoltura{display:block;max-width:none;margin:0;padding:0}
