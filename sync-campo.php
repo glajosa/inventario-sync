@@ -23,5 +23,9 @@ if ($dealId <= 0) { http_response_code(400); exit('falta deal'); }
 $r = sincronizar_deal($dealId);
 logline("deal=$dealId " . json_encode($r));
 
+// Mismo motivo que en guardar.php: este camino tampoco mueve el deal.
+require_once __DIR__ . '/historialib.php';
+hist_intentar((string)$dealId, null, 'SYNCCAMPO');
+
 header('Content-Type: application/json; charset=utf-8');
 echo json_encode($r);

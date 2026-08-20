@@ -288,17 +288,8 @@ logline("HOOK deal=$dealId sync=" . json_encode($res));
 // Envuelto en try/catch y despues del log de sync: si el generador esta caido, la
 // sincronizacion del inventario NO se cae por eso. La historia se puede pedir a
 // mano con historia.php?deal=<id>.
-if ((string)($deal['STAGE_ID'] ?? '') === 'C44:NEW') {
-    try {
-        require_once __DIR__ . '/stagelib.php';
-        require_once __DIR__ . '/historialib.php';
-        $h = hist_al_reservar($dealId, $deal);
-        if (($h['motivo'] ?? '') !== 'ya generada para estas unidades') {
-            logline("HOOK deal=$dealId historia=" . json_encode($h, JSON_UNESCAPED_SLASHES));
-        }
-    } catch (Throwable $e) {
-        logline("HOOK deal=$dealId historia FALLO: " . $e->getMessage());
-    }
-}
+require_once __DIR__ . '/stagelib.php';
+require_once __DIR__ . '/historialib.php';
+hist_intentar((string)$dealId, $deal, 'HOOK');
 
 echo 'ok-sync ' . json_encode($res);

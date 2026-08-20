@@ -173,6 +173,12 @@ if ($cat === COBRANZAS_CAT) {
 $r = sincronizar_deal($dealId, $deal);
 logline("deal=$dealId guardado=[$limpio] sync=" . json_encode($r));
 
+// Atar la unidad desde la app no mueve el deal, asi que el evento de Bitrix nunca
+// llega y la historia no se generaba: el sello aparecia en el plano y el buzon
+// quedaba vacio. Se intenta aca tambien; hist_intentar valida etapa y pipeline.
+require_once __DIR__ . '/historialib.php';
+hist_intentar((string)$dealId, $deal, 'GUARDAR');
+
 // En Prospectos fuera de RESERVA el campo SÍ se guardó pero la unidad NO se apartó.
 // Se dice explícito para que el asesor no crea que ya la tiene: hasta que el deal
 // entre a RESERVA la unidad sigue disponible y otro puede llevársela.

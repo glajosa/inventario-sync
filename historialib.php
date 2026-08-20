@@ -95,6 +95,34 @@ function hist_notificar(int $userId, string $texto): bool {
  * El trabajo completo para un deal. Devuelve un resumen para el log.
  * `$forzar` salta la libreta: sirve para regenerar a mano una que salió mal.
  */
+/**
+ * Intenta generar la historia desde CUALQUIER camino que sincronice el deal.
+ *
+ * 🔴 Antes esto vivia solo en hook.php, o sea solo cuando Bitrix mandaba el evento
+ * del deal. Pero `sincronizar_deal()` se llama desde tres lados, y atar la unidad
+ * desde la app (guardar.php) NO mueve el deal: se ponia el sello en el plano y la
+ * historia nunca se generaba. El vendedor ataba la unidad de un deal que YA estaba
+ * en RESERVA y no aparecia nada en el buzon.
+ *
+ * `hist_al_reservar()` valida sola el pipeline 44 y la etapa RESERVA, asi que
+ * llamarla desde todos los caminos es seguro: si no corresponde, no hace nada.
+ *
+ * Va envuelto: si el generador esta caido, guardar la unidad NO se cae por eso.
+ */
+function hist_intentar(string $dealId, ?array $deal, string $origen): void {
+    try {
+        $h = hist_al_reservar($dealId, $deal);
+        $m = (string)($h['motivo'] ?? '');
+        // los "no aplica" son la mayoria y taparian el log
+        if (!in_array($m, ['ya generada para estas unidades', 'no es del pipeline 44',
+                           'no esta en RESERVA'], true)) {
+            logline("$origen deal=$dealId historia=" . json_encode($h, JSON_UNESCAPED_SLASHES));
+        }
+    } catch (Throwable $e) {
+        logline("$origen deal=$dealId historia FALLO: " . $e->getMessage());
+    }
+}
+
 function hist_al_reservar(string $dealId, ?array $deal = null, bool $forzar = false): array {
     if ($deal === null) {
         $g = bx('crm.deal.get', ['id' => $dealId]);
