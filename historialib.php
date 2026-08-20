@@ -60,24 +60,58 @@ function hist_generar_una(string $proyecto, string $codigo): ?array {
     $tok = (string)getenv('NORAL_SYNC_TOKEN');
     if ($url === '' || $tok === '') return null;
 
-    $ch = curl_init($url . '/generar.php');
-    curl_setopt_array($ch, [
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => http_build_query(
-            ['proyecto' => $proyecto, 'id' => $codigo, 'token' => $tok]),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 45,          // estampar una imagen tarda mas que un aviso
-        CURLOPT_CONNECTTIMEOUT => 5,
-    ]);
-    $raw = (string)curl_exec($ch);
-    $j = json_decode($raw, true);
-    if (!is_array($j) || empty($j['ok']) || empty($j['url'])) {
-        logline('HISTORIA generar ' . $codigo . ' -> ' . substr($raw, 0, 120));
-        return null;
+    /**
+     * 🔴 Se pide a `video.php`, NO a `generar.php`.
+     *
+     * `generar.php` hace solo el JPG. Lo que el equipo sube a Instagram es el MP4
+     * con el sello animado, que es lo que hace el boton "Generar videos" del panel
+     * — o sea la automatica entregaba media historia y alguien tenia que ir al
+     * panel a completar lo que ya deberia estar hecho.
+     *
+     * `video.php` recibe los MISMOS parametros y hace las dos cosas: escribe el JPG
+     * y despues compone el MP4 con ffmpeg, y registra en el historial igual.
+     *
+     * Si ffmpeg falla, `video.php` responde ok:false — pero el JPG ya quedo escrito
+     * antes de llegar a ffmpeg. Por eso se cae de vuelta a `generar.php`: quedarse
+     * sin nada porque no se pudo armar el video seria peor que quedarse con la
+     * imagen.
+     */
+    $pedir = function (string $endpoint, int $timeout) use ($url, $proyecto, $codigo, $tok): ?array {
+        $ch = curl_init($url . '/' . $endpoint);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => http_build_query(
+                ['proyecto' => $proyecto, 'id' => $codigo, 'token' => $tok]),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_CONNECTTIMEOUT => 5,
+        ]);
+        $raw = (string)curl_exec($ch);
+        curl_close($ch);
+        $j = json_decode($raw, true);
+        if (!is_array($j) || empty($j['ok'])) {
+            logline("HISTORIA $endpoint $codigo -> " . substr($raw, 0, 160));
+            return null;
+        }
+        return $j;
+    };
+
+    // 45 frames de overlay mas ffmpeg: bastante mas que estampar un JPG
+    $j = $pedir('video.php', 150);
+    if ($j !== null) {
+        // video.php devuelve `image` y `video`; el resto del flujo espera `url`
+        $j['url']   = (string)($j['image'] ?? '');
+        $j['video'] = (string)($j['video'] ?? '');
+    } else {
+        $j = $pedir('generar.php', 45);
+        if ($j !== null) logline("HISTORIA $codigo sin video: se entrega solo la imagen");
     }
-    // La url que devuelve es relativa ("salidas/x.jpg"): se absolutiza aca, que es
-    // donde se sabe cual es el host del generador.
+    if ($j === null || ($j['url'] ?? '') === '') return null;
+
+    // Las urls que devuelve son relativas ("salidas/x.jpg"): se absolutizan aca, que
+    // es donde se sabe cual es el host del generador.
     $j['url_abs'] = $url . '/' . ltrim((string)$j['url'], '/');
+    if (($j['video'] ?? '') !== '') $j['video_abs'] = $url . '/' . ltrim((string)$j['video'], '/');
     return $j;
 }
 
