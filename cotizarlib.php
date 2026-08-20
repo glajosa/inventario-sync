@@ -20,6 +20,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/codigolib.php';   // codigos_comprimidos()
+
 /** Valores legales (notaría) por rango de precio — tabla 2026. */
 function cot_notaria(float $v): int {
     if ($v <= 60000)  return 466;

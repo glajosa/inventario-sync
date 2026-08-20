@@ -291,7 +291,7 @@ $hoy  = new DateTimeImmutable('now');
 <!doctype html>
 <html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cotización<?= $cliente !== '' ? ' · ' . h($cliente) : '' ?> · <?= h(implode(' + ', $codigos)) ?></title>
+<title>Cotización<?= $cliente !== '' ? ' · ' . h($cliente) : '' ?> · <?= h(codigos_comprimidos($codigos)) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -558,8 +558,13 @@ $hoy  = new DateTimeImmutable('now');
         color:var(--gris);line-height:1.5}
   @media (max-width:960px){ .pich-cuerpo{grid-template-columns:minmax(0,1fr)} .pich-dona-col{max-width:320px;margin:0 auto} }
   .pie{font-size:11.5px;color:var(--gris);margin-top:16px;line-height:1.5}
+  /* Margen de hoja en CERO para que el navegador NO dibuje su encabezado ni su pie.
+     Ese pie es el que estampaba la URL completa del cotizador —con el token de firma
+     dentro— en un documento que se le manda al cliente. El margen visual se devuelve
+     por padding, que es nuestro y no arrastra chrome del navegador. */
+  @page{ margin:0 }
   @media print{
-    body{background:#fff}
+    body{background:#fff;padding:14mm 12mm}
     .barra,.ajustes,.tarjeta-opciones,.noimp{display:none !important}
     /* display:block obligatorio: en pantalla .envoltura es una rejilla de 2
        columnas, y al imprimir el documento tiene que ocupar la hoja completa. */
@@ -1000,24 +1005,25 @@ $hoy  = new DateTimeImmutable('now');
   <?php if (count($bloques) > 1): ?>
     <h2 style="font-size:15px;margin:26px 0 10px;padding-top:16px;
                border-top:1px solid var(--linea);letter-spacing:.3px">
-      Opción <?= $bi + 1 ?> · <?= h(implode(' + ', $B['cods'])) ?></h2>
+      Opción <?= $bi + 1 ?> · <?= h(codigos_comprimidos($B['cods'])) ?></h2>
   <?php endif; ?>
 
   <dl class="datos">
     <dt>Proyecto</dt><dd><?= h($proyecto) ?></dd>
     <dt><?= count($B['cods']) > 1 ? 'Unidades' : 'Unidad' ?></dt>
-    <dd><?= h(implode(' + ', $B['cods'])) ?><?= count($B['cods']) > 1 ? ' <span style="font-weight:400;color:var(--gris)">(' . count($B['cods']) . ' activos fusionados)</span>' : '' ?></dd>
+    <!-- El codigo comprimido, la misma regla que usa el titulo del deal: dos unidades
+         fusionadas son "E-4-23-24", no "E-4-23 + E-4-24". Es UNA compra y el cliente la
+         tiene que leer como una. Se quito tambien el "(2 activos fusionados)": es
+         vocabulario interno del CRM y en la cara del cliente no dice nada. -->
+    <dd><?= h(codigos_comprimidos($B['cods'])) ?></dd>
     <?php if ($B['m2'] > 0): ?><dt>Metros<?= count($B['cods']) > 1 ? ' (suma)' : '' ?></dt><dd><?= number_format($B['m2'], 2) ?> m²</dd><?php endif; ?>
   </dl>
 
-  <?php if ($B['dcto'] > 0): ?>
-    <div class="datos" style="grid-template-columns:1fr auto;margin-bottom:10px;font-size:14px">
-      <div><?= count($B['cods']) > 1 ? 'Suma de las ' . count($B['cods']) . ' unidades' : 'Precio de lista' ?></div>
-      <div><?= h(cot_money($B['bruto'])) ?></div>
-      <div style="color:var(--gris)">Una unidad sin parqueo</div>
-      <div style="color:var(--gris)">− <?= h(cot_money($dctoParq)) ?></div>
-    </div>
-  <?php endif; ?>
+  <?php /* El desglose "Suma de las N unidades / Una unidad sin parqueo" ya no se
+           imprime. El descuento SIGUE aplicandose —esta dentro de $plan['valor']— pero
+           el documento del cliente muestra el precio final y nada mas: el detalle de
+           como se llego a el es informacion interna. Si hace falta auditarlo, esta en
+           $B['bruto'] y $B['dcto'], y el log del handler lo registra. */ ?>
   <div class="precio"><span>Precio final</span><span><?= h(cot_money($plan['valor'])) ?></span></div>
   <div class="legal"><span>Valores legales promesa C/V</span><span><?= h(cot_money((float)$plan['legal'])) ?></span></div>
   <p>Pago directo para el notario. Se da al momento de la firma del contrato.</p>

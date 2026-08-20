@@ -188,7 +188,8 @@ function bx(string $method, array $params = []): array {
     return ['ok' => false, 'error' => 'retries-exhausted'];
 }
 
-require_once __DIR__ . '/stagelib.php';   // stage_id(), apply_unit_stage(), CLIENTES_TRIGGERS...
+require_once __DIR__ . '/stagelib.php';
+require_once __DIR__ . '/codigolib.php';   // codigos_comprimidos()   // stage_id(), apply_unit_stage(), CLIENTES_TRIGGERS...
 
 /**
  * Refresca en el caché del selector las unidades que acabamos de tocar.
@@ -749,39 +750,8 @@ function money_fmt(float $n): string {
 const PROY_NORAL_SUITES = 1625;   // "Noral Plaza (Suites)" en la lista Proyectos 1
 const DESCUENTO_PARQUEO = 20000;
 
-/**
- * Junta varios códigos de unidad en el formato comprimido que usan los títulos de
- * los deals: F-4-14 + F-4-15 -> "F-4-14-15".
- *
- * Se busca el prefijo que comparten (hasta el último guion común) y se pegan solo
- * los tramos que cambian. Si no comparten prefijo —dos unidades de torres
- * distintas— se listan separados por coma, porque comprimirlos daría un código
- * que no existe y sería peor que un título largo.
- */
-function codigos_comprimidos(array $cods): string {
-    $cods = array_values(array_filter(array_map('trim', $cods), fn($c) => $c !== ''));
-    if (!$cods)            return '';
-    if (count($cods) === 1) return $cods[0];
-
-    $partes = array_map(fn($c) => explode('-', $c), $cods);
-    $comun  = [];
-    for ($i = 0; ; $i++) {
-        $v = $partes[0][$i] ?? null;
-        if ($v === null) break;
-        foreach ($partes as $p) if (($p[$i] ?? null) !== $v) { $v = null; break; }
-        if ($v === null) break;
-        $comun[] = $v;
-    }
-    // hace falta prefijo común Y que a cada código le quede algo propio detrás
-    $n = count($comun);
-    if ($n === 0) return implode(', ', $cods);
-    foreach ($partes as $p) if (count($p) <= $n) return implode(', ', $cods);
-
-    $colas = [];
-    foreach ($partes as $p) $colas[] = implode('-', array_slice($p, $n));
-    return implode('-', $comun) . '-' . implode('-', $colas);
-}
-
+// codigos_comprimidos() vive en codigolib.php: la cotización necesita la misma
+// regla y no puede cargar este archivo entero.
 /**
  * Título del deal: "Cliente--Proyecto--Unidad(es)".
  *
