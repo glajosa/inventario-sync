@@ -33,6 +33,10 @@ const LST_TIPOS = [
  *  "Departamento" son departamentos de verdad, no monoambientes. */
 const LST_NOMBRE_POR_CAT = [
     39 => [1793 => 'Departamentos'],
+    // Las torres de Galero tipifican sus unidades como "Departamento" igual que
+    // Plaza, pero son departamentos de verdad y no monoambientes de 30 m2.
+    47 => [1793 => 'Departamentos'],
+    51 => [1793 => 'Departamentos'],
     49 => [1795 => 'Solares'],
     55 => [1799 => 'Casas', 1947 => 'Casa modelo'],
 ];
