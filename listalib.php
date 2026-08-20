@@ -139,6 +139,28 @@ function lst_plan_hipo(float $p, array $fin): array {
             'tasa' => (float)($fin['tasa'] ?? 7.35)];
 }
 
+/**
+ * La fila de UNIDADES UNIDAS de un nivel: precio y metraje.
+ *
+ * Dos estructuras reales y hay que aceptar las dos, porque cada archivo del director
+ * la escribe a su manera:
+ *   Plaza:      combos = {metraje: 100, precio: {P2: 249000, ...}}
+ *   Apartments: combos = {A: {m2: 150, PB: 306750, PA: ..., 4P: ...}, GH: {...}}
+ * Unificar los archivos seria tocar su fuente de verdad; se lee lo que hay.
+ *
+ * @return array{precio: float, m2: ?float}|null
+ */
+function lst_combo(array $cfg, string $grupo, string $niv): ?array {
+    $cb = $cfg['combos'] ?? null;
+    if (!is_array($cb)) return null;
+    if (isset($cb[$grupo]) && is_array($cb[$grupo])) {
+        $p = $cb[$grupo][$niv] ?? null;
+        return $p === null ? null : ['precio' => (float)$p, 'm2' => $cb[$grupo]['m2'] ?? null];
+    }
+    $p = $cb['precio'][$niv] ?? null;
+    return $p === null ? null : ['precio' => (float)$p, 'm2' => $cb['metraje'] ?? null];
+}
+
 /** Cuántas unidades DISPONIBLES hay en una celda (grupo, nivel, categoría), y
  *  cuáles son. El código hace falta porque cuando queda UNA la lista la nombra. */
 function lst_celda(array $cfg, array $unidades, array $edificios, string $niv, string $cat): array {
@@ -170,10 +192,14 @@ function lst_celda(array $cfg, array $unidades, array $edificios, string $niv, s
  * los dos ("30 - 39") en vez de elegir uno y mentir en el otro.
  */
 function lst_metros(array $m2, array $cfg, string $grupo, string $cat,
-                    string $origen = 'unidades'): string {
+                    string $origen = 'unidades', string $niv = '', string $nivPatio = ''): string {
     $fmt = fn(float $v) => rtrim(rtrim(number_format($v, 2, ',', ''), '0'), ',');
     $me  = $cfg['metraje'][$grupo] ?? [];
-    $cfgM = in_array($cat, (array)($me['cats_mayor'] ?? []), true)
+    // "En PB todas las unidades son del metraje base + patio. El metraje mayor solo
+    // existe desde planta alta." Es la nota del propio archivo del director: sin esto
+    // A-1-1 y A-1-8 salian con 85,15 m2 cuando en planta baja son 75.
+    $esPatio = $nivPatio !== '' && $niv === $nivPatio;
+    $cfgM = (!$esPatio && in_array($cat, (array)($me['cats_mayor'] ?? []), true))
                 ? ($me['mayor'] ?? null) : ($me['base'] ?? null);
     // `config`: manda la tabla de la direccion. Apartments publica 85,15 m2 y Bitrix
     // guarda 84,90 en algunas fichas; el numero que el cliente ya vio es el suyo.

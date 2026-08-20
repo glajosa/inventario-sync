@@ -222,15 +222,23 @@ $hoy = new DateTimeImmutable('now');
                   if (!$cel['cods']) continue;          // agotada: no se ofrece
                   $filas[] = ['cat' => $k, 'g' => $gDatos, 'precio' => (float)$precio[$k],
                               'm2' => lst_metros($cel['m2'], $cfg, $gDatos, $k,
-                                          (string)($L['origen_metraje'] ?? 'unidades')),
+                                          (string)($L['origen_metraje'] ?? 'unidades'),
+                                          $niv, (string)($L['nivel_patio'] ?? '')),
                               'cods' => $cel['cods']];
               }
           }
-          if ($combo && isset($cfg['combos']['precio'][$niv]) && $filas) {
-              $cm = $cfg['combos']['metraje'] ?? null;
-              $filas[] = ['combo' => true, 'precio' => (float)$cfg['combos']['precio'][$niv],
-                          'm2' => $cm !== null ? rtrim(rtrim(number_format((float)$cm, 2, ',', ''), '0'), ',') : '—',
-                          'cods' => []];
+          if ($combo && $filas) {
+              // El grupo de precio del que sale el combo: con una hoja por edificio,
+              // B y E comparten el combo de BCDE.
+              $gc = $porEdificio ? mz_grupo_de($cfg, (string)$gs[0]) : (string)$gs[0];
+              $cb = lst_combo($cfg, $gc, $niv);
+              if ($cb) {
+                  $filas[] = ['combo' => true, 'precio' => $cb['precio'], 'g' => $gc,
+                              'm2' => $cb['m2'] !== null
+                                  ? rtrim(rtrim(number_format((float)$cb['m2'], 2, ',', ''), '0'), ',')
+                                  : '—',
+                              'cods' => []];
+              }
           }
           if ($filas) $bloques[$niv] = $filas;
       }
@@ -320,8 +328,11 @@ $hoy = new DateTimeImmutable('now');
             <?php if ($conPatio): ?>
               <?php /* El patio existe solo en el nivel que lo declara la matriz
                        (patio_pb). En los pisos altos la celda va vacia, no en cero. */ ?>
-              <td class="c"><?php $pt = empty($r['combo']) && $niv === (string)($L['nivel_patio'] ?? 'PB')
+              <td class="c"><?php
+                    // Una unidad unida lleva los dos patios: 16,25 + 16,25 = 32,5m2.
+                    $pt = $niv === (string)($L['nivel_patio'] ?? 'PB')
                         ? ($cfg['metraje'][$r['g']]['patio_pb'] ?? null) : null;
+                    if ($pt !== null && !empty($r['combo'])) $pt = (float)$pt * 2;
                     echo $pt !== null ? lh(rtrim(rtrim(number_format((float)$pt, 2, ',', ''), '0'), ',')) . 'm2' : '-'; ?></td>
             <?php endif; ?>
             <td class="p"><?= lh(lp($r['precio'])) ?></td>

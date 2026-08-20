@@ -703,7 +703,8 @@
           "PB": "DESDE",
           "PA": "3 DORM",
           "4P": "3 DORM"
-        }
+        },
+        "_nota": "El precio sale de combos[grupo][nivel] del archivo del director. Su HTML publicado muestra un DESDE distinto porque lo calculo del par disponible ese dia; el JSON es la regla."
       }
     }
   }
