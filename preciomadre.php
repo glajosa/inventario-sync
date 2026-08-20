@@ -25,6 +25,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/campolib.php';     // bx(), logline()
 require_once __DIR__ . '/matrizlib.php';
+require_once __DIR__ . '/listalib.php';   // lst_familias()
 
 $BX_FRENO_US = 120000;   // pantalla, no barrido: freno suave
 
@@ -62,9 +63,13 @@ if (($_REQUEST['accion'] ?? 'ver') === 'ver' && ($_REQUEST['cat'] ?? '') === '')
     foreach ($proyectos as $c => $j) {
         $nom = strtoupper((string)($j['proyecto'] ?? "Proyecto $c"));
         $col = $COLOR[$i++ % count($COLOR)];
-        $tot = $dis = 0; $err = '';
+        $tot = $dis = 0; $err = ''; $fams = [];
         try {
-            foreach (mz_unidades_cache($j) as $d) { $tot++; if ($d['etapa'] === 'DISPONIBLE') $dis++; }
+            $uu = mz_unidades_cache($j);
+            foreach ($uu as $d) { $tot++; if ($d['etapa'] === 'DISPONIBLE') $dis++; }
+            // Las familias que este proyecto vende HOY. Salen del tipo de bien de las
+            // fichas disponibles, asi que una familia agotada deja de ofrecer lista sola.
+            $fams = lst_familias($uu, $c);
         } catch (Throwable $e) { $err = 'el catálogo todavía se está armando'; }
         $eds  = mz_edificios($j);
         $ne   = count($eds);
@@ -83,6 +88,19 @@ if (($_REQUEST['accion'] ?? 'ver') === 'ver' && ($_REQUEST['cat'] ?? '') === '')
               <p>Los edificios con sus pisos y unidades. Categorías, precio de hoy contra
                  el de la matriz, y el simulador para subir por bloque.</p>
               <div class="acts"><a class="b pri" href="?token=' . urlencode($tok) . '&cat=' . $c . '">Abrir</a></div>
+            </div>
+            <div class="col">
+              <div class="ct">Lista de precios <span class="tag ok">PARA EL CLIENTE</span></div>
+              <p>' . ($fams
+                  ? 'Una lista por familia, con separación, firma, cuota y saldo contra
+                     entrega. Se arma del inventario en vivo: lo vendido no aparece.'
+                  : 'Todavía no hay unidades disponibles con precio para armar una lista.') . '</p>
+              <div class="acts">' . implode('', array_map(
+                  fn($f) => '<a class="b" target="_blank" href="lista.php?token=' . urlencode($tok)
+                          . '&cat=' . $c . '&fam=' . (int)$f['tipo'] . '">'
+                          . htmlspecialchars($f['nombre'], ENT_QUOTES)
+                          . ' <span class="n">' . (int)$f['n'] . '</span></a>',
+                  $fams)) . '</div>
             </div>
             <div class="col">
               <div class="ct">Configuración <span class="tag">FUENTE DE VERDAD</span></div>
@@ -106,6 +124,10 @@ if (($_REQUEST['accion'] ?? 'ver') === 'ver' && ($_REQUEST['cat'] ?? '') === '')
  .ph{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:16px 22px;border-bottom:1px solid var(--bd)}
  .bdg{color:#fff;font-size:11.5px;font-weight:700;letter-spacing:.07em;padding:4px 11px;border-radius:6px}
  .meta{color:var(--t2);font-size:14px}
+ .tag.ok{background:#14532d;color:#a7f3d0;border-color:#166534}
+ @media(prefers-color-scheme:light){.tag.ok{background:#dcfce7;color:#14532d;border-color:#bbf7d0}}
+ .n{display:inline-block;min-width:18px;padding:0 5px;margin-left:5px;border-radius:9px;
+    background:var(--bd);color:var(--t2);font-size:11.5px;font-weight:700;text-align:center}
  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
  .col{padding:20px 22px 22px;border-right:1px solid var(--bd)}
  .col:last-child{border-right:0}

@@ -337,6 +337,12 @@ function mz_unidades_cache(array $cfg, int $ttl = 0, ?array &$info = null): arra
             'etapa' => strtoupper((string)($u['stage'] ?? '')),
             'pvp'   => mz_money($u['pvp'] ?? null),
             'm2'    => $u['m2'] ?? null,
+            // Tipo de bien (Local / Oficina / Departamento...). Es lo que separa las
+            // FAMILIAS de un mismo pipeline: el 33 vende locales, oficinas y
+            // monoambientes juntos y cada familia lleva su propia lista de precios.
+            // Se lee del dato vivo y no del nombre de la categoria, que es nuestro.
+            'tipo'  => (int)($u['tipo'] ?? 0),
+            'cod'   => $cod,
         ];
     }
     if (!$out) throw new RuntimeException("El catálogo no trae unidades del proyecto $cat.");
