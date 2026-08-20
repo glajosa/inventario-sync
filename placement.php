@@ -157,6 +157,22 @@ if (($_GET['accion'] ?? '') === 'scope') {
     exit;
 }
 
+/** placement.get CRUDO, con titulo e id. Sin el titulo Bitrix no dibuja el item en
+ *  el menu, y `mostrar()` no lo imprime: por eso un boton podia estar enlazado y no
+ *  verse, sin forma de distinguirlo de un problema de cache del navegador. */
+if (($_GET['accion'] ?? '') === 'detalle') {
+    $r = app_bx('placement.get');
+    foreach ((array)($r['result'] ?? []) as $p) {
+        printf("%-28s id=%-6s titulo=%s\n   %s\n\n",
+            (string)($p['placement'] ?? '?'),
+            (string)($p['id'] ?? '?'),
+            ($p['title'] ?? '') === '' ? '(VACIO)' : '«' . $p['title'] . '»',
+            (string)($p['handler'] ?? ''));
+    }
+    if (isset($r['error'])) echo "error: {$r['error']} {$r['desc']}\n";
+    exit;
+}
+
 echo "Antes:\n"; mostrar();
 
 if ($accion === 'poner') {
