@@ -1,0 +1,386 @@
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/bootstrap.php';
+
+$endpointPath = __DIR__ . '/../api/private/llamadas/v1/resultado.php';
+if (is_file($endpointPath)) require_once $endpointPath;
+
+final class EndpointFakeBitrix {
+    public array $calls = [];
+    public array $errors = [];
+
+    public function __invoke(string $method, array $params): array {
+        $this->calls[] = [$method, $params];
+        if (isset($this->errors[$method])) return $this->errors[$method];
+
+        return match ($method) {
+            'crm.deal.get' => ['ok' => true, 'result' => [
+                'ID' => '77',
+                'ASSIGNED_BY_ID' => '42',
+                'CONTACT_ID' => '91',
+                'STAGE_ID' => 'C28:INTERESADO',
+            ]],
+            'crm.activity.get' => ['ok' => true, 'result' => [
+                'ID' => '731',
+                'OWNER_ID' => '77',
+                'OWNER_TYPE_ID' => '2',
+                'TYPE_ID' => '2',
+                'DIRECTION' => '2',
+                'RESPONSIBLE_ID' => '42',
+            ]],
+            'crm.contact.get' => ['ok' => true, 'result' => [
+                'ID' => '91',
+                'NAME' => 'Ana',
+                'LAST_NAME' => 'Pérez',
+            ]],
+            'crm.activity.list' => ['ok' => true, 'result' => []],
+            'crm.activity.update' => ['ok' => true, 'result' => true],
+            'crm.timeline.comment.add' => ['ok' => true, 'result' => 801],
+            'crm.deal.update' => ['ok' => true, 'result' => true],
+            default => ['ok' => false, 'error' => 'unexpected-method'],
+        };
+    }
+}
+
+function endpoint_test_input(array $changes = []): array {
+    return array_replace([
+        'callRequestId' => '11111111-1111-4111-8111-111111111111',
+        'memberId' => 'member-1',
+        'dealId' => 77,
+        'bitrixUserId' => 42,
+        'bitrixActivityId' => 731,
+        'outcome' => 'no_answer',
+        'selectedPhone' => '+593991234567',
+        'nextActivityAt' => null,
+        'comment' => '',
+    ], $changes);
+}
+
+function endpoint_test_body(array $changes = []): string {
+    return json_encode(endpoint_test_input($changes), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+function endpoint_test_dir(): string {
+    $directory = sys_get_temp_dir() . '/inventario-sync-endpoint-' . bin2hex(random_bytes(8));
+    mkdir($directory, 0700, true);
+    return $directory;
+}
+
+function endpoint_test_cleanup(string $directory): void {
+    foreach (['llamada-resultados.sqlite', 'llamada-resultados.sqlite-shm', 'llamada-resultados.sqlite-wal'] as $name) {
+        $path = $directory . '/' . $name;
+        if (is_file($path)) unlink($path);
+    }
+    if (is_dir($directory)) rmdir($directory);
+}
+
+function endpoint_test_allow_apache(string $directory): void {
+    chmod($directory, 0777);
+    foreach (['llamada-resultados.sqlite', 'llamada-resultados.sqlite-shm', 'llamada-resultados.sqlite-wal'] as $name) {
+        $path = $directory . '/' . $name;
+        if (is_file($path)) chmod($path, 0666);
+    }
+}
+
+function endpoint_test_env(string $directory): array {
+    return [
+        'INVENTARIO_SYNC_SHARED_SECRET' => 'test-secret-with-at-least-32-bytes',
+        'NO_INTEREST_STAGE_ID' => 'C28:NO_INTERESADO',
+        'DATA_DIR' => $directory,
+    ];
+}
+
+function endpoint_test_headers(string $body, int $timestamp, ?string $secret = null): array {
+    $secret ??= 'test-secret-with-at-least-32-bytes';
+    return [
+        'content-type' => 'application/json; charset=utf-8',
+        'x-galjosa-timestamp' => (string)$timestamp,
+        'x-galjosa-signature' => hash_hmac('sha256', $timestamp . "\n" . $body, $secret),
+    ];
+}
+
+function endpoint_test_response(int $expectedStatus, array $expectedBody, array $actual, string $name): void {
+    test_same($expectedStatus, $actual['status'] ?? null, $name . ' status');
+    test_same($expectedBody, $actual['body'] ?? null, $name . ' body');
+}
+
+$now = 1787238000;
+
+$directory = endpoint_test_dir();
+try {
+    $fake = new EndpointFakeBitrix();
+    endpoint_test_response(400, ['error' => 'invalid_request'], llamada_resultado_http(
+        'GET', '', [], endpoint_test_env($directory), $fake, $now
+    ), 'non-POST request');
+    test_same([], $fake->calls, 'non-POST request performs no Bitrix call');
+
+    $body = endpoint_test_body();
+    endpoint_test_response(400, ['error' => 'invalid_request'], llamada_resultado_http(
+        'POST', $body, array_replace(endpoint_test_headers($body, $now), ['content-type' => 'text/plain']),
+        endpoint_test_env($directory), $fake, $now
+    ), 'wrong content type');
+    test_same([], $fake->calls, 'wrong content type performs no Bitrix call');
+
+    $largeBody = str_repeat('x', 65_537);
+    endpoint_test_response(400, ['error' => 'invalid_request'], llamada_resultado_http(
+        'POST', $largeBody, endpoint_test_headers($largeBody, $now), endpoint_test_env($directory), $fake, $now
+    ), 'oversized request');
+    test_same([], $fake->calls, 'oversized request performs no Bitrix call');
+} finally {
+    endpoint_test_cleanup($directory);
+}
+
+$directory = endpoint_test_dir();
+try {
+    $fake = new EndpointFakeBitrix();
+    $body = endpoint_test_body();
+    $missingSecret = endpoint_test_env($directory);
+    unset($missingSecret['INVENTARIO_SYNC_SHARED_SECRET']);
+    endpoint_test_response(503, ['error' => 'bitrix_unavailable'], llamada_resultado_http(
+        'POST', $body, endpoint_test_headers($body, $now), $missingSecret, $fake, $now
+    ), 'missing configuration');
+    test_same([], $fake->calls, 'missing configuration performs no Bitrix call');
+
+    endpoint_test_response(401, ['error' => 'unauthorized'], llamada_resultado_http(
+        'POST', $body, endpoint_test_headers($body, $now, 'another-secret-with-at-least-32-bytes'),
+        endpoint_test_env($directory), $fake, $now
+    ), 'invalid signature');
+    endpoint_test_response(401, ['error' => 'unauthorized'], llamada_resultado_http(
+        'POST', $body, endpoint_test_headers($body, $now - 301), endpoint_test_env($directory), $fake, $now
+    ), 'expired signature');
+    test_same([], $fake->calls, 'unauthorized requests perform no Bitrix call');
+
+    $invalidJson = '{"callRequestId":';
+    endpoint_test_response(400, ['error' => 'invalid_request'], llamada_resultado_http(
+        'POST', $invalidJson, endpoint_test_headers($invalidJson, $now), endpoint_test_env($directory), $fake, $now
+    ), 'signed malformed JSON');
+    test_same([], $fake->calls, 'malformed JSON performs no Bitrix call');
+} finally {
+    endpoint_test_cleanup($directory);
+}
+
+$directory = endpoint_test_dir();
+try {
+    $fake = new EndpointFakeBitrix();
+    $body = endpoint_test_body();
+    $result = llamada_resultado_http(
+        'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
+    );
+    test_same(200, $result['status'], 'valid result status');
+    test_same('processed', $result['body']['status'] ?? null, 'valid result body status');
+    test_same(731, $result['body']['bitrixActivityId'] ?? null, 'valid result body activity');
+
+    $repeat = llamada_resultado_http(
+        'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
+    );
+    test_same(200, $repeat['status'], 'repeat status');
+    test_same('already_processed', $repeat['body']['status'] ?? null, 'repeat body status');
+
+    $conflictingBody = endpoint_test_body(['comment' => 'different']);
+    endpoint_test_response(409, ['error' => 'conflict'], llamada_resultado_http(
+        'POST', $conflictingBody, endpoint_test_headers($conflictingBody, $now), endpoint_test_env($directory), $fake, $now
+    ), 'idempotency conflict');
+} finally {
+    endpoint_test_cleanup($directory);
+}
+
+$directory = endpoint_test_dir();
+try {
+    $fake = new EndpointFakeBitrix();
+    $fake->errors['crm.deal.get'] = [
+        'ok' => false,
+        'error' => 'network-error',
+        'desc' => 'credential=must-never-leak',
+    ];
+    $body = endpoint_test_body(['callRequestId' => '22222222-2222-4222-8222-222222222222']);
+    endpoint_test_response(503, ['error' => 'bitrix_unavailable'], llamada_resultado_http(
+        'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
+    ), 'Bitrix failure');
+} finally {
+    endpoint_test_cleanup($directory);
+}
+
+$directory = endpoint_test_dir();
+try {
+    $fake = new EndpointFakeBitrix();
+    $fake->errors['crm.activity.update'] = [
+        'ok' => false,
+        'error' => 'ACCESS_DENIED',
+        'desc' => 'Access denied',
+    ];
+    $body = endpoint_test_body(['callRequestId' => '33333333-3333-4333-8333-333333333333']);
+    endpoint_test_response(403, ['error' => 'forbidden'], llamada_resultado_http(
+        'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
+    ), 'Bitrix access denied');
+    test_same(1, count(array_filter($fake->calls, fn(array $call): bool => $call[0] === 'crm.activity.update')), 'access denied is not retried or reassigned');
+    test_same(0, count(array_filter($fake->calls, fn(array $call): bool => $call[0] === 'crm.deal.update')), 'access denied does not reassign the deal');
+} finally {
+    endpoint_test_cleanup($directory);
+}
+
+$directory = endpoint_test_dir();
+try {
+    $fake = new EndpointFakeBitrix();
+    $fake->errors['crm.timeline.comment.add'] = ['ok' => false, 'error' => 'network-error'];
+    $body = endpoint_test_body([
+        'callRequestId' => '44444444-4444-4444-8444-444444444444',
+        'outcome' => 'answered',
+        'nextActivityAt' => '2026-08-25T10:15:00-05:00',
+        'comment' => 'Necesita seguimiento',
+    ]);
+    endpoint_test_response(503, ['error' => 'bitrix_unavailable'], llamada_resultado_http(
+        'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
+    ), 'uncertain comment delivery');
+    $callsAfterFailure = $fake->calls;
+    $review = llamada_resultado_http(
+        'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
+    );
+    test_same(422, $review['status'], 'manual review status');
+    test_same('manual_review', $review['body']['status'] ?? null, 'manual review body');
+    test_same($callsAfterFailure, $fake->calls, 'manual review retry performs no Bitrix call');
+} finally {
+    endpoint_test_cleanup($directory);
+}
+
+function endpoint_http_request(string $url, string $method, string $body = '', array $headers = []): array {
+    $handle = curl_init($url);
+    curl_setopt_array($handle, [
+        CURLOPT_CUSTOMREQUEST => $method,
+        CURLOPT_POSTFIELDS => $body,
+        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 5,
+    ]);
+    $raw = curl_exec($handle);
+    $status = (int)curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+    $curlError = curl_error($handle);
+    curl_close($handle);
+    if ($raw === false) throw new RuntimeException('HTTP request failed: ' . $curlError);
+    return ['status' => $status, 'raw' => $raw];
+}
+
+function endpoint_http_json(string $url, string $method, string $body = '', array $headers = []): array {
+    $response = endpoint_http_request($url, $method, $body, $headers);
+    return [
+        'status' => $response['status'],
+        'body' => json_decode($response['raw'], true, 32, JSON_THROW_ON_ERROR),
+    ];
+}
+
+$apache = '/usr/local/bin/apache2-foreground';
+test_same(true, is_file($apache), 'real HTTP tests run inside the Docker image');
+$httpDirectory = endpoint_test_dir();
+endpoint_test_allow_apache($httpDirectory);
+$httpEnv = getenv();
+$httpEnv['INVENTARIO_SYNC_SHARED_SECRET'] = 'test-secret-with-at-least-32-bytes';
+$httpEnv['NO_INTEREST_STAGE_ID'] = 'C28:NO_INTERESADO';
+$httpEnv['DATA_DIR'] = $httpDirectory;
+$pipes = [];
+$apacheProcess = proc_open([$apache], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, dirname(__DIR__), $httpEnv);
+if (!is_resource($apacheProcess)) throw new RuntimeException('could not start Apache for real HTTP tests');
+
+try {
+    $endpointUrl = 'http://127.0.0.1/api/private/llamadas/v1/resultado';
+    $ready = false;
+    for ($attempt = 0; $attempt < 50; $attempt++) {
+        try {
+            if (endpoint_http_request($endpointUrl, 'GET')['status'] > 0) {
+                $ready = true;
+                break;
+            }
+        } catch (Throwable) {
+            usleep(100_000);
+        }
+    }
+    test_same(true, $ready, 'Apache accepts real HTTP requests');
+
+    endpoint_test_response(400, ['error' => 'invalid_request'], endpoint_http_json($endpointUrl, 'GET'), 'real HTTP wrong method');
+    test_same(403, endpoint_http_request('http://127.0.0.1/tests/run.php', 'GET')['status'], 'Apache keeps tests blocked');
+
+    $invalidJson = '{"callRequestId":';
+    $timestamp = time();
+    endpoint_test_response(400, ['error' => 'invalid_request'], endpoint_http_json(
+        $endpointUrl,
+        'POST',
+        $invalidJson,
+        [
+            'Content-Type: application/json',
+            'X-Galjosa-Timestamp: ' . $timestamp,
+            'X-Galjosa-Signature: ' . hash_hmac('sha256', $timestamp . "\n" . $invalidJson, $httpEnv['INVENTARIO_SYNC_SHARED_SECRET']),
+        ]
+    ), 'real HTTP exact HMAC over malformed JSON');
+
+    $body = endpoint_test_body(['callRequestId' => '55555555-5555-4555-8555-555555555555']);
+    $expired = time() - 301;
+    endpoint_test_response(401, ['error' => 'unauthorized'], endpoint_http_json(
+        $endpointUrl,
+        'POST',
+        $body,
+        [
+            'Content-Type: application/json',
+            'X-Galjosa-Timestamp: ' . $expired,
+            'X-Galjosa-Signature: ' . hash_hmac('sha256', $expired . "\n" . $body, $httpEnv['INVENTARIO_SYNC_SHARED_SECRET']),
+        ]
+    ), 'real HTTP expired HMAC');
+
+    $store = new LlamadaIdempotenciaStore($httpDirectory);
+    $store->begin('member-1:66666666-6666-4666-8666-666666666666', str_repeat('a', 64), time());
+    unset($store);
+    endpoint_test_allow_apache($httpDirectory);
+    $conflictBody = endpoint_test_body(['callRequestId' => '66666666-6666-4666-8666-666666666666']);
+    $timestamp = time();
+    endpoint_test_response(409, ['error' => 'conflict'], endpoint_http_json(
+        $endpointUrl,
+        'POST',
+        $conflictBody,
+        [
+            'Content-Type: application/json',
+            'X-Galjosa-Timestamp: ' . $timestamp,
+            'X-Galjosa-Signature: ' . hash_hmac('sha256', $timestamp . "\n" . $conflictBody, $httpEnv['INVENTARIO_SYNC_SHARED_SECRET']),
+        ]
+    ), 'real HTTP conflict');
+
+    $manualBody = endpoint_test_body([
+        'callRequestId' => '77777777-7777-4777-8777-777777777777',
+        'outcome' => 'answered',
+        'nextActivityAt' => '2026-08-25T10:15:00-05:00',
+        'comment' => 'Necesita seguimiento',
+    ]);
+    $manualInput = json_decode($manualBody, true, 32, JSON_THROW_ON_ERROR);
+    $manualFake = new EndpointFakeBitrix();
+    $manualFake->errors['crm.timeline.comment.add'] = ['ok' => false, 'error' => 'network-error'];
+    $manualStore = new LlamadaIdempotenciaStore($httpDirectory);
+    try {
+        llamada_procesar_resultado(
+            $manualInput,
+            $manualFake,
+            $manualStore,
+            new DateTimeImmutable('@' . time()),
+            $httpEnv['NO_INTEREST_STAGE_ID']
+        );
+        throw new RuntimeException('manual review fixture did not fail uncertainly');
+    } catch (LlamadaBitrixError) {
+        // The persisted in-progress comment is the real uncertain-delivery state.
+    }
+    unset($manualStore);
+    endpoint_test_allow_apache($httpDirectory);
+    $timestamp = time();
+    $manualResponse = endpoint_http_json(
+        $endpointUrl,
+        'POST',
+        $manualBody,
+        [
+            'Content-Type: application/json',
+            'X-Galjosa-Timestamp: ' . $timestamp,
+            'X-Galjosa-Signature: ' . hash_hmac('sha256', $timestamp . "\n" . $manualBody, $httpEnv['INVENTARIO_SYNC_SHARED_SECRET']),
+        ]
+    );
+    test_same(422, $manualResponse['status'], 'real HTTP manual review status');
+    test_same('manual_review', $manualResponse['body']['status'] ?? null, 'real HTTP manual review body');
+} finally {
+    proc_terminate($apacheProcess);
+    foreach ($pipes as $pipe) fclose($pipe);
+    proc_close($apacheProcess);
+    endpoint_test_cleanup($httpDirectory);
+}
