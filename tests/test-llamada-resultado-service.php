@@ -303,7 +303,7 @@ try {
         'request' => $normalized,
         'noInterestStage' => $noInterestStage,
     ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-    $store->begin('member-1:15151515-1515-4151-8151-151515151515', $requestHash, $now->getTimestamp());
+    $store->begin('member-1:15151515-1515-4151-8151-151515151515', $requestHash, $store->now());
 
     $concurrent = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
     test_same([

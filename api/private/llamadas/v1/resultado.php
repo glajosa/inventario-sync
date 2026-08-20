@@ -70,7 +70,11 @@ function llamada_resultado_http(
         return match ((string)($result['status'] ?? '')) {
             'processed', 'already_processed' => ['status' => 200, 'body' => $result],
             'manual_review' => ['status' => 422, 'body' => $result],
-            'processing' => llamada_resultado_error(409, 'conflict'),
+            'processing' => [
+                'status' => 503,
+                'headers' => ['Retry-After' => '1'],
+                'body' => $result + ['reason' => 'processing'],
+            ],
             default => llamada_resultado_error(503, 'bitrix_unavailable'),
         };
     } catch (JsonException | LlamadaValidationError) {
@@ -102,5 +106,8 @@ if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
     header('X-Content-Type-Options: nosniff');
+    foreach (($result['headers'] ?? []) as $name => $value) {
+        header($name . ': ' . $value);
+    }
     echo json_encode($result['body'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 }

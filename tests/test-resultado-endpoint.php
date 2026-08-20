@@ -100,6 +100,22 @@ function endpoint_test_headers(string $body, int $timestamp, ?string $secret = n
     ];
 }
 
+function endpoint_seed_processing(string $directory, array $input, int $now): void {
+    $stage = 'C28:NO_INTERESADO';
+    $request = llamada_validar_resultado(
+        $input,
+        new DateTimeImmutable('@' . $now),
+        $stage
+    );
+    $requestHash = hash('sha256', json_encode([
+        'request' => $request,
+        'noInterestStage' => $stage,
+    ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    $store = new LlamadaIdempotenciaStore($directory);
+    $store->begin($request['memberId'] . ':' . $request['callRequestId'], $requestHash, $store->now());
+    unset($store);
+}
+
 function endpoint_test_response(int $expectedStatus, array $expectedBody, array $actual, string $name): void {
     test_same($expectedStatus, $actual['status'] ?? null, $name . ' status');
     test_same($expectedBody, $actual['body'] ?? null, $name . ' body');
@@ -127,6 +143,33 @@ try {
         'POST', $largeBody, endpoint_test_headers($largeBody, $now), endpoint_test_env($directory), $fake, $now
     ), 'oversized request');
     test_same([], $fake->calls, 'oversized request performs no Bitrix call');
+} finally {
+    endpoint_test_cleanup($directory);
+}
+
+$directory = endpoint_test_dir();
+try {
+    $fake = new EndpointFakeBitrix();
+    $input = endpoint_test_input([
+        'callRequestId' => '12121212-1212-4212-8212-121212121212',
+    ]);
+    $body = json_encode($input, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    endpoint_seed_processing($directory, $input, $now);
+    $processing = llamada_resultado_http(
+        'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
+    );
+    endpoint_test_response(503, [
+        'status' => 'processing',
+        'callRequestId' => '12121212-1212-4212-8212-121212121212',
+        'reason' => 'processing',
+    ], $processing, 'identical operation still processing');
+    test_same(['Retry-After' => '1'], $processing['headers'] ?? null, 'processing retry header');
+    test_same([], $fake->calls, 'processing retry performs no Bitrix call');
+
+    $differentBody = json_encode(array_replace($input, ['comment' => 'different']), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    endpoint_test_response(409, ['error' => 'conflict'], llamada_resultado_http(
+        'POST', $differentBody, endpoint_test_headers($differentBody, $now), endpoint_test_env($directory), $fake, $now
+    ), 'active operation with different fingerprint conflicts');
 } finally {
     endpoint_test_cleanup($directory);
 }
@@ -289,19 +332,28 @@ try {
 
 function endpoint_http_request(string $url, string $method, string $body = '', array $headers = []): array {
     $handle = curl_init($url);
+    $responseHeaders = [];
     curl_setopt_array($handle, [
         CURLOPT_CUSTOMREQUEST => $method,
         CURLOPT_POSTFIELDS => $body,
         CURLOPT_HTTPHEADER => $headers,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT => 5,
+        CURLOPT_HEADERFUNCTION => function ($curl, string $line) use (&$responseHeaders): int {
+            $length = strlen($line);
+            $parts = explode(':', $line, 2);
+            if (count($parts) === 2) {
+                $responseHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+            }
+            return $length;
+        },
     ]);
     $raw = curl_exec($handle);
     $status = (int)curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
     $curlError = curl_error($handle);
     curl_close($handle);
     if ($raw === false) throw new RuntimeException('HTTP request failed: ' . $curlError);
-    return ['status' => $status, 'raw' => $raw];
+    return ['status' => $status, 'raw' => $raw, 'headers' => $responseHeaders];
 }
 
 function endpoint_http_json(string $url, string $method, string $body = '', array $headers = []): array {
@@ -309,6 +361,7 @@ function endpoint_http_json(string $url, string $method, string $body = '', arra
     return [
         'status' => $response['status'],
         'body' => json_decode($response['raw'], true, 32, JSON_THROW_ON_ERROR),
+        'headers' => $response['headers'],
     ];
 }
 
@@ -384,6 +437,30 @@ try {
             'X-Galjosa-Signature: ' . hash_hmac('sha256', $timestamp . "\n" . $conflictBody, $httpEnv['INVENTARIO_SYNC_SHARED_SECRET']),
         ]
     ), 'real HTTP conflict');
+
+    $processingInput = endpoint_test_input([
+        'callRequestId' => '68686868-6868-4868-8868-686868686868',
+    ]);
+    $processingBody = json_encode($processingInput, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    endpoint_seed_processing($httpDirectory, $processingInput, time());
+    endpoint_test_allow_apache($httpDirectory);
+    $timestamp = time();
+    $processingResponse = endpoint_http_json(
+        $endpointUrl,
+        'POST',
+        $processingBody,
+        [
+            'Content-Type: application/json',
+            'X-Galjosa-Timestamp: ' . $timestamp,
+            'X-Galjosa-Signature: ' . hash_hmac('sha256', $timestamp . "\n" . $processingBody, $httpEnv['INVENTARIO_SYNC_SHARED_SECRET']),
+        ]
+    );
+    endpoint_test_response(503, [
+        'status' => 'processing',
+        'callRequestId' => '68686868-6868-4868-8868-686868686868',
+        'reason' => 'processing',
+    ], $processingResponse, 'real HTTP identical operation processing');
+    test_same('1', $processingResponse['headers']['retry-after'] ?? null, 'real HTTP processing retry header');
 
     $manualBody = endpoint_test_body([
         'callRequestId' => '77777777-7777-4777-8777-777777777777',

@@ -59,5 +59,8 @@ Invoke-RestMethod -Uri $url -Method Post -ContentType 'application/json; charset
 
 Respuestas públicas: `200 processed/already_processed`, `400 invalid_request`,
 `401 unauthorized`, `403 forbidden`, `409 conflict`, `422 manual_review` y
-`503 bitrix_unavailable`. No se devuelven mensajes internos de Bitrix ni datos
-de autenticación.
+`503 bitrix_unavailable`. Si la misma operación todavía está activa, responde
+`503` con `{"status":"processing","callRequestId":"...","reason":"processing"}`
+y `Retry-After: 1`; un `callRequestId` reutilizado con otro cuerpo conserva
+`409 {"error":"conflict"}`. No se devuelven mensajes internos de Bitrix ni
+datos de autenticación.
