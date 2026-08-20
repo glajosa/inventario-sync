@@ -47,8 +47,8 @@
       "pisos": [
         1
       ],
-      "etiqueta": "Planta Baja",
-      "nota": "tarifa 1800 $/m²"
+      "etiqueta": "Piso 1",
+      "nota": "En una torre el piso 1 es un piso con departamentos, no una planta baja comercial. Asi lo rotula la lista de la direccion."
     },
     "P2": {
       "pisos": [
@@ -285,7 +285,8 @@
         "tasa": 7.35,
         "vigencia_horas": 48,
         "_nota": "Entrega inmediata: no hay cuotas del constructor. La cuota del prestamo es amortizacion francesa a 20 anios y 7,35%, y es tentativa hasta que el banco la fije."
-      }
+      },
+      "codigo_formato": "guion"
     }
   }
 }

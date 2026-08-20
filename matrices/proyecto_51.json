@@ -49,8 +49,8 @@
       "pisos": [
         1
       ],
-      "etiqueta": "Planta Baja",
-      "nota": "tarifa 1800 $/m²"
+      "etiqueta": "Piso 1",
+      "nota": "En una torre el piso 1 es un piso con departamentos, no una planta baja comercial. Asi lo rotula la lista de la direccion."
     },
     "P2": {
       "pisos": [
@@ -316,7 +316,8 @@
         "contra_pct": 70,
         "vigencia_horas": 48,
         "_nota": "Torre D es 30% de entrada: 10% a la firma, 15% en 9 mensuales y 5% en una extraordinaria. El 70% restante va contra entrega."
-      }
+      },
+      "codigo_formato": "guion"
     }
   }
 }

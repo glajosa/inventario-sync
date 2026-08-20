@@ -23,7 +23,9 @@ foreach ($unidades as $u => $d) {
         'cod'   => (string)($d['cod'] ?? $u),
         'piso'  => (int)$piso,
         'm2'    => $m2 !== '' ? (float)str_replace(',', '.', $m2) : null,
-        'patio' => ((int)$piso === (int)($L['piso_con_patio'] ?? -1)) ? 'SI' : 'NO',
+        // La direccion marca el patio con "1" y la falta con "NO", no con SI/NO.
+        'patio' => ((int)$piso === (int)($L['piso_con_patio'] ?? -1))
+                     ? (string)($L['patio_si'] ?? '1') : 'NO',
         'pvp'   => $pvp,
         'plan'  => lst_plan_hipo($pvp, $fin),
     ];
@@ -58,9 +60,22 @@ $pl0 = $filas ? $filas[0]['plan'] : lst_plan_hipo(0.0, $fin);
     <tbody>
     <?php foreach ($filas as $r): $pl = $r['plan']; ?>
       <tr>
-        <td class="cat"><?= lh($r['cod']) ?><?php
-            $et = $cfg['niveles'][mz_nivel_de_piso($cfg, $r['piso']) ?? '']['etiqueta'] ?? '';
-            if ($et !== '') echo ' &nbsp;·&nbsp; ' . lh(strtoupper((string)$et)); ?></td>
+        <?php /* Como la direccion escribe el codigo en la lista, que NO es como lo
+                 guarda Bitrix: la torre pone "C-1-1" donde el SPA tiene "C1-1", y las
+                 suites se nombran "SUITE 1-5 (Planta Baja)". Es el nombre que el
+                 cliente ya vio en su cotizacion en papel. */ ?>
+        <td class="cat"><?php
+            $et = (string)($cfg['niveles'][mz_nivel_de_piso($cfg, $r['piso']) ?? '']['etiqueta'] ?? '');
+            $fmt = (string)($L['codigo_formato'] ?? '');
+            if ($fmt === 'suite' && preg_match('/^[A-Z](\d+)-(\d+)$/', $r['cod'], $mm)) {
+                echo lh("SUITE {$mm[1]}-{$mm[2]}") . ($et !== '' ? ' ' . lh("($et)") : '');
+            } else {
+                $cod = $fmt === 'guion'
+                    ? preg_replace('/^([A-Z])(\d+)-/', '$1-$2-', $r['cod'])
+                    : $r['cod'];
+                echo lh($cod) . ($et !== '' ? ' &nbsp;·&nbsp; ' . lh(strtoupper($et)) : '');
+            }
+        ?></td>
         <td class="c"><?= $r['m2'] !== null ? lh(rtrim(rtrim(number_format($r['m2'], 2, ',', ''), '0'), ',')) : '—' ?></td>
         <td class="c"><?= (int)($L['parqueos_por_unidad'] ?? 1) ?></td>
         <?php if ($conPatio): ?><td class="c"><?= lh($r['patio']) ?></td><?php endif; ?>
