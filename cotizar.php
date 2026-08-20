@@ -1011,10 +1011,12 @@ $hoy  = new DateTimeImmutable('now');
   <dl class="datos">
     <dt>Proyecto</dt><dd><?= h($proyecto) ?></dd>
     <dt><?= count($B['cods']) > 1 ? 'Unidades' : 'Unidad' ?></dt>
-    <!-- El codigo comprimido, la misma regla que usa el titulo del deal: dos unidades
-         fusionadas son "E-4-23-24", no "E-4-23 + E-4-24". Es UNA compra y el cliente la
-         tiene que leer como una. Se quito tambien el "(2 activos fusionados)": es
-         vocabulario interno del CRM y en la cara del cliente no dice nada. -->
+    <?php /* Codigo comprimido, la misma regla que usa el titulo del deal: dos unidades
+             fusionadas son "E-4-23-24" y no "E-4-23 + E-4-24" — es UNA compra y el
+             cliente la tiene que leer como una. Se quito tambien el rotulo de cuantos
+             activos son: es vocabulario interno del CRM.
+             Va como comentario PHP y no HTML: este documento se le abre al cliente y
+             los comentarios HTML viajan a su navegador. */ ?>
     <dd><?= h(codigos_comprimidos($B['cods'])) ?></dd>
     <?php if ($B['m2'] > 0): ?><dt>Metros<?= count($B['cods']) > 1 ? ' (suma)' : '' ?></dt><dd><?= number_format($B['m2'], 2) ?> m²</dd><?php endif; ?>
   </dl>
