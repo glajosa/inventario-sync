@@ -257,5 +257,66 @@
   "_financiamiento_nota": [
     "30% de entrada: 10% a la firma, 15% en mensuales, 5% en extraordinarias.",
     "Entrega mayo 2027. El plazo se DERIVA de esa fecha, no se escribe a mano."
-  ]
+  ],
+  "listas": {
+    "_lea_esto_primero": [
+      "El FORMATO es el de la direccion, en `~/Downloads/GALJOSA - Todos los sistemas de precios`.",
+      "No se reinventa: el equipo comercial reconoce este documento y el cliente ya lo vio asi."
+    ],
+    "1793": {
+      "forma": "tipologia",
+      "titulo": "EDIFICIO D - (departamentos de 2 dormitorios)",
+      "subtitulo": "30% de Entrada a 9 Meses",
+      "grupos": [
+        "D"
+      ],
+      "niveles": [
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+        "P5",
+        "P6",
+        "P7",
+        "P8",
+        "P9",
+        "P10"
+      ],
+      "orden": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "encabezado_cat": "DEPARTAMENTO",
+      "nombre": {
+        "1": "ESQUINERO - POSICIÓN 1",
+        "2": "MEDIANERO - POSICIÓN 2",
+        "3": "MEDIANERO - POSICIÓN 3",
+        "4": "ESQUINERO - POSICIÓN 4"
+      },
+      "lado": {},
+      "parqueos": {
+        "1": 1,
+        "2": 1,
+        "3": 1,
+        "4": 1
+      },
+      "pie": {
+        "rotulo": "EDIFICIO D",
+        "medidas": "70 - 81,10m2"
+      },
+      "financiamiento": {
+        "meses": 9,
+        "separa": 1000,
+        "reserva_pct": 10,
+        "cuotas_pct": 15,
+        "extra_pct": 5,
+        "extra_n": 1,
+        "contra_pct": 70,
+        "vigencia_horas": 48,
+        "_nota": "Torre D es 30% de entrada: 10% a la firma, 15% en 9 mensuales y 5% en una extraordinaria. El 70% restante va contra entrega."
+      }
+    }
+  }
 }

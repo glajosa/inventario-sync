@@ -124,6 +124,22 @@ $hoy = new DateTimeImmutable('now');
   .barra .imp{margin-left:auto;background:#3b5323;border-color:#3b5323;color:#fff}
   .aviso{max-width:1120px;margin:0 auto 14px;background:#fff3cd;border:1px solid #e0c874;
        padding:10px 14px;font-size:12px}
+  /* ── forma SOLAR (Sun Bay) ── */
+  td.mz{font-weight:700;text-align:center}
+  td.sal{text-align:right;font-variant-numeric:tabular-nums;background:#fce9e2;white-space:nowrap}
+  .esp{height:14px;border:0}
+  .nota{max-width:1120px;margin:12px auto 0;background:#ffff00;border:1px solid #000;
+        text-align:center;font-size:10px;font-weight:700;padding:5px;line-height:1.5}
+  .nota em{font-style:italic;text-decoration:underline}
+  /* ── forma HIPOTECARIO (Torre C, Suites) ── */
+  td.n.s-sep{background:#F4F8FB}
+  td.n.s-ent{background:#FDF2EC}
+  td.n.s-pre{background:#F4F9FD}
+  td.n.s-cuo{background:#FAFAFA}
+  .pies{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+  .pieh{display:inline-flex;font-size:10.5px;font-weight:700;border:1px solid #000}
+  .pieh b{background:#DDEBF7;padding:5px 14px;border-right:1px solid #000}
+  .pieh span{background:#FCE4D6;padding:5px 14px}
   @media print{body{background:#fff;padding:0}.hoja{box-shadow:none}.barra,.aviso{display:none}}
 </style>
 </head><body>
@@ -144,6 +160,14 @@ $hoy = new DateTimeImmutable('now');
     Las familias con formato están en la barra de arriba.
   </div>
 <?php else:
+  $forma = (string)($L['forma'] ?? 'tipologia');
+  if ($forma !== 'tipologia') {
+      // Las otras dos formas comparten cabecera y pie con esta, pero la tabla es
+      // otra: en Sun Bay la fila es un SOLAR y en Torre C / Suites el pago es
+      // entrada + credito hipotecario, no cuotas del constructor.
+      include __DIR__ . '/lista_' . preg_replace('/[^a-z]/', '', $forma) . '.php';
+      echo '</body></html>'; exit;
+  }
   $fin   = $L['financiamiento'] ?? [];
   $grupos = (array)($L['grupos'] ?? []);
   $niveles = (array)($L['niveles'] ?? []);

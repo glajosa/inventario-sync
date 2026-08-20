@@ -137,5 +137,37 @@
   },
   "_financiamiento_nota": [
     "30% de entrada + 70% a 20 anios al 7,35%. Entrega inmediata."
-  ]
+  ],
+  "listas": {
+    "_lea_esto_primero": [
+      "El FORMATO es el de la direccion, en `~/Downloads/GALJOSA - Todos los sistemas de precios`.",
+      "No se reinventa: el equipo comercial reconoce este documento y el cliente ya lo vio asi."
+    ],
+    "1797": {
+      "forma": "hipotecario",
+      "titulo": "CONDOMINIO G-8",
+      "subtitulo": "30% de Entrada  ·  Entrega INMEDIATA",
+      "parqueos_por_unidad": 1,
+      "columna_patio": true,
+      "piso_con_patio": 1,
+      "pies": [
+        [
+          "SUITES GALERO",
+          "30m2"
+        ],
+        [
+          "ENTREGA",
+          "INMEDIATA"
+        ]
+      ],
+      "financiamiento": {
+        "entrada_pct": 30,
+        "separa": 1000,
+        "anios": 20,
+        "tasa": 7.35,
+        "vigencia_horas": 48,
+        "_nota": "Entrega inmediata: no hay cuotas del constructor. La cuota del prestamo es amortizacion francesa a 20 anios y 7,35%, y es tentativa hasta que el banco la fije."
+      }
+    }
+  }
 }

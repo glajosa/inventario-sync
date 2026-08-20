@@ -257,5 +257,35 @@
   "_financiamiento_nota": [
     "30% de entrada + 70% con credito hipotecario a 20 anios, 7,35% anual.",
     "Entrega inmediata: NO aplica la regla del plazo dinamico."
-  ]
+  ],
+  "listas": {
+    "_lea_esto_primero": [
+      "El FORMATO es el de la direccion, en `~/Downloads/GALJOSA - Todos los sistemas de precios`.",
+      "No se reinventa: el equipo comercial reconoce este documento y el cliente ya lo vio asi."
+    ],
+    "1793": {
+      "forma": "hipotecario",
+      "titulo": "TORRE C",
+      "subtitulo": "FINANCIAMIENTO EDIFICIO C - 30% de Entrada",
+      "parqueos_por_unidad": 1,
+      "pies": [
+        [
+          "TORRE C",
+          "70 - 75m2"
+        ],
+        [
+          "ENTREGA",
+          "INMEDIATA"
+        ]
+      ],
+      "financiamiento": {
+        "entrada_pct": 30,
+        "separa": 1000,
+        "anios": 20,
+        "tasa": 7.35,
+        "vigencia_horas": 48,
+        "_nota": "Entrega inmediata: no hay cuotas del constructor. La cuota del prestamo es amortizacion francesa a 20 anios y 7,35%, y es tentativa hasta que el banco la fije."
+      }
+    }
+  }
 }

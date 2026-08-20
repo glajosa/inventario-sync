@@ -1,596 +1,656 @@
 {
- "_lea_esto_primero": [
-  "FUENTE DE VERDAD DE PRECIOS — NORAL APARTMENTS",
-  "Una unidad NO tiene precio propio. Hereda el de su grupo + nivel + categoria.",
-  "Para subir precios NO se edita 'precios': se agrega una linea en 'ajustes'.",
-  "Asi queda el historico de cada subida y se puede revertir borrando la linea."
- ],
- "version": "2026-08-12",
- "vigente_desde": "2026-08-12",
- "grupos": {
-  "BCDE": {
-   "edificios": [
-    "B",
-    "C",
-    "D",
-    "E"
-   ],
-   "nota": "Precio base compartido entre los cuatro",
-   "lanzado": true
-  },
-  "A": {
-   "edificios": [
-    "A"
-   ],
-   "nota": "Intermedio — por encima de BCDE, por debajo de F",
-   "lanzado": true
-  },
-  "F": {
-   "edificios": [
-    "F"
-   ],
-   "nota": "El mas costoso del segmento 75/85 m2",
-   "lanzado": true
-  },
-  "GH": {
-   "edificios": [
-    "G",
-    "H"
-   ],
-   "nota": "Precio compartido. Solo 3 dormitorios",
-   "lanzado": true
-  },
-  "I": {
-   "edificios": [
-    "I"
-   ],
-   "nota": "Precio propio — las unidades mas pequenas",
-   "lanzado": true
-  },
-  "J": {
-   "edificios": [
-    "J"
-   ],
-   "nota": "Edificio nuevo, aun sin lanzar. 4 unidades por piso",
-   "lanzado": false
-  }
- },
- "niveles": {
-  "PB": {
-   "pisos": [
-    1
-   ],
-   "etiqueta": "Planta Baja",
-   "nota": "Metraje base + patio"
-  },
-  "PA": {
-   "pisos": [
-    2,
-    3
-   ],
-   "etiqueta": "Pisos 2 y 3",
-   "nota": "Planta alta"
-  },
-  "4P": {
-   "pisos": [
-    4
-   ],
-   "etiqueta": "4to Piso",
-   "nota": "Ultimo piso"
-  }
- },
- "categorias": {
-  "M": {
-   "etiqueta": "Medianero",
-   "posiciones": [
-    2,
-    3,
-    6,
-    7
-   ]
-  },
-  "E1": {
-   "etiqueta": "Esquinero interno",
-   "posiciones": [
-    4,
-    5
-   ],
-   "nota": "Flanquean el nucleo de ascensor y escaleras"
-  },
-  "E2": {
-   "etiqueta": "Esquinero 2",
-   "posiciones": [
-    8
-   ],
-   "nota": "Mayor metraje en planta alta, no el de mayor valor"
-  },
-  "E3": {
-   "etiqueta": "Esquinero 3",
-   "posiciones": [
-    1
-   ],
-   "nota": "Mayor metraje y mayor valor. Esquina hacia la garita principal"
-  }
- },
- "_posiciones_nota": [
-  "Se cuenta de DERECHA a IZQUIERDA (1 a 8) viendo la fachada de frente.",
-  "La posicion 1 queda del lado de la garita principal.",
-  "El nucleo de ascensor y escaleras va entre la 4 y la 5.",
-  "null = categoria aun sin confirmar por gerencia."
- ],
- "posiciones": {
-  "A": {
-   "1": "E3",
-   "2": "M",
-   "3": "M",
-   "4": "E1",
-   "5": "E1",
-   "6": "M",
-   "7": "M",
-   "8": "E2"
-  },
-  "B": {
-   "1": "E2",
-   "2": "M",
-   "3": "M",
-   "4": "E1",
-   "5": "E1",
-   "6": "M",
-   "7": "M",
-   "8": "E2"
-  },
-  "C": {
-   "1": null,
-   "2": "M",
-   "3": "M",
-   "4": "E1",
-   "5": "E1",
-   "6": "M",
-   "7": "M",
-   "8": null
-  },
-  "D": {
-   "1": "E2",
-   "2": "M",
-   "3": "M",
-   "4": "E1",
-   "5": "E1",
-   "6": "M",
-   "7": "M",
-   "8": "E2"
-  },
-  "E": {
-   "1": "E2",
-   "2": "M",
-   "3": "M",
-   "4": "E1",
-   "5": "E1",
-   "6": "M",
-   "7": "M",
-   "8": "E2"
-  },
-  "F": {
-   "1": "E2",
-   "2": "M",
-   "3": "M",
-   "4": "E1",
-   "5": "E1",
-   "6": "M",
-   "7": "M",
-   "8": "E2"
-  },
-  "G": {
-   "1": "E3",
-   "2": "M",
-   "3": "M",
-   "4": "E1",
-   "5": "E1",
-   "6": "M",
-   "7": "M",
-   "8": "E2"
-  },
-  "H": {
-   "1": "E3",
-   "2": "M",
-   "3": "M",
-   "4": "E1",
-   "5": "E1",
-   "6": "M",
-   "7": "M",
-   "8": "E2"
-  },
-  "I": {
-   "1": "E2",
-   "2": "M",
-   "3": "M",
-   "4": "E1",
-   "5": "E1",
-   "6": "M",
-   "7": "M",
-   "8": "E2"
-  },
-  "J": {
-   "1": "E2",
-   "2": "M",
-   "3": "M",
-   "4": "E2"
-  }
- },
- "metraje": {
-  "_nota": "En PB todas las unidades son del metraje base + patio. El metraje mayor solo existe desde planta alta.",
-  "BCDE": {
-   "base": 75,
-   "patio_pb": 16.25,
-   "mayor": 85.15,
-   "cats_mayor": [
-    "E2",
-    "E3"
-   ]
-  },
-  "A": {
-   "base": 75,
-   "patio_pb": 16.25,
-   "mayor": 85.15,
-   "cats_mayor": [
-    "E2",
-    "E3"
-   ]
-  },
-  "F": {
-   "base": 75,
-   "patio_pb": 16.25,
-   "mayor": 85.15,
-   "cats_mayor": [
-    "E2",
-    "E3"
-   ]
-  },
-  "GH": {
-   "base": 106,
-   "patio_pb": 18.75,
-   "mayor": 118,
-   "cats_mayor": [
-    "E2",
-    "E3"
-   ]
-  },
-  "I": {
-   "base": 65,
-   "patio_pb": 16,
-   "mayor": 65,
-   "cats_mayor": []
-  },
-  "J": {
-   "base": 75,
-   "patio_pb": 12,
-   "mayor": 83,
-   "cats_mayor": [
-    "E2"
-   ],
-   "_nota": "En plantas altas el medianero baja a 72,6 m2"
-  }
- },
- "_precios_nota": "Precio BASE por grupo / nivel / categoria. null = sin definir todavia.",
- "precios": {
-  "BCDE": {
-   "PB": {
-    "M": 150875,
-    "E1": 154875,
-    "E2": 158875,
-    "E3": null
-   },
-   "PA": {
-    "M": 140375,
-    "E1": 144375,
-    "E2": 165100,
-    "E3": null
-   },
-   "4P": {
-    "M": 145375,
-    "E1": 149375,
-    "E2": 167696,
-    "E3": null
-   }
-  },
-  "A": {
-   "PB": {
-    "M": 153375,
-    "E1": 156875,
-    "E2": 158875,
-    "E3": 162375
-   },
-   "PA": {
-    "M": 144000,
-    "E1": 146500,
-    "E2": 163320,
-    "E3": 169900
-   },
-   "4P": {
-    "M": 148000,
-    "E1": 150500,
-    "E2": 165820,
-    "E3": 172400
-   }
-  },
-  "F": {
-   "PB": {
-    "M": null,
-    "E1": null,
-    "E2": 162375,
-    "E3": null
-   },
-   "PA": {
-    "M": 146500,
-    "E1": null,
-    "E2": 169082,
-    "E3": null
-   },
-   "4P": {
-    "M": 151000,
-    "E1": null,
-    "E2": 174082,
-    "E3": null
-   }
-  },
-  "GH": {
-   "PB": {
-    "M": 209785,
-    "E1": 213785,
-    "E2": 217785,
-    "E3": 221785
-   },
-   "PA": {
-    "M": 198330,
-    "E1": 202330,
-    "E2": 215990,
-    "E3": 219990
-   },
-   "4P": {
-    "M": 203330,
-    "E1": 207330,
-    "E2": 220200,
-    "E3": null
-   }
-  },
-  "I": {
-   "PB": {
-    "M": null,
-    "E1": 135000,
-    "E2": 137000,
-    "E3": null
-   },
-   "PA": {
-    "M": 125850,
-    "E1": 129850,
-    "E2": null,
-    "E3": null
-   },
-   "4P": {
-    "M": 130850,
-    "E1": 132050,
-    "E2": null,
-    "E3": null
-   }
-  },
-  "J": {
-   "PB": {
-    "M": 151408,
-    "E1": null,
-    "E2": 155408,
-    "E3": null
-   },
-   "PA": {
-    "M": 146626,
-    "E1": null,
-    "E2": 170914,
-    "E3": null
-   },
-   "4P": {
-    "M": 141626,
-    "E1": null,
-    "E2": 165914,
-    "E3": null
-   }
-  }
- },
- "_registro_de_vista": [
-  "REGLA DE NEGOCIO QUE EXPLICA EL SOBREPRECIO DE LOS ESQUINEROS EXTERNOS.",
-  "Un esquinero externo SIN registro de vista puede tener mas ventanal y mas",
-  "luz natural, y por eso vale mas. Uno CON registro de vista queda limitado y",
-  "se queda en el precio base del grupo.",
-  "No es una particularidad del edificio: es una condicion fisica de la unidad.",
-  "  D y E  -> sus esquineros externos NO tienen registro de vista (override de edificio)",
-  "  B y C  -> los disponibles SI lo tienen, se quedan en el precio base",
-  "  C-2-8, C-3-8, C-4-8 -> no lo tienen, siguen la matriz de D (override de unidad)",
-  "  F      -> NINGUNO de sus dos lados tiene registro de vista. Por eso las",
-  "            posiciones 1 y 8 son ambas Esquinero 2 al precio alto, y ese",
-  "            precio ya viene incorporado en la matriz base del grupo F."
- ],
- "_overrides_nota": [
-  "Excepciones de un edificio frente al precio de su grupo.",
-  "Se aplican sobre el precio base y ANTES de los ajustes, asi que una subida",
-  "posterior tambien las alcanza."
- ],
- "overrides": {
-  "D": {
-   "4P": {
-    "E2": 169696
-   }
-  },
-  "E": {
-   "4P": {
-    "E2": 169696
-   }
-  }
- },
- "_overrides_unidad_nota": [
-  "Excepciones de UNA unidad concreta.",
-  "'sigue_a' hace que la unidad herede la matriz completa de otro edificio, en",
-  "lugar de fijarle un numero. Asi una subida futura a ese edificio tambien la",
-  "arrastra y no queda un precio congelado a mano.",
-  "'categoria' fuerza la categoria de esa unidad cuando el mapa de posiciones",
-  "del edificio esta sin definir o no aplica."
- ],
- "overrides_unidad": {
-  "C-2-8": {
-   "categoria": "E2",
-   "sigue_a": "D",
-   "nota": "Sin registro de vista — mas ventanal y luz natural"
-  },
-  "C-3-8": {
-   "categoria": "E2",
-   "sigue_a": "D",
-   "nota": "Sin registro de vista — mas ventanal y luz natural"
-  },
-  "C-4-8": {
-   "categoria": "E2",
-   "sigue_a": "D",
-   "nota": "Sin registro de vista — mas ventanal y luz natural"
-  }
- },
- "_ajustes_nota": [
-  "AQUI SE SUBEN LOS PRECIOS. No se toca 'precios'.",
-  "'aplica_a': grupo ('GH'), edificio ('F') o '*' para todo el proyecto.",
-  "'nivel' y 'categoria': valor concreto o '*' para todos.",
-  "'monto': USD fijos a sumar.  'pct': porcentaje.  Usar uno de los dos.",
-  "Ejemplo — subir 3000 USD a todo el edificio F:",
-  "  { \"aplica_a\": \"F\", \"nivel\": \"*\", \"categoria\": \"*\", \"monto\": 3000, \"nota\": \"...\" }",
-  "Ejemplo — subir 2% solo a los 4tos pisos de todo el proyecto:",
-  "  { \"aplica_a\": \"*\", \"nivel\": \"4P\", \"categoria\": \"*\", \"pct\": 2, \"nota\": \"...\" }"
- ],
- "ajustes": [],
- "_exentas_nota": "Unidades que nunca reciben precio automatico.",
- "exentas": {
-  "H-4-1": "Luis Barek — dueno",
-  "H-4-2": "Estefania Barek — duena",
-  "H-4-3": "Alfonso Barek — dueno"
- },
- "_combos_nota": [
-  "Dos departamentos contiguos que se unen cuando un cliente compra ambos.",
-  "El valor es la suma de las dos unidades. NO son una categoria.",
-  "En la lista comercial salen como fila 'DESDE' / '3 DORM'."
- ],
- "combos": {
-  "BCDE": {
-   "m2": 150,
-   "PB": 301750,
-   "PA": 274750,
-   "4P": 290750
-  },
-  "A": {
-   "m2": 150,
-   "PB": 306750,
-   "PA": 272750,
-   "4P": 282750
-  },
-  "GH": {
-   "m2": 212,
-   "PB": 419570,
-   "PA": 386660,
-   "4P": 406660
-  },
-  "I": {
-   "m2": 130,
-   "PB": 261000,
-   "PA": 250700,
-   "4P": 260700
-  }
- },
- "bitrix": {
-  "entityTypeId": 1072,
-  "categoryId": 39,
-  "campo_pvp": "ufCrm25_1784563253861",
-  "campo_m2": "ufCrm25_1782615822688",
-  "campo_precio_m2": "ufCrm25_1784563957669",
-  "etapa_disponible": "DT1072_39:PREPARATION",
-  "_nota": "Solo se escribe sobre etapa_disponible. Reservadas y firmadas nunca se tocan.",
-  "etapas_editables": [
-   "DT1072_39:PREPARATION",
-   "DT1072_39:NEW"
-  ]
- },
- "_unidades_por_piso_nota": "Cuantas unidades tiene cada piso. Por defecto 8. J tiene 4, sin nucleo central que lo divida.",
- "unidades_por_piso": {
-  "J": 4
- },
- "metraje_pa_medianero": {
-  "J": 72.6
- },
- "_financiamiento_nota": [
-  "Condiciones comerciales de la lista de precios.",
-  "",
-  "EL PLAZO NO SE GUARDA: se calcula como los meses que faltan hasta",
-  "fecha_entrega. Cada primero de mes queda un mes menos y las cuotas suben",
-  "solas. Por eso aqui no hay campo 'meses'.",
-  "",
-  "  meses        = meses entre hoy y fecha_entrega",
-  "  extraord_n   = ceil(meses / 12)   un pago extraordinario por ano restante",
-  "  A LA FIRMA   = PVP * reserva_pct - separa_con",
-  "  MENSUALES    = PVP * cuotas_pct / meses",
-  "  EXTRAORD.    = PVP * extraordinarias_pct / extraord_n",
-  "",
-  "Si se corre la entrega, se cambia fecha_entrega y todo se recalcula."
- ],
- "financiamiento": {
-  "entrada_pct": 40,
-  "reserva_pct": 10,
-  "separa_con": 1000,
-  "cuotas_pct": 20,
-  "extraordinarias_pct": 10,
-  "vigencia_horas": 48,
-  "fecha_entrega": "2030-04",
-  "meses_minimo": 1
- },
- "_parqueos_nota": "Parqueos por unidad. 2 en G y H por ser de 3 dormitorios, y 2 en toda unidad unida.",
- "parqueos": {
-  "GH": 2,
-  "_default": 1,
-  "_combo": 2
- },
- "_etiquetas_nota": "Como se nombra cada categoria en la lista que ve el cliente.",
- "etiquetas_lista": {
-  "PB": {
-   "M": "MEDIANEROS",
-   "E1": "ESQUINEROS",
-   "E2": "ESQUINEROS 2",
-   "E3": "ESQUINERO 3"
-  },
-  "PA": {
-   "M": "MEDIANEROS",
-   "E1": "ESQUINEROS",
-   "E2": "ESQUINEROS 2",
-   "E3": "ESQUINEROS 3"
-  },
-  "4P": {
-   "M": "4TO PISO MED",
-   "E1": "4TO PISO ESQ 1",
-   "E2": "4TO PISO ESQ 2",
-   "E3": "4TO PISO ESQ 3"
-  },
-  "combo": {
-   "PB": "DESDE",
-   "PA": "3 DORM",
-   "4P": "3 DORM"
-  }
- },
- "_lanzado_nota": "Un grupo con lanzado=false queda fuera de la lista comercial y de cualquier escritura de precios, aunque sus unidades esten en Bitrix.",
- "_nucleo_entre_nota": "Entre que posiciones queda el nucleo de ascensor y escaleras. Ese par NO se puede unir en un 3 dormitorios. Clave = unidades por piso.",
- "nucleo_entre": {
-  "8": [
-   4,
-   5
+  "_lea_esto_primero": [
+    "FUENTE DE VERDAD DE PRECIOS — NORAL APARTMENTS",
+    "Una unidad NO tiene precio propio. Hereda el de su grupo + nivel + categoria.",
+    "Para subir precios NO se edita 'precios': se agrega una linea en 'ajustes'.",
+    "Asi queda el historico de cada subida y se puede revertir borrando la linea."
   ],
-  "4": []
- },
- "_leyendas_escasez_nota": [
-  "Texto que va debajo del nombre cuando queda poco stock.",
-  "Se muestra en letra pequena y en un vino apagado: tiene que leerse,",
-  "pero sin competir con el precio, que es lo que debe mandar en la fila.",
-  "Con 3 o mas unidades no se muestra nada."
- ],
- "leyendas_escasez": {
-  "1": "ÚLTIMA UNIDAD",
-  "2": "2 ÚLTIMAS DISPONIBLES"
- },
- "proyecto": "Noral Apartments"
+  "version": "2026-08-12",
+  "vigente_desde": "2026-08-12",
+  "grupos": {
+    "BCDE": {
+      "edificios": [
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "nota": "Precio base compartido entre los cuatro",
+      "lanzado": true
+    },
+    "A": {
+      "edificios": [
+        "A"
+      ],
+      "nota": "Intermedio — por encima de BCDE, por debajo de F",
+      "lanzado": true
+    },
+    "F": {
+      "edificios": [
+        "F"
+      ],
+      "nota": "El mas costoso del segmento 75/85 m2",
+      "lanzado": true
+    },
+    "GH": {
+      "edificios": [
+        "G",
+        "H"
+      ],
+      "nota": "Precio compartido. Solo 3 dormitorios",
+      "lanzado": true
+    },
+    "I": {
+      "edificios": [
+        "I"
+      ],
+      "nota": "Precio propio — las unidades mas pequenas",
+      "lanzado": true
+    },
+    "J": {
+      "edificios": [
+        "J"
+      ],
+      "nota": "Edificio nuevo, aun sin lanzar. 4 unidades por piso",
+      "lanzado": false
+    }
+  },
+  "niveles": {
+    "PB": {
+      "pisos": [
+        1
+      ],
+      "etiqueta": "Planta Baja",
+      "nota": "Metraje base + patio"
+    },
+    "PA": {
+      "pisos": [
+        2,
+        3
+      ],
+      "etiqueta": "Pisos 2 y 3",
+      "nota": "Planta alta"
+    },
+    "4P": {
+      "pisos": [
+        4
+      ],
+      "etiqueta": "4to Piso",
+      "nota": "Ultimo piso"
+    }
+  },
+  "categorias": {
+    "M": {
+      "etiqueta": "Medianero",
+      "posiciones": [
+        2,
+        3,
+        6,
+        7
+      ]
+    },
+    "E1": {
+      "etiqueta": "Esquinero interno",
+      "posiciones": [
+        4,
+        5
+      ],
+      "nota": "Flanquean el nucleo de ascensor y escaleras"
+    },
+    "E2": {
+      "etiqueta": "Esquinero 2",
+      "posiciones": [
+        8
+      ],
+      "nota": "Mayor metraje en planta alta, no el de mayor valor"
+    },
+    "E3": {
+      "etiqueta": "Esquinero 3",
+      "posiciones": [
+        1
+      ],
+      "nota": "Mayor metraje y mayor valor. Esquina hacia la garita principal"
+    }
+  },
+  "_posiciones_nota": [
+    "Se cuenta de DERECHA a IZQUIERDA (1 a 8) viendo la fachada de frente.",
+    "La posicion 1 queda del lado de la garita principal.",
+    "El nucleo de ascensor y escaleras va entre la 4 y la 5.",
+    "null = categoria aun sin confirmar por gerencia."
+  ],
+  "posiciones": {
+    "A": {
+      "1": "E3",
+      "2": "M",
+      "3": "M",
+      "4": "E1",
+      "5": "E1",
+      "6": "M",
+      "7": "M",
+      "8": "E2"
+    },
+    "B": {
+      "1": "E2",
+      "2": "M",
+      "3": "M",
+      "4": "E1",
+      "5": "E1",
+      "6": "M",
+      "7": "M",
+      "8": "E2"
+    },
+    "C": {
+      "1": null,
+      "2": "M",
+      "3": "M",
+      "4": "E1",
+      "5": "E1",
+      "6": "M",
+      "7": "M",
+      "8": null
+    },
+    "D": {
+      "1": "E2",
+      "2": "M",
+      "3": "M",
+      "4": "E1",
+      "5": "E1",
+      "6": "M",
+      "7": "M",
+      "8": "E2"
+    },
+    "E": {
+      "1": "E2",
+      "2": "M",
+      "3": "M",
+      "4": "E1",
+      "5": "E1",
+      "6": "M",
+      "7": "M",
+      "8": "E2"
+    },
+    "F": {
+      "1": "E2",
+      "2": "M",
+      "3": "M",
+      "4": "E1",
+      "5": "E1",
+      "6": "M",
+      "7": "M",
+      "8": "E2"
+    },
+    "G": {
+      "1": "E3",
+      "2": "M",
+      "3": "M",
+      "4": "E1",
+      "5": "E1",
+      "6": "M",
+      "7": "M",
+      "8": "E2"
+    },
+    "H": {
+      "1": "E3",
+      "2": "M",
+      "3": "M",
+      "4": "E1",
+      "5": "E1",
+      "6": "M",
+      "7": "M",
+      "8": "E2"
+    },
+    "I": {
+      "1": "E2",
+      "2": "M",
+      "3": "M",
+      "4": "E1",
+      "5": "E1",
+      "6": "M",
+      "7": "M",
+      "8": "E2"
+    },
+    "J": {
+      "1": "E2",
+      "2": "M",
+      "3": "M",
+      "4": "E2"
+    }
+  },
+  "metraje": {
+    "_nota": "En PB todas las unidades son del metraje base + patio. El metraje mayor solo existe desde planta alta.",
+    "BCDE": {
+      "base": 75,
+      "patio_pb": 16.25,
+      "mayor": 85.15,
+      "cats_mayor": [
+        "E2",
+        "E3"
+      ]
+    },
+    "A": {
+      "base": 75,
+      "patio_pb": 16.25,
+      "mayor": 85.15,
+      "cats_mayor": [
+        "E2",
+        "E3"
+      ]
+    },
+    "F": {
+      "base": 75,
+      "patio_pb": 16.25,
+      "mayor": 85.15,
+      "cats_mayor": [
+        "E2",
+        "E3"
+      ]
+    },
+    "GH": {
+      "base": 106,
+      "patio_pb": 18.75,
+      "mayor": 118,
+      "cats_mayor": [
+        "E2",
+        "E3"
+      ]
+    },
+    "I": {
+      "base": 65,
+      "patio_pb": 16,
+      "mayor": 65,
+      "cats_mayor": []
+    },
+    "J": {
+      "base": 75,
+      "patio_pb": 12,
+      "mayor": 83,
+      "cats_mayor": [
+        "E2"
+      ],
+      "_nota": "En plantas altas el medianero baja a 72,6 m2"
+    }
+  },
+  "_precios_nota": "Precio BASE por grupo / nivel / categoria. null = sin definir todavia.",
+  "precios": {
+    "BCDE": {
+      "PB": {
+        "M": 150875,
+        "E1": 154875,
+        "E2": 158875,
+        "E3": null
+      },
+      "PA": {
+        "M": 140375,
+        "E1": 144375,
+        "E2": 165100,
+        "E3": null
+      },
+      "4P": {
+        "M": 145375,
+        "E1": 149375,
+        "E2": 167696,
+        "E3": null
+      }
+    },
+    "A": {
+      "PB": {
+        "M": 153375,
+        "E1": 156875,
+        "E2": 158875,
+        "E3": 162375
+      },
+      "PA": {
+        "M": 144000,
+        "E1": 146500,
+        "E2": 163320,
+        "E3": 169900
+      },
+      "4P": {
+        "M": 148000,
+        "E1": 150500,
+        "E2": 165820,
+        "E3": 172400
+      }
+    },
+    "F": {
+      "PB": {
+        "M": null,
+        "E1": null,
+        "E2": 162375,
+        "E3": null
+      },
+      "PA": {
+        "M": 146500,
+        "E1": null,
+        "E2": 169082,
+        "E3": null
+      },
+      "4P": {
+        "M": 151000,
+        "E1": null,
+        "E2": 174082,
+        "E3": null
+      }
+    },
+    "GH": {
+      "PB": {
+        "M": 209785,
+        "E1": 213785,
+        "E2": 217785,
+        "E3": 221785
+      },
+      "PA": {
+        "M": 198330,
+        "E1": 202330,
+        "E2": 215990,
+        "E3": 219990
+      },
+      "4P": {
+        "M": 203330,
+        "E1": 207330,
+        "E2": 220200,
+        "E3": null
+      }
+    },
+    "I": {
+      "PB": {
+        "M": null,
+        "E1": 135000,
+        "E2": 137000,
+        "E3": null
+      },
+      "PA": {
+        "M": 125850,
+        "E1": 129850,
+        "E2": null,
+        "E3": null
+      },
+      "4P": {
+        "M": 130850,
+        "E1": 132050,
+        "E2": null,
+        "E3": null
+      }
+    },
+    "J": {
+      "PB": {
+        "M": 151408,
+        "E1": null,
+        "E2": 155408,
+        "E3": null
+      },
+      "PA": {
+        "M": 146626,
+        "E1": null,
+        "E2": 170914,
+        "E3": null
+      },
+      "4P": {
+        "M": 141626,
+        "E1": null,
+        "E2": 165914,
+        "E3": null
+      }
+    }
+  },
+  "_registro_de_vista": [
+    "REGLA DE NEGOCIO QUE EXPLICA EL SOBREPRECIO DE LOS ESQUINEROS EXTERNOS.",
+    "Un esquinero externo SIN registro de vista puede tener mas ventanal y mas",
+    "luz natural, y por eso vale mas. Uno CON registro de vista queda limitado y",
+    "se queda en el precio base del grupo.",
+    "No es una particularidad del edificio: es una condicion fisica de la unidad.",
+    "  D y E  -> sus esquineros externos NO tienen registro de vista (override de edificio)",
+    "  B y C  -> los disponibles SI lo tienen, se quedan en el precio base",
+    "  C-2-8, C-3-8, C-4-8 -> no lo tienen, siguen la matriz de D (override de unidad)",
+    "  F      -> NINGUNO de sus dos lados tiene registro de vista. Por eso las",
+    "            posiciones 1 y 8 son ambas Esquinero 2 al precio alto, y ese",
+    "            precio ya viene incorporado en la matriz base del grupo F."
+  ],
+  "_overrides_nota": [
+    "Excepciones de un edificio frente al precio de su grupo.",
+    "Se aplican sobre el precio base y ANTES de los ajustes, asi que una subida",
+    "posterior tambien las alcanza."
+  ],
+  "overrides": {
+    "D": {
+      "4P": {
+        "E2": 169696
+      }
+    },
+    "E": {
+      "4P": {
+        "E2": 169696
+      }
+    }
+  },
+  "_overrides_unidad_nota": [
+    "Excepciones de UNA unidad concreta.",
+    "'sigue_a' hace que la unidad herede la matriz completa de otro edificio, en",
+    "lugar de fijarle un numero. Asi una subida futura a ese edificio tambien la",
+    "arrastra y no queda un precio congelado a mano.",
+    "'categoria' fuerza la categoria de esa unidad cuando el mapa de posiciones",
+    "del edificio esta sin definir o no aplica."
+  ],
+  "overrides_unidad": {
+    "C-2-8": {
+      "categoria": "E2",
+      "sigue_a": "D",
+      "nota": "Sin registro de vista — mas ventanal y luz natural"
+    },
+    "C-3-8": {
+      "categoria": "E2",
+      "sigue_a": "D",
+      "nota": "Sin registro de vista — mas ventanal y luz natural"
+    },
+    "C-4-8": {
+      "categoria": "E2",
+      "sigue_a": "D",
+      "nota": "Sin registro de vista — mas ventanal y luz natural"
+    }
+  },
+  "_ajustes_nota": [
+    "AQUI SE SUBEN LOS PRECIOS. No se toca 'precios'.",
+    "'aplica_a': grupo ('GH'), edificio ('F') o '*' para todo el proyecto.",
+    "'nivel' y 'categoria': valor concreto o '*' para todos.",
+    "'monto': USD fijos a sumar.  'pct': porcentaje.  Usar uno de los dos.",
+    "Ejemplo — subir 3000 USD a todo el edificio F:",
+    "  { \"aplica_a\": \"F\", \"nivel\": \"*\", \"categoria\": \"*\", \"monto\": 3000, \"nota\": \"...\" }",
+    "Ejemplo — subir 2% solo a los 4tos pisos de todo el proyecto:",
+    "  { \"aplica_a\": \"*\", \"nivel\": \"4P\", \"categoria\": \"*\", \"pct\": 2, \"nota\": \"...\" }"
+  ],
+  "ajustes": [],
+  "_exentas_nota": "Unidades que nunca reciben precio automatico.",
+  "exentas": {
+    "H-4-1": "Luis Barek — dueno",
+    "H-4-2": "Estefania Barek — duena",
+    "H-4-3": "Alfonso Barek — dueno"
+  },
+  "_combos_nota": [
+    "Dos departamentos contiguos que se unen cuando un cliente compra ambos.",
+    "El valor es la suma de las dos unidades. NO son una categoria.",
+    "En la lista comercial salen como fila 'DESDE' / '3 DORM'."
+  ],
+  "combos": {
+    "BCDE": {
+      "m2": 150,
+      "PB": 301750,
+      "PA": 274750,
+      "4P": 290750
+    },
+    "A": {
+      "m2": 150,
+      "PB": 306750,
+      "PA": 272750,
+      "4P": 282750
+    },
+    "GH": {
+      "m2": 212,
+      "PB": 419570,
+      "PA": 386660,
+      "4P": 406660
+    },
+    "I": {
+      "m2": 130,
+      "PB": 261000,
+      "PA": 250700,
+      "4P": 260700
+    }
+  },
+  "bitrix": {
+    "entityTypeId": 1072,
+    "categoryId": 39,
+    "campo_pvp": "ufCrm25_1784563253861",
+    "campo_m2": "ufCrm25_1782615822688",
+    "campo_precio_m2": "ufCrm25_1784563957669",
+    "etapa_disponible": "DT1072_39:PREPARATION",
+    "_nota": "Solo se escribe sobre etapa_disponible. Reservadas y firmadas nunca se tocan.",
+    "etapas_editables": [
+      "DT1072_39:PREPARATION",
+      "DT1072_39:NEW"
+    ]
+  },
+  "_unidades_por_piso_nota": "Cuantas unidades tiene cada piso. Por defecto 8. J tiene 4, sin nucleo central que lo divida.",
+  "unidades_por_piso": {
+    "J": 4
+  },
+  "metraje_pa_medianero": {
+    "J": 72.6
+  },
+  "_financiamiento_nota": [
+    "Condiciones comerciales de la lista de precios.",
+    "",
+    "EL PLAZO NO SE GUARDA: se calcula como los meses que faltan hasta",
+    "fecha_entrega. Cada primero de mes queda un mes menos y las cuotas suben",
+    "solas. Por eso aqui no hay campo 'meses'.",
+    "",
+    "  meses        = meses entre hoy y fecha_entrega",
+    "  extraord_n   = ceil(meses / 12)   un pago extraordinario por ano restante",
+    "  A LA FIRMA   = PVP * reserva_pct - separa_con",
+    "  MENSUALES    = PVP * cuotas_pct / meses",
+    "  EXTRAORD.    = PVP * extraordinarias_pct / extraord_n",
+    "",
+    "Si se corre la entrega, se cambia fecha_entrega y todo se recalcula."
+  ],
+  "financiamiento": {
+    "entrada_pct": 40,
+    "reserva_pct": 10,
+    "separa_con": 1000,
+    "cuotas_pct": 20,
+    "extraordinarias_pct": 10,
+    "vigencia_horas": 48,
+    "fecha_entrega": "2030-04",
+    "meses_minimo": 1
+  },
+  "_parqueos_nota": "Parqueos por unidad. 2 en G y H por ser de 3 dormitorios, y 2 en toda unidad unida.",
+  "parqueos": {
+    "GH": 2,
+    "_default": 1,
+    "_combo": 2
+  },
+  "_etiquetas_nota": "Como se nombra cada categoria en la lista que ve el cliente.",
+  "etiquetas_lista": {
+    "PB": {
+      "M": "MEDIANEROS",
+      "E1": "ESQUINEROS",
+      "E2": "ESQUINEROS 2",
+      "E3": "ESQUINERO 3"
+    },
+    "PA": {
+      "M": "MEDIANEROS",
+      "E1": "ESQUINEROS",
+      "E2": "ESQUINEROS 2",
+      "E3": "ESQUINEROS 3"
+    },
+    "4P": {
+      "M": "4TO PISO MED",
+      "E1": "4TO PISO ESQ 1",
+      "E2": "4TO PISO ESQ 2",
+      "E3": "4TO PISO ESQ 3"
+    },
+    "combo": {
+      "PB": "DESDE",
+      "PA": "3 DORM",
+      "4P": "3 DORM"
+    }
+  },
+  "_lanzado_nota": "Un grupo con lanzado=false queda fuera de la lista comercial y de cualquier escritura de precios, aunque sus unidades esten en Bitrix.",
+  "_nucleo_entre_nota": "Entre que posiciones queda el nucleo de ascensor y escaleras. Ese par NO se puede unir en un 3 dormitorios. Clave = unidades por piso.",
+  "nucleo_entre": {
+    "8": [
+      4,
+      5
+    ],
+    "4": []
+  },
+  "_leyendas_escasez_nota": [
+    "Texto que va debajo del nombre cuando queda poco stock.",
+    "Se muestra en letra pequena y en un vino apagado: tiene que leerse,",
+    "pero sin competir con el precio, que es lo que debe mandar en la fila.",
+    "Con 3 o mas unidades no se muestra nada."
+  ],
+  "leyendas_escasez": {
+    "1": "ÚLTIMA UNIDAD",
+    "2": "2 ÚLTIMAS DISPONIBLES"
+  },
+  "proyecto": "Noral Apartments",
+  "listas": {
+    "_lea_esto_primero": [
+      "El FORMATO es el de la direccion, en `~/Downloads/GALJOSA - Todos los sistemas de precios`.",
+      "No se reinventa: el equipo comercial reconoce este documento y el cliente ya lo vio asi."
+    ],
+    "1793": {
+      "forma": "tipologia",
+      "titulo": "NORAL APARTMENTS",
+      "subtitulo": "40% de Entrada a 44 Meses",
+      "grupos": [
+        "A",
+        "BCDE",
+        "F",
+        "GH",
+        "I",
+        "J"
+      ],
+      "niveles": [
+        "PB",
+        "PA",
+        "4P"
+      ],
+      "orden": [
+        "E3",
+        "E2",
+        "E1",
+        "M"
+      ],
+      "encabezado_cat": "ESQUINERO/<br>MEDIANERO",
+      "una_tabla_por_grupo": true,
+      "nombre": {
+        "E3": "ESQUINERO 3",
+        "E2": "ESQUINERO 2",
+        "E1": "ESQUINERO INTERNO",
+        "M": "MEDIANEROS"
+      },
+      "lado": {},
+      "parqueos": {
+        "E3": 1,
+        "E2": 1,
+        "E1": 1,
+        "M": 1
+      },
+      "pie": {
+        "rotulo": "NORAL APARTMENTS",
+        "medidas": "75 - 85,15m2"
+      },
+      "financiamiento": {
+        "meses": 44,
+        "separa": 1000,
+        "reserva_pct": 10,
+        "cuotas_pct": 20,
+        "extra_pct": 10,
+        "extra_n": 4,
+        "contra_pct": 60,
+        "vigencia_horas": 48,
+        "_nota": "44 meses y 4 extraordinarias, no 5: es el tope de Apartments."
+      }
+    }
+  }
 }
