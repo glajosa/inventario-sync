@@ -1,21 +1,19 @@
 <?php
 /**
- * lista.php — la LISTA DE PRECIOS de una familia de un proyecto, lista para imprimir.
+ * lista.php — la LISTA DE PRECIOS de una familia, en el formato de la direccion.
  * ---------------------------------------------------------------------------
- * Se arma del inventario EN VIVO: lo que se vende sale de la lista en la siguiente
- * apertura, sin que nadie regenere nada. Antes esto era un PDF que alguien producia
- * a mano cada tanto, y el dia que una unidad se vendia la lista seguia ofreciendola.
+ * El formato NO es nuestro: se reproduce el que ya usa la direccion y que vive en
+ * `~/Downloads/GALJOSA - Todos los sistemas de precios`. Una fila por TIPOLOGIA,
+ * banda vertical con el piso, colores por lado del parque, fila DESDE para los
+ * combos, y el aviso de escasez cuando quedan una o dos.
  *
- * Las cifras salen de cot_plan(), el MISMO motor que la cotizacion del deal. Es a
- * proposito: si la lista tuviera su propia aritmetica, tarde o temprano la lista y
- * la cotizacion de la misma unidad dirian numeros distintos, y el que queda mal
- * delante del cliente es el asesor.
+ * Lo unico que agrega esta version: se arma del inventario EN VIVO. La lista de
+ * la direccion es un PDF que alguien regenera cada tanto, y el dia que una unidad
+ * se vende la lista la sigue ofreciendo.
  *
- *   ?token=...&cat=33&fam=1791     locales comerciales de Noral Plaza
- *   ?token=...&cat=33&fam=1951     oficinas y consultorios
- *   ?token=...&cat=33&fam=1793     monoambientes
+ *   ?token=...&cat=33&fam=1951     oficinas y consultorios de Noral Plaza
  *
- * Solo DISPONIBLES y solo con precio: una unidad sin PVP no se ofrece.
+ * Cada familia declara su forma y su plazo en el bloque `listas` de su JSON.
  * ---------------------------------------------------------------------------
  */
 
@@ -23,7 +21,6 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/matrizlib.php';
 require_once __DIR__ . '/listalib.php';
-require_once __DIR__ . '/cotizarlib.php';
 
 header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -34,17 +31,22 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
 }
 
 function lh(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
-function lm(float $v): string { return '$ ' . number_format($v, 2); }
+/** Precio grande: la direccion lo escribe sin centavos ($ 144,420). */
+function lp(float $v): string { return '$ ' . number_format($v, 0); }
+/** Cifras del plan: con centavos ($1,000.00). */
+function ln(float $v): string { return '$' . number_format($v, 2); }
 
 $cat = (int)($_GET['cat'] ?? 0);
 $fam = (int)($_GET['fam'] ?? 0);
+$tok = (string)($_GET['token'] ?? '');
 
 $cfgFile = __DIR__ . "/matrices/proyecto_$cat.json";
 $cfg = is_file($cfgFile) ? json_decode((string)file_get_contents($cfgFile), true) : null;
-$proyecto = $cfg['proyecto'] ?? "Proyecto $cat";
+if (!$cfg) { http_response_code(404); exit('proyecto sin matriz'); }
+$proyecto = (string)($cfg['proyecto'] ?? "Proyecto $cat");
 
 try {
-    $unidades = mz_unidades_cache($cfg ?: ['bitrix' => ['categoryId' => $cat]]);
+    $unidades = mz_unidades_cache($cfg);
 } catch (Throwable $e) {
     http_response_code(503);
     exit('<!doctype html><meta charset="utf-8"><p style="font:15px system-ui;padding:40px">'
@@ -52,158 +54,210 @@ try {
 }
 
 $familias = lst_familias($unidades, $cat);
-if ($fam === 0 && $familias) $fam = (int)array_key_first($familias);
+$LISTAS   = $cfg['listas'] ?? [];
+// Sin familia pedida: la primera que TENGA lista declarada, no la mas grande —
+// abrir en una familia que todavia no tiene formato es mostrar una pagina vacia.
+if ($fam === 0) {
+    foreach ($familias as $t => $_) if (isset($LISTAS[(string)$t])) { $fam = $t; break; }
+    if ($fam === 0 && $familias) $fam = (int)array_key_first($familias);
+}
+$L = $LISTAS[(string)$fam] ?? null;
 $nombreFam = lst_nombre_familia($cat, $fam);
 
-// ── las filas ───────────────────────────────────────────────────────────────
-// El plan se calcula UNA vez por unidad con el modelo del proyecto. mesIni vacio
-// = la primera cuota la pone el motor (el 16 del mes que viene).
-$entrega = cot_entrega($cat);
-$modelo  = cot_modelo($cat);
-$nCuotas = (int)($modelo['maxCuotas'] ?: COT_PLAZO_REF);
-
-$filas = []; $meses = 0; $nExtra = 0;
-foreach ($unidades as $u => $d) {
-    if (($d['etapa'] ?? '') !== 'DISPONIBLE') continue;
-    if ((int)($d['tipo'] ?? 0) !== $fam) continue;
-    $pvp = (float)($d['pvp'] ?? 0);
-    if ($pvp <= 0) continue;
-
-    $plan = cot_plan($pvp, $nCuotas, 'extraordinarias', '', $entrega);
-    // La extraordinaria: se lee de las filas del propio plan en vez de recalcular
-    // un 2% a mano, que es justo la clase de duplicado que despues se desalinea.
-    $ex = 0.0; $nEx = 0;
-    foreach (($plan['filas'] ?? []) as $f) {
-        if (!empty($f['extra'])) { $ex = (float)($f['monto'] ?? $f['valor'] ?? 0); $nEx++; }
-    }
-    $meses  = max($meses, (int)$plan['cuotas']);
-    $nExtra = max($nExtra, $nEx);
-    $filas[] = [
-        'cod'   => (string)($d['cod'] ?? $u),
-        'm2'    => $d['m2'] !== null && $d['m2'] !== '' ? (float)str_replace(',', '.', (string)$d['m2']) : null,
-        'pvp'   => $pvp,
-        'sep'   => (float)$plan['separacion'],
-        'firma' => (float)$plan['firma'],
-        'mens'  => (float)$plan['mensual'],
-        'cuotas'=> (int)$plan['cuotas'],
-        'extra' => $ex,
-        'contra'=> (float)$plan['contraentrega'],
-    ];
-}
-// Orden natural del inventario: edificio, piso, numero. strnatcmp para que el
-// 10 vaya despues del 9 y no entre el 1 y el 2.
-usort($filas, fn($a, $b) => strnatcmp($a['cod'], $b['cod']));
-
 $hoy = new DateTimeImmutable('now');
-$MES = ['', 'enero','febrero','marzo','abril','mayo','junio','julio','agosto',
-        'septiembre','octubre','noviembre','diciembre'];
-$entregaTxt = $entrega ? $MES[(int)$entrega['m']] . ' de ' . (int)$entrega['y'] : null;
 ?>
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lista de Precios · <?= lh($proyecto) ?> · <?= lh($nombreFam) ?></title>
 <style>
-  :root{ --tinta:#0f2f5c; --borde:#dfe4ea; --gris:#6b7480; --suave:#f6f8fa; }
-  *{box-sizing:border-box}
-  body{margin:0;background:#eef2f5;color:#1a2530;
-       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
-  .hoja{max-width:1180px;margin:20px auto;background:#fff;padding:26px 28px;
-        border-radius:8px;box-shadow:0 1px 3px rgba(16,24,40,.09)}
-  .cab{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:4px}
-  .cab img{height:44px;width:auto}
-  h1{font-size:19px;margin:0;letter-spacing:.01em}
-  .sub{color:var(--gris);font-size:13px;margin:2px 0 18px}
-  .barra{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}
-  .barra a{display:inline-block;padding:7px 13px;border-radius:6px;text-decoration:none;
-           font-size:13px;font-weight:600;border:1px solid var(--borde);color:#334;background:#fff}
-  .barra a.on{background:var(--tinta);border-color:var(--tinta);color:#fff}
-  .imp{margin-left:auto;background:var(--tinta) !important;border-color:var(--tinta) !important;
-       color:#fff !important;cursor:pointer;font-family:inherit}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  th,td{padding:7px 9px;text-align:right;white-space:nowrap}
-  th:first-child,td:first-child{text-align:left}
-  thead th{background:var(--tinta);color:#fff;font-weight:600;font-size:11.5px;
-           text-transform:uppercase;letter-spacing:.04em;
-           -webkit-print-color-adjust:exact;print-color-adjust:exact}
-  tbody tr:nth-child(even){background:var(--suave)}
-  tbody td{border-bottom:1px solid var(--borde)}
-  .cod{font-weight:700}
-  .tabla-marco{overflow-x:auto}
-  .pie{margin-top:16px;font-size:11.5px;color:var(--gris);line-height:1.7}
-  .vacio{padding:36px 0;text-align:center;color:var(--gris)}
-  /* Margen de hoja en CERO: si no, el navegador estampa su encabezado y su pie con
-     la URL completa —token incluido— en un documento que se le manda al cliente. */
-  @page{ margin:0 }
-  @media print{
-    body{background:#fff;padding:12mm 10mm}
-    .hoja{max-width:none;margin:0;padding:0;box-shadow:none;border-radius:0}
-    .barra{display:none !important}
-    .tabla-marco{overflow:visible}
-    thead{display:table-header-group}   /* la cabecera se repite en cada hoja */
-    tr{break-inside:avoid}
-  }
+  /* El CSS es el de la lista de la direccion. No se "moderniza": el equipo comercial
+     reconoce este documento y el cliente ya lo vio asi. */
+  @page { size: A4 landscape; margin: 12mm; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Calibri,'Segoe UI',Arial,sans-serif;background:#e9e9e6;color:#000;padding:18px}
+  .hoja{background:#fff;padding:20px 26px 26px;margin:0 auto;max-width:1120px;
+        box-shadow:0 1px 5px rgba(0,0,0,.16)}
+  .cab{display:flex;align-items:center;gap:20px;margin-bottom:6px}
+  .cab .logo{height:60px;width:auto}
+  .cab .tit{flex:1}
+  .wrap{display:flex;gap:0;align-items:stretch}
+  .wrap .lat{background:#3b5323;color:#fff;writing-mode:vertical-rl;transform:rotate(180deg);
+       display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;
+       padding:8px 5px;border:1px solid #000;border-left:0;letter-spacing:.03em}
+  .lat em{font-style:italic}
+  table{width:100%;border-collapse:collapse;font-size:11px}
+  th,td{border:1px solid #000;padding:4px 6px}
+  .titulo{background:#3b5323;color:#fff;font-size:15px;font-weight:700;text-align:center;padding:7px}
+  .sub{text-align:center;font-size:11.5px;font-weight:700;padding:5px}
+  .g th{font-weight:700;text-align:center;font-size:11px}
+  .g .it{font-style:italic}
+  .c th{font-weight:700;text-align:center;font-size:9px;line-height:1.2;padding:5px 4px}
+  .niv{color:#fff;font-weight:700;font-size:9px;text-align:center;width:26px;padding:2px}
+  .niv span{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap}
+  .niv2{background:#3b5323}.niv3{background:#6b8e3d}.niv4{background:#8a6d1f}
+  .niv5{background:#4a5d6b}.niv6{background:#7a4b00}
+  .cat{font-weight:700;font-size:10px;background:#fdf6e3;line-height:1.25}
+  /* Codigo de color de la vista, tomado de la hoja de Excel original:
+     crema para el parque lineal, verde palido para el parque central. */
+  .cat.lineal {background:#fff2cc}
+  .cat.central{background:#e2efda}
+  .cat.combo{background:#3b5323;color:#fff;text-align:center;letter-spacing:.04em}
+  .cat .ult{display:block;font-weight:600;font-size:6.5px;letter-spacing:.09em;
+       margin-top:2px;color:#9a6a63;opacity:.9}
+  td.c{text-align:center}
+  td.p{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+  td.n{text-align:right;font-variant-numeric:tabular-nums}
+  .pie{display:inline-flex;background:#3b5323;color:#fff;padding:5px 12px;
+       border:1px solid #000;border-top:0;font-size:10.5px;font-weight:700}
+  .pie span{background:#8fae5d;color:#1a1a1a;margin-left:14px;padding:0 10px;
+       font-size:9.5px;display:inline-flex;align-items:center}
+  .vig{margin-top:12px;background:#ffff00;border:1px solid #000;text-align:center;
+       font-size:11px;font-weight:700;padding:6px}
+  .meta{margin-top:6px;font-size:9.5px;color:#555;text-align:center}
+  /* Barra de familias: es navegacion nuestra y NO va en el papel. */
+  .barra{max-width:1120px;margin:0 auto 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .barra a,.barra button{font:600 12.5px/1 Calibri,'Segoe UI',Arial,sans-serif;padding:8px 13px;
+       border:1px solid #b9bdb4;background:#fff;color:#26301c;text-decoration:none;cursor:pointer;
+       border-radius:3px}
+  .barra a.on{background:#3b5323;border-color:#3b5323;color:#fff}
+  .barra .imp{margin-left:auto;background:#3b5323;border-color:#3b5323;color:#fff}
+  .aviso{max-width:1120px;margin:0 auto 14px;background:#fff3cd;border:1px solid #e0c874;
+       padding:10px 14px;font-size:12px}
+  @media print{body{background:#fff;padding:0}.hoja{box-shadow:none}.barra,.aviso{display:none}}
 </style>
 </head><body>
-<div class="hoja">
 
-  <div class="barra">
-    <?php foreach ($familias as $t => $f): ?>
-      <a class="<?= $t === $fam ? 'on' : '' ?>"
-         href="?token=<?= lh((string)($_GET['token'] ?? '')) ?>&cat=<?= $cat ?>&fam=<?= $t ?>"
-      ><?= lh($f['nombre']) ?> <span style="opacity:.7;font-weight:400">(<?= (int)$f['n'] ?>)</span></a>
-    <?php endforeach; ?>
-    <button class="barra-imp imp" onclick="window.print()">Descargar PDF</button>
+<div class="barra">
+  <?php foreach ($familias as $t => $f): ?>
+    <a class="<?= $t === $fam ? 'on' : '' ?>"
+       href="?token=<?= lh($tok) ?>&cat=<?= $cat ?>&fam=<?= (int)$t ?>"
+    ><?= lh($f['nombre']) ?> (<?= (int)$f['n'] ?>)</a>
+  <?php endforeach; ?>
+  <button class="imp" onclick="window.print()">Descargar PDF</button>
+</div>
+
+<?php if (!$L): ?>
+  <div class="aviso">
+    <b><?= lh($nombreFam) ?></b> todavía no tiene el formato de lista declarado en
+    <code>matrices/proyecto_<?= $cat ?>.json</code> (bloque <code>listas</code>).
+    Las familias con formato están en la barra de arriba.
   </div>
+<?php else:
+  $fin   = $L['financiamiento'] ?? [];
+  $grupos = (array)($L['grupos'] ?? []);
+  $niveles = (array)($L['niveles'] ?? []);
+  $orden  = (array)($L['orden'] ?? []);
+  $px     = mz_precios_vigentes($cfg);
+  $combo  = $L['combo'] ?? null;
+  $conParq = !empty($L['parqueos']);
 
+  // Se arma primero y se dibuja despues: hace falta saber cuantas filas tiene cada
+  // piso para el rowspan de la banda vertical, y cuales pisos quedaron sin nada.
+  $bloques = [];
+  foreach ($niveles as $niv) {
+      $filas = [];
+      foreach ($grupos as $g) {
+          $eds = (array)($cfg['grupos'][$g]['edificios'] ?? [$g]);
+          foreach ($orden as $k) {
+              $precio = $px[$eds[0]][$niv][$k] ?? null;
+              if ($precio === null) continue;
+              $cods = lst_celda($cfg, $unidades, $eds, $niv, $k);
+              if (!$cods) continue;                 // agotada: no se ofrece
+              $me = $cfg['metraje'][$g] ?? [];
+              $m2 = in_array($k, (array)($me['cats_mayor'] ?? []), true)
+                      ? ($me['mayor'] ?? null) : ($me['base'] ?? null);
+              $filas[] = ['cat' => $k, 'g' => $g, 'precio' => (float)$precio,
+                          'm2' => $m2, 'cods' => $cods];
+          }
+      }
+      // La fila DESDE del combo va al final del piso, como en la lista original.
+      if ($combo && isset($cfg['combos']['precio'][$niv])) {
+          $filas[] = ['combo' => true, 'precio' => (float)$cfg['combos']['precio'][$niv],
+                      'm2' => $cfg['combos']['metraje'] ?? null, 'cods' => []];
+      }
+      if ($filas) $bloques[$niv] = $filas;
+  }
+  $nCols = 4 + ($conParq ? 1 : 0);   // niv + cat + metros + [parqueos] + precio
+?>
+<section class="hoja">
   <div class="cab">
-    <img src="assets/logo_galjosa_transparente.png" alt="Galjosa" onerror="this.style.display='none'">
-    <div>
-      <h1><?= lh(strtoupper($proyecto)) ?> — <?= lh(strtoupper($nombreFam)) ?></h1>
-      <div class="sub">Lista de precios · <?= count($filas) ?> disponibles ·
-        <?= lh($hoy->format('d/m/Y')) ?><?php if ($meses): ?> ·
-        financiamiento a <?= $meses ?> meses<?php endif; ?></div>
+    <img class="logo" src="assets/logo_galjosa_transparente.png"
+         alt="<?= lh($proyecto) ?>" onerror="this.style.display='none'">
+    <div class="tit">
+      <table><tr><th class="titulo"><?= lh((string)($L['titulo'] ?? strtoupper($proyecto))) ?></th></tr>
+             <tr><th class="sub"><?= lh((string)($L['subtitulo'] ?? '')) ?></th></tr></table>
     </div>
   </div>
-
-  <?php if (!$filas): ?>
-    <div class="vacio">No hay unidades disponibles con precio en esta familia.</div>
-  <?php else: ?>
-  <div class="tabla-marco">
-  <table>
-    <thead><tr>
-      <th>Unidad</th><th>m²</th><th>Precio</th><th>Separe con</th><th>A la firma</th>
-      <th>Cuota mensual<?= $meses ? " ($meses)" : '' ?></th>
-      <?php if ($nExtra): ?><th>Extraordinaria (×<?= $nExtra ?>)</th><?php endif; ?>
-      <th>Saldo contra entrega</th>
-    </tr></thead>
-    <tbody>
-    <?php foreach ($filas as $r): ?>
-      <tr>
-        <td class="cod"><?= lh($r['cod']) ?></td>
-        <td><?= $r['m2'] !== null && $r['m2'] > 0 ? number_format($r['m2'], 2) : '—' ?></td>
-        <td><?= lm($r['pvp']) ?></td>
-        <td><?= lm($r['sep']) ?></td>
-        <td><?= lm($r['firma']) ?></td>
-        <td><?= lm($r['mens']) ?></td>
-        <?php if ($nExtra): ?><td><?= $r['extra'] > 0 ? lm($r['extra']) : '—' ?></td><?php endif; ?>
-        <td><?= lm($r['contra']) ?></td>
-      </tr>
-    <?php endforeach; ?>
-    </tbody>
-  </table>
+  <div class="wrap">
+    <table>
+      <thead>
+        <tr class="g"><th colspan="<?= $nCols ?>">CARACTER&Iacute;STICAS</th>
+          <th colspan="2" class="it"><?= (int)($fin['reserva_pct'] ?? 10) ?>% DE RESERVA</th>
+          <th><?= (int)($fin['cuotas_pct'] ?? 20) ?>%</th>
+          <th><?= (int)($fin['extra_pct'] ?? 10) ?>%</th></tr>
+        <tr class="c"><th></th><th><?= $L['encabezado_cat'] ?? 'CARACTER&Iacute;STICAS' ?></th>
+          <th>METROS (m2)</th><?php if ($conParq): ?><th>PARQUEOS</th><?php endif; ?><th>PRECIO</th>
+          <th>SEPARA CON</th><th>A LA FIRMA</th>
+          <th>CUOTAS<br>MENSUALES</th>
+          <th>CUOTAS EXTRAORDINARIAS<br>(1 VEZ AL A&Ntilde;O)</th></tr>
+      </thead>
+      <tbody>
+      <?php $iNiv = 0; foreach ($bloques as $niv => $filas): $iNiv++;
+            $etNiv = strtoupper((string)($cfg['niveles'][$niv]['etiqueta'] ?? $niv));
+            $clsNiv = 'niv' . (($iNiv - 1) % 5 + 2);
+            $primera = true; ?>
+        <?php foreach ($filas as $r): $pl = lst_plan($r['precio'], $fin); ?>
+          <tr>
+            <?php if ($primera): $primera = false; ?>
+              <td class="niv <?= $clsNiv ?>" rowspan="<?= count($filas) ?>"><span><?= lh($etNiv) ?></span></td>
+            <?php endif; ?>
+            <?php if (!empty($r['combo'])): ?>
+              <td class="cat combo"><?= lh((string)($combo['rotulo'] ?? 'DESDE')) ?></td>
+            <?php else:
+              $n = count($r['cods']);
+              // Una sola: la lista la nombra por su codigo. Dos: la tipologia con el
+              // aviso. Es como lo escribe la direccion y es presion de escasez real.
+              $texto = $n === 1 ? $r['cods'][0]
+                                : (string)($L['nombre'][$r['cat']] ?? $r['cat']);
+              $ult = $n === 1 ? 'ÚLTIMA DISPONIBLE' : ($n === 2 ? '2 ÚLTIMAS DISPONIBLES' : '');
+            ?>
+              <td class="cat <?= lh((string)($L['lado'][$r['cat']] ?? '')) ?>"><?= lh($texto) ?><?php
+                  if ($ult !== '') echo '<span class="ult">' . lh($ult) . '</span>'; ?></td>
+            <?php endif; ?>
+            <td class="c"><?= $r['m2'] !== null ? lh(rtrim(rtrim(number_format((float)$r['m2'], 2, ',', ''), '0'), ',')) : '—' ?></td>
+            <?php if ($conParq): ?>
+              <td class="c"><?= (int)(!empty($r['combo'])
+                    ? ($combo['parqueos'] ?? 2)
+                    : ($L['parqueos'][$r['cat']] ?? 1)) ?></td>
+            <?php endif; ?>
+            <td class="p"><?= lh(lp($r['precio'])) ?></td>
+            <td class="n"><?= lh(ln($pl['separa'])) ?></td>
+            <td class="n"><?= lh(ln($pl['firma'])) ?></td>
+            <td class="n"><?= lh(ln($pl['mensual'])) ?></td>
+            <td class="n"><?= lh(ln($pl['extra'])) ?></td>
+          </tr>
+        <?php endforeach; ?>
+      <?php endforeach; ?>
+      <?php if (!$bloques): ?>
+        <tr><td colspan="<?= $nCols + 4 ?>" style="text-align:center;padding:26px">
+          No hay unidades disponibles de esta familia.</td></tr>
+      <?php endif; ?>
+      </tbody>
+    </table>
+    <?php if (!empty($L['lat'])): ?>
+      <div class="lat"><?= $L['lat'] ?></div>
+    <?php endif; ?>
   </div>
-
-  <div class="pie">
-    Precios sujetos a cambio sin previo aviso. Valores en dólares de los Estados Unidos de América.<br>
-    <?php if ($entregaTxt): ?>Entrega prevista: <b><?= lh($entregaTxt) ?></b>. El plazo de
-    financiamiento se ajusta a esa fecha, así que se acorta con cada mes que pasa.<br><?php endif; ?>
-    <?php if ($nExtra): ?>Las cuotas extraordinarias son <b><?= $nExtra ?></b>, una por año.<br><?php endif; ?>
-    El saldo contra entrega puede cubrirse con recursos propios o con crédito hipotecario.<br>
-    Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo: las unidades
-    colocadas dejan de aparecer solas.
-  </div>
+  <?php if (!empty($L['pie'])): ?>
+    <div class="pie"><?= lh((string)($L['pie']['rotulo'] ?? '')) ?><?php
+        if (!empty($L['pie']['medidas'])) echo '<span>' . lh((string)$L['pie']['medidas']) . '</span>'; ?></div>
   <?php endif; ?>
+  <div class="vig">ESTA COTIZACI&Oacute;N TIENE UNA VIGENCIA DE
+    <?= (int)($fin['vigencia_horas'] ?? 48) ?> HRS NATURALES</div>
+  <div class="meta">Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo ·
+    <?= array_sum(array_map('count', $bloques)) ?> tipologías con disponibilidad</div>
+</section>
+<?php endif; ?>
 
-</div>
 </body></html>

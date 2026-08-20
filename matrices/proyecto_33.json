@@ -1235,5 +1235,200 @@
   "_exentas_nota": [
     "Mitades de locales FUSIONADOS: el par comparte un solo precio y metraje, que vive",
     "en la otra mitad. Estas van vacias a proposito y NO se reprecean."
-  ]
+  ],
+  "listas": {
+    "_lea_esto_primero": [
+      "El FORMATO de estas listas es el que ya usa la direccion, no uno nuevo. Los",
+      "originales estan en `~/Downloads/GALJOSA - Todos los sistemas de precios`.",
+      "Una fila por TIPOLOGIA, no por unidad: el cliente lee 'esquinero con vista al",
+      "parque lineal, 58 m2, $144.420' y no 78 codigos.",
+      "",
+      "Cuando en una celda queda UNA sola disponible la lista la nombra por su codigo",
+      "y le pone 'ULTIMA DISPONIBLE'; con dos, '2 ULTIMAS DISPONIBLES'. Es presion de",
+      "escasez y sale del inventario en vivo.",
+      "",
+      "🔴 El PLAZO es por FAMILIA, no por proyecto. Locales, oficinas y monoambientes",
+      "de Plaza no comparten meses. El cotizador resuelve por categoria de pipeline y",
+      "no puede distinguirlos: por eso el plazo de la lista vive ACA."
+    ],
+    "1951": {
+      "forma": "tipologia",
+      "titulo": "EDIFICIO A - B - C",
+      "subtitulo": "40% de Entrada a 54 Meses",
+      "grupos": [
+        "ABC"
+      ],
+      "niveles": [
+        "P2",
+        "P3",
+        "P4"
+      ],
+      "orden": [
+        "EL",
+        "ML",
+        "EC",
+        "MC"
+      ],
+      "encabezado_cat": "ESQUINERO/<br>MEDIANERO &amp; VISTA",
+      "nombre": {
+        "EL": "ESQUINERO - VISTA AL PARQUE LINEAL",
+        "ML": "MEDIANERO - VISTA AL PARQUE LINEAL",
+        "EC": "ESQUINERO - VISTA AL PARQUE CENTRAL",
+        "MC": "MEDIANERO - VISTA AL PARQUE CENTRAL"
+      },
+      "lado": {
+        "EL": "lineal",
+        "ML": "lineal",
+        "EC": "central",
+        "MC": "central"
+      },
+      "parqueos": {
+        "EL": 1,
+        "ML": 1,
+        "EC": 1,
+        "MC": 1
+      },
+      "combo": {
+        "rotulo": "DESDE",
+        "parqueos": 2
+      },
+      "lat": "CONSULTORIOS: Solo en el&nbsp;<em>2DO PISO del EDIFICIO B</em>",
+      "pie": {
+        "rotulo": "EDIFICIO A - B - C",
+        "medidas": "50 - 58 - 100m2"
+      },
+      "financiamiento": {
+        "meses": 54,
+        "separa": 1000,
+        "reserva_pct": 10,
+        "cuotas_pct": 20,
+        "extra_pct": 10,
+        "extra_n": 5,
+        "contra_pct": 60,
+        "_nota": "Verificado contra la lista de OFICINAS de la direccion: $144.420 da firma $13.442,00, mensual $534,89 y extraordinaria $2.888,40. Las cuatro filas cuadran al centavo."
+      }
+    },
+    "1793": {
+      "forma": "tipologia",
+      "titulo": "EDIFICIOS D - E - F  (monoambientes)",
+      "subtitulo": "40% de Entrada a 54 Meses",
+      "grupos": [
+        "D",
+        "E",
+        "F"
+      ],
+      "niveles": [
+        "P2",
+        "P3",
+        "P4"
+      ],
+      "orden": [
+        "E3L",
+        "E2L",
+        "E1L",
+        "ML",
+        "E3C",
+        "E2C",
+        "E1C",
+        "MC",
+        "U25"
+      ],
+      "encabezado_cat": "ESQUINERO/<br>MEDIANERO &amp; VISTA",
+      "nombre": {
+        "E3L": "ESQUINERO EXTERNO - PARQUE LINEAL",
+        "E2L": "ESQUINERO EXTERNO 2 - PARQUE LINEAL",
+        "E1L": "ESQUINERO INTERNO - PARQUE LINEAL",
+        "ML": "MEDIANERO - PARQUE LINEAL",
+        "E3C": "ESQUINERO EXTERNO - PARQUE CENTRAL",
+        "E2C": "ESQUINERO EXTERNO 2 - PARQUE CENTRAL",
+        "E1C": "ESQUINERO INTERNO - PARQUE CENTRAL",
+        "MC": "MEDIANERO - PARQUE CENTRAL",
+        "U25": "UNIDAD DEL VACIO CENTRAL"
+      },
+      "lado": {
+        "E3L": "lineal",
+        "E2L": "lineal",
+        "E1L": "lineal",
+        "ML": "lineal",
+        "E3C": "central",
+        "E2C": "central",
+        "E1C": "central",
+        "MC": "central",
+        "U25": ""
+      },
+      "parqueos": {},
+      "pie": {
+        "rotulo": "EDIFICIOS D - E - F",
+        "medidas": "31 - 32,5m2"
+      },
+      "financiamiento": {
+        "meses": 54,
+        "separa": 1000,
+        "reserva_pct": 10,
+        "cuotas_pct": 20,
+        "extra_pct": 10,
+        "extra_n": 5,
+        "contra_pct": 60,
+        "_nota": "Verificado contra la lista de OFICINAS de la direccion: $144.420 da firma $13.442,00, mensual $534,89 y extraordinaria $2.888,40. Las cuatro filas cuadran al centavo."
+      }
+    },
+    "1791": {
+      "forma": "tipologia",
+      "titulo": "LOCALES COMERCIALES",
+      "subtitulo": "40% de Entrada a 54 Meses",
+      "grupos": [
+        "ABC",
+        "D",
+        "E",
+        "F"
+      ],
+      "niveles": [
+        "PB",
+        "L1"
+      ],
+      "orden": [
+        "ESQ_L",
+        "MED_C",
+        "MED_L",
+        "ESQ39_C",
+        "ESQ39_L",
+        "MED30_C",
+        "MED30_L"
+      ],
+      "encabezado_cat": "UBICACI&Oacute;N",
+      "nombre": {
+        "ESQ_L": "ESQUINERO - PLANTA BAJA",
+        "MED_C": "MEDIANERO - PARQUE CENTRAL",
+        "MED_L": "MEDIANERO - PARQUE LINEAL",
+        "ESQ39_C": "ESQUINERO 39 m2 - PARQUE CENTRAL",
+        "ESQ39_L": "ESQUINERO 39 m2 - PARQUE LINEAL",
+        "MED30_C": "MEDIANERO 30 m2 - PARQUE CENTRAL",
+        "MED30_L": "MEDIANERO 30 m2 - PARQUE LINEAL"
+      },
+      "lado": {
+        "ESQ_L": "lineal",
+        "MED_L": "lineal",
+        "ESQ39_L": "lineal",
+        "MED30_L": "lineal",
+        "MED_C": "central",
+        "ESQ39_C": "central",
+        "MED30_C": "central"
+      },
+      "parqueos": {},
+      "pie": {
+        "rotulo": "LOCALES COMERCIALES",
+        "medidas": "30 - 39 - 77m2"
+      },
+      "financiamiento": {
+        "meses": 54,
+        "separa": 1000,
+        "reserva_pct": 10,
+        "cuotas_pct": 20,
+        "extra_pct": 10,
+        "extra_n": 5,
+        "contra_pct": 60,
+        "_nota": "Verificado contra la lista de OFICINAS de la direccion: $144.420 da firma $13.442,00, mensual $534,89 y extraordinaria $2.888,40. Las cuatro filas cuadran al centavo."
+      }
+    }
+  }
 }
