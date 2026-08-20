@@ -622,11 +622,10 @@
         "M"
       ],
       "encabezado_cat": "ESQUINERO/<br>MEDIANERO",
-      "una_tabla_por_grupo": true,
       "nombre": {
-        "E3": "ESQUINERO 3",
-        "E2": "ESQUINERO 2",
-        "E1": "ESQUINERO INTERNO",
+        "E3": "ESQUINEROS 3",
+        "E2": "ESQUINEROS 2",
+        "E1": "ESQUINEROS",
         "M": "MEDIANEROS"
       },
       "lado": {},
@@ -649,10 +648,26 @@
         "extra_n": 4,
         "contra_pct": 60,
         "vigencia_horas": 48,
-        "_nota": "44 meses y 4 extraordinarias, no 5: es el tope de Apartments."
+        "_nota": "4 extraordinarias, no 5: verificado contra la lista de la direccion — $153.375 da $3.834,38, o sea 10% dividido en 4. Es la regla del proyecto y el cotizador tambien la aplica (maxExtra=4)."
       },
       "columna_patio_m2": true,
-      "nivel_patio": "PB"
+      "nivel_patio": "PB",
+      "una_tabla_por_edificio": true,
+      "excluir_edificios": [
+        "J"
+      ],
+      "_nota_edificios": "Nueve tablas, una por edificio A..I, como la lista de la direccion. J queda fuera: se ve en la matriz pero no se escribe ni se ofrece.",
+      "badge_uno": "ÚLTIMA UNIDAD",
+      "badge_dos": "2 ÚLTIMAS DISPONIBLES",
+      "nombre_por_grupo": {
+        "GH": {
+          "E3": "3 DORM",
+          "E2": "3 DORM",
+          "E1": "3 DORM",
+          "M": "3 DORM"
+        }
+      },
+      "_nota_gh": "G y H son los unicos de 3 dormitorios (106 y 118 m2) y la direccion los rotula '3 DORM' en vez de esquinero/medianero."
     }
   }
 }

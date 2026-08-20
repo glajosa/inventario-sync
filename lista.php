@@ -181,23 +181,43 @@ $hoy = new DateTimeImmutable('now');
   // Una HOJA por grupo cuando la familia lo pide. La direccion saca una tabla por
   // edificio ("EDIFICIO A", "EDIFICIO B"): juntar D, E y F en una sola mezclaba
   // precios de edificios distintos bajo el mismo rotulo de piso.
-  $porGrupo = !empty($L['una_tabla_por_grupo']);
+  // Tres formas de partir el documento:
+  //   nada                  -> una sola tabla con todo
+  //   una_tabla_por_grupo   -> una por GRUPO DE PRECIO (los monoambientes de Plaza)
+  //   una_tabla_por_edificio-> una por EDIFICIO (Apartments: A, B, C... hasta I)
+  // Apartments necesita la tercera: la direccion saca nueve tablas, una por edificio,
+  // aunque B, C, D y E compartan precio. Agrupandolas en una sola "BCDE" el vendedor
+  // no encuentra su edificio y los metrajes distintos (GH son 106, I son 65) quedaban
+  // escondidos detras de un rotulo que no nombra ninguno.
+  $porEdificio = !empty($L['una_tabla_por_edificio']);
+  $porGrupo    = !empty($L['una_tabla_por_grupo']);
+  $excluir     = (array)($L['excluir_edificios'] ?? []);
   $hojas = [];
-  foreach ($porGrupo ? $grupos : [null] as $gSolo) {
+  if ($porEdificio) {
+      $unidadesHoja = [];
+      foreach ($grupos as $g)
+          foreach ((array)($cfg['grupos'][$g]['edificios'] ?? [$g]) as $ed)
+              if (!in_array($ed, $excluir, true)) $unidadesHoja[] = $ed;
+      sort($unidadesHoja);
+  } else {
+      $unidadesHoja = $porGrupo ? $grupos : [null];
+  }
+  foreach ($unidadesHoja as $gSolo) {
       $gs = $gSolo === null ? $grupos : [$gSolo];
       $bloques = [];
       foreach ($niveles as $niv) {
           $filas = [];
           foreach ($gs as $g) {
-              $eds = (array)($cfg['grupos'][$g]['edificios'] ?? [$g]);
+              $eds = $porEdificio ? [$g] : (array)($cfg['grupos'][$g]['edificios'] ?? [$g]);
+              $gDatos = $porEdificio ? mz_grupo_de($cfg, $g) : $g;   // metraje y notas van por GRUPO
               $precio = $px[$eds[0]][$niv] ?? null;
               if (!is_array($precio)) continue;
               foreach ($orden as $k) {
                   if (!isset($precio[$k])) continue;
                   $cel = lst_celda($cfg, $unidades, $eds, $niv, $k);
                   if (!$cel['cods']) continue;          // agotada: no se ofrece
-                  $filas[] = ['cat' => $k, 'g' => $g, 'precio' => (float)$precio[$k],
-                              'm2' => lst_metros($cel['m2'], $cfg, $g, $k),
+                  $filas[] = ['cat' => $k, 'g' => $gDatos, 'precio' => (float)$precio[$k],
+                              'm2' => lst_metros($cel['m2'], $cfg, $gDatos, $k),
                               'cods' => $cel['cods']];
               }
           }
@@ -220,7 +240,9 @@ $hoy = new DateTimeImmutable('now');
 <?php foreach ($hojas as $hoja): $bloques = $hoja['bloques'];
       $tit = $hoja['grupo'] === null
           ? (string)($L['titulo'] ?? strtoupper($proyecto))
-          : strtoupper((string)($cfg['grupos'][$hoja['grupo']]['etiqueta'] ?? ('EDIFICIO ' . $hoja['grupo']))); ?>
+          : ($porEdificio
+              ? 'EDIFICIO ' . $hoja['grupo']
+              : strtoupper((string)($cfg['grupos'][$hoja['grupo']]['etiqueta'] ?? ('EDIFICIO ' . $hoja['grupo'])))); ?>
 <section class="hoja">
   <div class="cab">
     <img class="logo" src="assets/logo_galjosa_transparente.png"
@@ -260,12 +282,17 @@ $hoy = new DateTimeImmutable('now');
               $n = count($r['cods']);
               // Una sola: la lista la nombra por su codigo. Dos: la tipologia con el
               // aviso. Es como lo escribe la direccion y es presion de escasez real.
+              $nomCat = $L['nombre_por_grupo'][$r['g']][$r['cat']]
+                     ?? ($L['nombre'][$r['cat']] ?? $r['cat']);
               $texto = $n === 1
                   ? (($L['codigo_formato'] ?? '') === 'guion'
                         ? preg_replace('/^([A-Z])(\d+)-/', '$1-$2-', $r['cods'][0])
                         : $r['cods'][0])
-                  : (string)($L['nombre'][$r['cat']] ?? $r['cat']);
-              $ult = $n === 1 ? 'ÚLTIMA DISPONIBLE' : ($n === 2 ? '2 ÚLTIMAS DISPONIBLES' : '');
+                  : (string)$nomCat;
+              // El texto exacto de la direccion. En Apartments escribe "ÚLTIMA UNIDAD"
+              // y en Plaza "ÚLTIMA DISPONIBLE": no es lo mismo y cada lista lo declara.
+              $ult = $n === 1 ? (string)($L['badge_uno'] ?? 'ÚLTIMA DISPONIBLE')
+                   : ($n === 2 ? (string)($L['badge_dos'] ?? '2 ÚLTIMAS DISPONIBLES') : '');
             ?>
               <td class="cat <?= lh((string)($L['lado'][$r['cat']] ?? '')) ?>"><?= lh($texto) ?><?php
                   if ($ult !== '') echo '<span class="ult">' . lh($ult) . '</span>'; ?></td>
