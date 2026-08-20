@@ -29,7 +29,7 @@ function llamada_procesar_resultado(
         'request' => $request,
         'noInterestStage' => $noInterestStage,
     ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-    $operation = $store->begin($idempotencyKey, $requestHash, $now->getTimestamp());
+    $operation = $store->begin($idempotencyKey, $requestHash, $store->now());
 
     if (!$operation['is_new'] && (string)$operation['state'] === 'completed') {
         return llamada_resultado_repetido($operation, $request['callRequestId']);
@@ -49,6 +49,8 @@ function llamada_procesar_resultado(
             'callRequestId' => $request['callRequestId'],
         ];
     }
+    $leaseToken = (string)($operation['lease_token'] ?? '');
+    if ($leaseToken === '') throw new LlamadaLeaseLost('idempotency reservation has no lease token');
 
     $progress = llamada_cargar_progreso($operation['response_json'] ?? null);
     $commentState = isset($operation['comment_state']) ? (string)$operation['comment_state'] : null;
@@ -132,7 +134,7 @@ function llamada_procesar_resultado(
     }
 
     $progress['nextActivityAt'] = $nextAt?->format(DateTimeInterface::ATOM);
-    llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $now);
+    llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken);
 
     if (!$progress['activityUpdated']) {
         try {
@@ -141,23 +143,23 @@ function llamada_procesar_resultado(
                 'fields' => $fields,
             ]);
         } catch (Throwable $error) {
-            llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $now, 'retryable');
+            llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken, 'retryable');
             throw $error;
         }
         $progress['activityUpdated'] = true;
-        llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $now);
+        llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken);
     }
 
     if (!$progress['commentProcessed']) {
         if ($request['comment'] === '') {
             $commentState = 'skipped';
             $progress['commentProcessed'] = true;
-            llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, null, $now);
+            llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, null, $leaseToken);
         } else {
             // comment.add is the only non-idempotent effect: after dispatch, a
             // transport loss cannot prove whether Bitrix created the comment.
             $commentState = 'in_progress';
-            llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, null, $now);
+            llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, null, $leaseToken);
             try {
                 $commentResult = llamada_bx_result($bx, 'crm.timeline.comment.add', [
                     'fields' => [
@@ -169,7 +171,7 @@ function llamada_procesar_resultado(
             } catch (LlamadaBitrixError $error) {
                 if ($error->isDeliveryUncertain()) throw $error;
                 $commentState = 'pending';
-                llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, null, $now, 'retryable');
+                llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, null, $leaseToken, 'retryable');
                 throw $error;
             }
             $commentId = (int)$commentResult;
@@ -178,7 +180,7 @@ function llamada_procesar_resultado(
             }
             $commentState = 'created';
             $progress['commentProcessed'] = true;
-            llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $now);
+            llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken);
         }
     }
 
@@ -190,20 +192,20 @@ function llamada_procesar_resultado(
             $progress['stageProcessed'] = true;
         } else {
             $progress['stageAttempted'] = true;
-            llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $now);
+            llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken);
             try {
                 llamada_bx_result($bx, 'crm.deal.update', [
                     'id' => $dealId,
                     'fields' => ['STAGE_ID' => $noInterestStage],
                 ]);
             } catch (Throwable $error) {
-                llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $now, 'retryable');
+                llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken, 'retryable');
                 throw $error;
             }
             $progress['stageChanged'] = true;
             $progress['stageProcessed'] = true;
         }
-        llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $now);
+        llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken);
     }
 
     $response = [
@@ -221,7 +223,8 @@ function llamada_procesar_resultado(
         json_encode($response, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         $commentState,
         $commentId,
-        $now->getTimestamp()
+        $store->now(),
+        $leaseToken
     );
 
     return $response;
@@ -251,7 +254,7 @@ function llamada_guardar_progreso(
     array $progress,
     ?string $commentState,
     ?int $commentId,
-    DateTimeImmutable $now,
+    string $leaseToken,
     string $state = 'processing'
 ): void {
     $store->checkpoint(
@@ -259,8 +262,9 @@ function llamada_guardar_progreso(
         json_encode($progress, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         $commentState,
         $commentId,
-        $now->getTimestamp(),
-        $state
+        $store->now(),
+        $state,
+        $leaseToken
     );
 }
 
@@ -293,14 +297,28 @@ function llamada_validar_resultado(array $input, DateTimeImmutable $now, string 
         if (!is_string($nextValue) || trim($nextValue) === '') {
             throw new LlamadaValidationError('nextActivityAt is required for answered');
         }
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/D', $nextValue)) {
+        if (!preg_match(
+            '/^(?<date>\d{4}-\d{2}-\d{2})T(?<time>\d{2}:\d{2}:\d{2})(?:\.\d+)?(?<zone>Z|[+-]\d{2}:\d{2})$/D',
+            $nextValue,
+            $dateParts
+        )) {
             throw new LlamadaValidationError('nextActivityAt must be RFC3339 with an explicit offset');
         }
         try {
-            $nextActivityAt = (new DateTimeImmutable($nextValue))->setTimezone(new DateTimeZone('America/Guayaquil'));
+            $parsedNextActivityAt = new DateTimeImmutable($nextValue);
         } catch (Throwable) {
             throw new LlamadaValidationError('invalid nextActivityAt');
         }
+        $parseErrors = DateTimeImmutable::getLastErrors();
+        $expectedOffset = $dateParts['zone'] === 'Z' ? '+00:00' : $dateParts['zone'];
+        if (($parseErrors !== false
+                && ((int)$parseErrors['warning_count'] > 0 || (int)$parseErrors['error_count'] > 0))
+            || $parsedNextActivityAt->format('Y-m-d') !== $dateParts['date']
+            || $parsedNextActivityAt->format('H:i:s') !== $dateParts['time']
+            || $parsedNextActivityAt->format('P') !== $expectedOffset) {
+            throw new LlamadaValidationError('invalid nextActivityAt');
+        }
+        $nextActivityAt = $parsedNextActivityAt->setTimezone(new DateTimeZone('America/Guayaquil'));
         if ($nextActivityAt <= $now) {
             throw new LlamadaValidationError('nextActivityAt must be in the future');
         }

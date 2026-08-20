@@ -2,11 +2,15 @@
 declare(strict_types=1);
 
 final class LlamadaIdempotenciaConflict extends RuntimeException {}
+final class LlamadaLeaseLost extends RuntimeException {}
 
 final class LlamadaIdempotenciaStore {
-    private PDO $pdo;
+    private const LEASE_SECONDS = 60;
 
-    public function __construct(?string $dataDir = null) {
+    private PDO $pdo;
+    private Closure $clock;
+
+    public function __construct(?string $dataDir = null, ?callable $clock = null) {
         $directory = $dataDir ?? (getenv('DATA_DIR') ?: '/data');
         if (!is_dir($directory) && !mkdir($directory, 0777, true) && !is_dir($directory)) {
             throw new RuntimeException('Unable to create idempotency data directory');
@@ -17,6 +21,9 @@ final class LlamadaIdempotenciaStore {
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]);
         $this->pdo->exec('PRAGMA busy_timeout = 5000');
+        $this->clock = $clock === null
+            ? static fn(): int => time()
+            : Closure::fromCallable($clock);
         $this->pdo->exec('CREATE TABLE IF NOT EXISTS result_operations (
             idempotency_key TEXT PRIMARY KEY,
             request_hash TEXT NOT NULL,
@@ -24,9 +31,23 @@ final class LlamadaIdempotenciaStore {
             response_json TEXT,
             comment_state TEXT,
             comment_id INTEGER,
+            lease_token TEXT,
+            lease_until INTEGER,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
         )');
+        $columns = $this->pdo->query('PRAGMA table_info(result_operations)')->fetchAll();
+        $columnNames = array_column($columns, 'name');
+        if (!in_array('lease_token', $columnNames, true)) {
+            $this->pdo->exec('ALTER TABLE result_operations ADD COLUMN lease_token TEXT');
+        }
+        if (!in_array('lease_until', $columnNames, true)) {
+            $this->pdo->exec('ALTER TABLE result_operations ADD COLUMN lease_until INTEGER');
+        }
+    }
+
+    public function now(): int {
+        return ($this->clock)();
     }
 
     public function begin(string $idempotencyKey, string $requestHash, int $now): array {
@@ -37,13 +58,18 @@ final class LlamadaIdempotenciaStore {
             $record = $this->get($idempotencyKey);
             $isNew = false;
             if ($record === null) {
+                $leaseToken = bin2hex(random_bytes(16));
                 $statement = $this->pdo->prepare('INSERT INTO result_operations
-                    (idempotency_key, request_hash, state, response_json, comment_state, comment_id, created_at, updated_at)
-                    VALUES (:idempotency_key, :request_hash, :state, NULL, NULL, NULL, :created_at, :updated_at)');
+                    (idempotency_key, request_hash, state, response_json, comment_state, comment_id,
+                     lease_token, lease_until, created_at, updated_at)
+                    VALUES (:idempotency_key, :request_hash, :state, NULL, NULL, NULL,
+                            :lease_token, :lease_until, :created_at, :updated_at)');
                 $statement->execute([
                     ':idempotency_key' => $idempotencyKey,
                     ':request_hash' => $requestHash,
                     ':state' => 'processing',
+                    ':lease_token' => $leaseToken,
+                    ':lease_until' => $now + self::LEASE_SECONDS,
                     ':created_at' => $now,
                     ':updated_at' => $now,
                 ]);
@@ -54,12 +80,16 @@ final class LlamadaIdempotenciaStore {
             } elseif ((string)$record['state'] === 'retryable'
                 || ((string)$record['state'] === 'processing'
                     && (string)($record['comment_state'] ?? '') !== 'in_progress'
-                    && (int)$record['updated_at'] <= $now - 60)) {
+                    && (int)($record['lease_until'] ?? ((int)$record['updated_at'] + self::LEASE_SECONDS)) < $now)) {
+                $leaseToken = bin2hex(random_bytes(16));
                 $statement = $this->pdo->prepare('UPDATE result_operations
-                    SET state = :state, updated_at = :updated_at
+                    SET state = :state, lease_token = :lease_token, lease_until = :lease_until,
+                        updated_at = :updated_at
                     WHERE idempotency_key = :idempotency_key');
                 $statement->execute([
                     ':state' => 'processing',
+                    ':lease_token' => $leaseToken,
+                    ':lease_until' => $now + self::LEASE_SECONDS,
                     ':updated_at' => $now,
                     ':idempotency_key' => $idempotencyKey,
                 ]);
@@ -69,6 +99,7 @@ final class LlamadaIdempotenciaStore {
 
             $this->pdo->exec('COMMIT');
             $transactionOpen = false;
+            if (!$isNew) $record['lease_token'] = null;
             return $record + ['is_new' => $isNew];
         } catch (Throwable $error) {
             if ($transactionOpen) {
@@ -78,21 +109,37 @@ final class LlamadaIdempotenciaStore {
         }
     }
 
-    public function complete(string $idempotencyKey, string $responseJson, string $commentState, ?int $commentId, int $now): void {
+    public function complete(
+        string $idempotencyKey,
+        string $responseJson,
+        string $commentState,
+        ?int $commentId,
+        int $now,
+        ?string $leaseToken = null
+    ): void {
+        $owned = $leaseToken !== null;
         $statement = $this->pdo->prepare('UPDATE result_operations
             SET state = :state, response_json = :response_json, comment_state = :comment_state,
-                comment_id = :comment_id, updated_at = :updated_at
-            WHERE idempotency_key = :idempotency_key');
-        $statement->execute([
+                comment_id = :comment_id, lease_token = NULL, lease_until = NULL, updated_at = :updated_at
+            WHERE idempotency_key = :idempotency_key' . ($owned
+                ? ' AND state = \'processing\' AND lease_token = :lease_token AND lease_until >= :lease_now'
+                : ''));
+        $parameters = [
             ':state' => 'completed',
             ':response_json' => $responseJson,
             ':comment_state' => $commentState,
             ':comment_id' => $commentId,
             ':updated_at' => $now,
             ':idempotency_key' => $idempotencyKey,
-        ]);
+        ];
+        if ($owned) {
+            $parameters[':lease_token'] = $leaseToken;
+            $parameters[':lease_now'] = $now;
+        }
+        $statement->execute($parameters);
 
         if ($statement->rowCount() !== 1) {
+            if ($owned) throw new LlamadaLeaseLost('idempotency lease lost before completion');
             throw new RuntimeException('idempotency operation not found');
         }
     }
@@ -103,31 +150,45 @@ final class LlamadaIdempotenciaStore {
         ?string $commentState,
         ?int $commentId,
         int $now,
-        string $state = 'processing'
+        string $state,
+        string $leaseToken
     ): void {
         if (!in_array($state, ['processing', 'retryable'], true)) {
             throw new InvalidArgumentException('invalid idempotency checkpoint state');
         }
+        $retryable = $state === 'retryable';
         $statement = $this->pdo->prepare('UPDATE result_operations
             SET state = :state, response_json = :response_json, comment_state = :comment_state,
-                comment_id = :comment_id, updated_at = :updated_at
-            WHERE idempotency_key = :idempotency_key');
-        $statement->execute([
+                comment_id = :comment_id,
+                lease_token = ' . ($retryable ? 'NULL' : ':next_lease_token') . ',
+                lease_until = ' . ($retryable ? 'NULL' : ':lease_until') . ',
+                updated_at = :updated_at
+            WHERE idempotency_key = :idempotency_key
+              AND state = \'processing\' AND lease_token = :lease_token AND lease_until >= :lease_now');
+        $parameters = [
             ':state' => $state,
             ':response_json' => $responseJson,
             ':comment_state' => $commentState,
             ':comment_id' => $commentId,
             ':updated_at' => $now,
             ':idempotency_key' => $idempotencyKey,
-        ]);
+            ':lease_token' => $leaseToken,
+            ':lease_now' => $now,
+        ];
+        if (!$retryable) {
+            $parameters[':next_lease_token'] = $leaseToken;
+            $parameters[':lease_until'] = $now + self::LEASE_SECONDS;
+        }
+        $statement->execute($parameters);
 
         if ($statement->rowCount() !== 1) {
-            throw new RuntimeException('idempotency operation not found');
+            throw new LlamadaLeaseLost('idempotency lease lost before checkpoint');
         }
     }
 
     public function get(string $idempotencyKey): ?array {
-        $statement = $this->pdo->prepare('SELECT idempotency_key, request_hash, state, response_json, comment_state, comment_id, created_at, updated_at
+        $statement = $this->pdo->prepare('SELECT idempotency_key, request_hash, state, response_json,
+                comment_state, comment_id, lease_token, lease_until, created_at, updated_at
             FROM result_operations WHERE idempotency_key = :idempotency_key');
         $statement->execute([':idempotency_key' => $idempotencyKey]);
         $record = $statement->fetch();

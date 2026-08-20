@@ -31,9 +31,11 @@ final class FakeBitrix {
     public array $errors = [];
     public array $responseQueues = [];
     public bool $throwOnComment = false;
+    public mixed $onCall = null;
 
     public function __invoke(string $method, array $params): array {
         $this->calls[] = [$method, $params];
+        if (is_callable($this->onCall)) ($this->onCall)($method, $params);
         if (!empty($this->responseQueues[$method])) {
             return array_shift($this->responseQueues[$method]);
         }
@@ -80,6 +82,14 @@ function llamada_test_store(): array {
     $directory = sys_get_temp_dir() . '/inventario-sync-result-service-' . bin2hex(random_bytes(8));
     mkdir($directory, 0700, true);
     return [new LlamadaIdempotenciaStore($directory), $directory];
+}
+
+function llamada_test_store_with_clock(int &$clock): array {
+    $directory = sys_get_temp_dir() . '/inventario-sync-result-service-' . bin2hex(random_bytes(8));
+    mkdir($directory, 0700, true);
+    return [new LlamadaIdempotenciaStore($directory, function () use (&$clock): int {
+        return $clock;
+    }), $directory];
 }
 
 function llamada_test_cleanup(string $directory): void {
@@ -139,6 +149,78 @@ try {
     ], $updates[0][1]['fields'], 'no answer writes complete pending activity fields');
     test_same([], llamada_calls($fake, 'crm.deal.update'), 'no answer preserves stage');
     test_same([], llamada_calls($fake, 'crm.timeline.comment.add'), 'empty comment creates no timeline entry');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+$leaseClock = 1_000;
+[$store, $directory] = llamada_test_store_with_clock($leaseClock);
+try {
+    $firstLease = $store->begin('lease-cas', 'same-hash', $leaseClock);
+    test_same(true, is_string($firstLease['lease_token'] ?? null) && $firstLease['lease_token'] !== '', 'first reservation receives lease token');
+
+    $leaseClock = 1_061;
+    $secondLease = $store->begin('lease-cas', 'same-hash', $leaseClock);
+    test_same(true, $secondLease['is_new'], 'expired reservation can be recovered after crash');
+    test_same(true, $secondLease['lease_token'] !== $firstLease['lease_token'], 'recovered reservation receives a new token');
+
+    test_throws(
+        fn() => $store->checkpoint('lease-cas', '{"step":"old"}', null, null, $leaseClock, 'processing', $firstLease['lease_token']),
+        LlamadaLeaseLost::class,
+        'expired owner cannot checkpoint after reclaim'
+    );
+    $store->checkpoint('lease-cas', '{"step":"new"}', null, null, $leaseClock, 'processing', $secondLease['lease_token']);
+    test_throws(
+        fn() => $store->complete('lease-cas', '{"status":"old"}', 'skipped', null, $leaseClock, $firstLease['lease_token']),
+        LlamadaLeaseLost::class,
+        'expired owner cannot complete after reclaim'
+    );
+    test_same('{"step":"new"}', $store->get('lease-cas')['response_json'], 'new owner checkpoint survives stale owner attempts');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+$raceClock = 2_000;
+[$store, $directory] = llamada_test_store_with_clock($raceClock);
+try {
+    $fake = new FakeBitrix();
+    $input = llamada_test_input([
+        'callRequestId' => '18181818-1818-4181-8181-181818181818',
+        'outcome' => 'not_interested',
+        'comment' => 'No desea nuevas llamadas',
+    ]);
+    $nestedResult = null;
+    $raceTriggered = false;
+    $fake->onCall = function (string $method) use (
+        &$raceTriggered,
+        &$raceClock,
+        &$nestedResult,
+        $input,
+        $fake,
+        $store,
+        $now,
+        $noInterestStage
+    ): void {
+        if ($method !== 'crm.timeline.comment.add' || $raceTriggered) return;
+        $raceTriggered = true;
+        $raceClock += 61;
+        $nestedResult = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
+    };
+
+    test_throws(
+        fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage),
+        LlamadaLeaseLost::class,
+        'owner expiring during comment cannot checkpoint its response'
+    );
+    test_same('manual_review', $nestedResult['status'] ?? null, 'overlapping retry cannot reclaim uncertain comment');
+    test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'lease race emits one activity update');
+    test_same(1, count(llamada_calls($fake, 'crm.timeline.comment.add')), 'lease race emits one non-repeatable comment');
+    test_same(0, count(llamada_calls($fake, 'crm.deal.update')), 'lease race does not change stage after uncertain comment');
+
+    $callsAfterRace = $fake->calls;
+    $review = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
+    test_same('manual_review', $review['status'], 'uncertain raced comment remains manual review');
+    test_same($callsAfterRace, $fake->calls, 'manual review after lease race emits no duplicate effects');
 } finally {
     llamada_test_cleanup($directory);
 }
@@ -365,6 +447,23 @@ try {
         'answered rejects date without explicit zone'
     );
     test_same([], $fake->calls, 'ambiguous answered date performs no external calls');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    test_throws(
+        fn() => llamada_procesar_resultado(llamada_test_input([
+            'callRequestId' => '17171717-1717-4171-8171-171717171717',
+            'outcome' => 'answered',
+            'nextActivityAt' => '2027-02-30T10:15:00-05:00',
+        ]), $fake, $store, $now, $noInterestStage),
+        LlamadaValidationError::class,
+        'answered rejects nonexistent civil date'
+    );
+    test_same([], $fake->calls, 'nonexistent civil date performs no external calls');
 } finally {
     llamada_test_cleanup($directory);
 }
