@@ -28,6 +28,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/codigolib.php';   // unidades_separadas(), MARCA_SEPARADAS
+
 $DATA_DIR = getenv('DATA_DIR') ?: '/data';
 
 // Diagnóstico: qué nos manda Bitrix. Necesitamos el ID del deal para poder
