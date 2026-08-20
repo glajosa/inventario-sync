@@ -98,6 +98,7 @@ if (!empty($_GET['pendientes'])) {
         'ok' => true,
         'desde' => $desde->format('d/m/Y H:i') . ' (hora Ecuador)',
         'en_reserva_en_ese_rango' => count($delDia),
+        'cuales' => $delDia,
         'ya_tenian_historia' => count($hechas),
         'sin_historia' => $faltan,
         'generadas' => empty($_GET['generar']) ? '(no se generó: agregá &generar=1)' : $generadas,
