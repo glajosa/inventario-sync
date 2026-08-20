@@ -658,6 +658,16 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
       hist: ['crm.activity.list', {
         filter: { OWNER_TYPE_ID:2, OWNER_ID:dealId, TYPE_ID:2, DIRECTION:2 },
         select: ['ID','CREATED','SUBJECT'], order: { ID:'ASC' }, start: -1
+      }],
+      // CUANDO VOLVIO A DEJAR SU NUMERO. Cada entrada a RECONTACTAR es un
+      // reingreso; la mas nueva manda, asi que ID DESC y se toma la primera.
+      // Va en el MISMO batch: un comando mas, cero viajes mas.
+      // (Verificado el 20-ago: crm.stagehistory.list acepta OWNER_ID y
+      //  STAGE_ID juntos y no devuelve filas de otros deals ni de otras etapas.)
+      reing: ['crm.stagehistory.list', {
+        entityTypeId: 2,
+        filter: { OWNER_ID: dealId, STAGE_ID: ETAPA_REING },
+        select: ['ID','CREATED_TIME'], order: { ID:'DESC' }
       }]
     }, function (r) {
       // ── historial → escalón
