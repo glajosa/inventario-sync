@@ -30,11 +30,13 @@
  */
 declare(strict_types=1);
 require_once __DIR__ . '/feriados.php';
+require_once __DIR__ . '/lib/llamada-protocolo.php';
 
 // Los feriados se calculan en PHP (la Pascua mueve Carnaval y Viernes Santo) y
 // viajan al navegador como una lista plana. Una sola fuente de verdad: el mismo
 // archivo lo puede usar después el motor de puntaje.
 $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
+$LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 ?>
 <!doctype html>
 <html>
@@ -553,10 +555,11 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
   // esquivar un feriado, y sin colchón ese corrimiento cuesta puntos: en la
   // regla ④ el techo son 30 y la escala cae a 8 en el día 31, o sea 7 puntos
   // por un día. Con 29 el corrimiento sale gratis.
-  var PLAZO = { 1:1, 2:6, 3:29 };        // sin contestar consecutivas -> días
-  var PLAZO_MANT = 99;
-  var PLAZO_CONTESTO = 3;
-  var HORA_AGENDA = '10:00';             // 10 h es de las más usadas (11,7%)
+  var LLAMADA_CONFIG = <?= $LLAMADA_CONFIG_JS ?>;
+  var PLAZO = LLAMADA_CONFIG.plazo;
+  var PLAZO_MANT = LLAMADA_CONFIG.plazo_mantenimiento;
+  var PLAZO_CONTESTO = LLAMADA_CONFIG.plazo_contesto;
+  var HORA_AGENDA = LLAMADA_CONFIG.hora_contesto;
 
   // Días no laborables (fines de semana aparte): los calcula feriados.php en
   // PHP, incluidos los movibles que dependen de la Pascua, y viajan como lista.
@@ -749,7 +752,7 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
       var fields = {
         OWNER_TYPE_ID:2, OWNER_ID:dealId,
         TYPE_ID:2, DIRECTION:2,
-        PROVIDER_ID:'VOXIMPLANT_CALL', PROVIDER_TYPE_ID:'CALL',
+        PROVIDER_ID:LLAMADA_CONFIG.provider_id, PROVIDER_TYPE_ID:LLAMADA_CONFIG.provider_type_id,
         SUBJECT: contesto ? '1234' : ('Llamada saliente ' + (ctx.nombre || 'cliente')),
         COMPLETED:'N', RESPONSIBLE_ID:ctx.resp,
         START_TIME:inicio, END_TIME:masUnaHora(inicio), DEADLINE:inicio,
