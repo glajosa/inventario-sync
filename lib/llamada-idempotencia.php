@@ -186,6 +186,29 @@ final class LlamadaIdempotenciaStore {
         }
     }
 
+    public function forbid(string $idempotencyKey, int $now, string $leaseToken): void {
+        $statement = $this->pdo->prepare('UPDATE result_operations
+            SET state = :state,
+                comment_state = CASE
+                    WHEN comment_state = \'in_progress\' AND comment_id IS NULL THEN \'pending\'
+                    ELSE comment_state
+                END,
+                lease_token = NULL, lease_until = NULL, updated_at = :updated_at
+            WHERE idempotency_key = :idempotency_key
+              AND state = \'processing\' AND lease_token = :lease_token AND lease_until >= :lease_now');
+        $statement->execute([
+            ':state' => 'forbidden',
+            ':updated_at' => $now,
+            ':idempotency_key' => $idempotencyKey,
+            ':lease_token' => $leaseToken,
+            ':lease_now' => $now,
+        ]);
+
+        if ($statement->rowCount() !== 1) {
+            throw new LlamadaLeaseLost('idempotency lease lost before forbidden transition');
+        }
+    }
+
     public function get(string $idempotencyKey): ?array {
         $statement = $this->pdo->prepare('SELECT idempotency_key, request_hash, state, response_json,
                 comment_state, comment_id, lease_token, lease_until, created_at, updated_at

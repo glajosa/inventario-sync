@@ -31,6 +31,9 @@ function llamada_procesar_resultado(
     ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     $operation = $store->begin($idempotencyKey, $requestHash, $store->now());
 
+    if (!$operation['is_new'] && (string)$operation['state'] === 'forbidden') {
+        throw new LlamadaForbidden('request was previously forbidden');
+    }
     if (!$operation['is_new'] && (string)$operation['state'] === 'completed') {
         return llamada_resultado_repetido($operation, $request['callRequestId']);
     }
@@ -52,6 +55,7 @@ function llamada_procesar_resultado(
     $leaseToken = (string)($operation['lease_token'] ?? '');
     if ($leaseToken === '') throw new LlamadaLeaseLost('idempotency reservation has no lease token');
 
+    try {
     $progress = llamada_cargar_progreso($operation['response_json'] ?? null);
     $commentState = isset($operation['comment_state']) ? (string)$operation['comment_state'] : null;
     $commentId = $operation['comment_id'] === null ? null : (int)$operation['comment_id'];
@@ -142,6 +146,8 @@ function llamada_procesar_resultado(
                 'id' => $activityId,
                 'fields' => $fields,
             ]);
+        } catch (LlamadaForbidden $error) {
+            throw $error;
         } catch (Throwable $error) {
             llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken, 'retryable');
             throw $error;
@@ -198,6 +204,8 @@ function llamada_procesar_resultado(
                     'id' => $dealId,
                     'fields' => ['STAGE_ID' => $noInterestStage],
                 ]);
+            } catch (LlamadaForbidden $error) {
+                throw $error;
             } catch (Throwable $error) {
                 llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken, 'retryable');
                 throw $error;
@@ -228,6 +236,10 @@ function llamada_procesar_resultado(
     );
 
     return $response;
+    } catch (LlamadaForbidden $error) {
+        $store->forbid($idempotencyKey, $store->now(), $leaseToken);
+        throw $error;
+    }
 }
 
 function llamada_cargar_progreso(mixed $responseJson): array {
@@ -393,6 +405,9 @@ function llamada_bx_result(callable $bx, string $method, array $params): mixed {
     if (($response['ok'] ?? false) !== true) {
         $error = trim((string)($response['error'] ?? 'unknown error'));
         $description = trim((string)($response['desc'] ?? ''));
+        if (strtoupper($error) === 'ACCESS_DENIED' || preg_match('/\baccess denied\b/i', $description) === 1) {
+            throw new LlamadaForbidden('Bitrix access denied');
+        }
         $detail = $description !== '' && $description !== $error
             ? $error . ': ' . $description
             : $error;

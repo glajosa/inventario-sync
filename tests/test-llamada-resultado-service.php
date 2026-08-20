@@ -557,17 +557,72 @@ try {
 [$store, $directory] = llamada_test_store();
 try {
     $fake = new FakeBitrix();
-    $fake->errors['crm.activity.update'] = ['ok' => false, 'error' => 'ACCESS_DENIED', 'desc' => 'Access denied'];
-    test_throws_message(
-        fn() => llamada_procesar_resultado(llamada_test_input([
-            'callRequestId' => '88888888-8888-4888-8888-888888888888',
-        ]), $fake, $store, $now, $noInterestStage),
-        LlamadaBitrixError::class,
-        'Access denied',
-        'Bitrix access denied is understandable'
+    $fake->errors['crm.deal.get'] = ['ok' => false, 'error' => 'ACCESS_DENIED', 'desc' => 'Access denied'];
+    $input = llamada_test_input([
+        'callRequestId' => '88888888-8888-4888-8888-888888888888',
+    ]);
+    test_throws(
+        fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage),
+        LlamadaForbidden::class,
+        'Bitrix read access denied is forbidden'
     );
-    test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'access denied is not retried with another user');
-    test_same([], llamada_calls($fake, 'crm.deal.update'), 'access denied never reassigns or updates deal');
+    $callsAfterFirst = $fake->calls;
+    test_same('forbidden', $store->get('member-1:' . $input['callRequestId'])['state'] ?? null, 'read access denied is stored as terminal forbidden');
+
+    unset($store);
+    $store = new LlamadaIdempotenciaStore($directory);
+    test_throws(
+        fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage),
+        LlamadaForbidden::class,
+        'identical forbidden read remains forbidden after restart'
+    );
+    test_same($callsAfterFirst, $fake->calls, 'forbidden read retry performs no Bitrix call');
+    test_throws(
+        fn() => llamada_procesar_resultado(array_replace($input, ['comment' => 'different']), $fake, $store, $now, $noInterestStage),
+        LlamadaIdempotenciaConflict::class,
+        'different payload after forbidden read still conflicts'
+    );
+    test_same([], llamada_calls($fake, 'crm.activity.update'), 'read access denied performs no write');
+    test_same([], llamada_calls($fake, 'crm.deal.update'), 'read access denied never reassigns or updates deal');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->errors['crm.timeline.comment.add'] = ['ok' => false, 'error' => 'ACCESS_DENIED', 'desc' => 'Access denied'];
+    $input = llamada_test_input([
+        'callRequestId' => '18181818-1818-4181-8181-181818181818',
+        'outcome' => 'answered',
+        'nextActivityAt' => '2026-08-25T10:15:00-05:00',
+        'comment' => 'Necesita seguimiento',
+    ]);
+    test_throws(
+        fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage),
+        LlamadaForbidden::class,
+        'known comment access denied is forbidden'
+    );
+    $callsAfterFirst = $fake->calls;
+    $record = $store->get('member-1:' . $input['callRequestId']);
+    test_same('forbidden', $record['state'] ?? null, 'comment access denied is stored as terminal forbidden');
+    test_same('pending', $record['comment_state'] ?? null, 'known comment denial is not delivery uncertain');
+    test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'activity is updated once before comment denial');
+    test_same(1, count(llamada_calls($fake, 'crm.timeline.comment.add')), 'denied comment is attempted once');
+
+    unset($store);
+    $store = new LlamadaIdempotenciaStore($directory);
+    test_throws(
+        fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage),
+        LlamadaForbidden::class,
+        'identical denied comment remains forbidden after restart'
+    );
+    test_same($callsAfterFirst, $fake->calls, 'forbidden comment retry duplicates no external effect');
+    test_throws(
+        fn() => llamada_procesar_resultado(array_replace($input, ['comment' => 'different']), $fake, $store, $now, $noInterestStage),
+        LlamadaIdempotenciaConflict::class,
+        'different payload after forbidden comment still conflicts'
+    );
 } finally {
     llamada_test_cleanup($directory);
 }

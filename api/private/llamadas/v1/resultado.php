@@ -20,20 +20,6 @@ function llamada_resultado_content_type_valido(mixed $value): bool {
     ) === 1;
 }
 
-function llamada_resultado_bx_seguro(callable $bx): callable {
-    return static function (string $method, array $params) use ($bx): array {
-        $response = $bx($method, $params);
-        if (is_array($response) && ($response['ok'] ?? false) !== true) {
-            $code = strtoupper(trim((string)($response['error'] ?? '')));
-            $description = trim((string)($response['desc'] ?? ''));
-            if ($code === 'ACCESS_DENIED' || preg_match('/\baccess denied\b/i', $description) === 1) {
-                throw new LlamadaForbidden('Bitrix access denied');
-            }
-        }
-        return $response;
-    };
-}
-
 function llamada_resultado_http(
     string $method,
     string $body,
@@ -75,7 +61,7 @@ function llamada_resultado_http(
         $store = new LlamadaIdempotenciaStore($dataDir);
         $result = llamada_procesar_resultado(
             (array)$decoded,
-            llamada_resultado_bx_seguro($bx),
+            $bx,
             $store,
             new DateTimeImmutable('@' . $now),
             $noInterestStage

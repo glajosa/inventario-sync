@@ -213,8 +213,52 @@ try {
     endpoint_test_response(403, ['error' => 'forbidden'], llamada_resultado_http(
         'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
     ), 'Bitrix access denied');
+    $callsAfterForbidden = $fake->calls;
+    endpoint_test_response(403, ['error' => 'forbidden'], llamada_resultado_http(
+        'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
+    ), 'identical Bitrix access denied retry');
+    test_same($callsAfterForbidden, $fake->calls, 'access denied endpoint retry performs no Bitrix call');
+
+    $differentBody = endpoint_test_body([
+        'callRequestId' => '33333333-3333-4333-8333-333333333333',
+        'comment' => 'different',
+    ]);
+    endpoint_test_response(409, ['error' => 'conflict'], llamada_resultado_http(
+        'POST', $differentBody, endpoint_test_headers($differentBody, $now), endpoint_test_env($directory), $fake, $now
+    ), 'different payload after access denied');
     test_same(1, count(array_filter($fake->calls, fn(array $call): bool => $call[0] === 'crm.activity.update')), 'access denied is not retried or reassigned');
     test_same(0, count(array_filter($fake->calls, fn(array $call): bool => $call[0] === 'crm.deal.update')), 'access denied does not reassign the deal');
+} finally {
+    endpoint_test_cleanup($directory);
+}
+
+$directory = endpoint_test_dir();
+try {
+    $fake = new EndpointFakeBitrix();
+    $fake->errors['crm.timeline.comment.add'] = [
+        'ok' => false,
+        'error' => 'ACCESS_DENIED',
+        'desc' => 'Access denied',
+    ];
+    $body = endpoint_test_body([
+        'callRequestId' => '34343434-3434-4343-8343-343434343434',
+        'outcome' => 'answered',
+        'nextActivityAt' => '2026-08-25T10:15:00-05:00',
+        'comment' => 'Necesita seguimiento',
+    ]);
+    endpoint_test_response(403, ['error' => 'forbidden'], llamada_resultado_http(
+        'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
+    ), 'comment access denied');
+    $callsAfterForbidden = $fake->calls;
+    endpoint_test_response(403, ['error' => 'forbidden'], llamada_resultado_http(
+        'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
+    ), 'identical comment access denied retry');
+    test_same($callsAfterForbidden, $fake->calls, 'comment access denied retry duplicates no external effect');
+    $store = new LlamadaIdempotenciaStore($directory);
+    $record = $store->get('member-1:34343434-3434-4343-8343-343434343434');
+    test_same('forbidden', $record['state'] ?? null, 'endpoint persists comment forbidden state');
+    test_same('pending', $record['comment_state'] ?? null, 'endpoint clears uncertain comment marker for known denial');
+    unset($store);
 } finally {
     endpoint_test_cleanup($directory);
 }
