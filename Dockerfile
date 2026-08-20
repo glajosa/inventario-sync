@@ -11,7 +11,9 @@ RUN mkdir -p /data && chmod 777 /data
 
 # código de la app
 COPY . /var/www/html/
-RUN rm -f /var/www/html/Dockerfile /var/www/html/README.md
+COPY apache-tests-deny.conf /etc/apache2/conf-available/tests-deny.conf
+RUN a2enconf tests-deny \
+ && rm -f /var/www/html/Dockerfile /var/www/html/README.md /var/www/html/apache-tests-deny.conf
 
 # crons (cargan env desde /data/env.sh que escribe entrypoint):
 #  - reconcile cada 15 min (~5 llamadas): red de seguridad, re-sincroniza parentId2.
