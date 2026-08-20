@@ -195,9 +195,13 @@ $hoy = new DateTimeImmutable('now');
   $hojas = [];
   if ($porEdificio) {
       $unidadesHoja = [];
-      foreach ($grupos as $g)
+      // Un grupo con lanzado=false queda fuera de la lista comercial aunque sus
+      // unidades esten en Bitrix. Es la regla que declara el archivo de la direccion.
+      foreach ($grupos as $g) {
+          if (isset($cfg['grupos'][$g]['lanzado']) && !$cfg['grupos'][$g]['lanzado']) continue;
           foreach ((array)($cfg['grupos'][$g]['edificios'] ?? [$g]) as $ed)
               if (!in_array($ed, $excluir, true)) $unidadesHoja[] = $ed;
+      }
       sort($unidadesHoja);
   } else {
       $unidadesHoja = $porGrupo ? $grupos : [null];
@@ -217,7 +221,8 @@ $hoy = new DateTimeImmutable('now');
                   $cel = lst_celda($cfg, $unidades, $eds, $niv, $k);
                   if (!$cel['cods']) continue;          // agotada: no se ofrece
                   $filas[] = ['cat' => $k, 'g' => $gDatos, 'precio' => (float)$precio[$k],
-                              'm2' => lst_metros($cel['m2'], $cfg, $gDatos, $k),
+                              'm2' => lst_metros($cel['m2'], $cfg, $gDatos, $k,
+                                          (string)($L['origen_metraje'] ?? 'unidades')),
                               'cods' => $cel['cods']];
               }
           }
@@ -268,7 +273,8 @@ $hoy = new DateTimeImmutable('now');
       </thead>
       <tbody>
       <?php $iNiv = 0; foreach ($bloques as $niv => $filas): $iNiv++;
-            $etNiv = strtoupper((string)($cfg['niveles'][$niv]['etiqueta'] ?? $niv));
+            $etNiv = strtoupper((string)($L['etiqueta_nivel'][$niv]
+                        ?? ($cfg['niveles'][$niv]['etiqueta'] ?? $niv)));
             $clsNiv = 'niv' . (($iNiv - 1) % 5 + 2);
             $primera = true; ?>
         <?php foreach ($filas as $r): $pl = lst_plan($r['precio'], $fin); ?>
@@ -277,13 +283,18 @@ $hoy = new DateTimeImmutable('now');
               <td class="niv <?= $clsNiv ?>" rowspan="<?= count($filas) ?>"><span><?= lh($etNiv) ?></span></td>
             <?php endif; ?>
             <?php if (!empty($r['combo'])): ?>
-              <td class="cat combo"><?= lh((string)($combo['rotulo'] ?? 'DESDE')) ?></td>
+              <td class="cat combo"><?= lh((string)($combo['rotulo_por_nivel'][$niv]
+                    ?? ($combo['rotulo'] ?? 'DESDE'))) ?></td>
             <?php else:
               $n = count($r['cods']);
               // Una sola: la lista la nombra por su codigo. Dos: la tipologia con el
               // aviso. Es como lo escribe la direccion y es presion de escasez real.
+              // Tres capas, de la mas especifica a la mas general. La direccion rotula
+              // el 4to piso aparte ("4TO PISO MED") y a G-H como "3 DORM": son
+              // etiquetas suyas y viven en `etiquetas_lista` de su propio archivo.
               $nomCat = $L['nombre_por_grupo'][$r['g']][$r['cat']]
-                     ?? ($L['nombre'][$r['cat']] ?? $r['cat']);
+                     ?? ($L['nombre_por_nivel'][$niv][$r['cat']]
+                     ?? ($L['nombre'][$r['cat']] ?? $r['cat']));
               $texto = $n === 1
                   ? (($L['codigo_formato'] ?? '') === 'guion'
                         ? preg_replace('/^([A-Z])(\d+)-/', '$1-$2-', $r['cods'][0])
@@ -299,16 +310,19 @@ $hoy = new DateTimeImmutable('now');
             <?php endif; ?>
             <td class="c"><?= lh((string)$r['m2']) ?></td>
             <?php if ($conParq): ?>
+              <?php /* G y H llevan 2 parqueos por ser de 3 dormitorios, y toda unidad
+                       unida lleva 2. Lo declara la direccion en su bloque `parqueos`. */ ?>
               <td class="c"><?= (int)(!empty($r['combo'])
-                    ? ($combo['parqueos'] ?? 2)
-                    : ($L['parqueos'][$r['cat']] ?? 1)) ?></td>
+                    ? ($L['parqueos_combo'] ?? $combo['parqueos'] ?? 2)
+                    : ($L['parqueos_por_grupo'][$r['g']]
+                       ?? ($L['parqueos'][$r['cat']] ?? ($L['parqueos_default'] ?? 1)))) ?></td>
             <?php endif; ?>
             <?php if ($conPatio): ?>
               <?php /* El patio existe solo en el nivel que lo declara la matriz
                        (patio_pb). En los pisos altos la celda va vacia, no en cero. */ ?>
               <td class="c"><?php $pt = empty($r['combo']) && $niv === (string)($L['nivel_patio'] ?? 'PB')
                         ? ($cfg['metraje'][$r['g']]['patio_pb'] ?? null) : null;
-                    echo $pt !== null ? lh(rtrim(rtrim(number_format((float)$pt, 2, ',', ''), '0'), ',')) . 'm2' : '—'; ?></td>
+                    echo $pt !== null ? lh(rtrim(rtrim(number_format((float)$pt, 2, ',', ''), '0'), ',')) . 'm2' : '-'; ?></td>
             <?php endif; ?>
             <td class="p"><?= lh(lp($r['precio'])) ?></td>
             <td class="n"><?= lh(ln($pl['separa'])) ?></td>

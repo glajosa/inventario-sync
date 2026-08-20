@@ -616,17 +616,17 @@
         "4P"
       ],
       "orden": [
-        "E3",
-        "E2",
+        "M",
         "E1",
-        "M"
+        "E2",
+        "E3"
       ],
       "encabezado_cat": "ESQUINERO/<br>MEDIANERO",
       "nombre": {
-        "E3": "ESQUINEROS 3",
-        "E2": "ESQUINEROS 2",
+        "M": "MEDIANEROS",
         "E1": "ESQUINEROS",
-        "M": "MEDIANEROS"
+        "E2": "ESQUINEROS 2",
+        "E3": "ESQUINERO 3"
       },
       "lado": {},
       "parqueos": {
@@ -640,15 +640,14 @@
         "medidas": "75 - 85,15m2"
       },
       "financiamiento": {
-        "meses": 44,
         "separa": 1000,
         "reserva_pct": 10,
         "cuotas_pct": 20,
         "extra_pct": 10,
-        "extra_n": 4,
         "contra_pct": 60,
+        "fecha_entrega": "2030-04",
         "vigencia_horas": 48,
-        "_nota": "4 extraordinarias, no 5: verificado contra la lista de la direccion — $153.375 da $3.834,38, o sea 10% dividido en 4. Es la regla del proyecto y el cotizador tambien la aplica (maxExtra=4)."
+        "_nota": "Todo del archivo del director (noral_precios.json). El PLAZO no se escribe: se deriva de fecha_entrega, y las extraordinarias son ceil(meses/12). Hoy da 44 meses y 4."
       },
       "columna_patio_m2": true,
       "nivel_patio": "PB",
@@ -661,13 +660,51 @@
       "badge_dos": "2 ÚLTIMAS DISPONIBLES",
       "nombre_por_grupo": {
         "GH": {
-          "E3": "3 DORM",
-          "E2": "3 DORM",
+          "M": "3 DORM",
           "E1": "3 DORM",
-          "M": "3 DORM"
+          "E2": "3 DORM",
+          "E3": "3 DORM"
         }
       },
-      "_nota_gh": "G y H son los unicos de 3 dormitorios (106 y 118 m2) y la direccion los rotula '3 DORM' en vez de esquinero/medianero."
+      "_nota_gh": "G y H son los unicos de 3 dormitorios (106 y 118 m2) y la direccion los rotula '3 DORM' en vez de esquinero/medianero.",
+      "origen_metraje": "config",
+      "etiqueta_nivel": {
+        "PB": "PB",
+        "PA": "PLANTA",
+        "4P": "4TO"
+      },
+      "nombre_por_nivel": {
+        "PB": {
+          "M": "MEDIANEROS",
+          "E1": "ESQUINEROS",
+          "E2": "ESQUINEROS 2",
+          "E3": "ESQUINERO 3"
+        },
+        "PA": {
+          "M": "MEDIANEROS",
+          "E1": "ESQUINEROS",
+          "E2": "ESQUINEROS 2",
+          "E3": "ESQUINEROS 3"
+        },
+        "4P": {
+          "M": "4TO PISO MED",
+          "E1": "4TO PISO ESQ 1",
+          "E2": "4TO PISO ESQ 2",
+          "E3": "4TO PISO ESQ 3"
+        }
+      },
+      "parqueos_por_grupo": {
+        "GH": 2
+      },
+      "parqueos_default": 1,
+      "parqueos_combo": 2,
+      "combo": {
+        "rotulo_por_nivel": {
+          "PB": "DESDE",
+          "PA": "3 DORM",
+          "4P": "3 DORM"
+        }
+      }
     }
   }
 }

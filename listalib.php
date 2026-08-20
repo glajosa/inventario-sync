@@ -67,6 +67,35 @@ function lst_familias(array $unidades, int $cat): array {
 }
 
 /**
+ * Meses de plazo y numero de extraordinarias, DERIVADOS de la fecha de entrega.
+ *
+ * Lo dice el propio archivo de la direccion: "EL PLAZO NO SE GUARDA: se calcula como
+ * los meses que faltan hasta fecha_entrega. Cada primero de mes queda un mes menos y
+ * las cuotas suben solas. Por eso aqui no hay campo 'meses'."
+ *
+ *   meses      = meses entre hoy y fecha_entrega
+ *   extraord_n = ceil(meses / 12)   un pago extraordinario por anio restante
+ *
+ * Escribir los meses a mano es el error que esta funcion evita: hoy Apartments da 44
+ * meses y 4 extraordinarias, pero un numero fijo se queda viejo el mes siguiente y
+ * nadie se entera hasta que un cliente compara dos cotizaciones.
+ *
+ * `meses` en el bloque solo se respeta cuando NO hay fecha de entrega (Galero Casas
+ * cuenta 36 meses desde la firma, no hasta una fecha del calendario).
+ */
+function lst_plazo(array $fin): array {
+    $f = (string)($fin['fecha_entrega'] ?? '');
+    if (preg_match('/^(\d{4})-(\d{2})$/', $f, $m)) {
+        $hoy = new DateTimeImmutable('now');
+        $meses = ((int)$m[1] - (int)$hoy->format('Y')) * 12 + ((int)$m[2] - (int)$hoy->format('n'));
+        $meses = max(1, $meses);
+        return ['meses' => $meses, 'extra_n' => (int)ceil($meses / 12), 'derivado' => true];
+    }
+    return ['meses' => max(1, (int)($fin['meses'] ?? 54)),
+            'extra_n' => max(1, (int)($fin['extra_n'] ?? 5)), 'derivado' => false];
+}
+
+/**
  * El plan de pago de un precio, con los porcentajes que declara la familia.
  *
  * Verificado contra las cuatro filas de la lista de OFICINAS de la direccion:
@@ -79,8 +108,9 @@ function lst_familias(array $unidades, int $cat): array {
  */
 function lst_plan(float $p, array $fin): array {
     $sep   = (float)($fin['separa'] ?? 1000);
-    $meses = max(1, (int)($fin['meses'] ?? 54));
-    $nEx   = max(1, (int)($fin['extra_n'] ?? 5));
+    $pz    = lst_plazo($fin);
+    $meses = $pz['meses'];
+    $nEx   = $pz['extra_n'];
     $reserva = $p * ((float)($fin['reserva_pct'] ?? 10) / 100);
     $cuotas  = $p * ((float)($fin['cuotas_pct']  ?? 20) / 100);
     $extras  = $p * ((float)($fin['extra_pct']   ?? 10) / 100);
@@ -139,12 +169,17 @@ function lst_celda(array $cfg, array $unidades, array $edificios, string $niv, s
  * local de 30 m2 anunciado con 50. Si en la celda conviven varios metrajes se dicen
  * los dos ("30 - 39") en vez de elegir uno y mentir en el otro.
  */
-function lst_metros(array $m2, array $cfg, string $grupo, string $cat): string {
+function lst_metros(array $m2, array $cfg, string $grupo, string $cat,
+                    string $origen = 'unidades'): string {
     $fmt = fn(float $v) => rtrim(rtrim(number_format($v, 2, ',', ''), '0'), ',');
+    $me  = $cfg['metraje'][$grupo] ?? [];
+    $cfgM = in_array($cat, (array)($me['cats_mayor'] ?? []), true)
+                ? ($me['mayor'] ?? null) : ($me['base'] ?? null);
+    // `config`: manda la tabla de la direccion. Apartments publica 85,15 m2 y Bitrix
+    // guarda 84,90 en algunas fichas; el numero que el cliente ya vio es el suyo.
+    // `unidades`: manda lo que dice cada ficha. Es lo correcto donde la tabla no
+    // cubre la familia — a los locales de Plaza les imprimia 50 m2 siendo de 30.
+    if ($origen === 'config' && $cfgM !== null) return $fmt((float)$cfgM);
     if ($m2) return implode(' - ', array_map($fmt, $m2));
-    // Sin metraje cargado en Bitrix se cae a la matriz, que es una aproximacion.
-    $me = $cfg['metraje'][$grupo] ?? [];
-    $v = in_array($cat, (array)($me['cats_mayor'] ?? []), true)
-            ? ($me['mayor'] ?? null) : ($me['base'] ?? null);
-    return $v !== null ? $fmt((float)$v) : '—';
+    return $cfgM !== null ? $fmt((float)$cfgM) : '—';
 }

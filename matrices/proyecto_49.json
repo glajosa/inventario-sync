@@ -547,16 +547,15 @@
       "subtitulo": "Financiamiento del terreno hasta 49 meses plazo",
       "nota": "La fachada de cada casa deberá respetarse. Financiamiento del terreno <em>SIN INTERESES</em>.",
       "financiamiento": {
-        "meses": 49,
         "separa": 1000,
         "entrada_pct": 70,
         "reserva_pct": 20,
         "cuotas_pct": 30,
         "extra_pct": 20,
-        "extra_n": 5,
         "contra_pct": 30,
         "vigencia_horas": 48,
-        "_nota": "Verificado contra la lista de la direccion: $41.960 da firma $7.392,00 (20% menos los $1.000), mensual $256,90 (30%/49), extraordinaria $1.678,40 (20%/5) y saldo $12.588,00 (30%)."
+        "_nota": "Plazo derivado de fecha_entrega (2030-09): hoy 49 meses y 5 extraordinarias, los mismos de la lista de la direccion.",
+        "fecha_entrega": "2030-09"
       }
     }
   }

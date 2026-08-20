@@ -1298,15 +1298,17 @@
         "medidas": "50 - 58 - 100m2"
       },
       "financiamiento": {
-        "meses": 54,
         "separa": 1000,
         "reserva_pct": 10,
         "cuotas_pct": 20,
         "extra_pct": 10,
-        "extra_n": 5,
         "contra_pct": 60,
-        "_nota": "Verificado contra la lista de OFICINAS de la direccion: $144.420 da firma $13.442,00, mensual $534,89 y extraordinaria $2.888,40. Las cuatro filas cuadran al centavo."
-      }
+        "_nota": "El plazo NO se escribe: se deriva de fecha_entrega (2031-02), y las extraordinarias son ceil(meses/12). Hoy da 54 meses y 5, que es lo que dice la lista de la direccion.",
+        "fecha_entrega": "2031-02"
+      },
+      "origen_metraje": "config",
+      "badge_uno": "ÚLTIMA DISPONIBLE",
+      "badge_dos": "2 ÚLTIMAS DISPONIBLES"
     },
     "1793": {
       "forma": "tipologia",
@@ -1362,17 +1364,19 @@
         "medidas": "31 - 32,5m2"
       },
       "financiamiento": {
-        "meses": 54,
         "separa": 1000,
         "reserva_pct": 10,
         "cuotas_pct": 20,
         "extra_pct": 10,
-        "extra_n": 5,
         "contra_pct": 60,
-        "_nota": "Verificado contra la lista de OFICINAS de la direccion: $144.420 da firma $13.442,00, mensual $534,89 y extraordinaria $2.888,40. Las cuatro filas cuadran al centavo."
+        "_nota": "El plazo NO se escribe: se deriva de fecha_entrega (2031-02), y las extraordinarias son ceil(meses/12). Hoy da 54 meses y 5, que es lo que dice la lista de la direccion.",
+        "fecha_entrega": "2031-02"
       },
       "una_tabla_por_grupo": true,
-      "_nota": "Una tabla por edificio, como la lista de Apartments de la direccion: D, E y F tienen precios distintos y juntarlos bajo el mismo rotulo de piso los mezclaba."
+      "_nota": "Una tabla por edificio, como la lista de Apartments de la direccion: D, E y F tienen precios distintos y juntarlos bajo el mismo rotulo de piso los mezclaba.",
+      "origen_metraje": "config",
+      "badge_uno": "ÚLTIMA DISPONIBLE",
+      "badge_dos": "2 ÚLTIMAS DISPONIBLES"
     },
     "1791": {
       "forma": "tipologia",
@@ -1422,15 +1426,17 @@
         "medidas": "30 - 39 - 77m2"
       },
       "financiamiento": {
-        "meses": 54,
         "separa": 1000,
         "reserva_pct": 10,
         "cuotas_pct": 20,
         "extra_pct": 10,
-        "extra_n": 5,
         "contra_pct": 60,
-        "_nota": "Verificado contra la lista de OFICINAS de la direccion: $144.420 da firma $13.442,00, mensual $534,89 y extraordinaria $2.888,40. Las cuatro filas cuadran al centavo."
-      }
+        "_nota": "El plazo NO se escribe: se deriva de fecha_entrega (2031-02), y las extraordinarias son ceil(meses/12). Hoy da 54 meses y 5, que es lo que dice la lista de la direccion.",
+        "fecha_entrega": "2031-02"
+      },
+      "origen_metraje": "unidades",
+      "badge_uno": "ÚLTIMA DISPONIBLE",
+      "badge_dos": "2 ÚLTIMAS DISPONIBLES"
     }
   }
 }
