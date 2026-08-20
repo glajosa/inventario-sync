@@ -2,8 +2,8 @@ FROM php:8.2-apache
 
 # curl para hablar con Bitrix
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libcurl4-openssl-dev \
- && docker-php-ext-install curl \
+ && apt-get install -y --no-install-recommends libcurl4-openssl-dev libsqlite3-dev \
+ && docker-php-ext-install curl pdo_sqlite \
  && rm -rf /var/lib/apt/lists/*
 
 # volumen persistente para allowlist.json + sync.log (montar en EasyPanel como /data)
@@ -38,7 +38,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends cron && rm -rf 
 
 # arrancar cron + apache
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh \
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh \
+ && chmod +x /usr/local/bin/entrypoint.sh \
  && rm -f /var/www/html/entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
