@@ -1370,7 +1370,9 @@
         "extra_n": 5,
         "contra_pct": 60,
         "_nota": "Verificado contra la lista de OFICINAS de la direccion: $144.420 da firma $13.442,00, mensual $534,89 y extraordinaria $2.888,40. Las cuatro filas cuadran al centavo."
-      }
+      },
+      "una_tabla_por_grupo": true,
+      "_nota": "Una tabla por edificio, como la lista de Apartments de la direccion: D, E y F tienen precios distintos y juntarlos bajo el mismo rotulo de piso los mezclaba."
     },
     "1791": {
       "forma": "tipologia",

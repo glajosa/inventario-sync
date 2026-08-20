@@ -154,38 +154,52 @@ $hoy = new DateTimeImmutable('now');
 
   // Se arma primero y se dibuja despues: hace falta saber cuantas filas tiene cada
   // piso para el rowspan de la banda vertical, y cuales pisos quedaron sin nada.
-  $bloques = [];
-  foreach ($niveles as $niv) {
-      $filas = [];
-      foreach ($grupos as $g) {
-          $eds = (array)($cfg['grupos'][$g]['edificios'] ?? [$g]);
-          foreach ($orden as $k) {
-              $precio = $px[$eds[0]][$niv][$k] ?? null;
-              if ($precio === null) continue;
-              $cods = lst_celda($cfg, $unidades, $eds, $niv, $k);
-              if (!$cods) continue;                 // agotada: no se ofrece
-              $me = $cfg['metraje'][$g] ?? [];
-              $m2 = in_array($k, (array)($me['cats_mayor'] ?? []), true)
-                      ? ($me['mayor'] ?? null) : ($me['base'] ?? null);
-              $filas[] = ['cat' => $k, 'g' => $g, 'precio' => (float)$precio,
-                          'm2' => $m2, 'cods' => $cods];
+  // Una HOJA por grupo cuando la familia lo pide. La direccion saca una tabla por
+  // edificio ("EDIFICIO A", "EDIFICIO B"): juntar D, E y F en una sola mezclaba
+  // precios de edificios distintos bajo el mismo rotulo de piso.
+  $porGrupo = !empty($L['una_tabla_por_grupo']);
+  $hojas = [];
+  foreach ($porGrupo ? $grupos : [null] as $gSolo) {
+      $gs = $gSolo === null ? $grupos : [$gSolo];
+      $bloques = [];
+      foreach ($niveles as $niv) {
+          $filas = [];
+          foreach ($gs as $g) {
+              $eds = (array)($cfg['grupos'][$g]['edificios'] ?? [$g]);
+              $precio = $px[$eds[0]][$niv] ?? null;
+              if (!is_array($precio)) continue;
+              foreach ($orden as $k) {
+                  if (!isset($precio[$k])) continue;
+                  $cel = lst_celda($cfg, $unidades, $eds, $niv, $k);
+                  if (!$cel['cods']) continue;          // agotada: no se ofrece
+                  $filas[] = ['cat' => $k, 'g' => $g, 'precio' => (float)$precio[$k],
+                              'm2' => lst_metros($cel['m2'], $cfg, $g, $k),
+                              'cods' => $cel['cods']];
+              }
           }
+          if ($combo && isset($cfg['combos']['precio'][$niv]) && $filas) {
+              $cm = $cfg['combos']['metraje'] ?? null;
+              $filas[] = ['combo' => true, 'precio' => (float)$cfg['combos']['precio'][$niv],
+                          'm2' => $cm !== null ? rtrim(rtrim(number_format((float)$cm, 2, ',', ''), '0'), ',') : '—',
+                          'cods' => []];
+          }
+          if ($filas) $bloques[$niv] = $filas;
       }
-      // La fila DESDE del combo va al final del piso, como en la lista original.
-      if ($combo && isset($cfg['combos']['precio'][$niv])) {
-          $filas[] = ['combo' => true, 'precio' => (float)$cfg['combos']['precio'][$niv],
-                      'm2' => $cfg['combos']['metraje'] ?? null, 'cods' => []];
-      }
-      if ($filas) $bloques[$niv] = $filas;
+      if ($bloques) $hojas[] = ['grupo' => $gSolo, 'bloques' => $bloques];
   }
   $nCols = 4 + ($conParq ? 1 : 0);   // niv + cat + metros + [parqueos] + precio
+  if (!$hojas) $hojas = [['grupo' => null, 'bloques' => []]];
 ?>
+<?php foreach ($hojas as $hoja): $bloques = $hoja['bloques'];
+      $tit = $hoja['grupo'] === null
+          ? (string)($L['titulo'] ?? strtoupper($proyecto))
+          : strtoupper((string)($cfg['grupos'][$hoja['grupo']]['etiqueta'] ?? ('EDIFICIO ' . $hoja['grupo']))); ?>
 <section class="hoja">
   <div class="cab">
     <img class="logo" src="assets/logo_galjosa_transparente.png"
          alt="<?= lh($proyecto) ?>" onerror="this.style.display='none'">
     <div class="tit">
-      <table><tr><th class="titulo"><?= lh((string)($L['titulo'] ?? strtoupper($proyecto))) ?></th></tr>
+      <table><tr><th class="titulo"><?= lh($tit) ?></th></tr>
              <tr><th class="sub"><?= lh((string)($L['subtitulo'] ?? '')) ?></th></tr></table>
     </div>
   </div>
@@ -225,7 +239,7 @@ $hoy = new DateTimeImmutable('now');
               <td class="cat <?= lh((string)($L['lado'][$r['cat']] ?? '')) ?>"><?= lh($texto) ?><?php
                   if ($ult !== '') echo '<span class="ult">' . lh($ult) . '</span>'; ?></td>
             <?php endif; ?>
-            <td class="c"><?= $r['m2'] !== null ? lh(rtrim(rtrim(number_format((float)$r['m2'], 2, ',', ''), '0'), ',')) : '—' ?></td>
+            <td class="c"><?= lh((string)$r['m2']) ?></td>
             <?php if ($conParq): ?>
               <td class="c"><?= (int)(!empty($r['combo'])
                     ? ($combo['parqueos'] ?? 2)
@@ -258,6 +272,7 @@ $hoy = new DateTimeImmutable('now');
   <div class="meta">Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo ·
     <?= array_sum(array_map('count', $bloques)) ?> tipologías con disponibilidad</div>
 </section>
+<?php endforeach; ?>
 <?php endif; ?>
 
 </body></html>

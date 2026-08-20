@@ -112,7 +112,7 @@ function lst_plan_hipo(float $p, array $fin): array {
 /** Cuántas unidades DISPONIBLES hay en una celda (grupo, nivel, categoría), y
  *  cuáles son. El código hace falta porque cuando queda UNA la lista la nombra. */
 function lst_celda(array $cfg, array $unidades, array $edificios, string $niv, string $cat): array {
-    $cods = [];
+    $cods = []; $m2 = [];
     foreach ($unidades as $u => $d) {
         if (($d['etapa'] ?? '') !== 'DISPONIBLE') continue;
         [$ed, $piso, $pos] = array_pad(explode('-', $u), 3, '0');
@@ -121,7 +121,30 @@ function lst_celda(array $cfg, array $unidades, array $edificios, string $niv, s
         $ov = mz_por_unidad($cfg, $cfg['overrides_unidad'] ?? [], $ed, (int)$piso, (int)$pos) ?? [];
         if (mz_categoria_de($cfg, $ed, (int)$pos, $u, $niv, $ov) !== $cat) continue;
         $cods[] = (string)($d['cod'] ?? $u);
+        $v = (string)($d['m2'] ?? '');
+        if ($v !== '') $m2[] = round((float)str_replace(',', '.', $v), 2);
     }
     natsort($cods);
-    return array_values($cods);
+    $m2 = array_values(array_unique($m2));
+    sort($m2);
+    return ['cods' => array_values($cods), 'm2' => $m2];
+}
+
+/**
+ * Los metros que se imprimen en la fila.
+ *
+ * Salen de las PROPIAS unidades disponibles, no de la tabla `metraje` del proyecto:
+ * esa guarda base/mayor por grupo y sirve para oficinas y departamentos, pero los
+ * locales tienen sus propios 30, 39 y 77 m2 y quedaban impresos como 50 o 31 — un
+ * local de 30 m2 anunciado con 50. Si en la celda conviven varios metrajes se dicen
+ * los dos ("30 - 39") en vez de elegir uno y mentir en el otro.
+ */
+function lst_metros(array $m2, array $cfg, string $grupo, string $cat): string {
+    $fmt = fn(float $v) => rtrim(rtrim(number_format($v, 2, ',', ''), '0'), ',');
+    if ($m2) return implode(' - ', array_map($fmt, $m2));
+    // Sin metraje cargado en Bitrix se cae a la matriz, que es una aproximacion.
+    $me = $cfg['metraje'][$grupo] ?? [];
+    $v = in_array($cat, (array)($me['cats_mayor'] ?? []), true)
+            ? ($me['mayor'] ?? null) : ($me['base'] ?? null);
+    return $v !== null ? $fmt((float)$v) : '—';
 }
