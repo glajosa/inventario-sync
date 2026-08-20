@@ -1290,7 +1290,9 @@
       },
       "combo": {
         "rotulo": "DESDE",
-        "parqueos": 2
+        "parqueos": 2,
+        "mostrar_par": true,
+        "_nota": "El precio de la fila DESDE sale del par contiguo DISPONIBLE mas barato, calculado al abrir. La tabla `combos` del director queda como referencia del metraje: su valor de precio envejece — decia $306.750 (dos medianeros) cuando hoy no hay dos medianeros contiguos libres."
       },
       "lat": "CONSULTORIOS: Solo en el&nbsp;<em>2DO PISO del EDIFICIO B</em>",
       "pie": {
@@ -1308,7 +1310,8 @@
       },
       "origen_metraje": "config",
       "badge_uno": "ÚLTIMA DISPONIBLE",
-      "badge_dos": "2 ÚLTIMAS DISPONIBLES"
+      "badge_dos": "2 ÚLTIMAS DISPONIBLES",
+      "mostrar_par": true
     },
     "1793": {
       "forma": "tipologia",

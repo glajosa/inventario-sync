@@ -140,6 +140,65 @@ function lst_plan_hipo(float $p, array $fin): array {
 }
 
 /**
+ * El par contiguo DISPONIBLE mas barato de un nivel: la fila "DESDE".
+ *
+ * "DESDE" significa desde cuanto sale hoy una unidad unida, asi que se calcula del
+ * inventario y no de una tabla. El valor declarado en `combos` es una referencia que
+ * envejece: en Apartments A/PB decia $306.750 —dos medianeros— y hoy no hay dos
+ * medianeros contiguos libres, o sea que ese par NO EXISTE. El par real es
+ * A-1-7 + A-1-8 = $312.250, que es exactamente lo que publica la lista del director.
+ *
+ * Y al revés: en Noral Plaza P2 la tabla ofrece $249.000 cuando hoy no queda ningun
+ * par valido. Sin este calculo la lista promete una union que no se puede vender.
+ *
+ * Dos formas de saber que unidades se pueden unir, y cada proyecto usa la suya:
+ *   `combos.pares_validos`  posiciones que se unen (Plaza: [[2,3],[4,5],[8,9],[10,11]])
+ *   `nucleo_entre`          contiguas, salvo las que el nucleo de ascensores separa
+ *                           (Apartments: con 8 por piso, la 4 y la 5 no se unen)
+ * Los dos pares tienen que estar en el MISMO piso: dos unidades de pisos distintos
+ * no se unen.
+ *
+ * @return array{precio: float, a: string, b: string}|null
+ */
+function lst_par_mas_barato(array $cfg, array $unidades, array $edificios, string $niv): ?array {
+    // Disponibles por piso y posicion, solo de los edificios de esta hoja.
+    $porPiso = [];
+    foreach ($unidades as $k => $d) {
+        if (($d['etapa'] ?? '') !== 'DISPONIBLE') continue;
+        $pvp = (float)($d['pvp'] ?? 0);
+        if ($pvp <= 0) continue;
+        [$ed, $piso, $pos] = array_pad(explode('-', $k), 3, '0');
+        if (!in_array($ed, $edificios, true)) continue;
+        if (mz_nivel_de_piso($cfg, (int)$piso) !== $niv) continue;
+        $porPiso["$ed-$piso"][(int)$pos] = ['pvp' => $pvp, 'cod' => (string)($d['cod'] ?? $k)];
+    }
+    $validos = $cfg['combos']['pares_validos'] ?? null;
+    $mejor = null;
+    foreach ($porPiso as $clave => $m) {
+        $ed = explode('-', $clave)[0];
+        if (is_array($validos)) {
+            $pares = array_map(fn($x) => [(int)$x[0], (int)$x[1]], $validos);
+        } else {
+            $uxp = (int)(($cfg['unidades_por_piso'][$ed] ?? null)
+                      ?? ($cfg['unidades_por_piso'][mz_grupo_de($cfg, $ed)] ?? 8));
+            $corte = (array)(($cfg['nucleo_entre'][(string)$uxp] ?? []) ?: []);
+            $pares = [];
+            for ($i = 1; $i < $uxp; $i++) {
+                if (count($corte) === 2 && $i === (int)$corte[0] && $i + 1 === (int)$corte[1]) continue;
+                $pares[] = [$i, $i + 1];
+            }
+        }
+        foreach ($pares as [$a, $b]) {
+            if (!isset($m[$a], $m[$b])) continue;
+            $sum = $m[$a]['pvp'] + $m[$b]['pvp'];
+            if ($mejor === null || $sum < $mejor['precio'])
+                $mejor = ['precio' => $sum, 'a' => $m[$a]['cod'], 'b' => $m[$b]['cod']];
+        }
+    }
+    return $mejor;
+}
+
+/**
  * La fila de UNIDADES UNIDAS de un nivel: precio y metraje.
  *
  * Dos estructuras reales y hay que aceptar las dos, porque cada archivo del director

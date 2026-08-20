@@ -228,13 +228,22 @@ $hoy = new DateTimeImmutable('now');
               }
           }
           if ($combo && $filas) {
-              // El grupo de precio del que sale el combo: con una hoja por edificio,
-              // B y E comparten el combo de BCDE.
-              $gc = $porEdificio ? mz_grupo_de($cfg, (string)$gs[0]) : (string)$gs[0];
-              $cb = lst_combo($cfg, $gc, $niv);
-              if ($cb) {
-                  $filas[] = ['combo' => true, 'precio' => $cb['precio'], 'g' => $gc,
-                              'm2' => $cb['m2'] !== null
+              // El grupo de precio del que sale el metraje del combo: con una hoja por
+              // edificio, B y E comparten el de BCDE.
+              $gc  = $porEdificio ? mz_grupo_de($cfg, (string)$gs[0]) : (string)$gs[0];
+              $eds = [];
+              foreach ($gs as $g)
+                  foreach (($porEdificio ? [$g] : (array)($cfg['grupos'][$g]['edificios'] ?? [$g])) as $e)
+                      $eds[] = $e;
+              // El PRECIO sale del par disponible mas barato, no de la tabla: "DESDE"
+              // es una promesa y tiene que existir. Si hoy no queda ningun par que se
+              // pueda unir, la fila no se dibuja.
+              $par = lst_par_mas_barato($cfg, $unidades, $eds, $niv);
+              if ($par) {
+                  $cb = lst_combo($cfg, $gc, $niv);
+                  $filas[] = ['combo' => true, 'precio' => $par['precio'], 'g' => $gc,
+                              'par' => $par['a'] . ' + ' . $par['b'],
+                              'm2' => $cb && $cb['m2'] !== null
                                   ? rtrim(rtrim(number_format((float)$cb['m2'], 2, ',', ''), '0'), ',')
                                   : '—',
                               'cods' => []];
@@ -292,7 +301,11 @@ $hoy = new DateTimeImmutable('now');
             <?php endif; ?>
             <?php if (!empty($r['combo'])): ?>
               <td class="cat combo"><?= lh((string)($combo['rotulo_por_nivel'][$niv]
-                    ?? ($combo['rotulo'] ?? 'DESDE'))) ?></td>
+                    ?? ($combo['rotulo'] ?? 'DESDE'))) ?><?php
+                    /* Cual es el par, en letra chica: el vendedor necesita saber que
+                       unidades son, y ademas hace verificable el numero. */
+                    if (!empty($r['par']) && !empty($L['mostrar_par']))
+                        echo '<span class="ult" style="color:#cfe0b4">' . lh($r['par']) . '</span>'; ?></td>
             <?php else:
               $n = count($r['cods']);
               // Una sola: la lista la nombra por su codigo. Dos: la tipologia con el

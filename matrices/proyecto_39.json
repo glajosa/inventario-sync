@@ -704,8 +704,10 @@
           "PA": "3 DORM",
           "4P": "3 DORM"
         },
-        "_nota": "El precio sale de combos[grupo][nivel] del archivo del director. Su HTML publicado muestra un DESDE distinto porque lo calculo del par disponible ese dia; el JSON es la regla."
-      }
+        "_nota": "El precio de la fila DESDE sale del par contiguo DISPONIBLE mas barato, calculado al abrir. La tabla `combos` del director queda como referencia del metraje: su valor de precio envejece — decia $306.750 (dos medianeros) cuando hoy no hay dos medianeros contiguos libres.",
+        "mostrar_par": true
+      },
+      "mostrar_par": true
     }
   }
 }
