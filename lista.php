@@ -211,7 +211,10 @@ $hoy = new DateTimeImmutable('now');
       }
       if ($bloques) $hojas[] = ['grupo' => $gSolo, 'bloques' => $bloques];
   }
-  $nCols = 4 + ($conParq ? 1 : 0);   // niv + cat + metros + [parqueos] + precio
+  // Apartments cobra el patio de la planta baja y lo lista en su propia columna:
+  // sin ella dos filas de 75 m2 se ven iguales cuando una trae 16,25 m2 de patio.
+  $conPatio = !empty($L['columna_patio_m2']);
+  $nCols = 4 + ($conParq ? 1 : 0) + ($conPatio ? 1 : 0);
   if (!$hojas) $hojas = [['grupo' => null, 'bloques' => []]];
 ?>
 <?php foreach ($hojas as $hoja): $bloques = $hoja['bloques'];
@@ -235,7 +238,8 @@ $hoy = new DateTimeImmutable('now');
           <th><?= (int)($fin['cuotas_pct'] ?? 20) ?>%</th>
           <th><?= (int)($fin['extra_pct'] ?? 10) ?>%</th></tr>
         <tr class="c"><th></th><th><?= $L['encabezado_cat'] ?? 'CARACTER&Iacute;STICAS' ?></th>
-          <th>METROS (m2)</th><?php if ($conParq): ?><th>PARQUEOS</th><?php endif; ?><th>PRECIO</th>
+          <th>METROS (m2)</th><?php if ($conParq): ?><th>PARQUEOS</th><?php endif; ?>
+          <?php if ($conPatio): ?><th>M2 PATIO</th><?php endif; ?><th>PRECIO</th>
           <th>SEPARA CON</th><th>A LA FIRMA</th>
           <th>CUOTAS<br>MENSUALES</th>
           <th>CUOTAS EXTRAORDINARIAS<br>(1 VEZ AL A&Ntilde;O)</th></tr>
@@ -256,8 +260,11 @@ $hoy = new DateTimeImmutable('now');
               $n = count($r['cods']);
               // Una sola: la lista la nombra por su codigo. Dos: la tipologia con el
               // aviso. Es como lo escribe la direccion y es presion de escasez real.
-              $texto = $n === 1 ? $r['cods'][0]
-                                : (string)($L['nombre'][$r['cat']] ?? $r['cat']);
+              $texto = $n === 1
+                  ? (($L['codigo_formato'] ?? '') === 'guion'
+                        ? preg_replace('/^([A-Z])(\d+)-/', '$1-$2-', $r['cods'][0])
+                        : $r['cods'][0])
+                  : (string)($L['nombre'][$r['cat']] ?? $r['cat']);
               $ult = $n === 1 ? 'ÚLTIMA DISPONIBLE' : ($n === 2 ? '2 ÚLTIMAS DISPONIBLES' : '');
             ?>
               <td class="cat <?= lh((string)($L['lado'][$r['cat']] ?? '')) ?>"><?= lh($texto) ?><?php
@@ -268,6 +275,13 @@ $hoy = new DateTimeImmutable('now');
               <td class="c"><?= (int)(!empty($r['combo'])
                     ? ($combo['parqueos'] ?? 2)
                     : ($L['parqueos'][$r['cat']] ?? 1)) ?></td>
+            <?php endif; ?>
+            <?php if ($conPatio): ?>
+              <?php /* El patio existe solo en el nivel que lo declara la matriz
+                       (patio_pb). En los pisos altos la celda va vacia, no en cero. */ ?>
+              <td class="c"><?php $pt = empty($r['combo']) && $niv === (string)($L['nivel_patio'] ?? 'PB')
+                        ? ($cfg['metraje'][$r['g']]['patio_pb'] ?? null) : null;
+                    echo $pt !== null ? lh(rtrim(rtrim(number_format((float)$pt, 2, ',', ''), '0'), ',')) . 'm2' : '—'; ?></td>
             <?php endif; ?>
             <td class="p"><?= lh(lp($r['precio'])) ?></td>
             <td class="n"><?= lh(ln($pl['separa'])) ?></td>

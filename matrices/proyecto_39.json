@@ -650,7 +650,9 @@
         "contra_pct": 60,
         "vigencia_horas": 48,
         "_nota": "44 meses y 4 extraordinarias, no 5: es el tope de Apartments."
-      }
+      },
+      "columna_patio_m2": true,
+      "nivel_patio": "PB"
     }
   }
 }
