@@ -72,15 +72,24 @@ if (!empty($_GET['pendientes'])) {
         $fila = ['deal' => (string)$d['ID'], 'titulo' => (string)($d['TITLE'] ?? ''),
                  'entro' => $cuando->format('d/m H:i')];
         $delDia[] = $fila;
+        // 🔴 "tiene entrada en la libreta" NO es lo mismo que "su historia esta al
+        // dia": el deal 404139 entro con F-1-3, se le genero, y despues le cambiaron
+        // la unidad a E-4-20 — libreta llena y ninguna imagen de la unidad actual.
+        // La huella de la libreta se compara contra las unidades de AHORA, y eso lo
+        // hace hist_al_reservar(), asi que aca solo se marca lo evidente.
         if (isset($lib[(string)$d['ID']])) $hechas[] = $fila; else $faltan[] = $fila;
     }
 
+    // Al generar se repasan TODOS los del rango, no solo los sin entrada:
+    // hist_al_reservar compara la huella y no hace nada si de verdad esta al dia.
+    // Asi se atrapan los que cambiaron de unidad despues de generarse.
     $generadas = [];
     if (!empty($_GET['generar'])) {
-        foreach ($faltan as $f) {
+        foreach ($delDia as $f) {
             $h = hist_al_reservar($f['deal']);
-            $generadas[] = $f + ['resultado' => $h['motivo'] ?? '?',
-                                 'unidades' => $h['unidades'] ?? null];
+            $m = (string)($h['motivo'] ?? '?');
+            if ($m === 'ya generada para estas unidades') continue;   // nada que hacer
+            $generadas[] = $f + ['resultado' => $m, 'unidades' => $h['unidades'] ?? null];
             logline("BARRIDO deal={$f['deal']} historia=" . json_encode($h, JSON_UNESCAPED_SLASHES));
         }
     }
