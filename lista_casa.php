@@ -65,7 +65,9 @@ $COL = (array)($L['colores_manzana'] ?? []);
     <thead>
       <tr class="g"><th colspan="4">CASA <?= lh(strtoupper($nom)) ?><?php
           if ($m2c !== null) echo ' - ' . (int)$m2c . ' MTS DE CONSTRUCCI&Oacute;N'; ?></th>
-        <th colspan="4">FINANCIADO HASTA <?= (int)($fin['meses'] ?? 36) ?> MESES</th></tr>
+        <?php /* El rotulo dice el plazo de ENTREGA (36), no el numero de mensuales
+                 (24). Asi lo escribe la lista de la direccion: `meses_rotulo`. */ ?>
+        <th colspan="4">FINANCIADO HASTA <?= (int)($fin['meses_rotulo'] ?? $fin['meses'] ?? 36) ?> MESES</th></tr>
       <tr class="c"><th>MZ.</th><th># SOLAR</th><th>AREA M2<br>del Solar</th>
         <th><?= lh(strtoupper($nom)) ?><?php if ($m2c !== null) echo '<br>(' . (int)$m2c . 'mts)'; ?></th>
         <th>SEPARE<br>CON</th>
