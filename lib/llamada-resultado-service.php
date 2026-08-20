@@ -6,7 +6,15 @@ require_once __DIR__ . '/llamada-protocolo.php';
 
 final class LlamadaValidationError extends InvalidArgumentException {}
 final class LlamadaForbidden extends RuntimeException {}
-final class LlamadaBitrixError extends RuntimeException {}
+final class LlamadaBitrixError extends RuntimeException {
+    public function __construct(string $message, private bool $deliveryUncertain = false) {
+        parent::__construct($message);
+    }
+
+    public function isDeliveryUncertain(): bool {
+        return $this->deliveryUncertain;
+    }
+}
 
 function llamada_procesar_resultado(
     array $input,
@@ -23,9 +31,28 @@ function llamada_procesar_resultado(
     ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     $operation = $store->begin($idempotencyKey, $requestHash, $now->getTimestamp());
 
-    if (!$operation['is_new']) {
+    if (!$operation['is_new'] && (string)$operation['state'] === 'completed') {
         return llamada_resultado_repetido($operation, $request['callRequestId']);
     }
+    if (!$operation['is_new']
+        && (string)($operation['comment_state'] ?? '') === 'in_progress'
+        && $operation['comment_id'] === null) {
+        return [
+            'status' => 'manual_review',
+            'callRequestId' => $request['callRequestId'],
+            'reason' => 'comment_delivery_uncertain',
+        ];
+    }
+    if (!$operation['is_new']) {
+        return [
+            'status' => 'processing',
+            'callRequestId' => $request['callRequestId'],
+        ];
+    }
+
+    $progress = llamada_cargar_progreso($operation['response_json'] ?? null);
+    $commentState = isset($operation['comment_state']) ? (string)$operation['comment_state'] : null;
+    $commentId = $operation['comment_id'] === null ? null : (int)$operation['comment_id'];
 
     $dealId = $request['dealId'];
     $bitrixUserId = $request['bitrixUserId'];
@@ -45,6 +72,15 @@ function llamada_procesar_resultado(
         || (int)($activity['OWNER_ID'] ?? 0) !== $dealId) {
         throw new LlamadaForbidden('activity owner mismatch');
     }
+    if ((int)($activity['TYPE_ID'] ?? 0) !== 2) {
+        throw new LlamadaForbidden('activity type mismatch');
+    }
+    if ((int)($activity['DIRECTION'] ?? 0) !== 2) {
+        throw new LlamadaForbidden('activity direction mismatch');
+    }
+    if ((int)($activity['RESPONSIBLE_ID'] ?? 0) !== $bitrixUserId) {
+        throw new LlamadaForbidden('activity responsible mismatch');
+    }
 
     $contactId = (int)($deal['CONTACT_ID'] ?? 0);
     $contact = [];
@@ -63,6 +99,7 @@ function llamada_procesar_resultado(
     ], fn(string $part): bool => $part !== '')));
     if ($contactName === '') $contactName = 'cliente';
 
+    $nextAt = null;
     if ($request['outcome'] === 'not_interested') {
         $fields = llamada_campos_actividad_completada([
             'dealId' => $dealId,
@@ -72,9 +109,17 @@ function llamada_procesar_resultado(
             'subject' => '1234 · No le interesa',
         ]);
     } else {
-        $nextAt = $request['outcome'] === 'answered'
-            ? new DateTimeImmutable($request['nextActivityAt'])
-            : llamada_proxima_no_contesto($protocol, $now)['at'];
+        if (is_string($progress['nextActivityAt']) && $progress['nextActivityAt'] !== '') {
+            $nextAt = new DateTimeImmutable($progress['nextActivityAt']);
+        } else {
+            $nextAt = $request['outcome'] === 'answered'
+                ? new DateTimeImmutable($request['nextActivityAt'])
+                : llamada_proxima_no_contesto(
+                    $protocol,
+                    $now->setTimezone(new DateTimeZone('America/Guayaquil'))
+                )['at'];
+        }
+        $nextAt = $nextAt->setTimezone(new DateTimeZone('America/Guayaquil'));
         $fields = llamada_campos_actividad([
             'nextAt' => $nextAt,
             'dealId' => $dealId,
@@ -86,18 +131,79 @@ function llamada_procesar_resultado(
         ]);
     }
 
-    llamada_bx_result($bx, 'crm.activity.update', [
-        'id' => $activityId,
-        'fields' => $fields,
-    ]);
+    $progress['nextActivityAt'] = $nextAt?->format(DateTimeInterface::ATOM);
+    llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $now);
 
-    $stageUpdated = false;
-    if ($request['outcome'] === 'not_interested' && (string)($deal['STAGE_ID'] ?? '') !== $noInterestStage) {
-        llamada_bx_result($bx, 'crm.deal.update', [
-            'id' => $dealId,
-            'fields' => ['STAGE_ID' => $noInterestStage],
-        ]);
-        $stageUpdated = true;
+    if (!$progress['activityUpdated']) {
+        try {
+            llamada_bx_result($bx, 'crm.activity.update', [
+                'id' => $activityId,
+                'fields' => $fields,
+            ]);
+        } catch (Throwable $error) {
+            llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $now, 'retryable');
+            throw $error;
+        }
+        $progress['activityUpdated'] = true;
+        llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $now);
+    }
+
+    if (!$progress['commentProcessed']) {
+        if ($request['comment'] === '') {
+            $commentState = 'skipped';
+            $progress['commentProcessed'] = true;
+            llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, null, $now);
+        } else {
+            // comment.add is the only non-idempotent effect: after dispatch, a
+            // transport loss cannot prove whether Bitrix created the comment.
+            $commentState = 'in_progress';
+            llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, null, $now);
+            try {
+                $commentResult = llamada_bx_result($bx, 'crm.timeline.comment.add', [
+                    'fields' => [
+                        'ENTITY_ID' => $dealId,
+                        'ENTITY_TYPE' => 'deal',
+                        'COMMENT' => $request['comment'],
+                    ],
+                ]);
+            } catch (LlamadaBitrixError $error) {
+                if ($error->isDeliveryUncertain()) throw $error;
+                $commentState = 'pending';
+                llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, null, $now, 'retryable');
+                throw $error;
+            }
+            $commentId = (int)$commentResult;
+            if ($commentId <= 0) {
+                throw new LlamadaBitrixError('Bitrix crm.timeline.comment.add did not return a comment id', true);
+            }
+            $commentState = 'created';
+            $progress['commentProcessed'] = true;
+            llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $now);
+        }
+    }
+
+    if (!$progress['stageProcessed']) {
+        if ($request['outcome'] !== 'not_interested') {
+            $progress['stageProcessed'] = true;
+        } elseif ((string)($deal['STAGE_ID'] ?? '') === $noInterestStage) {
+            $progress['stageChanged'] = $progress['stageAttempted'];
+            $progress['stageProcessed'] = true;
+        } else {
+            $progress['stageAttempted'] = true;
+            llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $now);
+            try {
+                llamada_bx_result($bx, 'crm.deal.update', [
+                    'id' => $dealId,
+                    'fields' => ['STAGE_ID' => $noInterestStage],
+                ]);
+            } catch (Throwable $error) {
+                llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $now, 'retryable');
+                throw $error;
+            }
+            $progress['stageChanged'] = true;
+            $progress['stageProcessed'] = true;
+        }
+        llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $now);
     }
 
     $response = [
@@ -105,39 +211,10 @@ function llamada_procesar_resultado(
         'callRequestId' => $request['callRequestId'],
         'outcome' => $request['outcome'],
         'bitrixActivityId' => $activityId,
-        'stageUpdated' => $stageUpdated,
-        'commentId' => null,
+        'stageChanged' => (bool)$progress['stageChanged'],
+        'commentCreated' => $commentState === 'created' && $commentId !== null,
+        'nextActivityAt' => $progress['nextActivityAt'],
     ];
-    $commentState = 'skipped';
-    $commentId = null;
-
-    if ($request['comment'] !== '') {
-        $manualReview = array_merge($response, [
-            'status' => 'manual_review',
-            'reason' => 'comment_in_progress',
-        ]);
-        $store->complete(
-            $idempotencyKey,
-            json_encode($manualReview, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'in_progress',
-            null,
-            $now->getTimestamp()
-        );
-
-        $commentResult = llamada_bx_result($bx, 'crm.timeline.comment.add', [
-            'fields' => [
-                'ENTITY_ID' => $dealId,
-                'ENTITY_TYPE' => 'deal',
-                'COMMENT' => $request['comment'],
-            ],
-        ]);
-        $commentId = (int)$commentResult;
-        if ($commentId <= 0) {
-            throw new LlamadaBitrixError('Bitrix crm.timeline.comment.add did not return a comment id');
-        }
-        $commentState = 'created';
-        $response['commentId'] = $commentId;
-    }
 
     $store->complete(
         $idempotencyKey,
@@ -148,6 +225,43 @@ function llamada_procesar_resultado(
     );
 
     return $response;
+}
+
+function llamada_cargar_progreso(mixed $responseJson): array {
+    $stored = is_string($responseJson) && $responseJson !== ''
+        ? json_decode($responseJson, true)
+        : null;
+    if (!is_array($stored)) $stored = [];
+
+    return [
+        'nextActivityAt' => isset($stored['nextActivityAt']) && is_string($stored['nextActivityAt'])
+            ? $stored['nextActivityAt']
+            : null,
+        'activityUpdated' => (bool)($stored['activityUpdated'] ?? false),
+        'commentProcessed' => (bool)($stored['commentProcessed'] ?? false),
+        'stageAttempted' => (bool)($stored['stageAttempted'] ?? false),
+        'stageProcessed' => (bool)($stored['stageProcessed'] ?? false),
+        'stageChanged' => (bool)($stored['stageChanged'] ?? false),
+    ];
+}
+
+function llamada_guardar_progreso(
+    LlamadaIdempotenciaStore $store,
+    string $idempotencyKey,
+    array $progress,
+    ?string $commentState,
+    ?int $commentId,
+    DateTimeImmutable $now,
+    string $state = 'processing'
+): void {
+    $store->checkpoint(
+        $idempotencyKey,
+        json_encode($progress, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        $commentState,
+        $commentId,
+        $now->getTimestamp(),
+        $state
+    );
 }
 
 function llamada_validar_resultado(array $input, DateTimeImmutable $now, string $noInterestStage): array {
@@ -179,8 +293,11 @@ function llamada_validar_resultado(array $input, DateTimeImmutable $now, string 
         if (!is_string($nextValue) || trim($nextValue) === '') {
             throw new LlamadaValidationError('nextActivityAt is required for answered');
         }
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/D', $nextValue)) {
+            throw new LlamadaValidationError('nextActivityAt must be RFC3339 with an explicit offset');
+        }
         try {
-            $nextActivityAt = new DateTimeImmutable($nextValue);
+            $nextActivityAt = (new DateTimeImmutable($nextValue))->setTimezone(new DateTimeZone('America/Guayaquil'));
         } catch (Throwable) {
             throw new LlamadaValidationError('invalid nextActivityAt');
         }
@@ -230,11 +347,7 @@ function llamada_normalizar_telefono(mixed $value): string {
 
 function llamada_resultado_repetido(array $operation, string $callRequestId): array {
     if ((string)($operation['state'] ?? '') !== 'completed') {
-        return [
-            'status' => 'manual_review',
-            'callRequestId' => $callRequestId,
-            'reason' => 'operation_in_progress',
-        ];
+        throw new RuntimeException('idempotency operation is not completed');
     }
 
     if ((string)($operation['comment_state'] ?? '') === 'in_progress'
@@ -242,17 +355,13 @@ function llamada_resultado_repetido(array $operation, string $callRequestId): ar
         return [
             'status' => 'manual_review',
             'callRequestId' => $callRequestId,
-            'reason' => 'comment_in_progress',
+            'reason' => 'comment_delivery_uncertain',
         ];
     }
 
     $previous = json_decode((string)($operation['response_json'] ?? ''), true);
     if (!is_array($previous)) {
-        return [
-            'status' => 'manual_review',
-            'callRequestId' => $callRequestId,
-            'reason' => 'stored_response_invalid',
-        ];
+        throw new RuntimeException('stored idempotency response is invalid');
     }
     $previous['status'] = 'already_processed';
     return $previous;
@@ -260,16 +369,26 @@ function llamada_resultado_repetido(array $operation, string $callRequestId): ar
 
 function llamada_bx_result(callable $bx, string $method, array $params): mixed {
     $response = $bx($method, $params);
-    if (!is_array($response) || ($response['ok'] ?? false) !== true) {
+    if (!is_array($response)) {
+        throw new LlamadaBitrixError('Bitrix ' . $method . ' returned an invalid response', true);
+    }
+    if (($response['ok'] ?? false) !== true) {
         $error = trim((string)($response['error'] ?? 'unknown error'));
         $description = trim((string)($response['desc'] ?? ''));
         $detail = $description !== '' && $description !== $error
             ? $error . ': ' . $description
             : $error;
-        throw new LlamadaBitrixError('Bitrix ' . $method . ' failed: ' . $detail);
+        $deliveryUncertain = in_array(strtolower($error), [
+            'bad-json',
+            'network-error',
+            'timeout',
+            'transport-error',
+            'unknown error',
+        ], true);
+        throw new LlamadaBitrixError('Bitrix ' . $method . ' failed: ' . $detail, $deliveryUncertain);
     }
     if (!array_key_exists('result', $response)) {
-        throw new LlamadaBitrixError('Bitrix ' . $method . ' returned no result');
+        throw new LlamadaBitrixError('Bitrix ' . $method . ' returned no result', true);
     }
     return $response['result'];
 }

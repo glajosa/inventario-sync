@@ -51,6 +51,20 @@ final class LlamadaIdempotenciaStore {
                 $isNew = true;
             } elseif (!hash_equals((string)$record['request_hash'], $requestHash)) {
                 throw new LlamadaIdempotenciaConflict('idempotency key already belongs to another request');
+            } elseif ((string)$record['state'] === 'retryable'
+                || ((string)$record['state'] === 'processing'
+                    && (string)($record['comment_state'] ?? '') !== 'in_progress'
+                    && (int)$record['updated_at'] <= $now - 60)) {
+                $statement = $this->pdo->prepare('UPDATE result_operations
+                    SET state = :state, updated_at = :updated_at
+                    WHERE idempotency_key = :idempotency_key');
+                $statement->execute([
+                    ':state' => 'processing',
+                    ':updated_at' => $now,
+                    ':idempotency_key' => $idempotencyKey,
+                ]);
+                $record = $this->get($idempotencyKey);
+                $isNew = true;
             }
 
             $this->pdo->exec('COMMIT');
@@ -71,6 +85,35 @@ final class LlamadaIdempotenciaStore {
             WHERE idempotency_key = :idempotency_key');
         $statement->execute([
             ':state' => 'completed',
+            ':response_json' => $responseJson,
+            ':comment_state' => $commentState,
+            ':comment_id' => $commentId,
+            ':updated_at' => $now,
+            ':idempotency_key' => $idempotencyKey,
+        ]);
+
+        if ($statement->rowCount() !== 1) {
+            throw new RuntimeException('idempotency operation not found');
+        }
+    }
+
+    public function checkpoint(
+        string $idempotencyKey,
+        string $responseJson,
+        ?string $commentState,
+        ?int $commentId,
+        int $now,
+        string $state = 'processing'
+    ): void {
+        if (!in_array($state, ['processing', 'retryable'], true)) {
+            throw new InvalidArgumentException('invalid idempotency checkpoint state');
+        }
+        $statement = $this->pdo->prepare('UPDATE result_operations
+            SET state = :state, response_json = :response_json, comment_state = :comment_state,
+                comment_id = :comment_id, updated_at = :updated_at
+            WHERE idempotency_key = :idempotency_key');
+        $statement->execute([
+            ':state' => $state,
             ':response_json' => $responseJson,
             ':comment_state' => $commentState,
             ':comment_id' => $commentId,

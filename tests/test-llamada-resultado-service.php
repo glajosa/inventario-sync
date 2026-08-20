@@ -18,6 +18,8 @@ final class FakeBitrix {
         'ID' => '731',
         'OWNER_ID' => '77',
         'OWNER_TYPE_ID' => '2',
+        'TYPE_ID' => '2',
+        'DIRECTION' => '2',
         'RESPONSIBLE_ID' => '42',
     ];
     public array $contact = [
@@ -27,10 +29,14 @@ final class FakeBitrix {
     ];
     public array $historyPages = [];
     public array $errors = [];
+    public array $responseQueues = [];
     public bool $throwOnComment = false;
 
     public function __invoke(string $method, array $params): array {
         $this->calls[] = [$method, $params];
+        if (!empty($this->responseQueues[$method])) {
+            return array_shift($this->responseQueues[$method]);
+        }
         if (isset($this->errors[$method])) return $this->errors[$method];
 
         return match ($method) {
@@ -95,7 +101,15 @@ try {
     $fake->historyPages = [0 => [fake_activity(731, 'Llamada saliente Ana Pérez', '2026-08-20T16:00:00-05:00')]];
     $result = llamada_procesar_resultado(llamada_test_input(), $fake, $store, $now, $noInterestStage);
 
-    test_same('processed', $result['status'], 'no answer processed');
+    test_same([
+        'status' => 'processed',
+        'callRequestId' => '11111111-1111-4111-8111-111111111111',
+        'outcome' => 'no_answer',
+        'bitrixActivityId' => 731,
+        'stageChanged' => false,
+        'commentCreated' => false,
+        'nextActivityAt' => '2026-08-21T19:00:00-05:00',
+    ], $result, 'no answer returns exact result contract and calculated date');
     $updates = llamada_calls($fake, 'crm.activity.update');
     test_same(1, count($updates), 'no answer updates one existing activity');
     test_same(731, $updates[0][1]['id'], 'no answer updates requested activity id');
@@ -132,11 +146,184 @@ try {
 [$store, $directory] = llamada_test_store();
 try {
     $fake = new FakeBitrix();
+    $fake->responseQueues['crm.timeline.comment.add'] = [
+        ['ok' => false, 'error' => 'bad-json'],
+    ];
+    $input = llamada_test_input([
+        'callRequestId' => '16161616-1616-4161-8161-161616161616',
+        'outcome' => 'not_interested',
+        'comment' => 'No desea nuevas llamadas',
+    ]);
+
+    test_throws(
+        fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage),
+        LlamadaBitrixError::class,
+        'uncertain comment response is surfaced'
+    );
+    $callsAfterUncertainResponse = $fake->calls;
+    $retry = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
+    test_same('manual_review', $retry['status'], 'uncertain comment response requires manual review');
+    test_same($callsAfterUncertainResponse, $fake->calls, 'uncertain comment response is never retried automatically');
+    test_same([], llamada_calls($fake, 'crm.deal.update'), 'uncertain comment response leaves stage unchanged');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->responseQueues['crm.deal.update'] = [
+        ['ok' => false, 'error' => 'TEMPORARY_ERROR', 'desc' => 'temporary stage failure'],
+        ['ok' => true, 'result' => true],
+    ];
+    $input = llamada_test_input([
+        'callRequestId' => '12121212-1212-4121-8121-121212121212',
+        'outcome' => 'not_interested',
+    ]);
+
+    test_throws(
+        fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage),
+        LlamadaBitrixError::class,
+        'partial stage failure is surfaced'
+    );
+    test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'partial failure checkpoints successful activity update');
+    test_same(1, count(llamada_calls($fake, 'crm.deal.update')), 'partial failure attempts stage once');
+    test_same('retryable', $store->get('member-1:12121212-1212-4121-8121-121212121212')['state'], 'partial failure releases operation for retry');
+
+    $store = new LlamadaIdempotenciaStore($directory);
+    $retried = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
+    test_same('processed', $retried['status'], 'partial stage failure resumes successfully');
+    test_same(true, $retried['stageChanged'], 'resumed stage update is reported');
+    test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'resumed stage update does not duplicate activity update');
+    test_same(2, count(llamada_calls($fake, 'crm.deal.update')), 'resumed operation retries only missing stage update');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $input = llamada_test_input([
+        'callRequestId' => '15151515-1515-4151-8151-151515151515',
+    ]);
+    $normalized = [
+        'callRequestId' => '15151515-1515-4151-8151-151515151515',
+        'memberId' => 'member-1',
+        'dealId' => 77,
+        'bitrixUserId' => 42,
+        'bitrixActivityId' => 731,
+        'outcome' => 'no_answer',
+        'selectedPhone' => '+593991234567',
+        'nextActivityAt' => null,
+        'comment' => '',
+    ];
+    $requestHash = hash('sha256', json_encode([
+        'request' => $normalized,
+        'noInterestStage' => $noInterestStage,
+    ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    $store->begin('member-1:15151515-1515-4151-8151-151515151515', $requestHash, $now->getTimestamp());
+
+    $concurrent = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
+    test_same([
+        'status' => 'processing',
+        'callRequestId' => '15151515-1515-4151-8151-151515151515',
+    ], $concurrent, 'active concurrent attempt reports processing');
+    test_same([], $fake->calls, 'active concurrent attempt performs no external calls');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $result = llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '13131313-1313-4131-8131-131313131313',
+        'outcome' => 'not_interested',
+        'comment' => 'No desea nuevas llamadas',
+    ]), $fake, $store, $now, $noInterestStage);
+    $writeOrder = array_values(array_map(
+        fn(array $call): string => $call[0],
+        array_filter($fake->calls, fn(array $call): bool => in_array($call[0], [
+            'crm.activity.update',
+            'crm.timeline.comment.add',
+            'crm.deal.update',
+        ], true))
+    ));
+    test_same([
+        'crm.activity.update',
+        'crm.timeline.comment.add',
+        'crm.deal.update',
+    ], $writeOrder, 'not interested writes comment before stage');
+    test_same(true, $result['commentCreated'], 'not interested reports comment creation');
+    test_same(true, $result['stageChanged'], 'not interested reports stage change');
+    test_same(null, $result['nextActivityAt'], 'not interested reports no future activity');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->responseQueues['crm.timeline.comment.add'] = [
+        ['ok' => false, 'error' => 'INVALID_COMMENT', 'desc' => 'comment rejected'],
+        ['ok' => true, 'result' => 801],
+    ];
+    $input = llamada_test_input([
+        'callRequestId' => '14141414-1414-4141-8141-141414141414',
+        'outcome' => 'not_interested',
+        'comment' => 'No desea nuevas llamadas',
+    ]);
+
+    test_throws(
+        fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage),
+        LlamadaBitrixError::class,
+        'known comment failure is surfaced'
+    );
+    test_same([], llamada_calls($fake, 'crm.deal.update'), 'known comment failure leaves stage unchanged');
+
+    $retried = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
+    test_same('processed', $retried['status'], 'known comment failure is safely retryable');
+    test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'known comment retry does not duplicate activity update');
+    test_same(2, count(llamada_calls($fake, 'crm.timeline.comment.add')), 'known comment retry repeats only failed comment');
+    test_same(1, count(llamada_calls($fake, 'crm.deal.update')), 'stage changes after retried comment succeeds');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+$activityMismatches = [
+    ['RESPONSIBLE_ID', '99', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'activity responsible mismatch'],
+    ['TYPE_ID', '1', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'activity type mismatch'],
+    ['DIRECTION', '1', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'activity direction mismatch'],
+];
+foreach ($activityMismatches as [$field, $value, $callRequestId, $expectedMessage]) {
+    [$store, $directory] = llamada_test_store();
+    try {
+        $fake = new FakeBitrix();
+        $fake->activity[$field] = $value;
+        test_throws_message(
+            fn() => llamada_procesar_resultado(llamada_test_input([
+                'callRequestId' => $callRequestId,
+            ]), $fake, $store, $now, $noInterestStage),
+            LlamadaForbidden::class,
+            $expectedMessage,
+            $expectedMessage . ' is rejected'
+        );
+        test_same([], llamada_calls($fake, 'crm.activity.update'), $expectedMessage . ' performs no activity write');
+        test_same([], llamada_calls($fake, 'crm.deal.update'), $expectedMessage . ' performs no deal write');
+        test_same([], llamada_calls($fake, 'crm.timeline.comment.add'), $expectedMessage . ' performs no comment write');
+    } finally {
+        llamada_test_cleanup($directory);
+    }
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
     $input = llamada_test_input([
         'callRequestId' => '22222222-2222-4222-8222-222222222222',
         'outcome' => 'answered',
         'selectedPhone' => '+593 99-123-4567',
-        'nextActivityAt' => '2026-08-25T10:15:00-05:00',
+        'nextActivityAt' => '2026-08-25T15:15:00Z',
         'comment' => '  Pide información del proyecto  ',
     ]);
     $result = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
@@ -146,6 +333,9 @@ try {
     test_same('1234', $updates[0][1]['fields']['SUBJECT'], 'answered keeps dashboard marker');
     test_same('N', $updates[0][1]['fields']['COMPLETED'], 'answered future activity remains pending');
     test_same('2026-08-25T10:15:00-05:00', $updates[0][1]['fields']['START_TIME'], 'answered uses requested future date');
+    test_same('2026-08-25T10:15:00-05:00', $result['nextActivityAt'], 'answered response normalizes date to Guayaquil');
+    test_same(false, $result['stageChanged'], 'answered reports unchanged stage');
+    test_same(true, $result['commentCreated'], 'answered reports created comment');
     test_same('+593991234567', $updates[0][1]['fields']['COMMUNICATIONS'][0]['VALUE'], 'answered normalizes selected phone');
     test_same([], llamada_calls($fake, 'crm.deal.update'), 'answered preserves stage');
     $comments = llamada_calls($fake, 'crm.timeline.comment.add');
@@ -158,6 +348,23 @@ try {
         fn(array $call): string => $call[0],
         array_filter($fake->calls, fn(array $call): bool => in_array($call[0], ['crm.activity.update', 'crm.timeline.comment.add'], true))
     )), 'comment is written after activity');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    test_throws(
+        fn() => llamada_procesar_resultado(llamada_test_input([
+            'callRequestId' => 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+            'outcome' => 'answered',
+            'nextActivityAt' => '2026-08-25T10:15:00',
+        ]), $fake, $store, $now, $noInterestStage),
+        LlamadaValidationError::class,
+        'answered rejects date without explicit zone'
+    );
+    test_same([], $fake->calls, 'ambiguous answered date performs no external calls');
 } finally {
     llamada_test_cleanup($directory);
 }
