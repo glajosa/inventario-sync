@@ -96,6 +96,11 @@ function cot_modelo(int $categoryId): array {
 const COT_PLAZO_REF = 60;     // plazo de referencia
 const COT_SEPARACION = 1000;  // la separación siempre es $1.000 (o el 10% si es menor)
 const COT_PARQUEO = 20000;    // valor de un parqueo de Noral Plaza Suites
+/** El campo "Inventario" del deal. Se lee para saber si las unidades van en fusion o
+ *  separadas, que es lo que decide el descuento del parqueo. Mismo codigo que
+ *  CAMPO_NUEVO en campolib; se repite la constante porque el cotizador no carga
+ *  campolib (arrastra los hooks y el API entero para leer un campo). */
+const COT_CAMPO_UNIDADES = 'UF_CRM_1785205972989';
 
 /** ¿La unidad es una SUITE de Noral Plaza? Es el único producto con la regla del
  *  parqueo. Se decide por el TIPO DE BIEN, no por el código: los edificios E y F

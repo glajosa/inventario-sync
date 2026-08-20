@@ -844,10 +844,17 @@ function autollenar_ficha(int $dealId, array $fichas, array $deal = []): array {
     }
     if (!$cods) return [];
 
-    if ($esSuites && count($fichas) > 1 && $suma > DESCUENTO_PARQUEO) {
+    // El descuento SOLO en fusion. Si el vendedor marco las unidades como SEPARADAS,
+    // cada una es una compra con su contrato y su parqueo: no se perdona ninguno.
+    // Esa marca es justamente la palanca que el equipo comercial usa para decidirlo.
+    $separadas = unidades_separadas((string)($deal[CAMPO_NUEVO] ?? ''));
+    if ($esSuites && count($fichas) > 1 && $suma > DESCUENTO_PARQUEO && !$separadas) {
         $suma -= DESCUENTO_PARQUEO;
         logline("deal=$dealId Noral Plaza Suites con " . count($fichas)
-              . ' unidades -> se resta el parqueo (' . DESCUENTO_PARQUEO . ')');
+              . ' unidades FUSIONADAS -> se resta el parqueo (' . DESCUENTO_PARQUEO . ')');
+    } elseif ($esSuites && count($fichas) > 1 && $separadas) {
+        logline("deal=$dealId Noral Plaza Suites con " . count($fichas)
+              . ' unidades SEPARADAS -> NO se resta el parqueo');
     }
 
     $campos = [D_ACTIVO => implode(', ', $cods)];

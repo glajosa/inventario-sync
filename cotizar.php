@@ -140,9 +140,13 @@ if (preg_match('/^\d+(\.\d+)?$/', $vPrecio) && (float)$vPrecio > 0 && $pvpInvent
 
 // ---------- cliente ----------
 $cliente = '';
+$separadas = false;   // sin deal no hay marca: se cotiza como fusion, que es el defecto
 if ($dealId > 0) {
     $d = cot_bx('crm.deal.get', ['id' => $dealId]);
     $deal = $d['result'] ?? [];
+    // Fusion o separadas: lo declara el vendedor en el campo Inventario y decide si
+    // se perdona un parqueo. No es una preferencia de esta pantalla.
+    $separadas = unidades_separadas((string)($deal[COT_CAMPO_UNIDADES] ?? ''));
     // El nombre sale del CONTACTO: el título del deal casi siempre es el texto
     // crudo del formulario ("Complete CRM form ...") y no se le muestra a nadie.
     if (!empty($deal['CONTACT_ID'])) {
@@ -245,17 +249,17 @@ if ($vExtraMes2 >= 1 && $vExtraMes2 <= 12) $opts['extraMes2'] = $vExtraMes2;
 // 30 y la cotización salía 35/65 con un préstamo menor al que de verdad necesita.
 $repartoFijo = !empty($modelo['banco']);
 if ($vFinanciar !== '' && !$repartoFijo) $opts['financiarPct'] = (float)$vFinanciar;
-// Parqueo: en una compra de 2+ suites se perdona UNO solo. ENCENDIDO por defecto.
+// Parqueo: en una compra de 2+ suites de Noral Plaza se perdona UNO solo.
 //
-// Estaba apagado, con el argumento de que lo decidiera el asesor. Estaba mal: no es
-// una concesion que se negocia, es la regla del negocio, y el campo del deal ya la
-// venia aplicando sola en `autollenar_ficha`. O sea que el deal decia $138.178 y la
-// cotizacion impresa decia $158.178 por la misma compra. La que estaba fuera de
-// norma era esta pantalla.
+// Lo decide la MARCA del campo Inventario, no esta pantalla:
+//   FUSION     -> una sola compra, se perdona un parqueo (-20.000)
+//   SEPARADAS  -> cada unidad su compra, su contrato y su parqueo: NO se resta nada
+// Es la palanca que el equipo comercial usa a proposito, y por eso vive en el deal y
+// no en un parametro de la URL: la cotizacion tiene que decir lo mismo que el deal.
 //
-// La casilla sigue existiendo para DESACTIVARLO en el caso raro en que el cliente
-// se lleve los dos parqueos. `sinparq=0` lo apaga; cualquier otra cosa lo deja.
-$sinParqueo = (($_GET['sinparq'] ?? '1') !== '0');
+// `sinparq=0` sigue existiendo para apagarlo a mano en un caso raro, pero ya no hace
+// falta prenderlo: con fusion viene puesto.
+$sinParqueo = !$separadas && (($_GET['sinparq'] ?? '1') !== '0');
 $dctoParq   = cot_descuento_parqueo($suites, $sinParqueo);
 $pvpFinal   = max(0.0, $pvp - $dctoParq);
 
@@ -807,7 +811,7 @@ $hoy  = new DateTimeImmutable('now');
       </label>
     </div>
     <?php endif; ?>
-    <?php if ($suites >= 2): ?>
+    <?php if ($suites >= 2 && !$separadas): ?>
     <!-- Solo aparece con 2+ suites de Noral Plaza: es el único caso donde la regla existe. -->
     <div class="col2" style="align-self:center">
       <label class="chk-linea">
@@ -1029,6 +1033,14 @@ $hoy  = new DateTimeImmutable('now');
            el documento del cliente muestra el precio final y nada mas: el detalle de
            como se llego a el es informacion interna. Si hace falta auditarlo, esta en
            $B['bruto'] y $B['dcto'], y el log del handler lo registra. */ ?>
+  <?php if ($separadas && $suites >= 2): ?>
+    <?php /* Se dice explicito: si no, el asesor ve dos suites sin descuento y cree
+             que la pantalla se equivoco. La clase `aviso` no se imprime. */ ?>
+    <div class="aviso">Las unidades están marcadas como <b>separadas</b>, así que
+      cada una lleva su parqueo y <b>no se descuentan los
+      <?= h(cot_money((float)COT_PARQUEO)) ?></b>. Para que aplique, hay que marcarlas
+      como fusión en el campo Inventario del negocio.</div>
+  <?php endif; ?>
   <div class="precio"><span>Precio final</span><span><?= h(cot_money($plan['valor'])) ?></span></div>
   <div class="legal"><span>Valores legales promesa C/V</span><span><?= h(cot_money((float)$plan['legal'])) ?></span></div>
   <p>Pago directo para el notario. Se da al momento de la firma del contrato.</p>

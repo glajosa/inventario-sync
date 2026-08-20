@@ -17,6 +17,8 @@
  */
 
 declare(strict_types=1);
+
+require_once __DIR__ . '/codigolib.php';   // valor_campo(), unidades_separadas()
 require_once __DIR__ . '/campolib.php';
 require_once __DIR__ . '/reubicalib.php';
 
@@ -46,7 +48,10 @@ foreach (preg_split('/[,;\s]+/', $valor) as $x) {
     if ($x !== '' && ctype_digit($x) && (int)$x > 0) $ids[] = (int)$x;
 }
 $ids    = array_values(array_unique($ids));
-$limpio = implode(',', $ids);
+// La marca de separadas llega en su propio parametro y se vuelve a pegar aca: el
+// valor que se escribe se arma SIEMPRE en el servidor, nunca se guarda lo que llego.
+$separadas = ((string)($_POST['separadas'] ?? $_GET['separadas'] ?? '')) === '1';
+$limpio = valor_campo($ids, $separadas);
 
 // El pipeline se valida ANTES de escribir. Antes se escribía primero y el
 // sincronizador rechazaba después: el campo quedaba con un valor que nunca se

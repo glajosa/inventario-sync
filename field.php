@@ -206,7 +206,10 @@ $proys = $cat['proyectos'] ?? [];
 $porId = [];
 foreach ($units as $u) $porId[(string)$u['id']] = $u;
 
-$elegidos = ids_de($value);
+$elegidos  = ids_de($value);
+// Fusion o separadas. Viaja DENTRO del mismo valor ("581,623 separadas") para que la
+// copia nativa de Bitrix se la lleve sola, que es la operacion donde importa.
+$separadas = unidades_separadas($value);
 
 // ---- settings: el campo no necesita configuración ---------------------------
 if ($mode === 'settings') { echo ''; exit; }
@@ -454,6 +457,13 @@ $phIni = $bloqIni === 'si' ? 'Ver inventario (se elige en RESERVA)'
       border-top:1px solid #eaeef2;color:#8b949e;font-size:11px}
   #<?= $uid ?> .gu-listo{margin-left:auto;border:0;background:#0969da;color:#fff;font:inherit;
       font-size:11.5px;font-weight:600;padding:4px 12px;border-radius:5px;cursor:pointer}
+  #<?= $uid ?> .gu-junto{border-bottom:1px solid #eaeef2;background:#fffdf5;padding:9px 11px 8px;
+      display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center}
+  #<?= $uid ?> .gu-junto label{display:inline-flex;align-items:baseline;gap:6px;cursor:pointer;
+      font-size:12px;line-height:1.35}
+  #<?= $uid ?> .gu-junto b{font-weight:600;color:#1f2328}
+  #<?= $uid ?> .gu-junto span{color:#6a737b;font-size:11px}
+  #<?= $uid ?> .gu-junto-n{flex:1 0 100%;color:#8a6d1f;font-size:11px;line-height:1.4}
 </style>
 
 <!-- se deja el input por compatibilidad, pero el guardado real lo hace el JS por API -->
@@ -530,6 +540,15 @@ foreach ($elegidos as $id) {
   </div>
 
   <div class="gu-elegidas" id="<?= $uid ?>_elegidas" style="display:none"></div>
+  <?php /* Solo tiene sentido con 2 o mas: con una unidad no hay nada que separar.
+           Lo muestra y lo esconde el JS segun cuantas haya elegidas. */ ?>
+  <div class="gu-junto" id="<?= $uid ?>_junto" style="display:none">
+    <label><input type="radio" name="<?= $uid ?>_sep" value="0" <?= $separadas ? '' : 'checked' ?>>
+      <b>Una sola compra</b> <span>se fusionan en un contrato</span></label>
+    <label><input type="radio" name="<?= $uid ?>_sep" value="1" <?= $separadas ? 'checked' : '' ?>>
+      <b>Compras separadas</b> <span>un negocio por unidad</span></label>
+    <div class="gu-junto-n" id="<?= $uid ?>_juntoN"></div>
+  </div>
 
   <?php
   /*
@@ -562,6 +581,10 @@ foreach ($elegidos as $id) {
               trim(($u['torre'] !== '' ? 'T' . $u['torre'] : '')
                  . ($u['piso']  !== '' ? ' · P' . $u['piso'] : '')),
               $pvpNum,
+              // Tipo de bien. Hace falta para saber si son SUITES de Noral Plaza, que
+              // es el unico caso con regla de parqueo: el codigo no basta porque los
+              // edificios E y F tienen locales Y suites con la misma letra.
+              (int)($u['tipo'] ?? 0),
           ];
       }
       $datos[] = [(string)$cid, (string)$nom, $us];
@@ -642,6 +665,42 @@ foreach ($elegidos as $id) {
   var notaEl   = document.getElementById('<?= $uid ?>_nota');
   var txt      = document.getElementById('<?= $uid ?>_txt');
   var elegidas = document.getElementById('<?= $uid ?>_elegidas');
+  var junto    = document.getElementById('<?= $uid ?>_junto');
+  var juntoN   = document.getElementById('<?= $uid ?>_juntoN');
+  var CAT_PLAZA = 33, TIPO_DEPTO = 1793, TIPO_SUITE = 1797, PARQUEO = 20000;
+
+  /** Separadas o fusion. Sin nada elegido o con una sola, fusion (es el defecto). */
+  function esSeparadas(){
+    var r = document.querySelector('input[name="<?= $uid ?>_sep"]:checked');
+    return !!(r && r.value === '1');
+  }
+
+  /** El interruptor solo aparece con 2 o mas unidades: con una no hay nada que separar.
+   *  Y si son suites de Noral Plaza se dice cuanto cuesta la decision, porque de eso
+   *  depende que se perdone un parqueo o no. */
+  function pintarJunto(){
+    var ids = val.value.split(',').filter(function(x){ return x; });
+    if (ids.length < 2) { junto.style.display = 'none'; juntoN.textContent = ''; return; }
+    junto.style.display = 'flex';
+    var suites = 0;
+    ids.forEach(function(id){
+      var d = datos(id);
+      if (d && Number(d.cat) === CAT_PLAZA
+            && (Number(d.tipo) === TIPO_DEPTO || Number(d.tipo) === TIPO_SUITE)) suites++;
+    });
+    if (suites >= 2) {
+      juntoN.textContent = esSeparadas()
+        ? 'Separadas: cada suite lleva su parqueo. No se descuentan los $' + PARQUEO.toLocaleString('en-US') + '.'
+        : 'Fusión: se perdona un parqueo. Se descuentan $' + PARQUEO.toLocaleString('en-US') + ' del total.';
+    } else {
+      juntoN.textContent = esSeparadas()
+        ? 'Se creará un negocio por unidad al llegar a RESERVA.'
+        : 'Las unidades se cotizan y se cobran como una sola compra.';
+    }
+  }
+  document.querySelectorAll('input[name="<?= $uid ?>_sep"]').forEach(function(r){
+    r.addEventListener('change', function(){ pintarJunto(); guardar(); });
+  });
   var COT = <?= json_encode(cot_base($dealId), JSON_UNESCAPED_SLASHES) ?>;
   // Unidades marcadas SOLO para cotizar. Es una lista aparte de `sel` a propósito:
   // no se guarda, no cambia la etapa de la unidad y no ocupa nada. Así el asesor
@@ -703,11 +762,13 @@ foreach ($elegidos as $id) {
       if (!us || !us.length) continue;
       h.push('<div class="gu-grupo" data-cat="', cid, '">', nom, '</div>');
       for (var j = 0; j < us.length; j++) {
-        var u = us[j];                      // [id, codigo, estado, libre, meta, pvp]
+        var u = us[j];                 // [id, codigo, estado, libre, meta, pvp, tipo]
         var cod = esc(u[1]), est = esc(u[2]), libre = u[3] ? 1 : 0, meta = esc(u[4]), pvp = u[5] || 0;
+        var tipo = u[6] || 0;
         h.push('<div class="gu-fila', (libre ? '' : ' gu-no'),
                '" data-cat="', cid, '" data-cod="', esc(String(u[1]).toUpperCase()),
                '" data-libre="', libre, '" data-id="', u[0], '" data-pvp="', pvp,
+               '" data-tipo="', tipo,
                '" data-cod-txt="', cod, '" data-proy="', nom, '">',
                '<span class="gu-cod">', cod, '</span>',
                '<span class="gu-tag ', est, '">', est, '</span>');
@@ -766,6 +827,9 @@ foreach ($elegidos as $id) {
     var cuerpo = new URLSearchParams();
     cuerpo.set('deal',  CFG.deal);
     cuerpo.set('valor', val.value);
+    // La marca va aparte y el servidor la vuelve a pegar: asi el input que lee el resto
+    // del JS sigue siendo IDs limpios y nada tiene que aprender a ignorar una palabra.
+    cuerpo.set('separadas', esSeparadas() ? '1' : '0');
     cuerpo.set('firma', CFG.firma);
 
     fetch('guardar.php', {method:'POST', body:cuerpo})
@@ -808,8 +872,9 @@ foreach ($elegidos as $id) {
     var f = filas.filter(function(x){ return x.dataset.id === id; })[0];
     // pvp va incluido: el botón de cotizar el conjunto descarta las unidades sin
     // precio, que no suman nada al total.
-    return f ? {cod: f.dataset.codTxt, proy: f.dataset.proy, pvp: f.dataset.pvp}
-             : {cod: '#' + id, proy: '', pvp: 0};
+    return f ? {cod: f.dataset.codTxt, proy: f.dataset.proy, pvp: f.dataset.pvp,
+                cat: f.dataset.cat, tipo: f.dataset.tipo}
+             : {cod: '#' + id, proy: '', pvp: 0, cat: '', tipo: 0};
   }
 
   /** Cerrado: texto plano, igual que los campos nativos del deal. */
@@ -846,6 +911,8 @@ foreach ($elegidos as $id) {
 
   /** Dentro del desplegable: lo elegido arriba, en azul y con la X. */
   function pintarElegidas(){
+    // el interruptor depende de cuantas hay elegidas
+    try { pintarJunto(); } catch(e) {}
     elegidas.innerHTML = '';
     if (!sel.length) { elegidas.style.display = 'none'; return; }
     elegidas.style.display = '';
