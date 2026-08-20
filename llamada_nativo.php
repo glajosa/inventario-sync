@@ -349,8 +349,15 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
     }
 
     // Renglón de arriba: en qué escalón quedó. Es lo que pediste ver.
+    // Un deal con 8 llamadas que dice "Primer contacto" parece un error si no
+    // se explica: el reingreso lo saco de la escalera vieja y le abrio otra.
+    var reciclado = protocolo.viejas > 0
+      ? '  \u00b7  volvi\u00f3 a dejar su n\u00famero (' + protocolo.viejas
+        + (protocolo.viejas === 1 ? ' llamada' : ' llamadas') + ' del ciclo anterior)'
+      : '';
     blocks.estado = { type:'text', properties:{ size:'sm', color:'base_70',
-      value: (TOCA[protocolo.estado] || protocolo.estado) + '  \u00b7  ' + protocolo.estado } };
+      value: (TOCA[protocolo.estado] || protocolo.estado) + '  \u00b7  '
+             + protocolo.estado + reciclado } };
 
     if (deshecho) {
       blocks.caja = { type:'section', properties:{ type:'warning', blocks:{
@@ -382,11 +389,11 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
    * Sin pacto las pone la escalera; con pacto, lo que eligió el vendedor
    * porque el cliente lo dijo.
    *
-   * La fecha se corre al día hábil más cercano PREFIRIENDO HACIA ATRÁS. Ver
-   * feriados.php: adelantar la llamada no cuesta puntos (el atraso es
-   * max(0, gap - plazo) y no baja de cero), retrasarla sí. Medido en la regla
-   * ②: empujar del sábado al lunes baja de 10 a 6 puntos por un día que la
-   * empresa no trabaja — un castigo que el vendedor no se ganó.
+   * La fecha se corre al día hábil SIGUIENTE, nunca al anterior. Adelantarla
+   * parecía gratis en puntos, pero ACUMULA: todo lo que cae fin de semana se
+   * apilaba en el viernes. El colchón de un día que deja PLAZO (se agenda al
+   * techo del documento menos uno) absorbe el corrimiento sin costar puntos.
+   * Ver habilCercano() y feriados.php.
    */
   /**
    * ⭐ UNA SOLA VERDAD para la próxima llamada.
@@ -502,6 +509,13 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
   //   ③ 2ª sin contestar     → +7 días
   //   ④ 3ª sin contestar     → +30 días, y de ahí cada 100
   //   ⑤ contestó             → +3 días, salvo que el cliente pacte fecha
+  //   ⑥ volvió a dejar su número → SALE de la escalera y vuelve al ①
+  //
+  // El ⑥ es el que faltaba hasta el 20-ago. El cliente que vuelve a llenar el
+  // formulario es un lead caliente: la escalera arranca de nuevo y la próxima
+  // llamada es un primer contacto, no un mantenimiento a 99 días. Lo que NO se
+  // reinicia es la nota del asesor — esa es del asesor y las obligaciones
+  // viejas siguen en su promedio.
   //
   // El estado se calcula recorriendo las salientes en orden de CREATED, no
   // sumando contadores: dos deals con los mismos números pueden estar en
@@ -549,20 +563,53 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
   var FERIADOS = <?= $FERIADOS_JS ?>;
 
   var F_PROTOCOLO = 'UF_CRM_1786279719022';   // ESTADO DE PROTOCOLO
+  var F_VECES     = 'UF_CRM_1781115254387';   // VECES QUE DEJO EL NUMERO
+  var ETAPA_REING = 'C28:PREPARATION';        // RECONTACTAR
+  var llamadas  = [];      // [{ts, contesto}] en orden de CREATED, tal como vino
+  var reingreso = '';      // ISO del ultimo RECONTACTAR real ('' = no hubo)
   var registrado = 0;      // id de la actividad recién creada (0 = todavía nada)
   var yaIntento  = false;  // el auto-registro corre UNA sola vez por apertura
   var deshecho   = false;
   var protocolo = null;    // { estado, sinContestar }
   var modoPacto = false;   // el cliente dijo una fecha -> ahí sí calendario
 
-  function calcularProtocolo(llamadas) {
-    // llamadas: [{fecha, contesto}] ya ordenadas por CREATED
-    var estado = 'NUEVO', nc = 0;
-    for (var i = 0; i < llamadas.length; i++) {
-      if (llamadas[i].contesto) { estado = 'CONTACTADO'; nc = 0; }
+  /**
+   * En que escalon esta el deal. Se RECORRE en orden, no se cuenta: dos deals
+   * con los mismos numeros pueden estar en estados opuestos segun el ORDEN.
+   *
+   * EL REINGRESO BORRA EL CICLO VIEJO.
+   *
+   * El cliente volvio a dejar su numero: eso es accion del cliente y el
+   * documento manda reiniciar la escalera. Las llamadas de antes del reingreso
+   * NO cuentan para elegir el escalon. (Si siguen contando para la nota del
+   * asesor -"la nota del asesor es del asesor"- pero eso lo lleva el motor.)
+   *
+   * ESTO TIENE QUE DECIR LO MISMO QUE protocolo_de() DEL MOTOR.
+   * Hasta el 20-ago no miraba el reingreso: agendaba la proxima llamada a +99
+   * dias cuando reglas_de() la media contra el techo de 2, o sea que el
+   * vendedor perdia los 10 puntos de la obligacion POR OBEDECER AL PANEL.
+   * Medido sobre los 399 reingresos reales mas recientes: 136 (34%) con el
+   * escalon equivocado, 96 de ellos a +99 dias.
+   * Lo amarra bin/probar.php de dashboardbitrix, bloque "divergencia: N
+   * llamadas tras el reingreso": el panel agenda al techo del documento -1.
+   *
+   * @param lls  [{ts, contesto}] ordenadas por CREATED
+   * @param re   ISO del reingreso, o '' si no hubo
+   */
+  function calcularProtocolo(lls, re) {
+    var estado = 'NUEVO', nc = 0, viejas = 0;
+    for (var i = 0; i < lls.length; i++) {
+      // Comparacion de CADENAS, sin convertir zona: el CREATED de la actividad
+      // y el CREATED_TIME del historial salen del MISMO servidor con el mismo
+      // desfase (+03:00), asi que el orden lexicografico es el orden real.
+      // Convertir aca fue el bug de la doble conversion del 18-ago.
+      if (re && lls[i].ts && lls[i].ts < re) { viejas++; continue; }
+      if (lls[i].contesto) { estado = 'CONTACTADO'; nc = 0; }
       else { nc++; estado = nc === 1 ? 'ESCALERA-1' : (nc === 2 ? 'ESCALERA-2' : 'MANTENIMIENTO'); }
     }
-    return { estado: estado, sinContestar: nc };
+    // viejas > 0 -> el reingreso recorto algo de verdad: el vendedor tiene que
+    // entender por que un deal con 8 llamadas dice "primer contacto".
+    return { estado: estado, sinContestar: nc, viejas: viejas };
   }
 
   /** Días hasta la próxima llamada según lo que acaba de pasar. */
@@ -570,13 +617,6 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
     if (contesto) return PLAZO_CONTESTO;
     var k = (protocolo ? protocolo.sinContestar : 0) + 1;
     return PLAZO[k] || PLAZO_MANT;
-  }
-
-  /** El estado en que queda el deal después de esta llamada. */
-  function estadoProximo(contesto) {
-    if (contesto) return 'CONTACTADO';
-    var k = (protocolo ? protocolo.sinContestar : 0) + 1;
-    return k === 1 ? 'ESCALERA-1' : (k === 2 ? 'ESCALERA-2' : 'MANTENIMIENTO');
   }
 
   function fechaMas(dias) {
@@ -621,13 +661,13 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
       }]
     }, function (r) {
       // ── historial → escalón
-      var l = [];
+      llamadas = [];
       try {
         var d = (r.hist && !r.hist.error()) ? (r.hist.data() || []) : [];
         for (var i = 0; i < d.length; i++)
-          l.push({ contesto: String(d[i].SUBJECT || '').indexOf('1234') >= 0 });
+          llamadas.push({ ts: String(d[i].CREATED || '').substr(0,19),
+                          contesto: String(d[i].SUBJECT || '').indexOf('1234') >= 0 });
       } catch (e) {}
-      protocolo = calcularProtocolo(l);
 
       // ── deal + contacto → responsable y teléfono
       var base = null;
@@ -641,8 +681,25 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
             base.nombre = [c.NAME, c.LAST_NAME].filter(Boolean).join(' ').trim() || null;
             base.tel = (c.PHONE && c.PHONE[0] && c.PHONE[0].VALUE) || null;
           }
+          // El reingreso, SOLO si es real.
+          //
+          // El 19% de las entradas a RECONTACTAR no son reingresos: las mete
+          // una integracion externa (webhooks por asesor + Wazzup) y se
+          // distinguen porque el deal NO tiene el contador "VECES QUE DEJO EL
+          // NUMERO", que prospectosventas.php escribe en el mismo update que
+          // mueve la etapa. Es el MISMO filtro que usa bin/reingresos.php del
+          // motor; si aca se relaja, el panel y el puntaje vuelven a diverger.
+          if (deal[F_VECES]) {
+            try {
+              var rh = (r.reing && !r.reing.error()) ? (r.reing.data() || []) : [];
+              var it = rh.items || rh;                    // segun version del API
+              if (it && it.length)
+                reingreso = String(it[0].CREATED_TIME || '').substr(0,19);
+            } catch (e2) {}
+          }
         }
       } catch (e) {}
+      protocolo = calcularProtocolo(llamadas, reingreso);
 
       listo(base);        // libera lo que estuviera esperando
       redibujar();
@@ -767,13 +824,27 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
         registrado = parseInt(ra.data(), 10) || 0;   // para poder deshacerlo
         // Sin texto de "Guardado": la actividad recien creada YA sale ahi
         // abajo en la linea de tiempo con su fecha limite.
+        // La caja muestra proxAgendada, LO QUE DE VERDAD SE GUARDO.
+        //
+        // Aca quedaba un resto del bug viejo: recalculaba con
+        // fechaMas(diasProxima(contesto)) y eso se salta habilCercano(), asi
+        // que la caja podia decir "sabado" mientras en Bitrix quedaba el lunes.
+        // proxAgendada lo fijo inicioIso() con la fecha exacta del deadline.
         aviso = 'Guardado \u2713  ' + (contesto ? 'contest\u00f3' : 'no contest\u00f3')
-              + ' \u00b7 vuelvo a llamar el ' + textoFecha(
-                  modoPacto && sel ? sel : fechaMas(diasProxima(contesto)));
-        if (protocolo) {
-          protocolo = { estado: estadoProximo(contesto),
-                        sinContestar: contesto ? 0 : protocolo.sinContestar + 1 };
-        }
+              + ' \u00b7 vuelvo a llamar el '
+              + textoFecha(proxAgendada ? proxAgendada.f : fechaMas(diasProxima(contesto)));
+        // UNA sola verdad: se empuja la llamada a la lista y se recalcula.
+        //
+        // Antes se sumaba 1 a sinContestar a mano, y deshacer() restaba 1. Dos
+        // copias de la misma regla, y la de deshacer estaba mal: al bajar de 1
+        // a 0 dejaba el estado en CONTACTADO aunque el deal no hubiera
+        // contestado nunca (o aunque la escalera viniera de un reingreso).
+        //
+        // El ts va con un centinela porque la llamada que acaba de crearse
+        // SIEMPRE pertenece al ciclo actual: el reingreso esta en el pasado, y
+        // no hay que adivinar la zona del navegador para saberlo.
+        llamadas.push({ ts: '9999-12-31T00:00:00', contesto: contesto });
+        protocolo = calcularProtocolo(llamadas, reingreso);
         modoPacto = false; horaManual = false; diaManual = false; importante = false;
         // si escribió algo, se publica junto con la llamada: un solo paso
         mandarComentario(function(){
@@ -812,11 +883,11 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
       BX24.placement.call('unlock');
       if (r.error()) { aviso = 'No se pudo deshacer: ' + r.error(); redibujar(); return; }
       registrado = 0; deshecho = true;
-      if (protocolo && protocolo.sinContestar > 0) {
-        protocolo = { estado: protocolo.sinContestar === 1 ? 'CONTACTADO'
-                        : (protocolo.sinContestar === 2 ? 'ESCALERA-1' : 'ESCALERA-2'),
-                      sinContestar: protocolo.sinContestar - 1 };
-      }
+      // Se saca la que se acaba de crear y se recalcula con la misma funcion
+      // que la calculo: deshacer no puede tener su propia version de la regla.
+      if (llamadas.length && llamadas[llamadas.length - 1].ts === '9999-12-31T00:00:00')
+        llamadas.pop();
+      protocolo = calcularProtocolo(llamadas, reingreso);
       redibujar();
 
       // Borrar la actividad NO alcanza: el puntaje ya se había recalculado con
