@@ -87,10 +87,17 @@ suites?". En el modo "un plan por unidad" le pone los $20.000 enteros a la prime
   (rama `arreglo-propagacion`) hace falta igual, como red.
 
 ## Orden propuesto
-1. El descuento de parqueo atado a fusión/separado. **No depende de lo demás y es lo que hoy
-   cuesta plata.**
-2. Campo "Unidades juntas / separadas" en el SPA (hay que crearlo por UI).
-3. El interruptor en `field.php`, visible en la ventana del cambio de etapa.
-4. `duplicarlib.php`: duplicar un deal fijando los 6 campos por unidad.
-5. Partición automática al entrar a RESERVA con "separadas".
-6. Opción "copiar este deal con otra unidad" en el desplegable.
+1. ✅ **HECHO 2026-08-20** — El interruptor "juntas o separadas" y el descuento atado a él.
+   La marca vive DENTRO del valor del campo (`"2025,2027 separadas"`), no en un campo nuevo del
+   SPA: así viaja sola en el "Copiar" nativo de Bitrix, que es la operación donde importa, y no
+   hace falta crear nada por interfaz de administrador. `ids_de()` descarta lo que no es número,
+   así que ningún lector existente se rompió.
+   Verificado: fusión $141.728 · separadas $158.178 · una sola unidad sin descuento · la etiqueta
+   FUSIÓN/SEPARADAS se ve en la ficha cerrada · el aviso solo aparece en suites de Plaza
+   (`cat 33` + `tipo 1793/1797`), un local no lo dispara.
+2. ~~Campo nuevo en el SPA~~ — **ya no hace falta**: la marca vive en el mismo campo.
+3. `duplicarlib.php`: duplicar un deal fijando los 6 campos por unidad.
+4. Partición automática al entrar a RESERVA con "separadas".
+5. Opción "copiar este deal con otra unidad" en el desplegable.
+
+**Falta luz verde del usuario para 3, 4 y 5: crean deals reales en Bitrix.**
