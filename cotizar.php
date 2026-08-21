@@ -249,6 +249,10 @@ if ($vExtraMes2 >= 1 && $vExtraMes2 <= 12) $opts['extraMes2'] = $vExtraMes2;
 // 30 y la cotización salía 35/65 con un préstamo menor al que de verdad necesita.
 $repartoFijo = !empty($modelo['banco']);
 if ($vFinanciar !== '' && !$repartoFijo) $opts['financiarPct'] = (float)$vFinanciar;
+// El reparto que declara el PROYECTO. Va despues de financiarPct para que un proyecto
+// con reparto propio no quede a merced de lo que el asesor escriba en el formulario.
+foreach (['cuotasPct', 'extraPct'] as $k)
+    if (isset($modelo[$k])) $opts[$k] = (float)$modelo[$k];
 // Parqueo: en una compra de 2+ suites de Noral Plaza se perdona UNO solo.
 //
 // Lo decide la MARCA del campo Inventario, no esta pantalla:

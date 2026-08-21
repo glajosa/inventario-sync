@@ -82,6 +82,18 @@ function cot_modelo(int $categoryId): array {
                                             'extra'=>false, 'maxCuotas'=>0,
                                             'banco'=>true, 'inmediata'=>true]);
 
+        // Galero Torre D — 30% de entrada A 9 MESES y el 70% contra entrega.
+        // El reparto lo fija el contrato: 10% a la firma, 15% en las 9 mensuales y 5%
+        // en UNA extraordinaria. Por eso `cuotasPct` es 0,15 y no el 20% de Noral.
+        //
+        // Lleva `banco` aunque SI tenga cuotas: son pocas y chicas, y el 70% de
+        // contraentrega igual lo cubre el cliente con un credito. La simulacion corre
+        // sobre `contraentrega`, o sea sobre lo que falta — no sobre el precio entero.
+        case 51: return array_merge($base, ['reservaPct'=>0.10, 'contraPct'=>0.70,
+                                            'cuotasPct'=>0.15, 'extraPct'=>0.05,
+                                            'maxCuotas'=>9, 'maxExtra'=>1,
+                                            'banco'=>true]);
+
         // Galero Casas — mismo 30/70 con banco, pero NO es entrega inmediata: la
         // entrega la elige el asesor entre 6 y 36 meses, y el 30% se reparte en las
         // cuotas que quepan hasta esa fecha.
@@ -165,6 +177,11 @@ function cot_descuento_parqueo(int $suites, bool $aplicar): float {
  *        'extraTotal'   total en extraordinarias (alternativa a extraCada).
  *        'extraPartes'  1 o 2: parte la extraordinaria de cada año en dos pagos
  *                       (abril + diciembre, 14vo/18vo sueldo) en vez de uno solo.
+ *        'extraPct'     porcentaje del precio que va en las EXTRAORDINARIAS (0.10 por
+ *                       defecto, el reparto de Noral). Torre D pone 5%.
+ *        'cuotasPct'    porcentaje del precio que va en las cuotas MENSUALES. Sin
+ *                       esto se usa 20% (o 30% en modalidad "iguales"), que es como
+ *                       reparte Noral. Torre D reparte 15%.
  *        'contraPct'    porcentaje de contraentrega directo (0.60 por defecto). Lo
  *                       normal es usar 'financiarPct' en su lugar, que ya trae el
  *                       piso de negocio; este queda para uso interno/pruebas.
@@ -195,7 +212,13 @@ function cot_monto_extra(array $posExtra, array $extraMontos, float $parejo, int
 
 function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInicio, ?array $entrega, float $presupuesto = 0.0, array $opts = []): array {
     $iguales = ($modalidad === 'iguales');
-    $porc    = $iguales ? 0.30 : 0.20;          // lo que va en cuotas mensuales
+    // Lo que va en cuotas mensuales. Estaba clavado en 20% (30% sin extraordinarias)
+    // porque los dos proyectos de Noral reparten asi, pero no es universal: Galero
+    // Torre D pone 15% en las mensuales y 5% en una extraordinaria. Si el proyecto lo
+    // declara, manda el suyo.
+    $porc    = isset($opts['cuotasPct'])
+                 ? max(0.0, min(1.0, (float)$opts['cuotasPct']))
+                 : ($iguales ? 0.30 : 0.20);
     $v       = max(0.0, $valor);
 
     // --- primera cuota: el 16 del mes elegido; nunca un mes ya pasado ---
@@ -368,7 +391,11 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         $extraTotal = max(0.0, $v - $separacion - $contraentrega - $firmaPrev - $mensualObjetivo * $n);
         $extraAbsorbio = true;
     } else {
-        $extraTotal = 0.10 * $v;
+        // 10% es el reparto de Noral. Torre D pone 5% en una sola extraordinaria, asi
+        // que el proyecto puede declarar el suyo. Si no lo declara, sigue el de siempre.
+        $extraTotal = (isset($opts['extraPct'])
+                          ? max(0.0, min(1.0, (float)$opts['extraPct']))
+                          : 0.10) * $v;
     }
     if ($nExtra === 0) $extraTotal = 0.0;      // sin extraordinarias no hay dónde ponerlo
     $extraTotal = max(0.0, min($extraTotal, max(0.0, $v - $separacion - $contraentrega)));
