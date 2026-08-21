@@ -272,6 +272,32 @@ if (ids_de((string)($deal[CAMPO_NUEVO] ?? '')) === []) {
     if ($viejas) $deal[CAMPO_NUEVO] = implode(',', array_keys($viejas));
 }
 
+// ── Partir el deal, si el vendedor marco las unidades SEPARADAS ─────────────
+// Va ANTES de sincronizar a proposito: parte primero y cada deal —el original y sus
+// copias— entra al sincronizado ya con UNA sola unidad en su campo. Al reves,
+// sincronizar veria las dos juntas y les aplicaria el trato de fusion (incluido el
+// descuento de parqueo) un instante antes de partirlas.
+//
+// partir_deal() se protege sola: solo actua en CLIENTES/RESERVA, solo con la marca
+// de separadas, solo con 2 o mas, y anota en partidos.json para que el siguiente
+// ONCRMDEALUPDATE del mismo cambio no vuelva a partir.
+//
+// En try/catch: si partir falla, el deal se sincroniza igual como estaba. Es
+// preferible una venta sin partir —visible y arreglable a mano— que un hook caido
+// que deja de atar unidades para todo el portal.
+require_once __DIR__ . '/copiarlib.php';
+try {
+    $part = partir_deal((int)$dealId, $deal);
+    if (!empty($part['ok'])) {
+        logline("HOOK deal=$dealId PARTIDO " . json_encode($part));
+        // El deal ya no es el que leimos: se relee para sincronizar con su campo nuevo.
+        $g = bx('crm.deal.get', ['id' => (int)$dealId]);
+        if ($g['ok'] && !empty($g['result'])) $deal = $g['result'];
+    }
+} catch (Throwable $e) {
+    logline("HOOK deal=$dealId PARTIR fallo: " . $e->getMessage());
+}
+
 // (int) obligatorio: $dealId viaja como string desde el payload del webhook y
 // campolib.php declara strict_types, así que pasarlo tal cual era un TypeError.
 $res = sincronizar_deal((int)$dealId, $deal);
