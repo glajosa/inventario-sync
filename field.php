@@ -303,15 +303,20 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
  * En el modal (MODE=edit) se responde 'no' sin preguntarle nada al API: ahí el campo
  * va abierto siempre, porque es donde Bitrix pide la unidad para pasar a RESERVA.
  */
+// El estado del deal se resuelve siempre que haya deal, tambien en modo edicion: el
+// boton de copiar necesita saber el PIPELINE para no ofrecerse donde no aplica, y en
+// el cuadro de campos obligatorios (que llega como mode=edit) es justo donde el
+// vendedor lo veia sin tener ninguna unidad todavia. La lectura esta cacheada 60 s.
+$est = $dealId > 0 ? deal_estado($dealId) : null;
 if ($mode === 'edit') {
     $bloqIni = 'no';
 } else {
-    $est = deal_estado($dealId);
     if ($est === null)                      $bloqIni = '?';
     elseif ((int)$est['cat'] !== 28)        $bloqIni = 'no';
     elseif ($est['stage'] === reserva28_cache()) $bloqIni = 'no';
     else                                    $bloqIni = 'si';
 }
+$catDeal = $est !== null ? (int)$est['cat'] : 0;
 $phIni = $bloqIni === 'si' ? 'Ver inventario (se elige en RESERVA)'
        : ($bloqIni === '?' ? 'Ver inventario…' : 'Elegir unidad…');
 ?>
@@ -496,6 +501,9 @@ $phIni = $bloqIni === 'si' ? 'Ver inventario (se elige en RESERVA)'
   window.GU_CFG_<?= $uid ?> = {
     deal:  <?= (int)$dealId ?>,
     campo: <?= json_encode($name) ?>,
+    // para el boton de copiar: en que pipeline esta y si ya tiene unidad guardada
+    cat:      <?= (int)$catDeal ?>,
+    yaTiene:  <?= count($elegidos) ?>,
     // firma del id del deal: guardar.php no escribe nada sin ella
     firma: <?= json_encode($dealId > 0
         ? hash_hmac('sha256', (string)$dealId, (string)getenv('OUTBOUND_TOKEN'))
@@ -1126,10 +1134,19 @@ foreach ($elegidos as $id) {
       : '';
   }
 
-  /** Solo tiene sentido dentro de un deal. Se muestra siempre que haya deal: el
-   *  cliente puede sumar otra unidad estando en PROSPECTOS o en CLIENTES. */
+  /**
+   * Copiar el negocio solo tiene sentido en CLIENTES y cuando el negocio YA TIENE su
+   * unidad: es el caso de "el cliente reservo una y despues escoge otra".
+   *
+   * Estaba visible con solo haber un deal, y aparecia en PROSPECTOS sobre un negocio
+   * sin ninguna unidad — donde no hay nada que copiar y encima confunde con el
+   * interruptor de juntas/separadas, que es otra cosa.
+   */
+  var CAT_CLIENTES = 44;
   function pintarCopia(){
-    copia.style.display = CFG.deal ? 'flex' : 'none';
+    var aplica = CFG.deal && Number(CFG.cat) === CAT_CLIENTES && Number(CFG.yaTiene) > 0;
+    copia.style.display = aplica ? 'flex' : 'none';
+    if (!aplica && copiando) modoCopia(false);
   }
 
   function copiarCon(fila){
