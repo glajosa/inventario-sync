@@ -119,6 +119,17 @@ function copiar_deal_con_unidad(int $dealOrigen, array $deal, int $unitId): arra
     }
     cache_unidad($unitId, null, $nuevo);
     atados_anotar($unitId, $nuevo);
+
+    // La unidad sale del campo de PROSPECTOS: ahi ya no es un apartado, es una venta.
+    //
+    // Hay que hacerlo ACA a mano. `sincronizar_deal` lo hace solo, pero solo para lo
+    // que el deal "acaba de atar" ($agregar), y la copia ata su unidad escribiendo
+    // parentId2 directo tres lineas arriba — asi que cuando su hook corre ya la tiene
+    // y $agregar viene vacio. Resultado: la unidad quedaba nombrada para siempre en
+    // el deal de PROSPECTOS, que es el hueco que se veia despues de partir.
+    $contacto = (int)($deal['CONTACT_ID'] ?? 0);
+    if ($contacto > 0) limpiar_prospecto($nuevo, $contacto, [$unitId]);
+
     logline("COPIA deal=$dealOrigen -> $nuevo con u=$unitId ({$u['cod']}, proy {$u['proy']}, $monto)");
     return ['ok' => true, 'id' => $nuevo];
 }
@@ -186,6 +197,16 @@ function partir_deal(int $dealId, array $deal): array {
     $up = bx('crm.deal.update', ['id' => $dealId,
                                  'fields' => [CAMPO_NUEVO => (string)$queda]]);
     if (!$up['ok']) logline("PARTIR deal=$dealId no se pudo dejar solo u=$queda: {$up['error']}");
+
+    // TODAS las unidades del reparto salen del campo de PROSPECTOS, no solo las de las
+    // copias: la que el original conserva tampoco es un apartado ya. Se hace aca y no
+    // se confia en el sincronizado porque ese update deja el campo IGUAL a lo que el
+    // deal ya tenia atado, asi que su $agregar tambien viene vacio.
+    $contacto = (int)($deal['CONTACT_ID'] ?? 0);
+    if ($contacto > 0) {
+        $todas = array_merge([$queda], array_map(fn($c) => $c['unidad'], $creados));
+        limpiar_prospecto($dealId, $contacto, $todas);
+    }
 
     logline("PARTIR deal=$dealId -> conserva u=$queda · creados: "
           . implode(', ', array_map(fn($c) => "{$c['deal']}(u{$c['unidad']})", $creados)));
