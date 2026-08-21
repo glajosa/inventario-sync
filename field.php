@@ -478,6 +478,16 @@ $phIni = $bloqIni === 'si' ? 'Ver inventario (se elige en RESERVA)'
   #<?= $uid ?> .gu-junto-n{flex:1 0 100%;color:#8a6d1f;font-size:11px;line-height:1.4}
   #<?= $uid ?> .gu-junto-t{flex:1 0 100%;font-size:11px;font-weight:600;color:#57606a;
       text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px}
+  #<?= $uid ?> .gu-copia{border-bottom:1px solid #eaeef2;background:#f6f8fa;padding:7px 11px;
+      display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  #<?= $uid ?> .gu-copia-b{border:1px solid #d0d7de;background:#fff;color:#24292f;font:inherit;
+      font-size:11.5px;font-weight:600;padding:4px 11px;border-radius:5px;cursor:pointer}
+  #<?= $uid ?> .gu-copia-b:hover{border-color:#0969da;color:#0969da}
+  #<?= $uid ?>.copiando .gu-copia-b{background:#0969da;border-color:#0969da;color:#fff}
+  #<?= $uid ?> .gu-copia-n{font-size:11px;color:#6a737b;flex:1}
+  #<?= $uid ?> .gu-copia-n b{color:#1a7f37}
+  #<?= $uid ?> .gu-copia-n i{color:#b35900;font-style:normal}
+  #<?= $uid ?>.copiando .gu-fila:not(.gu-no){outline:1px dashed #0969da;outline-offset:-2px}
 </style>
 
 <!-- se deja el input por compatibilidad, pero el guardado real lo hace el JS por API -->
@@ -556,6 +566,13 @@ foreach ($elegidos as $id) {
   <div class="gu-elegidas" id="<?= $uid ?>_elegidas" style="display:none"></div>
   <?php /* Solo tiene sentido con 2 o mas: con una unidad no hay nada que separar.
            Lo muestra y lo esconde el JS segun cuantas haya elegidas. */ ?>
+  <?php /* Copiar el negocio con otra unidad. El caso: el cliente reservo una y
+           despues escoge otra. Antes habia que copiar el deal con el boton de Bitrix
+           —que arrastra la unidad del original— y arreglar los dos campos a mano. */ ?>
+  <div class="gu-copia" id="<?= $uid ?>_copia" style="display:none">
+    <button type="button" class="gu-copia-b" id="<?= $uid ?>_copiaB">＋ Copiar el negocio con otra unidad</button>
+    <span class="gu-copia-n" id="<?= $uid ?>_copiaN"></span>
+  </div>
   <div class="gu-junto" id="<?= $uid ?>_junto" style="display:none">
     <div class="gu-junto-t">¿Cómo se venden estas unidades?</div>
     <label><input type="radio" name="<?= $uid ?>_sep" value="0" <?= $separadas ? '' : 'checked' ?>>
@@ -1085,6 +1102,79 @@ foreach ($elegidos as $id) {
     try { window.top.location.href = ruta; } catch(e) { window.open(ruta, '_blank'); }
   }
 
+  /* ── copiar el negocio con otra unidad ───────────────────────────────────── */
+  var copia   = document.getElementById('<?= $uid ?>_copia');
+  var copiaB  = document.getElementById('<?= $uid ?>_copiaB');
+  var copiaN  = document.getElementById('<?= $uid ?>_copiaN');
+  var copiando = false, copiaEnVuelo = false;
+
+  /* Escape propio: el `esc` de arriba vive dentro del armador de filas y desde aca
+     no se ve. Sin esto la primera respuesta con codigo reventaba con
+     "esc is not defined" y el aviso quedaba en blanco. */
+  function escT(x){
+    return String(x == null ? '' : x).replace(/[&<>"]/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+    });
+  }
+
+  function modoCopia(si){
+    copiando = !!si;
+    R.classList.toggle('copiando', copiando);
+    copiaB.textContent = copiando ? '✕ Cancelar' : '＋ Copiar el negocio con otra unidad';
+    copiaN.innerHTML = copiando
+      ? 'Elegí la unidad del negocio nuevo. Este negocio no se toca.'
+      : '';
+  }
+
+  /** Solo tiene sentido dentro de un deal. Se muestra siempre que haya deal: el
+   *  cliente puede sumar otra unidad estando en PROSPECTOS o en CLIENTES. */
+  function pintarCopia(){
+    copia.style.display = CFG.deal ? 'flex' : 'none';
+  }
+
+  function copiarCon(fila){
+    if (copiaEnVuelo) return;
+    if (fila.dataset.libre !== '1') {
+      copiaN.innerHTML = '<i>' + escT(fila.dataset.codTxt) + ' no está libre: ya es de otro negocio.</i>';
+      return;
+    }
+    copiaEnVuelo = true;
+    copiaN.textContent = 'Copiando el negocio con ' + fila.dataset.codTxt + '…';
+    var cuerpo = new URLSearchParams();
+    cuerpo.set('deal', CFG.deal);
+    cuerpo.set('unidad', fila.dataset.id);
+    cuerpo.set('firma', CFG.firma);
+    fetch('copiar.php', {method:'POST', body:cuerpo})
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        copiaEnVuelo = false;
+        if (!j || !j.ok) {
+          copiaN.innerHTML = '<i>' + escT((j && j.error) || 'no se pudo copiar') + '</i>';
+          return;
+        }
+        // La unidad pasa a estar ocupada por el negocio nuevo: se refleja al instante
+        // para que nadie la vuelva a elegir creyendo que sigue libre.
+        marcarFila(String(fila.dataset.id), false);
+        filtrar();
+        copiaN.innerHTML = '<b>Negocio #' + (j.deal|0) + ' creado con ' + escT(j.codigo) + '.</b> '
+          + '<a href="#" data-ir-deal="' + (j.deal|0) + '">Abrirlo</a>';
+        modoCopia(false);
+      })
+      .catch(function(){ copiaEnVuelo = false; copiaN.innerHTML = '<i>error de red</i>'; });
+  }
+
+  copiaB.addEventListener('click', function(e){ e.stopPropagation(); modoCopia(!copiando); });
+  copiaN.addEventListener('click', function(e){
+    var a = e.target.closest ? e.target.closest('[data-ir-deal]') : null;
+    if (!a) return;
+    e.preventDefault(); e.stopPropagation();
+    var ruta = '/crm/deal/details/' + a.dataset.irDeal + '/';
+    try {
+      if (typeof BX24 !== 'undefined' && BX24.openPath) { BX24.openPath(ruta); return; }
+    } catch(err) {}
+    try { window.top.location.href = ruta; } catch(err) { window.open(ruta, '_blank'); }
+  });
+
   campo.addEventListener('click', function(ev){
     // pulsar el código abre la unidad; pulsar el resto de la barra despliega
     var ir = ev.target.closest ? ev.target.closest('.gu-ir') : null;
@@ -1137,6 +1227,9 @@ foreach ($elegidos as $id) {
     }
     var f = e.target.closest('.gu-fila'); if (!f) return;
     var id = f.dataset.id;
+    // Modo COPIAR: el clic no agrega la unidad a este negocio, crea otro negocio con
+    // ella. Se corta aca, antes de cualquier otra rama, para que nunca haga las dos.
+    if (copiando) { e.stopPropagation(); e.preventDefault(); copiarCon(f); return; }
     if (BLOQ) {
       // No se puede APARTAR en esta etapa, pero sí cotizar: el clic marca y
       // desmarca para armar la fusión que se va a cotizar. Nada se guarda.
@@ -1286,7 +1379,7 @@ foreach ($elegidos as $id) {
   }
 
   pintar(); pintarElegidas();
-  function iniciar(){ ajustarIframe(); candadoEtapa(); }
+  function iniciar(){ ajustarIframe(); candadoEtapa(); pintarCopia(); }
   if (typeof BX24 !== 'undefined') { try { BX24.init(iniciar); } catch(e) { iniciar(); } }
 
 
