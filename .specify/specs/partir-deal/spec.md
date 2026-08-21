@@ -104,4 +104,4 @@ suites?". En el modo "un plan por unidad" le pone los $20.000 enteros a la prime
 4. Partición automática al entrar a RESERVA con "separadas".
 5. Opción "copiar este deal con otra unidad" en el desplegable.
 
-**Falta luz verde del usuario para 3, 4 y 5: crean deals reales en Bitrix.**
+✅ **3, 4 y 5 HECHOS 2026-08-21** y probados en vivo. Ver [[reference_partir_deal_por_unidad]].
