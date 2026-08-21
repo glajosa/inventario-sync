@@ -401,7 +401,10 @@ $phIni = $bloqIni === 'si' ? 'Ver inventario (se elige en RESERVA)'
   #<?= $uid ?>.abierto .gu-top,
   #<?= $uid ?>.abierto .gu-elegidas,
   #<?= $uid ?>.abierto .gu-pie{flex:0 0 auto}
-  #<?= $uid ?>.abierto .gu-lista{flex:1 1 auto;min-height:64px;max-height:none}
+  /* 140 y no 64: con 64 la lista quedaba en una fila y media y no se podia rodar.
+     Es el minimo con el que se ven varias unidades y el scroll sirve. */
+  #<?= $uid ?>.abierto .gu-lista{flex:1 1 auto;min-height:140px;max-height:none;
+      overflow-y:auto;overscroll-behavior:contain}
 
   /* orden: 1) proyecto  2) buscar unidad  3) disponibles/todos */
   #<?= $uid ?> .gu-top{display:flex;gap:6px;align-items:center;padding:7px;border-bottom:1px solid #eaeef2}
@@ -706,6 +709,11 @@ foreach ($elegidos as $id) {
   var txt      = document.getElementById('<?= $uid ?>_txt');
   var elegidas = document.getElementById('<?= $uid ?>_elegidas');
   var junto    = document.getElementById('<?= $uid ?>_junto');
+  // Se declaran ACA, junto a los demas, y no mas abajo con el resto de su codigo:
+  // ajustarIframe() los mide para calcular el alto y corre antes que ese bloque.
+  var copia    = document.getElementById('<?= $uid ?>_copia');
+  var copiaB   = document.getElementById('<?= $uid ?>_copiaB');
+  var copiaN   = document.getElementById('<?= $uid ?>_copiaN');
   var juntoN   = document.getElementById('<?= $uid ?>_juntoN');
   var CAT_PLAZA = 33, TIPO_DEPTO = 1793, TIPO_SUITE = 1797, PARQUEO = 20000;
 
@@ -739,7 +747,7 @@ foreach ($elegidos as $id) {
     }
   }
   document.querySelectorAll('input[name="<?= $uid ?>_sep"]').forEach(function(r){
-    r.addEventListener('change', function(){ pintarJunto(); guardar(); });
+    r.addEventListener('change', function(){ pintarJunto(); ajustarIframe(); guardar(); });
   });
   var COT = <?= json_encode(cot_base($dealId), JSON_UNESCAPED_SLASHES) ?>;
   // Unidades marcadas SOLO para cotizar. Es una lista aparte de `sel` a propósito:
@@ -999,8 +1007,17 @@ foreach ($elegidos as $id) {
     // el contenido, Bitrix lo alinea arriba y el texto se ve "un poco arriba".
     // Abierto se pide un alto FIJO: el panel se adapta a lo que Bitrix conceda,
     // así que ya no hace falta medir scrollHeight (que además ahora está clavado).
+    // Abierto: 360 era suficiente cuando arriba de la lista solo iba el buscador.
+    // Con las elegidas, el boton de copiar y el interruptor de juntas/separadas, esos
+    // bloques se comian el espacio y la lista quedaba en una fila sin poder rodarse.
+    // Se pide el alto base MAS lo que ocupan los bloques que esten visibles, con un
+    // tope: Bitrix no concede un iframe infinito y pasado cierto punto lo recorta.
+    var extra = 0;
+    [elegidas, copia, junto].forEach(function(el){
+      if (el && el.offsetParent !== null) extra += el.offsetHeight;
+    });
     var alto = R.classList.contains('abierto')
-      ? 360
+      ? Math.min(620, 360 + extra)
       : Math.max(ALTO_CERRADO, campo.offsetHeight);
     try {
       if (typeof BX24 !== 'undefined' && BX24.resizeWindow) {
@@ -1111,9 +1128,6 @@ foreach ($elegidos as $id) {
   }
 
   /* ── copiar el negocio con otra unidad ───────────────────────────────────── */
-  var copia   = document.getElementById('<?= $uid ?>_copia');
-  var copiaB  = document.getElementById('<?= $uid ?>_copiaB');
-  var copiaN  = document.getElementById('<?= $uid ?>_copiaN');
   var copiando = false, copiaEnVuelo = false;
 
   /* Escape propio: el `esc` de arriba vive dentro del armador de filas y desde aca
