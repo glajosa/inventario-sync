@@ -237,6 +237,16 @@ if ($mode === 'view' && !empty($_REQUEST['solo_lectura'])) {
     $texto = $partes
         ? implode('<span style="color:#d0d7de">&nbsp;·&nbsp;</span>', $partes)
         : '<span style="color:#8b949e">—</span>';
+    // Con dos o mas unidades se dice si van juntas o separadas: de eso depende que se
+    // parta el negocio y que se perdone un parqueo, y no se puede quedar invisible
+    // para quien solo mira la ficha.
+    if (count($elegidos) > 1) {
+        $texto .= $separadas
+            ? '<span style="margin-left:8px;padding:1px 7px;border-radius:9px;font-size:10.5px;'
+            . 'font-weight:600;background:#fff4e5;color:#8a6d1f;border:1px solid #f0d090">SEPARADAS</span>'
+            : '<span style="margin-left:8px;padding:1px 7px;border-radius:9px;font-size:10.5px;'
+            . 'font-weight:600;background:#eaf6ff;color:#0c4a6e;border:1px solid #b9ddf5">FUSIÓN</span>';
+    }
 
     // El modo lectura TAMBIÉN va dentro del iframe de 200px. Si no se le pide a
     // Bitrix encogerlo, el campo deja un bloque enorme vacío en todos los deals.
@@ -466,6 +476,8 @@ $phIni = $bloqIni === 'si' ? 'Ver inventario (se elige en RESERVA)'
   #<?= $uid ?> .gu-junto b{font-weight:600;color:#1f2328}
   #<?= $uid ?> .gu-junto span{color:#6a737b;font-size:11px}
   #<?= $uid ?> .gu-junto-n{flex:1 0 100%;color:#8a6d1f;font-size:11px;line-height:1.4}
+  #<?= $uid ?> .gu-junto-t{flex:1 0 100%;font-size:11px;font-weight:600;color:#57606a;
+      text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px}
 </style>
 
 <!-- se deja el input por compatibilidad, pero el guardado real lo hace el JS por API -->
@@ -545,6 +557,7 @@ foreach ($elegidos as $id) {
   <?php /* Solo tiene sentido con 2 o mas: con una unidad no hay nada que separar.
            Lo muestra y lo esconde el JS segun cuantas haya elegidas. */ ?>
   <div class="gu-junto" id="<?= $uid ?>_junto" style="display:none">
+    <div class="gu-junto-t">¿Cómo se venden estas unidades?</div>
     <label><input type="radio" name="<?= $uid ?>_sep" value="0" <?= $separadas ? '' : 'checked' ?>>
       <b>Una sola compra</b> <span>se fusionan en un contrato</span></label>
     <label><input type="radio" name="<?= $uid ?>_sep" value="1" <?= $separadas ? 'checked' : '' ?>>
