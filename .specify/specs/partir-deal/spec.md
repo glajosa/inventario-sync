@@ -2,6 +2,10 @@
 
 **2026-08-20** · pendiente de luz verde del usuario
 
+> **Vocabulario.** Se dice **COPIAR**, nunca "duplicar". Es la misma operación y es la palabra
+> del botón de Bitrix que el director usa hoy (menú de engranaje del deal → *Copiar*). Usar dos
+> palabras para una sola cosa ya generó confusión una vez.
+
 ## El problema
 
 Un deal puede llevar varias unidades en el campo Inventario. Eso sirve para una **fusión**
@@ -10,7 +14,7 @@ independientes**, cada uno con su contrato.
 
 Hoy eso se resuelve a mano: el deal llega a RESERVA en CLIENTES y el director usa el
 **"Copiar" nativo de Bitrix** (menú de engranaje del deal). El problema es que la copia nativa
-duplica el campo Inventario tal cual, así que las dos unidades quedan nombradas en los dos
+copia el campo Inventario tal cual, así que las dos unidades quedan nombradas en los dos
 deals. Al quitar una de la copia, `propagar_quitada` se la quita también al original. El
 director la vuelve a poner, y otra vez. Verificado en el log: `u=2061` quitada del 404143 a las
 00:17 y repuesta a mano en el 404141 a las 00:24.
@@ -31,13 +35,13 @@ Esa es la razón de fondo por la que los vendedores separan o fusionan. Un solo 
 ## Alcance
 
 ### A) Al pasar a RESERVA con varias unidades separadas
-El deal se duplica tantas veces como unidades, y queda **una unidad en cada deal**.
+El deal se COPIA tantas veces como haga falta, y queda **una unidad en cada deal**.
 
 ### B) Ya en CLIENTES, el cliente escoge otra unidad
 Opción en el desplegable del campo Inventario: **"copiar este deal con otra unidad"**. Elige la
-unidad y se crea el deal duplicado. Mismo mecanismo, disparado a mano.
+unidad y se crea la copia. Mismo mecanismo, disparado a mano.
 
-### Qué cambia en cada duplicado
+### Qué cambia en cada copia
 La copia nativa de Bitrix deja **307 campos idénticos** y solo 6 distintos (medido sobre el par
 404141/404143). Los que hay que fijar por unidad son estos, y son constantes que ya existen:
 
@@ -79,7 +83,7 @@ suites?". En el modo "un plan por unidad" le pone los $20.000 enteros a la prime
 `autollenar_ficha`, que resta cuando hay más de una unidad sin preguntar si es fusión.
 
 ## Riesgos
-- Crea deals reales en Bitrix. Un error duplica ventas.
+- Crea deals reales en Bitrix. Un error deja ventas repetidas.
 - El interruptor tiene que vivir en el cuadro de campos obligatorios del cambio de etapa. Hay
   que confirmar que en **ese** contexto el iframe recibe el ID del deal y puede guardar; si no
   llega, la marca va en la ficha del deal.
@@ -96,7 +100,7 @@ suites?". En el modo "un plan por unidad" le pone los $20.000 enteros a la prime
    FUSIÓN/SEPARADAS se ve en la ficha cerrada · el aviso solo aparece en suites de Plaza
    (`cat 33` + `tipo 1793/1797`), un local no lo dispara.
 2. ~~Campo nuevo en el SPA~~ — **ya no hace falta**: la marca vive en el mismo campo.
-3. `duplicarlib.php`: duplicar un deal fijando los 6 campos por unidad.
+3. `copiarlib.php`: copiar un deal fijando los 6 campos por unidad.
 4. Partición automática al entrar a RESERVA con "separadas".
 5. Opción "copiar este deal con otra unidad" en el desplegable.
 
