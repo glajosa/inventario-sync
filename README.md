@@ -94,7 +94,10 @@ existe un consumidor activo. El orden operativo es:
 3. conservar `BITRIX_WEBHOOK`, `OUTBOUND_TOKEN` y las variables existentes;
 4. cargar directamente `INVENTARIO_SYNC_SHARED_SECRET` y
    `NO_INTEREST_STAGE_ID` como variables protegidas, sin imprimir sus valores;
-5. desplegar la candidata;
+5. pulsar **Implementar** manualmente. EasyPanel puede no registrar el primer
+   clic: exigir una ejecución nueva, confirmar en su log el commit completo
+   candidato y comparar el digest producido por ese build con el digest del
+   contenedor activo; un health correcto de la imagen anterior no alcanza;
 6. ejecutar las pruebas del mismo digest en un contenedor aislado, con
    `DATA_DIR=/tmp`, no contra `/data` real:
 
@@ -106,8 +109,15 @@ docker run --rm --entrypoint php -e DATA_DIR=/tmp inventario-sync:candidate /var
 8. comprobar la ruta privada con `POST {}` sin firma: debe responder
    `401 {"error":"unauthorized"}`. El rechazo ocurre antes de crear idempotencia
    o llamar a Bitrix;
-9. comprobar que el panel de llamadas vigente continúa funcionando;
-10. solo entonces desplegar el bridge con el piloto habilitado.
+9. comprobar que `/tests/run.php` responde `403`, que la respuesta privada
+   incluye `Cache-Control: no-store` y `X-Content-Type-Options: nosniff`, y que
+   no incluye `Access-Control-Allow-Origin`;
+10. desde la consola del bridge desplegado, enviar `{}` firmado con sus propias
+   variables y sin `Idempotency-Key`: debe responder `400 invalid_request`. Ese
+   orden demuestra que la firma fue aceptada, pero se detiene antes de abrir
+   SQLite o llamar a Bitrix;
+11. comprobar que el panel de llamadas vigente continúa funcionando;
+12. solo entonces habilitar llamadas reales del piloto.
 
 El endpoint no expone CORS y Apache niega acceso web a `/tests`. La idempotencia
 durable vive en `/data/llamada-resultados.sqlite`; conservar ese archivo evita
