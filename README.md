@@ -24,7 +24,9 @@ Variables obligatorias:
 - `INVENTARIO_SYNC_SHARED_SECRET` — secreto compartido de 32 caracteres o más;
   debe cargarse directamente en el entorno y nunca guardarse en Git.
 - `NO_INTEREST_STAGE_ID` — identificador de la etapa de Bitrix para “No le
-  interesa”.
+  interesa”. Debe identificarse por lectura con `crm.status.list` en la categoría
+  del negocio designado para la prueba; no se deduce de la etiqueta ni se copia
+  de otro pipeline.
 - `DATA_DIR` — directorio persistente y escribible para la idempotencia; en
   EasyPanel debe mantenerse montado en `/data`.
 
@@ -80,3 +82,53 @@ Respuestas públicas: `200 processed/already_processed`, `400 invalid_request`,
 y `Retry-After: 1`; un `callRequestId` reutilizado con otro cuerpo conserva
 `409 {"error":"conflict"}`. No se devuelven mensajes internos de Bitrix ni
 datos de autenticación.
+
+## Despliegue seguro de la API privada
+
+`inventario-sync` se despliega antes que `bitrix-sim-bridge`, cuando todavía no
+existe un consumidor activo. El orden operativo es:
+
+1. registrar el digest de la imagen actual y la candidata;
+2. confirmar que el mismo volumen persistente continúa montado en `/data` y
+   crear un backup protegido; no reemplazarlo por un volumen vacío;
+3. conservar `BITRIX_WEBHOOK`, `OUTBOUND_TOKEN` y las variables existentes;
+4. cargar directamente `INVENTARIO_SYNC_SHARED_SECRET` y
+   `NO_INTEREST_STAGE_ID` como variables protegidas, sin imprimir sus valores;
+5. desplegar la candidata;
+6. ejecutar las pruebas del mismo digest en un contenedor aislado, con
+   `DATA_DIR=/tmp`, no contra `/data` real:
+
+```powershell
+docker run --rm --entrypoint php -e DATA_DIR=/tmp inventario-sync:candidate /var/www/html/tests/run.php
+```
+
+7. comprobar `GET /`: debe devolver `service=inventario-sync` y `ok=true`;
+8. comprobar la ruta privada con `POST {}` sin firma: debe responder
+   `401 {"error":"unauthorized"}`. El rechazo ocurre antes de crear idempotencia
+   o llamar a Bitrix;
+9. comprobar que el panel de llamadas vigente continúa funcionando;
+10. solo entonces desplegar el bridge con el piloto habilitado.
+
+El endpoint no expone CORS y Apache niega acceso web a `/tests`. La idempotencia
+durable vive en `/data/llamada-resultados.sqlite`; conservar ese archivo evita
+que un reinicio o cambio de imagen repita comentarios o acciones comerciales.
+
+## Reversión sin pérdida de actividades
+
+Si la API privada falla, se pausa el rollout y no se repiten manualmente la
+actividad, el comentario ni el cambio de etapa. El bridge conserva el resultado
+pendiente y su `CRM_ACTIVITY_ID` para reintentar con la misma clave.
+
+Para revertir `inventario-sync`:
+
+1. seleccionar el digest inmutable anterior;
+2. desplegarlo con exactamente el mismo volumen `/data` y las mismas variables
+   vigentes;
+3. no borrar ni recrear `llamada-resultados.sqlite`, `allowlist.json`, logs o
+   cachés operativos;
+4. verificar `GET /` y el panel existente;
+5. conservar para revisión cualquier operación `manual_review` o pendiente.
+
+La reversión cambia el código que atenderá solicitudes futuras. Nunca borra o
+deshace actividades, comentarios o etapas ya confirmados en Bitrix. Una
+corrección de esos datos se acuerda y realiza manualmente con evidencia.
