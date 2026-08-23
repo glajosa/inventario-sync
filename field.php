@@ -28,6 +28,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/codigolib.php';   // unidades_separadas(), MARCA_SEPARADAS
+
 $DATA_DIR = getenv('DATA_DIR') ?: '/data';
 
 // Diagnóstico: qué nos manda Bitrix. Necesitamos el ID del deal para poder
@@ -206,7 +208,10 @@ $proys = $cat['proyectos'] ?? [];
 $porId = [];
 foreach ($units as $u) $porId[(string)$u['id']] = $u;
 
-$elegidos = ids_de($value);
+$elegidos  = ids_de($value);
+// Fusion o separadas. Viaja DENTRO del mismo valor ("581,623 separadas") para que la
+// copia nativa de Bitrix se la lleve sola, que es la operacion donde importa.
+$separadas = unidades_separadas($value);
 
 // ---- settings: el campo no necesita configuración ---------------------------
 if ($mode === 'settings') { echo ''; exit; }
@@ -232,6 +237,16 @@ if ($mode === 'view' && !empty($_REQUEST['solo_lectura'])) {
     $texto = $partes
         ? implode('<span style="color:#d0d7de">&nbsp;·&nbsp;</span>', $partes)
         : '<span style="color:#8b949e">—</span>';
+    // Con dos o mas unidades se dice si van juntas o separadas: de eso depende que se
+    // parta el negocio y que se perdone un parqueo, y no se puede quedar invisible
+    // para quien solo mira la ficha.
+    if (count($elegidos) > 1) {
+        $texto .= $separadas
+            ? '<span style="margin-left:8px;padding:1px 7px;border-radius:9px;font-size:10.5px;'
+            . 'font-weight:600;background:#fff4e5;color:#8a6d1f;border:1px solid #f0d090">SEPARADAS</span>'
+            : '<span style="margin-left:8px;padding:1px 7px;border-radius:9px;font-size:10.5px;'
+            . 'font-weight:600;background:#eaf6ff;color:#0c4a6e;border:1px solid #b9ddf5">FUSIÓN</span>';
+    }
 
     // El modo lectura TAMBIÉN va dentro del iframe de 200px. Si no se le pide a
     // Bitrix encogerlo, el campo deja un bloque enorme vacío en todos los deals.
@@ -288,15 +303,20 @@ $uid = 'gu' . bin2hex(random_bytes(4));   // ids únicos: puede haber varios cam
  * En el modal (MODE=edit) se responde 'no' sin preguntarle nada al API: ahí el campo
  * va abierto siempre, porque es donde Bitrix pide la unidad para pasar a RESERVA.
  */
+// El estado del deal se resuelve siempre que haya deal, tambien en modo edicion: el
+// boton de copiar necesita saber el PIPELINE para no ofrecerse donde no aplica, y en
+// el cuadro de campos obligatorios (que llega como mode=edit) es justo donde el
+// vendedor lo veia sin tener ninguna unidad todavia. La lectura esta cacheada 60 s.
+$est = $dealId > 0 ? deal_estado($dealId) : null;
 if ($mode === 'edit') {
     $bloqIni = 'no';
 } else {
-    $est = deal_estado($dealId);
     if ($est === null)                      $bloqIni = '?';
     elseif ((int)$est['cat'] !== 28)        $bloqIni = 'no';
     elseif ($est['stage'] === reserva28_cache()) $bloqIni = 'no';
     else                                    $bloqIni = 'si';
 }
+$catDeal = $est !== null ? (int)$est['cat'] : 0;
 $phIni = $bloqIni === 'si' ? 'Ver inventario (se elige en RESERVA)'
        : ($bloqIni === '?' ? 'Ver inventario…' : 'Elegir unidad…');
 ?>
@@ -381,7 +401,10 @@ $phIni = $bloqIni === 'si' ? 'Ver inventario (se elige en RESERVA)'
   #<?= $uid ?>.abierto .gu-top,
   #<?= $uid ?>.abierto .gu-elegidas,
   #<?= $uid ?>.abierto .gu-pie{flex:0 0 auto}
-  #<?= $uid ?>.abierto .gu-lista{flex:1 1 auto;min-height:64px;max-height:none}
+  /* 140 y no 64: con 64 la lista quedaba en una fila y media y no se podia rodar.
+     Es el minimo con el que se ven varias unidades y el scroll sirve. */
+  #<?= $uid ?>.abierto .gu-lista{flex:1 1 auto;min-height:140px;max-height:none;
+      overflow-y:auto;overscroll-behavior:contain}
 
   /* orden: 1) proyecto  2) buscar unidad  3) disponibles/todos */
   #<?= $uid ?> .gu-top{display:flex;gap:6px;align-items:center;padding:7px;border-bottom:1px solid #eaeef2}
@@ -454,6 +477,25 @@ $phIni = $bloqIni === 'si' ? 'Ver inventario (se elige en RESERVA)'
       border-top:1px solid #eaeef2;color:#8b949e;font-size:11px}
   #<?= $uid ?> .gu-listo{margin-left:auto;border:0;background:#0969da;color:#fff;font:inherit;
       font-size:11.5px;font-weight:600;padding:4px 12px;border-radius:5px;cursor:pointer}
+  #<?= $uid ?> .gu-junto{border-bottom:1px solid #eaeef2;background:#fffdf5;padding:9px 11px 8px;
+      display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center}
+  #<?= $uid ?> .gu-junto label{display:inline-flex;align-items:baseline;gap:6px;cursor:pointer;
+      font-size:12px;line-height:1.35}
+  #<?= $uid ?> .gu-junto b{font-weight:600;color:#1f2328}
+  #<?= $uid ?> .gu-junto span{color:#6a737b;font-size:11px}
+  #<?= $uid ?> .gu-junto-n{flex:1 0 100%;color:#8a6d1f;font-size:11px;line-height:1.4}
+  #<?= $uid ?> .gu-junto-t{flex:1 0 100%;font-size:11px;font-weight:600;color:#57606a;
+      text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px}
+  #<?= $uid ?> .gu-copia{border-bottom:1px solid #eaeef2;background:#f6f8fa;padding:7px 11px;
+      display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  #<?= $uid ?> .gu-copia-b{border:1px solid #d0d7de;background:#fff;color:#24292f;font:inherit;
+      font-size:11.5px;font-weight:600;padding:4px 11px;border-radius:5px;cursor:pointer}
+  #<?= $uid ?> .gu-copia-b:hover{border-color:#0969da;color:#0969da}
+  #<?= $uid ?>.copiando .gu-copia-b{background:#0969da;border-color:#0969da;color:#fff}
+  #<?= $uid ?> .gu-copia-n{font-size:11px;color:#6a737b;flex:1}
+  #<?= $uid ?> .gu-copia-n b{color:#1a7f37}
+  #<?= $uid ?> .gu-copia-n i{color:#b35900;font-style:normal}
+  #<?= $uid ?>.copiando .gu-fila:not(.gu-no){outline:1px dashed #0969da;outline-offset:-2px}
 </style>
 
 <!-- se deja el input por compatibilidad, pero el guardado real lo hace el JS por API -->
@@ -462,6 +504,9 @@ $phIni = $bloqIni === 'si' ? 'Ver inventario (se elige en RESERVA)'
   window.GU_CFG_<?= $uid ?> = {
     deal:  <?= (int)$dealId ?>,
     campo: <?= json_encode($name) ?>,
+    // para el boton de copiar: en que pipeline esta y si ya tiene unidad guardada
+    cat:      <?= (int)$catDeal ?>,
+    yaTiene:  <?= count($elegidos) ?>,
     // firma del id del deal: guardar.php no escribe nada sin ella
     firma: <?= json_encode($dealId > 0
         ? hash_hmac('sha256', (string)$dealId, (string)getenv('OUTBOUND_TOKEN'))
@@ -530,6 +575,23 @@ foreach ($elegidos as $id) {
   </div>
 
   <div class="gu-elegidas" id="<?= $uid ?>_elegidas" style="display:none"></div>
+  <?php /* Solo tiene sentido con 2 o mas: con una unidad no hay nada que separar.
+           Lo muestra y lo esconde el JS segun cuantas haya elegidas. */ ?>
+  <?php /* Copiar el negocio con otra unidad. El caso: el cliente reservo una y
+           despues escoge otra. Antes habia que copiar el deal con el boton de Bitrix
+           —que arrastra la unidad del original— y arreglar los dos campos a mano. */ ?>
+  <div class="gu-copia" id="<?= $uid ?>_copia" style="display:none">
+    <button type="button" class="gu-copia-b" id="<?= $uid ?>_copiaB">＋ Copiar el negocio con otra unidad</button>
+    <span class="gu-copia-n" id="<?= $uid ?>_copiaN"></span>
+  </div>
+  <div class="gu-junto" id="<?= $uid ?>_junto" style="display:none">
+    <div class="gu-junto-t">¿Cómo se venden estas unidades?</div>
+    <label><input type="radio" name="<?= $uid ?>_sep" value="0" <?= $separadas ? '' : 'checked' ?>>
+      <b>Una sola compra</b> <span>se fusionan en un contrato</span></label>
+    <label><input type="radio" name="<?= $uid ?>_sep" value="1" <?= $separadas ? 'checked' : '' ?>>
+      <b>Compras separadas</b> <span>un negocio por unidad</span></label>
+    <div class="gu-junto-n" id="<?= $uid ?>_juntoN"></div>
+  </div>
 
   <?php
   /*
@@ -562,6 +624,10 @@ foreach ($elegidos as $id) {
               trim(($u['torre'] !== '' ? 'T' . $u['torre'] : '')
                  . ($u['piso']  !== '' ? ' · P' . $u['piso'] : '')),
               $pvpNum,
+              // Tipo de bien. Hace falta para saber si son SUITES de Noral Plaza, que
+              // es el unico caso con regla de parqueo: el codigo no basta porque los
+              // edificios E y F tienen locales Y suites con la misma letra.
+              (int)($u['tipo'] ?? 0),
           ];
       }
       $datos[] = [(string)$cid, (string)$nom, $us];
@@ -642,6 +708,47 @@ foreach ($elegidos as $id) {
   var notaEl   = document.getElementById('<?= $uid ?>_nota');
   var txt      = document.getElementById('<?= $uid ?>_txt');
   var elegidas = document.getElementById('<?= $uid ?>_elegidas');
+  var junto    = document.getElementById('<?= $uid ?>_junto');
+  // Se declaran ACA, junto a los demas, y no mas abajo con el resto de su codigo:
+  // ajustarIframe() los mide para calcular el alto y corre antes que ese bloque.
+  var copia    = document.getElementById('<?= $uid ?>_copia');
+  var copiaB   = document.getElementById('<?= $uid ?>_copiaB');
+  var copiaN   = document.getElementById('<?= $uid ?>_copiaN');
+  var juntoN   = document.getElementById('<?= $uid ?>_juntoN');
+  var CAT_PLAZA = 33, TIPO_DEPTO = 1793, TIPO_SUITE = 1797, PARQUEO = 20000;
+
+  /** Separadas o fusion. Sin nada elegido o con una sola, fusion (es el defecto). */
+  function esSeparadas(){
+    var r = document.querySelector('input[name="<?= $uid ?>_sep"]:checked');
+    return !!(r && r.value === '1');
+  }
+
+  /** El interruptor solo aparece con 2 o mas unidades: con una no hay nada que separar.
+   *  Y si son suites de Noral Plaza se dice cuanto cuesta la decision, porque de eso
+   *  depende que se perdone un parqueo o no. */
+  function pintarJunto(){
+    var ids = val.value.split(',').filter(function(x){ return x; });
+    if (ids.length < 2) { junto.style.display = 'none'; juntoN.textContent = ''; return; }
+    junto.style.display = 'flex';
+    var suites = 0;
+    ids.forEach(function(id){
+      var d = datos(id);
+      if (d && Number(d.cat) === CAT_PLAZA
+            && (Number(d.tipo) === TIPO_DEPTO || Number(d.tipo) === TIPO_SUITE)) suites++;
+    });
+    if (suites >= 2) {
+      juntoN.textContent = esSeparadas()
+        ? 'Separadas: cada suite lleva su parqueo. No se descuentan los $' + PARQUEO.toLocaleString('en-US') + '.'
+        : 'Fusión: se perdona un parqueo. Se descuentan $' + PARQUEO.toLocaleString('en-US') + ' del total.';
+    } else {
+      juntoN.textContent = esSeparadas()
+        ? 'Se creará un negocio por unidad al llegar a RESERVA.'
+        : 'Las unidades se cotizan y se cobran como una sola compra.';
+    }
+  }
+  document.querySelectorAll('input[name="<?= $uid ?>_sep"]').forEach(function(r){
+    r.addEventListener('change', function(){ pintarJunto(); ajustarIframe(); guardar(); });
+  });
   var COT = <?= json_encode(cot_base($dealId), JSON_UNESCAPED_SLASHES) ?>;
   // Unidades marcadas SOLO para cotizar. Es una lista aparte de `sel` a propósito:
   // no se guarda, no cambia la etapa de la unidad y no ocupa nada. Así el asesor
@@ -703,11 +810,13 @@ foreach ($elegidos as $id) {
       if (!us || !us.length) continue;
       h.push('<div class="gu-grupo" data-cat="', cid, '">', nom, '</div>');
       for (var j = 0; j < us.length; j++) {
-        var u = us[j];                      // [id, codigo, estado, libre, meta, pvp]
+        var u = us[j];                 // [id, codigo, estado, libre, meta, pvp, tipo]
         var cod = esc(u[1]), est = esc(u[2]), libre = u[3] ? 1 : 0, meta = esc(u[4]), pvp = u[5] || 0;
+        var tipo = u[6] || 0;
         h.push('<div class="gu-fila', (libre ? '' : ' gu-no'),
                '" data-cat="', cid, '" data-cod="', esc(String(u[1]).toUpperCase()),
                '" data-libre="', libre, '" data-id="', u[0], '" data-pvp="', pvp,
+               '" data-tipo="', tipo,
                '" data-cod-txt="', cod, '" data-proy="', nom, '">',
                '<span class="gu-cod">', cod, '</span>',
                '<span class="gu-tag ', est, '">', est, '</span>');
@@ -766,6 +875,9 @@ foreach ($elegidos as $id) {
     var cuerpo = new URLSearchParams();
     cuerpo.set('deal',  CFG.deal);
     cuerpo.set('valor', val.value);
+    // La marca va aparte y el servidor la vuelve a pegar: asi el input que lee el resto
+    // del JS sigue siendo IDs limpios y nada tiene que aprender a ignorar una palabra.
+    cuerpo.set('separadas', esSeparadas() ? '1' : '0');
     cuerpo.set('firma', CFG.firma);
 
     fetch('guardar.php', {method:'POST', body:cuerpo})
@@ -808,8 +920,9 @@ foreach ($elegidos as $id) {
     var f = filas.filter(function(x){ return x.dataset.id === id; })[0];
     // pvp va incluido: el botón de cotizar el conjunto descarta las unidades sin
     // precio, que no suman nada al total.
-    return f ? {cod: f.dataset.codTxt, proy: f.dataset.proy, pvp: f.dataset.pvp}
-             : {cod: '#' + id, proy: '', pvp: 0};
+    return f ? {cod: f.dataset.codTxt, proy: f.dataset.proy, pvp: f.dataset.pvp,
+                cat: f.dataset.cat, tipo: f.dataset.tipo}
+             : {cod: '#' + id, proy: '', pvp: 0, cat: '', tipo: 0};
   }
 
   /** Cerrado: texto plano, igual que los campos nativos del deal. */
@@ -846,6 +959,8 @@ foreach ($elegidos as $id) {
 
   /** Dentro del desplegable: lo elegido arriba, en azul y con la X. */
   function pintarElegidas(){
+    // el interruptor depende de cuantas hay elegidas
+    try { pintarJunto(); } catch(e) {}
     elegidas.innerHTML = '';
     if (!sel.length) { elegidas.style.display = 'none'; return; }
     elegidas.style.display = '';
@@ -892,8 +1007,17 @@ foreach ($elegidos as $id) {
     // el contenido, Bitrix lo alinea arriba y el texto se ve "un poco arriba".
     // Abierto se pide un alto FIJO: el panel se adapta a lo que Bitrix conceda,
     // así que ya no hace falta medir scrollHeight (que además ahora está clavado).
+    // Abierto: 360 era suficiente cuando arriba de la lista solo iba el buscador.
+    // Con las elegidas, el boton de copiar y el interruptor de juntas/separadas, esos
+    // bloques se comian el espacio y la lista quedaba en una fila sin poder rodarse.
+    // Se pide el alto base MAS lo que ocupan los bloques que esten visibles, con un
+    // tope: Bitrix no concede un iframe infinito y pasado cierto punto lo recorta.
+    var extra = 0;
+    [elegidas, copia, junto].forEach(function(el){
+      if (el && el.offsetParent !== null) extra += el.offsetHeight;
+    });
     var alto = R.classList.contains('abierto')
-      ? 360
+      ? Math.min(620, 360 + extra)
       : Math.max(ALTO_CERRADO, campo.offsetHeight);
     try {
       if (typeof BX24 !== 'undefined' && BX24.resizeWindow) {
@@ -1003,6 +1127,85 @@ foreach ($elegidos as $id) {
     try { window.top.location.href = ruta; } catch(e) { window.open(ruta, '_blank'); }
   }
 
+  /* ── copiar el negocio con otra unidad ───────────────────────────────────── */
+  var copiando = false, copiaEnVuelo = false;
+
+  /* Escape propio: el `esc` de arriba vive dentro del armador de filas y desde aca
+     no se ve. Sin esto la primera respuesta con codigo reventaba con
+     "esc is not defined" y el aviso quedaba en blanco. */
+  function escT(x){
+    return String(x == null ? '' : x).replace(/[&<>"]/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+    });
+  }
+
+  function modoCopia(si){
+    copiando = !!si;
+    R.classList.toggle('copiando', copiando);
+    copiaB.textContent = copiando ? '✕ Cancelar' : '＋ Copiar el negocio con otra unidad';
+    copiaN.innerHTML = copiando
+      ? 'Elegí la unidad del negocio nuevo. Este negocio no se toca.'
+      : '';
+  }
+
+  /**
+   * Copiar el negocio solo tiene sentido en CLIENTES y cuando el negocio YA TIENE su
+   * unidad: es el caso de "el cliente reservo una y despues escoge otra".
+   *
+   * Estaba visible con solo haber un deal, y aparecia en PROSPECTOS sobre un negocio
+   * sin ninguna unidad — donde no hay nada que copiar y encima confunde con el
+   * interruptor de juntas/separadas, que es otra cosa.
+   */
+  var CAT_CLIENTES = 44;
+  function pintarCopia(){
+    var aplica = CFG.deal && Number(CFG.cat) === CAT_CLIENTES && Number(CFG.yaTiene) > 0;
+    copia.style.display = aplica ? 'flex' : 'none';
+    if (!aplica && copiando) modoCopia(false);
+  }
+
+  function copiarCon(fila){
+    if (copiaEnVuelo) return;
+    if (fila.dataset.libre !== '1') {
+      copiaN.innerHTML = '<i>' + escT(fila.dataset.codTxt) + ' no está libre: ya es de otro negocio.</i>';
+      return;
+    }
+    copiaEnVuelo = true;
+    copiaN.textContent = 'Copiando el negocio con ' + fila.dataset.codTxt + '…';
+    var cuerpo = new URLSearchParams();
+    cuerpo.set('deal', CFG.deal);
+    cuerpo.set('unidad', fila.dataset.id);
+    cuerpo.set('firma', CFG.firma);
+    fetch('copiar.php', {method:'POST', body:cuerpo})
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        copiaEnVuelo = false;
+        if (!j || !j.ok) {
+          copiaN.innerHTML = '<i>' + escT((j && j.error) || 'no se pudo copiar') + '</i>';
+          return;
+        }
+        // La unidad pasa a estar ocupada por el negocio nuevo: se refleja al instante
+        // para que nadie la vuelva a elegir creyendo que sigue libre.
+        marcarFila(String(fila.dataset.id), false);
+        filtrar();
+        copiaN.innerHTML = '<b>Negocio #' + (j.deal|0) + ' creado con ' + escT(j.codigo) + '.</b> '
+          + '<a href="#" data-ir-deal="' + (j.deal|0) + '">Abrirlo</a>';
+        modoCopia(false);
+      })
+      .catch(function(){ copiaEnVuelo = false; copiaN.innerHTML = '<i>error de red</i>'; });
+  }
+
+  copiaB.addEventListener('click', function(e){ e.stopPropagation(); modoCopia(!copiando); });
+  copiaN.addEventListener('click', function(e){
+    var a = e.target.closest ? e.target.closest('[data-ir-deal]') : null;
+    if (!a) return;
+    e.preventDefault(); e.stopPropagation();
+    var ruta = '/crm/deal/details/' + a.dataset.irDeal + '/';
+    try {
+      if (typeof BX24 !== 'undefined' && BX24.openPath) { BX24.openPath(ruta); return; }
+    } catch(err) {}
+    try { window.top.location.href = ruta; } catch(err) { window.open(ruta, '_blank'); }
+  });
+
   campo.addEventListener('click', function(ev){
     // pulsar el código abre la unidad; pulsar el resto de la barra despliega
     var ir = ev.target.closest ? ev.target.closest('.gu-ir') : null;
@@ -1055,6 +1258,9 @@ foreach ($elegidos as $id) {
     }
     var f = e.target.closest('.gu-fila'); if (!f) return;
     var id = f.dataset.id;
+    // Modo COPIAR: el clic no agrega la unidad a este negocio, crea otro negocio con
+    // ella. Se corta aca, antes de cualquier otra rama, para que nunca haga las dos.
+    if (copiando) { e.stopPropagation(); e.preventDefault(); copiarCon(f); return; }
     if (BLOQ) {
       // No se puede APARTAR en esta etapa, pero sí cotizar: el clic marca y
       // desmarca para armar la fusión que se va a cotizar. Nada se guarda.
@@ -1204,7 +1410,7 @@ foreach ($elegidos as $id) {
   }
 
   pintar(); pintarElegidas();
-  function iniciar(){ ajustarIframe(); candadoEtapa(); }
+  function iniciar(){ ajustarIframe(); candadoEtapa(); pintarCopia(); }
   if (typeof BX24 !== 'undefined') { try { BX24.init(iniciar); } catch(e) { iniciar(); } }
 
 

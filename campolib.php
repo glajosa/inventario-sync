@@ -518,7 +518,7 @@ function apartar_prospecto(int $dealId, array $deal): array {
     // Igual que en CLIENTES: la copia del otro pipeline la sigue nombrando, así
     // que se le quita también o volvería a atarla.
     $propagadas = $quitadas
-        ? propagar_quitada($quitadas, $dealId, (int)($deal['CONTACT_ID'] ?? 0))
+        ? propagar_quitada($quitadas, $dealId, (int)($deal['CONTACT_ID'] ?? 0), !$quiere)
         : 0;
 
     return ['ok' => true, 'modo' => 'apartado-28', 'aparta' => count($quiere),
@@ -643,9 +643,31 @@ function limpiar_campo_caido(int $dealOrigen, int $contacto, array $unidades): i
  * sincronizado: ahí es donde la unidad termina de soltarse. No hay bucle porque
  * en la segunda pasada el origen ya no la nombra y no queda nada que quitar.
  */
-function propagar_quitada(array $unitIds, int $dealOrigen, int $contacto): int {
+function propagar_quitada(array $unitIds, int $dealOrigen, int $contacto,
+                          bool $origenSinUnidades = true): int {
     $unitIds = array_values(array_unique(array_map('intval', $unitIds)));
     if (!$unitIds || $contacto <= 0) return 0;
+
+    // REPARTO: si el deal origen se quedo con alguna unidad, lo que hubo no fue una
+    // baja sino un reparto entre el deal y su copia, y quitarle la unidad al hermano
+    // deshace justo lo que el asesor acaba de hacer.
+    //
+    // El caso real: el deal entra a RESERVA con dos unidades y el asesor DUPLICA el
+    // deal a mano ahi mismo en CLIENTES para dejar una unidad en cada uno. La copia
+    // arrastra el campo, asi que las dos quedan nombradas en los dos deals. Al quitar
+    // una del original, esto se la quitaba tambien a la copia -> el asesor la volvia a
+    // poner -> y otra vez. Verificado en el log: u=2061 (F-1-4) quitada del 404143 a
+    // las 00:17 y repuesta a mano en el 404141 a las 00:24.
+    //
+    // Cuando el deal SI se quedo sin nada (cayo, o le vaciaron el campo) la propagacion
+    // sigue siendo la correcta: la venta murio y ningun hermano debe seguir nombrando
+    // sus unidades, o la unidad no vuelve nunca a DISPONIBLE. Ese es el motivo por el
+    // que esta funcion existe y no se toca.
+    if (!$origenSinUnidades) {
+        logline("propagar: el deal $dealOrigen conservo unidades -> reparto, no se toca ningun hermano"
+              . " (u=[" . implode(',', $unitIds) . "])");
+        return 0;
+    }
 
     $r = bx('crm.deal.list', [
         'filter' => ['CONTACT_ID'        => $contacto,
@@ -667,12 +689,31 @@ function propagar_quitada(array $unitIds, int $dealOrigen, int $contacto): int {
         }
 
         $tiene = ids_de((string)($d[CAMPO_NUEVO] ?? ''));
-        $queda = array_values(array_diff($tiene, $unitIds));
-        if (count($queda) === count($tiene)) continue;          // no la tenía
+        $quitar = array_values(array_intersect($tiene, $unitIds));
+        if (!$quitar) continue;                                  // no la tenía
+
+        // Nunca quitarsela a su DUEÑO real. Si parentId2 apunta a este hermano, la
+        // unidad es suya de verdad y el campo esta bien puesto: vaciarselo la dejaria
+        // atada a un deal que ya no la nombra, o sea invisible para todos.
+        // Mismo criterio que usa la rama de liberar por etapa mas arriba.
+        $suyas = [];
+        foreach ($quitar as $uid) {
+            $q = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => (int)$uid]);
+            if ($q['ok'] && (int)(($q['result']['item'] ?? $q['result'])['parentId2'] ?? 0) === $did) {
+                $suyas[] = (int)$uid;
+            }
+        }
+        if ($suyas) {
+            logline("propagar: u=[" . implode(',', $suyas) . "] son del deal $did (parentId2)"
+                  . " -> no se le quitan");
+            $quitar = array_values(array_diff($quitar, $suyas));
+            if (!$quitar) continue;
+        }
+        $queda = array_values(array_diff($tiene, $quitar));
 
         $up = bx('crm.deal.update', ['id' => $did, 'fields' => [CAMPO_NUEVO => implode(',', $queda)]]);
         if (!$up['ok']) { logline("propagar: ERR update deal $did: {$up['error']}"); continue; }
-        logline("propagada quitada de u=[" . implode(',', array_intersect($tiene, $unitIds))
+        logline("propagada quitada de u=[" . implode(',', $quitar)
               . "] al deal hermano $did (origen $dealOrigen)");
         $n++;
     }
@@ -844,10 +885,17 @@ function autollenar_ficha(int $dealId, array $fichas, array $deal = []): array {
     }
     if (!$cods) return [];
 
-    if ($esSuites && count($fichas) > 1 && $suma > DESCUENTO_PARQUEO) {
+    // El descuento SOLO en fusion. Si el vendedor marco las unidades como SEPARADAS,
+    // cada una es una compra con su contrato y su parqueo: no se perdona ninguno.
+    // Esa marca es justamente la palanca que el equipo comercial usa para decidirlo.
+    $separadas = unidades_separadas((string)($deal[CAMPO_NUEVO] ?? ''));
+    if ($esSuites && count($fichas) > 1 && $suma > DESCUENTO_PARQUEO && !$separadas) {
         $suma -= DESCUENTO_PARQUEO;
         logline("deal=$dealId Noral Plaza Suites con " . count($fichas)
-              . ' unidades -> se resta el parqueo (' . DESCUENTO_PARQUEO . ')');
+              . ' unidades FUSIONADAS -> se resta el parqueo (' . DESCUENTO_PARQUEO . ')');
+    } elseif ($esSuites && count($fichas) > 1 && $separadas) {
+        logline("deal=$dealId Noral Plaza Suites con " . count($fichas)
+              . ' unidades SEPARADAS -> NO se resta el parqueo');
     }
 
     $campos = [D_ACTIVO => implode(', ', $cods)];
@@ -1088,7 +1136,7 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     // (deal caído): ahí el campo se deja de registro, es a propósito.
     $propagadas = 0;
     if ($soltar && !$cayo) {
-        $propagadas = propagar_quitada($soltar, $dealId, (int)($deal['CONTACT_ID'] ?? 0));
+        $propagadas = propagar_quitada($soltar, $dealId, (int)($deal['CONTACT_ID'] ?? 0), !$quiere);
     }
 
     // Deal caído: el campo se vacía en este deal y en los del mismo cliente que
