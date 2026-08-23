@@ -33,6 +33,13 @@ La firma es HMAC-SHA256 hexadecimal sobre los bytes exactos de
 `X-Galjosa-Timestamp` y la firma en `X-Galjosa-Signature`; tiene una vigencia
 máxima de cinco minutos.
 
+`Idempotency-Key` también es obligatorio. Debe ser el mismo UUID v4 canónico
+en minúsculas que `callRequestId` en el JSON, sin espacios ni otra
+normalización. Si falta, no tiene ese formato o no coincide exactamente, la API
+responde `400 {"error":"invalid_request"}` antes de crear el registro durable o
+llamar a Bitrix. Esta cabecera no forma parte del HMAC: la firma continúa
+cubriendo únicamente `<timestamp>\n<cuerpo>`.
+
 El fixture de aceptación v1 está congelado en
 `tests/fixtures/call-result-v1.json` y debe ser idéntico al archivo
 `contracts/inventario-sync-call-result-v1.json` del puente. Ambos archivos
@@ -60,6 +67,7 @@ try {
 
 Invoke-RestMethod -Uri $url -Method Post -ContentType 'application/json; charset=utf-8' `
     -Headers @{
+        'Idempotency-Key' = '11111111-1111-4111-8111-111111111111'
         'X-Galjosa-Timestamp' = $timestamp
         'X-Galjosa-Signature' = $signature
     } -Body $utf8.GetBytes($body)

@@ -20,6 +20,15 @@ function llamada_resultado_content_type_valido(mixed $value): bool {
     ) === 1;
 }
 
+function llamada_resultado_idempotency_key_valida(array $headers, stdClass $decoded): bool {
+    $idempotencyKey = $headers['idempotency-key'] ?? null;
+    $callRequestId = $decoded->callRequestId ?? null;
+    return is_string($idempotencyKey)
+        && is_string($callRequestId)
+        && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/D', $idempotencyKey) === 1
+        && hash_equals($callRequestId, $idempotencyKey);
+}
+
 function llamada_resultado_http(
     string $method,
     string $body,
@@ -55,6 +64,9 @@ function llamada_resultado_http(
     try {
         $decoded = json_decode($body, false, 64, JSON_THROW_ON_ERROR);
         if (!$decoded instanceof stdClass) {
+            return llamada_resultado_error(400, 'invalid_request');
+        }
+        if (!llamada_resultado_idempotency_key_valida($headers, $decoded)) {
             return llamada_resultado_error(400, 'invalid_request');
         }
 

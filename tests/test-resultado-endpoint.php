@@ -106,8 +106,17 @@ function endpoint_test_env(string $directory): array {
 
 function endpoint_test_headers(string $body, int $timestamp, ?string $secret = null): array {
     $secret ??= 'test-secret-with-at-least-32-bytes';
+    try {
+        $decoded = json_decode($body, true, 64, JSON_THROW_ON_ERROR);
+        $idempotencyKey = is_array($decoded) && is_string($decoded['callRequestId'] ?? null)
+            ? $decoded['callRequestId']
+            : '11111111-1111-4111-8111-111111111111';
+    } catch (JsonException) {
+        $idempotencyKey = '11111111-1111-4111-8111-111111111111';
+    }
     return [
         'content-type' => 'application/json; charset=utf-8',
+        'idempotency-key' => $idempotencyKey,
         'x-galjosa-timestamp' => (string)$timestamp,
         'x-galjosa-signature' => hash_hmac('sha256', $timestamp . "\n" . $body, $secret),
     ];
@@ -140,8 +149,11 @@ $directory = endpoint_test_dir();
 try {
     $fake = new EndpointFakeBitrix();
     $body = endpoint_contract_body();
+    $headers = endpoint_test_headers($body, $now);
+    $headers['Idempotency-Key'] = $headers['idempotency-key'];
+    unset($headers['idempotency-key']);
     $result = llamada_resultado_http(
-        'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
+        'POST', $body, $headers, endpoint_test_env($directory), $fake, $now
     );
     test_same(200, $result['status'] ?? null, 'canonical contract status');
     test_same('processed', $result['body']['status'] ?? null, 'canonical contract processed outcome');
@@ -160,6 +172,24 @@ try {
     test_same([], $fake->calls, 'non-POST request performs no Bitrix call');
 
     $body = endpoint_test_body();
+    $validHeaders = endpoint_test_headers($body, $now);
+    $missingIdempotencyKey = $validHeaders;
+    unset($missingIdempotencyKey['idempotency-key']);
+    endpoint_test_response(400, ['error' => 'invalid_request'], llamada_resultado_http(
+        'POST', $body, $missingIdempotencyKey, endpoint_test_env($directory), $fake, $now
+    ), 'missing idempotency key');
+    endpoint_test_response(400, ['error' => 'invalid_request'], llamada_resultado_http(
+        'POST', $body, array_replace($validHeaders, ['idempotency-key' => 'not-a-uuid']),
+        endpoint_test_env($directory), $fake, $now
+    ), 'malformed idempotency key');
+    endpoint_test_response(400, ['error' => 'invalid_request'], llamada_resultado_http(
+        'POST', $body, array_replace($validHeaders, [
+            'idempotency-key' => '22222222-2222-4222-8222-222222222222',
+        ]), endpoint_test_env($directory), $fake, $now
+    ), 'mismatched idempotency key');
+    test_same([], $fake->calls, 'invalid idempotency keys perform no Bitrix call');
+    test_same(false, is_file($directory . '/llamada-resultados.sqlite'), 'invalid idempotency keys create no store');
+
     endpoint_test_response(400, ['error' => 'invalid_request'], llamada_resultado_http(
         'POST', $body, array_replace(endpoint_test_headers($body, $now), ['content-type' => 'text/plain']),
         endpoint_test_env($directory), $fake, $now
@@ -431,6 +461,7 @@ try {
         $invalidJson,
         [
             'Content-Type: application/json',
+            'Idempotency-Key: 11111111-1111-4111-8111-111111111111',
             'X-Galjosa-Timestamp: ' . $timestamp,
             'X-Galjosa-Signature: ' . hash_hmac('sha256', $timestamp . "\n" . $invalidJson, $httpEnv['INVENTARIO_SYNC_SHARED_SECRET']),
         ]
@@ -444,6 +475,7 @@ try {
         $body,
         [
             'Content-Type: application/json',
+            'Idempotency-Key: 55555555-5555-4555-8555-555555555555',
             'X-Galjosa-Timestamp: ' . $expired,
             'X-Galjosa-Signature: ' . hash_hmac('sha256', $expired . "\n" . $body, $httpEnv['INVENTARIO_SYNC_SHARED_SECRET']),
         ]
@@ -461,6 +493,7 @@ try {
         $conflictBody,
         [
             'Content-Type: application/json',
+            'Idempotency-Key: 66666666-6666-4666-8666-666666666666',
             'X-Galjosa-Timestamp: ' . $timestamp,
             'X-Galjosa-Signature: ' . hash_hmac('sha256', $timestamp . "\n" . $conflictBody, $httpEnv['INVENTARIO_SYNC_SHARED_SECRET']),
         ]
@@ -479,6 +512,7 @@ try {
         $processingBody,
         [
             'Content-Type: application/json',
+            'Idempotency-Key: 68686868-6868-4868-8868-686868686868',
             'X-Galjosa-Timestamp: ' . $timestamp,
             'X-Galjosa-Signature: ' . hash_hmac('sha256', $timestamp . "\n" . $processingBody, $httpEnv['INVENTARIO_SYNC_SHARED_SECRET']),
         ]
@@ -521,6 +555,7 @@ try {
         $manualBody,
         [
             'Content-Type: application/json',
+            'Idempotency-Key: 77777777-7777-4777-8777-777777777777',
             'X-Galjosa-Timestamp: ' . $timestamp,
             'X-Galjosa-Signature: ' . hash_hmac('sha256', $timestamp . "\n" . $manualBody, $httpEnv['INVENTARIO_SYNC_SHARED_SECRET']),
         ]
