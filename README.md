@@ -33,6 +33,14 @@ La firma es HMAC-SHA256 hexadecimal sobre los bytes exactos de
 `X-Galjosa-Timestamp` y la firma en `X-Galjosa-Signature`; tiene una vigencia
 máxima de cinco minutos.
 
+El fixture de aceptación v1 está congelado en
+`tests/fixtures/call-result-v1.json` y debe ser idéntico al archivo
+`contracts/inventario-sync-call-result-v1.json` del puente. Ambos archivos
+contienen una sola línea JSON y un terminador de línea de editor; el terminador
+se elimina de forma explícita antes de firmar y enviar. La prueba del endpoint
+firma esos bytes exactos y exige una respuesta `processed` para `answered` con
+la actividad `731`.
+
 Ejemplo local en PowerShell (usa el secreto del entorno, sin imprimirlo):
 
 ```powershell

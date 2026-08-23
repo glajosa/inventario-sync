@@ -61,6 +61,19 @@ function endpoint_test_body(array $changes = []): string {
     return json_encode(endpoint_test_input($changes), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
+function endpoint_contract_body(): string {
+    $raw = file_get_contents(__DIR__ . '/fixtures/call-result-v1.json');
+    if ($raw === false || !str_ends_with($raw, "\n")) {
+        throw new RuntimeException('canonical contract fixture must have one terminal line ending');
+    }
+    $body = substr($raw, 0, -1);
+    if (str_ends_with($body, "\r")) $body = substr($body, 0, -1);
+    if (str_contains($body, "\r") || str_contains($body, "\n")) {
+        throw new RuntimeException('canonical contract fixture must contain one JSON line');
+    }
+    return $body;
+}
+
 function endpoint_test_dir(): string {
     $directory = sys_get_temp_dir() . '/inventario-sync-endpoint-' . bin2hex(random_bytes(8));
     mkdir($directory, 0700, true);
@@ -122,6 +135,21 @@ function endpoint_test_response(int $expectedStatus, array $expectedBody, array 
 }
 
 $now = 1787238000;
+
+$directory = endpoint_test_dir();
+try {
+    $fake = new EndpointFakeBitrix();
+    $body = endpoint_contract_body();
+    $result = llamada_resultado_http(
+        'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
+    );
+    test_same(200, $result['status'] ?? null, 'canonical contract status');
+    test_same('processed', $result['body']['status'] ?? null, 'canonical contract processed outcome');
+    test_same('answered', $result['body']['outcome'] ?? null, 'canonical contract answered outcome');
+    test_same(731, $result['body']['bitrixActivityId'] ?? null, 'canonical contract activity id');
+} finally {
+    endpoint_test_cleanup($directory);
+}
 
 $directory = endpoint_test_dir();
 try {

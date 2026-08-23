@@ -81,7 +81,8 @@ function llamada_test_input(array $changes = []): array {
 function llamada_test_store(): array {
     $directory = sys_get_temp_dir() . '/inventario-sync-result-service-' . bin2hex(random_bytes(8));
     mkdir($directory, 0700, true);
-    return [new LlamadaIdempotenciaStore($directory), $directory];
+    $clock = (new DateTimeImmutable('2026-08-20T16:30:00-05:00'))->getTimestamp();
+    return [new LlamadaIdempotenciaStore($directory, static fn(): int => $clock), $directory];
 }
 
 function llamada_test_store_with_clock(int &$clock): array {
@@ -149,6 +150,8 @@ try {
     ], $updates[0][1]['fields'], 'no answer writes complete pending activity fields');
     test_same([], llamada_calls($fake, 'crm.deal.update'), 'no answer preserves stage');
     test_same([], llamada_calls($fake, 'crm.timeline.comment.add'), 'empty comment creates no timeline entry');
+    $stored = $store->get('member-1:11111111-1111-4111-8111-111111111111');
+    test_same($now->getTimestamp(), (int)($stored['updated_at'] ?? 0), 'result service lease clock is deterministic');
 } finally {
     llamada_test_cleanup($directory);
 }
