@@ -8,8 +8,25 @@ $history = [
     fake_activity(11, '1234', '2026-08-19T10:00:00-05:00'),
     fake_activity(12, 'Llamada saliente Ana', '2026-08-20T09:00:00-05:00'),
 ];
-test_same(['estado' => 'ESCALERA-1', 'sinContestar' => 1], llamada_calcular_protocolo($history, null), 'protocol order');
-test_same(['estado' => 'CONTACTADO', 'sinContestar' => 0], llamada_calcular_protocolo($history, 12), 'exclude current telephony activity');
+test_same(['estado' => 'ESCALERA-1', 'sinContestar' => 1, 'viejas' => 0], llamada_calcular_protocolo($history, null), 'protocol order');
+test_same(['estado' => 'CONTACTADO', 'sinContestar' => 0, 'viejas' => 0], llamada_calcular_protocolo($history, 12), 'exclude current telephony activity');
+
+$historyBeforeReentry = [
+    fake_activity(20, 'Llamada saliente Ana', '2026-08-10T09:00:00-05:00'),
+    fake_activity(21, 'Llamada saliente Ana', '2026-08-11T09:00:00-05:00'),
+    fake_activity(22, 'Llamada saliente Ana', '2026-08-12T09:00:00-05:00'),
+    fake_activity(23, 'Llamada saliente Ana', '2026-08-20T16:00:00-05:00'),
+];
+test_same(
+    ['estado' => 'NUEVO', 'sinContestar' => 0, 'viejas' => 3],
+    llamada_calcular_protocolo($historyBeforeReentry, 23, '2026-08-20T15:00:00'),
+    'latest real reentry erases the old unanswered cycle'
+);
+test_same(
+    ['estado' => 'MANTENIMIENTO', 'sinContestar' => 3, 'viejas' => 0],
+    llamada_calcular_protocolo($historyBeforeReentry, 23, null),
+    'no reentry preserves the existing unanswered cycle'
+);
 
 $now = new DateTimeImmutable('2026-08-20T16:30:00-05:00', new DateTimeZone('America/Guayaquil'));
 $next = llamada_proxima_no_contesto(['estado' => 'CONTACTADO', 'sinContestar' => 0], $now);

@@ -566,8 +566,8 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
   var FERIADOS = <?= $FERIADOS_JS ?>;
 
   var F_PROTOCOLO = 'UF_CRM_1786279719022';   // ESTADO DE PROTOCOLO
-  var F_VECES     = 'UF_CRM_1781115254387';   // VECES QUE DEJO EL NUMERO
-  var ETAPA_REING = 'C28:PREPARATION';        // RECONTACTAR
+  var F_VECES     = LLAMADA_CONFIG.reentry_count_field; // VECES QUE DEJO EL NUMERO
+  var ETAPA_REING = LLAMADA_CONFIG.reentry_stage_id;    // RECONTACTAR
   var llamadas  = [];      // [{ts, contesto}] en orden de CREATED, tal como vino
   var reingreso = '';      // ISO del ultimo RECONTACTAR real ('' = no hubo)
   var registrado = 0;      // id de la actividad recién creada (0 = todavía nada)

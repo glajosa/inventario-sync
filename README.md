@@ -83,6 +83,13 @@ y `Retry-After: 1`; un `callRequestId` reutilizado con otro cuerpo conserva
 `409 {"error":"conflict"}`. No se devuelven mensajes internos de Bitrix ni
 datos de autenticación.
 
+`comment` debe ser UTF-8 válido. El servidor recorta en los extremos los mismos
+espacios Unicode que `String.trim()` del bridge y acepta como máximo 2.000
+puntos de código Unicode (un emoji simple cuenta como uno). El bridge ya recorta
+su propia entrada a ese máximo; una llamada directa que lo exceda se rechaza con
+`400 invalid_request` antes de leer o escribir en Bitrix, nunca se trunca de
+forma silenciosa en este servidor.
+
 ## Despliegue seguro de la API privada
 
 `inventario-sync` se despliega antes que `bitrix-sim-bridge`, cuando todavía no

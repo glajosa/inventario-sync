@@ -12,7 +12,10 @@ RUN mkdir -p /data && chmod 777 /data
 # código de la app
 COPY . /var/www/html/
 COPY apache-tests-deny.conf /etc/apache2/conf-available/tests-deny.conf
-RUN a2enconf tests-deny \
+RUN test ! -e /var/www/html/.git \
+ && test ! -e /var/www/html/app_auth.json \
+ && ! find /var/www/html -type f \( -name '*.bak' -o -name '*.bak-*' -o -name '*.pre-*' -o -name '*.orig' -o -name '*.rej' -o -name '*.pem' -o -name '*.key' \) -print -quit | grep -q . \
+ && a2enconf tests-deny \
  && rm -f /var/www/html/Dockerfile /var/www/html/README.md /var/www/html/apache-tests-deny.conf
 
 # crons (cargan env desde /data/env.sh que escribe entrypoint):

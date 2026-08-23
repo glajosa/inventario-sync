@@ -28,11 +28,22 @@ final class EndpointFakeBitrix {
                 'TYPE_ID' => '2',
                 'DIRECTION' => '2',
                 'RESPONSIBLE_ID' => '42',
+                'COMMUNICATIONS' => [[
+                    'VALUE' => '+593 99 123 4567',
+                    'ENTITY_ID' => '91',
+                    'ENTITY_TYPE_ID' => '3',
+                    'TYPE' => 'PHONE',
+                ]],
             ]],
             'crm.contact.get' => ['ok' => true, 'result' => [
                 'ID' => '91',
                 'NAME' => 'Ana',
                 'LAST_NAME' => 'Pérez',
+                'PHONE' => [[
+                    'ID' => '501',
+                    'VALUE' => '+593 99 123 4567',
+                    'VALUE_TYPE' => 'MOBILE',
+                ]],
             ]],
             'crm.activity.list' => ['ok' => true, 'result' => []],
             'crm.activity.update' => ['ok' => true, 'result' => true],
@@ -228,6 +239,36 @@ try {
     endpoint_test_response(409, ['error' => 'conflict'], llamada_resultado_http(
         'POST', $differentBody, endpoint_test_headers($differentBody, $now), endpoint_test_env($directory), $fake, $now
     ), 'active operation with different fingerprint conflicts');
+} finally {
+    endpoint_test_cleanup($directory);
+}
+
+$directory = endpoint_test_dir();
+try {
+    $fake = new EndpointFakeBitrix();
+    $body = endpoint_test_body([
+        'callRequestId' => '77777777-7777-4777-8777-777777777777',
+        'comment' => str_repeat('😀', 2_001),
+    ]);
+    endpoint_test_response(400, ['error' => 'invalid_request'], llamada_resultado_http(
+        'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
+    ), 'comment over 2000 Unicode code points');
+    test_same([], $fake->calls, 'overlimit endpoint comment performs no Bitrix call');
+} finally {
+    endpoint_test_cleanup($directory);
+}
+
+$directory = endpoint_test_dir();
+try {
+    $fake = new EndpointFakeBitrix();
+    $body = endpoint_test_body([
+        'callRequestId' => '75757575-7575-4575-8575-757575757575',
+        'selectedPhone' => '+593999999999',
+    ]);
+    endpoint_test_response(403, ['error' => 'forbidden'], llamada_resultado_http(
+        'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
+    ), 'selected phone outside Bitrix context');
+    test_same(0, count(array_filter($fake->calls, fn(array $call): bool => str_ends_with($call[0], '.update'))), 'selected phone mismatch performs no endpoint write');
 } finally {
     endpoint_test_cleanup($directory);
 }

@@ -96,9 +96,15 @@ function llamada_procesar_resultado(
             throw new LlamadaForbidden('contact id mismatch');
         }
     }
+    if (!llamada_telefono_pertenece_contexto($request['selectedPhone'], $activity, $contact)) {
+        throw new LlamadaForbidden('selected phone mismatch');
+    }
 
+    $reentry = $request['outcome'] === 'no_answer'
+        ? llamada_ultimo_reingreso($bx, $deal, $dealId)
+        : null;
     $history = llamada_historial_actividades($bx, $dealId);
-    $protocol = llamada_calcular_protocolo($history, $activityId);
+    $protocol = llamada_calcular_protocolo($history, $activityId, $reentry);
     $contactName = trim(implode(' ', array_filter([
         trim((string)($contact['NAME'] ?? '')),
         trim((string)($contact['LAST_NAME'] ?? '')),
@@ -142,7 +148,7 @@ function llamada_procesar_resultado(
 
     if (!$progress['activityUpdated']) {
         try {
-            llamada_bx_result($bx, 'crm.activity.update', [
+            llamada_bx_true($bx, 'crm.activity.update', [
                 'id' => $activityId,
                 'fields' => $fields,
             ]);
@@ -200,7 +206,7 @@ function llamada_procesar_resultado(
             $progress['stageAttempted'] = true;
             llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken);
             try {
-                llamada_bx_result($bx, 'crm.deal.update', [
+                llamada_bx_true($bx, 'crm.deal.update', [
                     'id' => $dealId,
                     'fields' => ['STAGE_ID' => $noInterestStage],
                 ]);
@@ -301,7 +307,7 @@ function llamada_validar_resultado(array $input, DateTimeImmutable $now, string 
     $selectedPhone = llamada_normalizar_telefono($input['selectedPhone'] ?? null);
     $commentValue = $input['comment'] ?? '';
     if (!is_string($commentValue)) throw new LlamadaValidationError('comment must be a string');
-    $comment = trim($commentValue);
+    $comment = llamada_validar_comentario($commentValue);
 
     $nextActivityAt = null;
     if ($outcome === 'answered') {
@@ -369,10 +375,56 @@ function llamada_normalizar_telefono(mixed $value): string {
     $trimmed = trim($value);
     $prefix = str_starts_with($trimmed, '+') ? '+' : '';
     $digits = preg_replace('/\D+/', '', $trimmed);
-    if (!is_string($digits) || strlen($digits) < 7) {
+    if (!is_string($digits) || strlen($digits) < 7 || strlen($digits) > 15) {
         throw new LlamadaValidationError('invalid selectedPhone');
     }
     return $prefix . $digits;
+}
+
+function llamada_validar_comentario(string $value): string {
+    if (preg_match('//u', $value) !== 1) {
+        throw new LlamadaValidationError('comment must be valid UTF-8');
+    }
+    $trimmed = preg_replace(
+        '/\A[\p{Z}\x{0009}-\x{000D}\x{FEFF}]+|[\p{Z}\x{0009}-\x{000D}\x{FEFF}]+\z/u',
+        '',
+        $value
+    );
+    if (!is_string($trimmed)) {
+        throw new LlamadaValidationError('comment must be valid UTF-8');
+    }
+    $codePoints = preg_match_all('/./us', $trimmed);
+    if (!is_int($codePoints) || $codePoints > 2_000) {
+        throw new LlamadaValidationError('comment must not exceed 2000 Unicode code points');
+    }
+    return $trimmed;
+}
+
+function llamada_telefono_pertenece_contexto(
+    string $selectedPhone,
+    array $activity,
+    array $contact
+): bool {
+    $sources = [];
+    foreach (($activity['COMMUNICATIONS'] ?? []) as $communication) {
+        if (!is_array($communication)
+            || strtoupper((string)($communication['TYPE'] ?? '')) !== 'PHONE') {
+            continue;
+        }
+        $sources[] = $communication['VALUE'] ?? null;
+    }
+    foreach (($contact['PHONE'] ?? []) as $phone) {
+        if (is_array($phone)) $sources[] = $phone['VALUE'] ?? null;
+    }
+
+    foreach ($sources as $candidate) {
+        try {
+            if (llamada_normalizar_telefono($candidate) === $selectedPhone) return true;
+        } catch (LlamadaValidationError) {
+            continue;
+        }
+    }
+    return false;
 }
 
 function llamada_resultado_repetido(array $operation, string $callRequestId): array {
@@ -434,6 +486,13 @@ function llamada_bx_array(callable $bx, string $method, array $params): array {
     return $result;
 }
 
+function llamada_bx_true(callable $bx, string $method, array $params): void {
+    $result = llamada_bx_result($bx, $method, $params);
+    if ($result !== true) {
+        throw new LlamadaBitrixError('Bitrix ' . $method . ' did not return true');
+    }
+}
+
 function llamada_historial_actividades(callable $bx, int $dealId): array {
     $history = [];
     $afterId = 0;
@@ -471,6 +530,35 @@ function llamada_historial_actividades(callable $bx, int $dealId): array {
 
     usort($history, fn(array $left, array $right): int => (int)$left['ID'] <=> (int)$right['ID']);
     return $history;
+}
+
+function llamada_ultimo_reingreso(callable $bx, array $deal, int $dealId): ?string {
+    $config = llamada_config();
+    $counterField = (string)$config['reentry_count_field'];
+    $counter = $deal[$counterField] ?? null;
+    $hasRealReentry = !($counter === null
+        || $counter === false
+        || $counter === 0
+        || $counter === 0.0
+        || $counter === '');
+    if (!$hasRealReentry) return null;
+
+    $history = llamada_bx_array($bx, 'crm.stagehistory.list', [
+        'entityTypeId' => 2,
+        'filter' => [
+            'OWNER_ID' => $dealId,
+            'STAGE_ID' => (string)$config['reentry_stage_id'],
+        ],
+        'select' => ['ID', 'CREATED_TIME'],
+        'order' => ['ID' => 'DESC'],
+    ]);
+    $items = isset($history['items']) && is_array($history['items'])
+        ? $history['items']
+        : $history;
+    $created = isset($items[0]) && is_array($items[0])
+        ? substr((string)($items[0]['CREATED_TIME'] ?? ''), 0, 19)
+        : '';
+    return $created !== '' ? $created : null;
 }
 
 function llamada_campos_actividad_completada(array $context): array {

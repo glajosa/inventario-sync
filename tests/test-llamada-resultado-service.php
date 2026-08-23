@@ -21,13 +21,25 @@ final class FakeBitrix {
         'TYPE_ID' => '2',
         'DIRECTION' => '2',
         'RESPONSIBLE_ID' => '42',
+        'COMMUNICATIONS' => [[
+            'VALUE' => '+593 99 123 4567',
+            'ENTITY_ID' => '91',
+            'ENTITY_TYPE_ID' => '3',
+            'TYPE' => 'PHONE',
+        ]],
     ];
     public array $contact = [
         'ID' => '91',
         'NAME' => 'Ana',
         'LAST_NAME' => 'Pérez',
+        'PHONE' => [[
+            'ID' => '501',
+            'VALUE' => '+593 99 123 4567',
+            'VALUE_TYPE' => 'MOBILE',
+        ]],
     ];
     public array $historyPages = [];
+    public array $reentryHistory = [];
     public array $errors = [];
     public array $responseQueues = [];
     public bool $throwOnComment = false;
@@ -46,6 +58,7 @@ final class FakeBitrix {
             'crm.activity.get' => ['ok' => true, 'result' => $this->activity],
             'crm.contact.get' => ['ok' => true, 'result' => $this->contact],
             'crm.activity.list' => ['ok' => true, 'result' => $this->historyPage($params)],
+            'crm.stagehistory.list' => ['ok' => true, 'result' => $this->reentryHistory],
             'crm.activity.update' => ['ok' => true, 'result' => true],
             'crm.timeline.comment.add' => $this->commentResult(),
             'crm.deal.update' => ['ok' => true, 'result' => true],
@@ -106,6 +119,38 @@ function llamada_calls(FakeBitrix $fake, string $method): array {
 $now = new DateTimeImmutable('2026-08-20T16:30:00-05:00');
 $noInterestStage = 'C28:NO_INTERESADO';
 
+$twoThousandEmojis = str_repeat('😀', 2_000);
+$commentBoundary = llamada_validar_resultado(llamada_test_input([
+    'comment' => "\u{00A0}\u{FEFF}" . $twoThousandEmojis . "\u{2028}",
+]), $now, $noInterestStage);
+test_same($twoThousandEmojis, $commentBoundary['comment'], 'comment trims bridge Unicode edge whitespace and accepts 2000 code points');
+
+test_throws_message(
+    fn() => llamada_validar_resultado(llamada_test_input([
+        'comment' => "válido\xC3\x28",
+    ]), $now, $noInterestStage),
+    LlamadaValidationError::class,
+    'valid UTF-8',
+    'invalid UTF-8 comment is rejected explicitly'
+);
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    test_throws_message(
+        fn() => llamada_procesar_resultado(llamada_test_input([
+            'callRequestId' => '76767676-7676-4676-8676-767676767676',
+            'comment' => str_repeat('😀', 2_001),
+        ]), $fake, $store, $now, $noInterestStage),
+        LlamadaValidationError::class,
+        '2000 Unicode code points',
+        'comment over 2000 emoji code points is rejected'
+    );
+    test_same([], $fake->calls, 'overlimit Unicode comment performs no Bitrix call');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
 [$store, $directory] = llamada_test_store();
 try {
     $fake = new FakeBitrix();
@@ -152,6 +197,141 @@ try {
     test_same([], llamada_calls($fake, 'crm.timeline.comment.add'), 'empty comment creates no timeline entry');
     $stored = $store->get('member-1:11111111-1111-4111-8111-111111111111');
     test_same($now->getTimestamp(), (int)($stored['updated_at'] ?? 0), 'result service lease clock is deterministic');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+$invalidUpdateResults = [
+    ['51515151-5151-4151-8151-515151515151', ['ok' => true, 'result' => false], 'false'],
+    ['52525252-5252-4252-8252-525252525252', ['ok' => true], 'missing result'],
+    ['53535353-5353-4353-8353-535353535353', ['ok' => true, 'result' => ['updated' => true]], 'unexpected result'],
+];
+foreach ($invalidUpdateResults as [$callRequestId, $invalidResponse, $label]) {
+    [$store, $directory] = llamada_test_store();
+    try {
+        $fake = new FakeBitrix();
+        $fake->responseQueues['crm.activity.update'] = [
+            $invalidResponse,
+            ['ok' => true, 'result' => true],
+        ];
+        $input = llamada_test_input([
+            'callRequestId' => $callRequestId,
+            'outcome' => 'not_interested',
+            'comment' => 'No desea nuevas llamadas',
+        ]);
+
+        test_throws(
+            fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage),
+            LlamadaBitrixError::class,
+            'activity update ' . $label . ' is not success'
+        );
+        test_same([], llamada_calls($fake, 'crm.timeline.comment.add'), 'activity update ' . $label . ' creates no comment');
+        test_same([], llamada_calls($fake, 'crm.deal.update'), 'activity update ' . $label . ' changes no stage');
+        $record = $store->get('member-1:' . $callRequestId);
+        test_same('retryable', $record['state'] ?? null, 'activity update ' . $label . ' keeps retryable checkpoint');
+        $progress = json_decode((string)($record['response_json'] ?? ''), true, 64, JSON_THROW_ON_ERROR);
+        test_same(false, $progress['activityUpdated'] ?? null, 'activity update ' . $label . ' does not advance checkpoint');
+
+        $store = new LlamadaIdempotenciaStore($directory);
+        $retried = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
+        test_same('processed', $retried['status'], 'activity update ' . $label . ' retries successfully');
+        test_same(2, count(llamada_calls($fake, 'crm.activity.update')), 'activity update ' . $label . ' retries only the failed write');
+        test_same(1, count(llamada_calls($fake, 'crm.timeline.comment.add')), 'activity update ' . $label . ' creates one comment after retry');
+        test_same(1, count(llamada_calls($fake, 'crm.deal.update')), 'activity update ' . $label . ' changes stage once after retry');
+    } finally {
+        llamada_test_cleanup($directory);
+    }
+}
+
+$invalidStageResults = [
+    ['61616161-6161-4161-8161-616161616161', ['ok' => true, 'result' => false], 'false'],
+    ['62626262-6262-4262-8262-626262626262', ['ok' => true], 'missing result'],
+    ['63636363-6363-4363-8363-636363636363', ['ok' => true, 'result' => (object)['updated' => true]], 'unexpected result'],
+];
+foreach ($invalidStageResults as [$callRequestId, $invalidResponse, $label]) {
+    [$store, $directory] = llamada_test_store();
+    try {
+        $fake = new FakeBitrix();
+        $fake->responseQueues['crm.deal.update'] = [
+            $invalidResponse,
+            ['ok' => true, 'result' => true],
+        ];
+        $input = llamada_test_input([
+            'callRequestId' => $callRequestId,
+            'outcome' => 'not_interested',
+            'comment' => 'No desea nuevas llamadas',
+        ]);
+
+        test_throws(
+            fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage),
+            LlamadaBitrixError::class,
+            'deal update ' . $label . ' is not success'
+        );
+        test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'deal update ' . $label . ' checkpoints activity once');
+        test_same(1, count(llamada_calls($fake, 'crm.timeline.comment.add')), 'deal update ' . $label . ' checkpoints comment once');
+        $record = $store->get('member-1:' . $callRequestId);
+        test_same('retryable', $record['state'] ?? null, 'deal update ' . $label . ' keeps retryable checkpoint');
+        test_same('created', $record['comment_state'] ?? null, 'deal update ' . $label . ' preserves created comment checkpoint');
+
+        $store = new LlamadaIdempotenciaStore($directory);
+        $retried = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
+        test_same('processed', $retried['status'], 'deal update ' . $label . ' retries successfully');
+        test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'deal update ' . $label . ' never duplicates activity');
+        test_same(1, count(llamada_calls($fake, 'crm.timeline.comment.add')), 'deal update ' . $label . ' never duplicates comment');
+        test_same(2, count(llamada_calls($fake, 'crm.deal.update')), 'deal update ' . $label . ' retries only stage');
+    } finally {
+        llamada_test_cleanup($directory);
+    }
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->deal['UF_CRM_1781115254387'] = '4';
+    $fake->historyPages = [0 => [
+        fake_activity(701, 'Llamada saliente Ana Pérez', '2026-08-10T09:00:00-05:00'),
+        fake_activity(702, 'Llamada saliente Ana Pérez', '2026-08-11T09:00:00-05:00'),
+        fake_activity(703, 'Llamada saliente Ana Pérez', '2026-08-12T09:00:00-05:00'),
+        fake_activity(731, 'Llamada saliente Ana Pérez', '2026-08-20T16:00:00-05:00'),
+    ]];
+    $fake->reentryHistory = ['items' => [[
+        'ID' => '900',
+        'CREATED_TIME' => '2026-08-20T15:00:00-05:00',
+    ]]];
+
+    llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '13131313-1313-4131-8131-131313131313',
+    ]), $fake, $store, $now, $noInterestStage);
+
+    test_same(
+        '2026-08-21T19:00:00-05:00',
+        llamada_calls($fake, 'crm.activity.update')[0][1]['fields']['START_TIME'],
+        'three old attempts plus real reentry restart no-answer at one day'
+    );
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->historyPages = [0 => [
+        fake_activity(701, 'Llamada saliente Ana Pérez', '2026-08-10T09:00:00-05:00'),
+        fake_activity(702, 'Llamada saliente Ana Pérez', '2026-08-11T09:00:00-05:00'),
+        fake_activity(703, 'Llamada saliente Ana Pérez', '2026-08-12T09:00:00-05:00'),
+        fake_activity(731, 'Llamada saliente Ana Pérez', '2026-08-20T16:00:00-05:00'),
+    ]];
+
+    llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '14141414-1414-4141-8141-141414141414',
+    ]), $fake, $store, $now, $noInterestStage);
+
+    test_same(
+        '2026-11-27T19:00:00-05:00',
+        llamada_calls($fake, 'crm.activity.update')[0][1]['fields']['START_TIME'],
+        'same three attempts without real reentry keep maintenance schedule'
+    );
+    test_same([], llamada_calls($fake, 'crm.stagehistory.list'), 'no reentry counter avoids stage-history lookup');
 } finally {
     llamada_test_cleanup($directory);
 }
@@ -399,6 +579,82 @@ foreach ($activityMismatches as [$field, $value, $callRequestId, $expectedMessag
     } finally {
         llamada_test_cleanup($directory);
     }
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->activity['COMMUNICATIONS'] = [[
+        'VALUE' => '+593 (99) 765-4321',
+        'ENTITY_ID' => '777',
+        'ENTITY_TYPE_ID' => '3',
+        'TYPE' => 'PHONE',
+    ]];
+    $fake->contact['PHONE'] = [[
+        'ID' => '501',
+        'VALUE' => '+593 99 000 0000',
+        'VALUE_TYPE' => 'MOBILE',
+    ]];
+    $result = llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '71717171-7171-4171-8171-717171717171',
+        'selectedPhone' => '+593 99-765-4321',
+    ]), $fake, $store, $now, $noInterestStage);
+    test_same('processed', $result['status'], 'formatted selected number matches current activity communication');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->activity['COMMUNICATIONS'] = [];
+    $fake->contact['PHONE'] = [
+        ['ID' => '501', 'VALUE' => '099 111 1111', 'VALUE_TYPE' => 'MOBILE'],
+        ['ID' => '502', 'VALUE' => '099 765 4321', 'VALUE_TYPE' => 'WORK'],
+    ];
+    $result = llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '72727272-7272-4272-8272-727272727272',
+        'selectedPhone' => '099-765-4321',
+    ]), $fake, $store, $now, $noInterestStage);
+    test_same('processed', $result['status'], 'selected number matches a non-first primary-contact phone');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    test_throws_message(
+        fn() => llamada_procesar_resultado(llamada_test_input([
+            'callRequestId' => '73737373-7373-4373-8373-737373737373',
+            'selectedPhone' => '+593 99 999 9999',
+        ]), $fake, $store, $now, $noInterestStage),
+        LlamadaForbidden::class,
+        'selected phone mismatch',
+        'selected phone outside activity and contact context is rejected'
+    );
+    test_same([], llamada_calls($fake, 'crm.activity.list'), 'selected phone mismatch is rejected before protocol reads');
+    test_same([], llamada_calls($fake, 'crm.activity.update'), 'selected phone mismatch performs no activity write');
+    test_same([], llamada_calls($fake, 'crm.timeline.comment.add'), 'selected phone mismatch performs no comment write');
+    test_same([], llamada_calls($fake, 'crm.deal.update'), 'selected phone mismatch performs no stage write');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    test_throws(
+        fn() => llamada_procesar_resultado(llamada_test_input([
+            'callRequestId' => '74747474-7474-4474-8474-747474747474',
+            'selectedPhone' => '+1234567890123456',
+        ]), $fake, $store, $now, $noInterestStage),
+        LlamadaValidationError::class,
+        'selected phone longer than bridge E.164 limit is rejected'
+    );
+    test_same([], $fake->calls, 'overlong selected phone performs no Bitrix call');
+} finally {
+    llamada_test_cleanup($directory);
 }
 
 [$store, $directory] = llamada_test_store();

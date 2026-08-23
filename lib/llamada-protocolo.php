@@ -11,16 +11,29 @@ function llamada_config(): array {
         'hora_contesto' => '10:00',
         'provider_id' => 'VOXIMPLANT_CALL',
         'provider_type_id' => 'CALL',
+        'reentry_stage_id' => 'C28:PREPARATION',
+        'reentry_count_field' => 'UF_CRM_1781115254387',
     ];
 }
 
-function llamada_calcular_protocolo(array $actividades, ?int $excluirId): array {
+function llamada_calcular_protocolo(
+    array $actividades,
+    ?int $excluirId,
+    ?string $reingreso = null
+): array {
     $estado = 'NUEVO';
     $sinContestar = 0;
+    $viejas = 0;
+    $reingreso = is_string($reingreso) ? substr($reingreso, 0, 19) : '';
 
     foreach ($actividades as $actividad) {
         if ($excluirId !== null && (int)$actividad['ID'] === $excluirId) continue;
         if ((int)$actividad['TYPE_ID'] !== 2 || (int)$actividad['DIRECTION'] !== 2) continue;
+        $creada = substr((string)($actividad['CREATED'] ?? ''), 0, 19);
+        if ($reingreso !== '' && $creada !== '' && $creada < $reingreso) {
+            $viejas++;
+            continue;
+        }
 
         if (stripos((string)$actividad['SUBJECT'], '1234') !== false) {
             $estado = 'CONTACTADO';
@@ -34,7 +47,7 @@ function llamada_calcular_protocolo(array $actividades, ?int $excluirId): array 
             : ($sinContestar === 2 ? 'ESCALERA-2' : 'MANTENIMIENTO');
     }
 
-    return ['estado' => $estado, 'sinContestar' => $sinContestar];
+    return ['estado' => $estado, 'sinContestar' => $sinContestar, 'viejas' => $viejas];
 }
 
 function llamada_proxima_no_contesto(array $protocolo, DateTimeImmutable $ahora): array {
