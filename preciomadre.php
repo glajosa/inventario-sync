@@ -114,7 +114,21 @@ if (($_REQUEST['accion'] ?? 'ver') === 'ver' && ($_REQUEST['cat'] ?? '') === '')
     echo '<!doctype html><meta charset="utf-8"><title>GALJOSA — Sistemas de precios</title>
 <style>
  :root{--bg:#0d1014;--sf:#151a20;--sf2:#1b222a;--bd:#252d37;--t1:#e9edf2;--t2:#98a2b0;--t3:#6b7683;--ac:#4ea1ff}
- @media(prefers-color-scheme:light){:root{--bg:#f4f6f8;--sf:#fff;--sf2:#f7f9fb;--bd:#e2e7ec;--t1:#12161c;--t2:#5a6472;--t3:#8b95a1;--ac:#1f6feb}}
+ /* Tema CLARO. El anterior era casi ilegible: tarjetas blancas sobre un fondo casi
+    blanco y un borde de #e2e7ec que no se veia, asi que nada separaba a nada y la
+    pantalla se leia como una sola mancha. Lo que cambia:
+      - el FONDO baja a #e8ecf1, para que la tarjeta blanca se levante
+      - el BORDE sube a #d0d7de, que se ve sin ser duro
+      - la CABECERA de cada tarjeta lleva relleno propio, no queda flotando
+      - una sombra suave: en claro es lo que da la sensacion de tarjeta */
+ @media(prefers-color-scheme:light){
+   :root{--bg:#e8ecf1;--sf:#fff;--sf2:#f2f5f8;--bd:#d0d7de;--t1:#0f1419;--t2:#57606a;--t3:#6e7781;--ac:#0969da;
+         --sh:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05)}
+   .pc{box-shadow:var(--sh)}
+   .ph{background:var(--sf2)}
+   .b{box-shadow:0 1px 1px rgba(16,24,40,.04)}
+   .b:hover{background:#fff}
+ }
  html,body{overflow-x:clip}
  body{background:var(--bg);color:var(--t1);margin:0;font:16px/1.55 -apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
  .w{max-width:1180px;margin:0 auto;padding:46px 24px 80px}
@@ -127,7 +141,7 @@ if (($_REQUEST['accion'] ?? 'ver') === 'ver' && ($_REQUEST['cat'] ?? '') === '')
  .tag.ok{background:#14532d;color:#a7f3d0;border-color:#166534}
  @media(prefers-color-scheme:light){.tag.ok{background:#dcfce7;color:#14532d;border-color:#bbf7d0}}
  .n{display:inline-block;min-width:18px;padding:0 5px;margin-left:5px;border-radius:9px;
-    background:var(--bd);color:var(--t2);font-size:11.5px;font-weight:700;text-align:center}
+    background:var(--bd);color:var(--t1);font-size:11.5px;font-weight:700;text-align:center}
  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
  .col{padding:20px 22px 22px;border-right:1px solid var(--bd)}
  .col:last-child{border-right:0}
