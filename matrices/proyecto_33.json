@@ -1238,18 +1238,13 @@
   ],
   "listas": {
     "_lea_esto_primero": [
-      "El FORMATO de estas listas es el que ya usa la direccion, no uno nuevo. Los",
-      "originales estan en `~/Downloads/GALJOSA - Todos los sistemas de precios`.",
-      "Una fila por TIPOLOGIA, no por unidad: el cliente lee 'esquinero con vista al",
-      "parque lineal, 58 m2, $144.420' y no 78 codigos.",
+      "El FORMATO y las REGLAS son del director: `spec_uniones_y_escasez.json` del",
+      "24-ago-2026, con fixture de aceptacion. Se agrupa por PRECIO + M2 sobre TODO el",
+      "proyecto — nunca por edificio ni por piso. El precio YA ES la tipologia; esta",
+      "tabla solo le pone nombre a cada grupo.",
       "",
-      "Cuando en una celda queda UNA sola disponible la lista la nombra por su codigo",
-      "y le pone 'ULTIMA DISPONIBLE'; con dos, '2 ULTIMAS DISPONIBLES'. Es presion de",
-      "escasez y sale del inventario en vivo.",
-      "",
-      "🔴 El PLAZO es por FAMILIA, no por proyecto. Locales, oficinas y monoambientes",
-      "de Plaza no comparten meses. El cotizador resuelve por categoria de pipeline y",
-      "no puede distinguirlos: por eso el plazo de la lista vive ACA."
+      "Verificado contra el inventario en vivo: 13 grupos, 79 disponibles, y las cinco",
+      "mitades sin precio (A-1-14, C-1-12, C-1-23, D-1-2, D-1-14) quedan fuera solas."
     ],
     "1951": {
       "forma": "tipologia",
@@ -1382,51 +1377,112 @@
       "badge_dos": "2 ÚLTIMAS DISPONIBLES"
     },
     "1791": {
-      "forma": "tipologia",
+      "forma": "precio",
       "titulo": "LOCALES COMERCIALES",
-      "subtitulo": "40% de Entrada a 54 Meses",
-      "grupos": [
-        "ABC",
-        "D",
-        "E",
-        "F"
-      ],
-      "niveles": [
-        "PB",
-        "L1"
-      ],
-      "orden": [
-        "ESQ_L",
-        "MED_C",
-        "MED_L",
-        "ESQ39_C",
-        "ESQ39_L",
-        "MED30_C",
-        "MED30_L"
-      ],
+      "subtitulo": "40% de Entrada",
       "encabezado_cat": "UBICACI&Oacute;N",
-      "nombre": {
-        "ESQ_L": "ESQUINERO - PLANTA BAJA",
-        "MED_C": "MEDIANERO - PARQUE CENTRAL",
-        "MED_L": "MEDIANERO - PARQUE LINEAL",
-        "ESQ39_C": "ESQUINERO 39 m2 - PARQUE CENTRAL",
-        "ESQ39_L": "ESQUINERO 39 m2 - PARQUE LINEAL",
-        "MED30_C": "MEDIANERO 30 m2 - PARQUE CENTRAL",
-        "MED30_L": "MEDIANERO 30 m2 - PARQUE LINEAL"
+      "badge_uno": "ÚLTIMA UNIDAD",
+      "badge_dos": "2 ÚLTIMAS DISPONIBLES",
+      "bloques": [
+        {
+          "id": "PA",
+          "etiqueta": "1er Piso",
+          "pisos": [
+            1
+          ]
+        },
+        {
+          "id": "PB",
+          "etiqueta": "Planta Baja",
+          "pisos": [
+            0
+          ]
+        }
+      ],
+      "_tipologias_nota": [
+        "La llave es `precio|m2`. Salen del propio inventario: si manana el",
+        "director sube un precio, aparece una llave nueva y hay que nombrarla aca.",
+        "Un grupo sin nombre sale con la fila en blanco, que se nota enseguida.",
+        "",
+        "🔴 En PLANTA BAJA el precio depende del GIRO: un local de 69 m2 lineal vale",
+        "205.255 como local y 215.255 como RESTAURANTE. El destino del negocio es una",
+        "variable de precio, no solo control de mezcla comercial.",
+        "",
+        "El edificio D se nombra '(EDIFICIO D)', NUNCA 'vista parcial': nombrar la",
+        "limitacion le resta al producto sin darle al cliente nada que le sirva."
+      ],
+      "tipologias": {
+        "94500|30": {
+          "nombre": "LOCALES PARQUE LINEAL",
+          "singular": "LOCAL",
+          "zona": "LINEAL"
+        },
+        "124300|39": {
+          "nombre": "LOCALES PARQUE LINEAL ESQUINERO",
+          "singular": "LOCAL",
+          "zona": "LINEAL"
+        },
+        "229181|77": {
+          "nombre": "LOCALES PARQUE LINEAL ESQUINERO",
+          "singular": "LOCAL",
+          "zona": "LINEAL",
+          "union": true
+        },
+        "101900|30": {
+          "nombre": "LOCALES PARQUE CENTRAL (EDIFICIO D)",
+          "singular": "LOCAL",
+          "zona": "CENTRAL"
+        },
+        "111000|30": {
+          "nombre": "LOCALES PARQUE CENTRAL",
+          "singular": "LOCAL",
+          "zona": "CENTRAL"
+        },
+        "136500|39": {
+          "nombre": "LOCALES PARQUE CENTRAL ESQUINERO",
+          "singular": "LOCAL",
+          "zona": "CENTRAL"
+        },
+        "237767|70": {
+          "nombre": "LOCALES PARQUE CENTRAL ESQUINERO",
+          "singular": "LOCAL",
+          "zona": "CENTRAL",
+          "union": true
+        },
+        "205255|69": {
+          "nombre": "LOCALES PARQUE LINEAL",
+          "singular": "LOCAL",
+          "zona": "LINEAL"
+        },
+        "212255|69": {
+          "nombre": "LOCALES PARQUE LINEAL ESQUINERO",
+          "singular": "LOCAL",
+          "zona": "LINEAL"
+        },
+        "215255|69": {
+          "nombre": "RESTAURANTES PARQUE LINEAL",
+          "singular": "RESTAURANTE",
+          "zona": "LINEAL"
+        },
+        "221255|69": {
+          "nombre": "RESTAURANTES PARQUE LINEAL ESQUINERO",
+          "singular": "RESTAURANTE",
+          "zona": "LINEAL"
+        },
+        "227465|69": {
+          "nombre": "LOCALES PARQUE CENTRAL",
+          "singular": "LOCAL",
+          "zona": "CENTRAL"
+        },
+        "237000|69": {
+          "nombre": "RESTAURANTES PARQUE CENTRAL",
+          "singular": "RESTAURANTE",
+          "zona": "CENTRAL"
+        }
       },
-      "lado": {
-        "ESQ_L": "lineal",
-        "MED_L": "lineal",
-        "ESQ39_L": "lineal",
-        "MED30_L": "lineal",
-        "MED_C": "central",
-        "ESQ39_C": "central",
-        "MED30_C": "central"
-      },
-      "parqueos": {},
       "pie": {
         "rotulo": "LOCALES COMERCIALES",
-        "medidas": "30 - 39 - 77m2"
+        "medidas": "30 - 39 - 69 - 70 - 77m2"
       },
       "financiamiento": {
         "separa": 1000,
@@ -1434,12 +1490,10 @@
         "cuotas_pct": 20,
         "extra_pct": 10,
         "contra_pct": 60,
-        "_nota": "El plazo NO se escribe: se deriva de fecha_entrega (2031-02), y las extraordinarias son ceil(meses/12). Hoy da 54 meses y 5, que es lo que dice la lista de la direccion.",
-        "fecha_entrega": "2031-02"
-      },
-      "origen_metraje": "unidades",
-      "badge_uno": "ÚLTIMA DISPONIBLE",
-      "badge_dos": "2 ÚLTIMAS DISPONIBLES"
+        "fecha_entrega": "2031-02",
+        "vigencia_horas": 48,
+        "_nota": "Del archivo del director. El plazo NO se escribe: sale de fecha_entrega (2031-02) y las extraordinarias son ceil(meses/12)."
+      }
     }
   }
 }

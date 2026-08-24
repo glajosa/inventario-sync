@@ -1,0 +1,163 @@
+<?php
+/**
+ * lista_precio.php — la lista agrupada por TIPOLOGIA, como la especifico la direccion.
+ * ---------------------------------------------------------------------------
+ * Spec del 24-ago-2026 (`spec_uniones_y_escasez.json`), con fixture de aceptacion.
+ *
+ * La regla es una sola y es simple: se agrupa por **precio + m2**, sobre TODO el
+ * proyecto. Nunca por edificio ni por piso. Se comprobo contra el inventario en vivo:
+ * agrupando asi salen los 13 grupos y los 79 disponibles del fixture, uno a uno.
+ *
+ * O sea que EL PRECIO YA ES LA TIPOLOGIA. No hay que clasificar por zona, giro ni
+ * esquinero para AGRUPAR — solo para ponerle nombre a cada grupo, y eso lo declara
+ * el proyecto en su tabla `tipologias`.
+ *
+ * UNIONES. Una unidad con PVP vacio es la segunda mitad de una union. La spec es
+ * tajante: esa mitad NO genera fila, NO cuenta como disponible y su m2 NO entra a
+ * ninguna tipologia. Con solo exigir "PVP > 0" quedan fuera las cinco de Noral Plaza
+ * (A-1-14, C-1-12, C-1-23, D-1-2, D-1-14), que son justo las que el fixture lista
+ * como `no_deben_aparecer`. La mitad CON precio es una tipologia propia, con su m2 y
+ * su precio, en fila aparte — antes quedaba escondida dentro de la fila de 30 m2.
+ *
+ * ESCASEZ. El universo es el proyecto entero:
+ *   1 disponible  -> la fila se nombra con el CODIGO real (LOCAL A-1-12)
+ *   2 disponibles -> el nombre de la tipologia + "2 ULTIMAS DISPONIBLES"
+ *   3 o mas       -> sin etiqueta
+ *
+ * Se incluye desde lista.php, que ya dejo listos $cfg, $L, $unidades, $fam y las
+ * funciones lh()/lp()/ln()/lst_plan().
+ * ---------------------------------------------------------------------------
+ */
+
+$fin     = $L['financiamiento'] ?? [];
+$TIPOS   = (array)($L['tipologias'] ?? []);
+$BLOQUES = (array)($L['bloques'] ?? [['id' => '', 'etiqueta' => '', 'pisos' => null]]);
+
+/** El bloque (1ER PISO / PLANTA BAJA) al que pertenece un piso. */
+$bloqueDe = function (int $piso) use ($BLOQUES): ?string {
+    foreach ($BLOQUES as $b) {
+        $p = $b['pisos'] ?? null;
+        if ($p === null || in_array($piso, (array)$p, true)) return (string)$b['id'];
+    }
+    return null;
+};
+
+// ── agrupar ─────────────────────────────────────────────────────────────────
+$grupos = [];
+foreach ($unidades as $u => $d) {
+    if (($d['etapa'] ?? '') !== 'DISPONIBLE') continue;
+    if ((int)($d['tipo'] ?? 0) !== $fam) continue;
+    $pvp = (float)($d['pvp'] ?? 0);
+    if ($pvp <= 0) continue;                       // mitad de union o ficha incompleta
+    [$ed, $piso, $pos] = array_pad(explode('-', $u), 3, '0');
+    $blq = $bloqueDe((int)$piso);
+    if ($blq === null) continue;
+    $m2  = (float)str_replace(',', '.', (string)($d['m2'] ?? 0));
+    $key = $blq . '|' . round($pvp) . '|' . rtrim(rtrim(number_format($m2, 2, '.', ''), '0'), '.');
+    if (!isset($grupos[$key])) {
+        $t = $TIPOS[round($pvp) . '|' . rtrim(rtrim(number_format($m2, 2, '.', ''), '0'), '.')] ?? [];
+        $grupos[$key] = ['bloque' => $blq, 'precio' => $pvp, 'm2' => $m2,
+                         'nombre' => (string)($t['nombre'] ?? ''), 'sing' => (string)($t['singular'] ?? ''),
+                         'zona' => (string)($t['zona'] ?? ''), 'parq' => $t['parqueos'] ?? null,
+                         'union' => !empty($t['union']), 'cods' => []];
+    }
+    $grupos[$key]['cods'][] = (string)($d['cod'] ?? $u);
+}
+foreach ($grupos as &$g) natsort($g['cods']);
+unset($g);
+
+// ── ordenar: bloque, después el LINEAL antes que el resto, después precio ────
+// Es el orden del fixture: en el 1er piso van 94.500 · 124.300 · 229.181 (lineal) y
+// recién ahí 101.900 · 111.000 · 136.500 · 237.767 (central). No es precio ascendente
+// a secas: la zona manda primero.
+$ordenBloque = array_flip(array_map(fn($b) => (string)$b['id'], $BLOQUES));
+uasort($grupos, function ($a, $b) use ($ordenBloque) {
+    $ba = $ordenBloque[$a['bloque']] ?? 99;
+    $bb = $ordenBloque[$b['bloque']] ?? 99;
+    if ($ba !== $bb) return $ba <=> $bb;
+    $za = $a['zona'] === 'LINEAL' ? 0 : 1;
+    $zb = $b['zona'] === 'LINEAL' ? 0 : 1;
+    if ($za !== $zb) return $za <=> $zb;
+    return $a['precio'] <=> $b['precio'];
+});
+
+// por bloque, para la banda vertical
+$porBloque = [];
+foreach ($grupos as $g) $porBloque[$g['bloque']][] = $g;
+
+$etBloque = [];
+foreach ($BLOQUES as $b) $etBloque[(string)$b['id']] = (string)($b['etiqueta'] ?? $b['id']);
+$conParq = !empty($L['columna_parqueos']);
+$nCols   = 3 + ($conParq ? 1 : 0);
+$totDisp = 0;
+foreach ($grupos as $g) $totDisp += count($g['cods']);
+?>
+<section class="hoja">
+  <div class="cab">
+    <img class="logo" src="assets/logo_galjosa_transparente.png"
+         alt="<?= lh($proyecto) ?>" onerror="this.style.display='none'">
+    <div class="tit">
+      <table><tr><th class="titulo"><?= lh((string)($L['titulo'] ?? strtoupper($proyecto))) ?></th></tr>
+             <tr><th class="sub"><?= lh((string)($L['subtitulo'] ?? '')) ?></th></tr></table>
+    </div>
+  </div>
+  <div class="wrap">
+    <table>
+      <thead>
+        <tr class="g"><th colspan="<?= $nCols ?>">CARACTER&Iacute;STICAS</th>
+          <th colspan="2" class="it"><?= (int)($fin['reserva_pct'] ?? 10) ?>% DE RESERVA</th>
+          <th><?= (int)($fin['cuotas_pct'] ?? 20) ?>%</th>
+          <th><?= (int)($fin['extra_pct'] ?? 10) ?>%</th></tr>
+        <tr class="c"><th></th><th><?= $L['encabezado_cat'] ?? 'CARACTER&Iacute;STICAS' ?></th>
+          <th>METROS (m2)</th><?php if ($conParq): ?><th>PARQUEOS</th><?php endif; ?><th>PRECIO</th>
+          <th>SEPARA CON</th><th>A LA FIRMA</th>
+          <th>CUOTAS<br>MENSUALES</th>
+          <th>CUOTAS EXTRAORDINARIAS<br>(1 VEZ AL A&Ntilde;O)</th></tr>
+      </thead>
+      <tbody>
+      <?php $iB = 0; foreach ($porBloque as $blq => $filas): $iB++;
+            $clsNiv = 'niv' . (($iB - 1) % 5 + 2); $primera = true; ?>
+        <?php foreach ($filas as $g): $pl = lst_plan($g['precio'], $fin);
+              $n = count($g['cods']);
+              // Con UNA disponible la fila se nombra con el codigo real, no con la
+              // tipologia: "LOCAL A-1-12", "RESTAURANTE C-7". Lo pide la spec y es lo
+              // que hace la presion de escasez concreta.
+              $texto = $n === 1 && $g['sing'] !== ''
+                     ? trim($g['sing'] . ' ' . $g['cods'][array_key_first($g['cods'])])
+                     : ($n === 1 ? $g['cods'][array_key_first($g['cods'])] : $g['nombre']);
+              $ult = $n === 1 ? (string)($L['badge_uno'] ?? 'ÚLTIMA UNIDAD')
+                   : ($n === 2 ? (string)($L['badge_dos'] ?? '2 ÚLTIMAS DISPONIBLES') : ''); ?>
+          <tr>
+            <?php if ($primera): $primera = false; ?>
+              <td class="niv <?= $clsNiv ?>" rowspan="<?= count($filas) ?>"><span><?= lh(strtoupper($etBloque[$blq] ?? $blq)) ?></span></td>
+            <?php endif; ?>
+            <td class="cat <?= $g['zona'] === 'LINEAL' ? 'lineal' : ($g['zona'] !== '' ? 'central' : '') ?>"><?php
+                echo lh($texto);
+                if ($ult !== '') echo '<span class="ult">' . lh($ult) . '</span>'; ?></td>
+            <td class="c"><?= lh(rtrim(rtrim(number_format($g['m2'], 2, ',', ''), '0'), ',')) ?></td>
+            <?php if ($conParq): ?><td class="c"><?= (int)($g['parq'] ?? 1) ?></td><?php endif; ?>
+            <td class="p"><?= lh(lp($g['precio'])) ?></td>
+            <td class="n"><?= lh(ln($pl['separa'])) ?></td>
+            <td class="n"><?= lh(ln($pl['firma'])) ?></td>
+            <td class="n"><?= lh(ln($pl['mensual'])) ?></td>
+            <td class="n"><?= lh(ln($pl['extra'])) ?></td>
+          </tr>
+        <?php endforeach; ?>
+      <?php endforeach; ?>
+      <?php if (!$grupos): ?>
+        <tr><td colspan="<?= $nCols + 4 ?>" style="text-align:center;padding:26px">
+          No hay unidades disponibles de esta familia.</td></tr>
+      <?php endif; ?>
+      </tbody>
+    </table>
+    <?php if (!empty($L['lat'])): ?><div class="lat"><?= $L['lat'] ?></div><?php endif; ?>
+  </div>
+  <?php if (!empty($L['pie'])): ?>
+    <div class="pie"><?= lh((string)($L['pie']['rotulo'] ?? '')) ?><?php
+        if (!empty($L['pie']['medidas'])) echo '<span>' . lh((string)$L['pie']['medidas']) . '</span>'; ?></div>
+  <?php endif; ?>
+  <div class="vig">ESTA COTIZACI&Oacute;N TIENE UNA VIGENCIA DE
+    <?= (int)($fin['vigencia_horas'] ?? 48) ?> HRS NATURALES</div>
+  <div class="meta">Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo ·
+    <?= count($grupos) ?> tipologías · <?= $totDisp ?> disponibles</div>
+</section>
