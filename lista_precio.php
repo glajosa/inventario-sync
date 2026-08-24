@@ -224,8 +224,12 @@ $etBloque = [];
 foreach ($BLOQUES as $b) $etBloque[(string)$b['id']] = (string)($b['etiqueta'] ?? $b['id']);
 $conParq = !empty($L['columna_parqueos']);
 $nCols   = 3 + ($conParq ? 1 : 0);
+// Las uniones NO suman al conteo: no son unidades, son combinaciones de las que ya
+// estan contadas. Sumarlas hacia decir 26 disponibles donde hay 24.
 $totDisp = 0;
-foreach ($grupos as $g) $totDisp += count($g['cods']);
+foreach ($grupos as $g) if (empty($g['union'])) $totDisp += count($g['cods']);
+$nUnion = 0;
+foreach ($grupos as $g) if (!empty($g['union']) && $g['cods'] === ['', '']) $nUnion++;
 ?>
 <section class="hoja">
   <div class="cab">
@@ -296,5 +300,6 @@ foreach ($grupos as $g) $totDisp += count($g['cods']);
   <div class="vig">ESTA COTIZACI&Oacute;N TIENE UNA VIGENCIA DE
     <?= (int)($fin['vigencia_horas'] ?? 48) ?> HRS NATURALES</div>
   <div class="meta">Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo ·
-    <?= count($grupos) ?> tipologías · <?= $totDisp ?> disponibles</div>
+    <?= count($grupos) - $nUnion ?> tipologías · <?= $totDisp ?> disponibles<?php
+      if ($nUnion) echo ' · ' . $nUnion . ' opción' . ($nUnion > 1 ? 'es' : '') . ' de unidades unidas'; ?></div>
 </section>
