@@ -1247,47 +1247,114 @@
       "mitades sin precio (A-1-14, C-1-12, C-1-23, D-1-2, D-1-14) quedan fuera solas."
     ],
     "1951": {
-      "forma": "tipologia",
+      "forma": "precio",
       "titulo": "EDIFICIO A - B - C",
-      "subtitulo": "40% de Entrada a 54 Meses",
-      "grupos": [
-        "ABC"
-      ],
-      "niveles": [
-        "P2",
-        "P3",
-        "P4"
-      ],
-      "orden": [
-        "EL",
-        "ML",
-        "EC",
-        "MC"
-      ],
+      "subtitulo": "40% de Entrada",
       "encabezado_cat": "ESQUINERO/<br>MEDIANERO &amp; VISTA",
-      "nombre": {
-        "EL": "ESQUINERO - VISTA AL PARQUE LINEAL",
-        "ML": "MEDIANERO - VISTA AL PARQUE LINEAL",
-        "EC": "ESQUINERO - VISTA AL PARQUE CENTRAL",
-        "MC": "MEDIANERO - VISTA AL PARQUE CENTRAL"
-      },
-      "lado": {
-        "EL": "lineal",
-        "ML": "lineal",
-        "EC": "central",
-        "MC": "central"
-      },
-      "parqueos": {
-        "EL": 1,
-        "ML": 1,
-        "EC": 1,
-        "MC": 1
-      },
-      "combo": {
-        "rotulo": "DESDE",
-        "parqueos": 2,
-        "mostrar_par": true,
-        "_nota": "El precio de la fila DESDE sale del par contiguo DISPONIBLE mas barato, calculado al abrir. La tabla `combos` del director queda como referencia del metraje: su valor de precio envejece — decia $306.750 (dos medianeros) cuando hoy no hay dos medianeros contiguos libres."
+      "columna_parqueos": true,
+      "badge_uno": "ÚLTIMA DISPONIBLE",
+      "badge_dos": "2 ÚLTIMAS DISPONIBLES",
+      "bloques": [
+        {
+          "id": "P2",
+          "etiqueta": "2do Piso",
+          "pisos": [
+            2
+          ]
+        },
+        {
+          "id": "P3",
+          "etiqueta": "3er Piso",
+          "pisos": [
+            3
+          ]
+        },
+        {
+          "id": "P4",
+          "etiqueta": "4to Piso",
+          "pisos": [
+            4
+          ]
+        }
+      ],
+      "_tipologias_nota": [
+        "58 m2 = ESQUINERO, 50 m2 = MEDIANERO. Dentro de cada piso el mas",
+        "barato de cada metraje da al parque LINEAL y el otro al CENTRAL.",
+        "Las oficinas viven solo en los edificios A, B y C, pisos 2 a 4."
+      ],
+      "tipologias": {
+        "125500|50": {
+          "nombre": "MEDIANEROS - VISTA AL PARQUE LINEAL",
+          "singular": "OFICINA",
+          "zona": "LINEAL",
+          "parqueos": 1
+        },
+        "144420|58": {
+          "nombre": "ESQUINEROS - VISTA AL PARQUE LINEAL",
+          "singular": "OFICINA",
+          "zona": "LINEAL",
+          "parqueos": 1
+        },
+        "132500|50": {
+          "nombre": "MEDIANEROS - VISTA AL PARQUE CENTRAL",
+          "singular": "OFICINA",
+          "zona": "CENTRAL",
+          "parqueos": 1
+        },
+        "153700|58": {
+          "nombre": "ESQUINEROS - VISTA AL PARQUE CENTRAL",
+          "singular": "OFICINA",
+          "zona": "CENTRAL",
+          "parqueos": 1
+        },
+        "129500|50": {
+          "nombre": "MEDIANEROS - VISTA AL PARQUE LINEAL",
+          "singular": "OFICINA",
+          "zona": "LINEAL",
+          "parqueos": 1
+        },
+        "150220|58": {
+          "nombre": "ESQUINEROS - VISTA AL PARQUE LINEAL",
+          "singular": "OFICINA",
+          "zona": "LINEAL",
+          "parqueos": 1
+        },
+        "134500|50": {
+          "nombre": "MEDIANEROS - VISTA AL PARQUE CENTRAL",
+          "singular": "OFICINA",
+          "zona": "CENTRAL",
+          "parqueos": 1
+        },
+        "156020|58": {
+          "nombre": "ESQUINEROS - VISTA AL PARQUE CENTRAL",
+          "singular": "OFICINA",
+          "zona": "CENTRAL",
+          "parqueos": 1
+        },
+        "139500|50": {
+          "nombre": "MEDIANEROS - VISTA AL PARQUE LINEAL",
+          "singular": "OFICINA",
+          "zona": "LINEAL",
+          "parqueos": 1
+        },
+        "161820|58": {
+          "nombre": "ESQUINEROS - VISTA AL PARQUE LINEAL",
+          "singular": "OFICINA",
+          "zona": "LINEAL",
+          "parqueos": 1
+        },
+        "144500|50": {
+          "nombre": "MEDIANEROS - VISTA AL PARQUE CENTRAL",
+          "singular": "OFICINA",
+          "zona": "CENTRAL",
+          "parqueos": 1
+        },
+        "167620|58": {
+          "nombre": "ESQUINEROS - VISTA AL PARQUE CENTRAL",
+          "singular": "OFICINA",
+          "zona": "CENTRAL",
+          "parqueos": 1
+        }
       },
       "lat": "CONSULTORIOS: Solo en el&nbsp;<em>2DO PISO del EDIFICIO B</em>",
       "pie": {
@@ -1300,13 +1367,10 @@
         "cuotas_pct": 20,
         "extra_pct": 10,
         "contra_pct": 60,
-        "_nota": "El plazo NO se escribe: se deriva de fecha_entrega (2031-02), y las extraordinarias son ceil(meses/12). Hoy da 54 meses y 5, que es lo que dice la lista de la direccion.",
-        "fecha_entrega": "2031-02"
-      },
-      "origen_metraje": "config",
-      "badge_uno": "ÚLTIMA DISPONIBLE",
-      "badge_dos": "2 ÚLTIMAS DISPONIBLES",
-      "mostrar_par": true
+        "fecha_entrega": "2031-02",
+        "vigencia_horas": 48,
+        "_nota": "Del archivo del director. El plazo NO se escribe: sale de fecha_entrega (2031-02) y las extraordinarias son ceil(meses/12)."
+      }
     },
     "1793": {
       "forma": "tipologia",
