@@ -608,6 +608,24 @@ try {
 try {
     $fake = new FakeBitrix();
     $fake->activity['COMMUNICATIONS'] = [];
+    $fake->contact['PHONE'] = [[
+        'ID' => '501',
+        'VALUE' => '593991234567',
+        'VALUE_TYPE' => 'MOBILE',
+    ]];
+    $result = llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '72727272-7272-4272-8272-727272727271',
+        'selectedPhone' => '+593991234567',
+    ]), $fake, $store, $now, $noInterestStage);
+    test_same('processed', $result['status'], 'country-code phone matches with or without a leading plus');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->activity['COMMUNICATIONS'] = [];
     $fake->contact['PHONE'] = [
         ['ID' => '501', 'VALUE' => '099 111 1111', 'VALUE_TYPE' => 'MOBILE'],
         ['ID' => '502', 'VALUE' => '099 765 4321', 'VALUE_TYPE' => 'WORK'],
