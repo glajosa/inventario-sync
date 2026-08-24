@@ -367,6 +367,20 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
       var b2 = botones(); b2.blocks = blocks; return b2;
     }
 
+    // Se abrio la pestaña de nuevo sobre algo ya registrado. Se avisa en vez de
+    // duplicar en silencio: el vendedor tiene que saber que NO se sumo otra.
+    if (yaHabia) {
+      var hace = yaHabia.minutos === 1 ? 'hace 1 minuto'
+               : 'hace ' + yaHabia.minutos + ' minutos';
+      blocks.caja = { type:'section', properties:{ type:'primary', blocks:{
+        a: { type:'text', properties:{ bold:true,
+             value:'Ya registraste esta llamada ' + hace + '.' } },
+        b: { type:'text', properties:{ size:'sm', color:'base_70',
+             value:'No se sum\u00f3 otra. Si de verdad volviste a llamar, '
+                 + 'reg\u00edstrala desde la pesta\u00f1a de llamada de Bitrix.' } } }}};
+      var b3 = botones(); b3.blocks = blocks; return b3;
+    }
+
     // Lo que se muestra es lo que se guard\u00f3, no un rec\u00e1lculo: ver calcularProxima().
     // Si todav\u00eda no se registr\u00f3 (no deber\u00eda pasar ac\u00e1), se calcula al vuelo.
     var pr = proxAgendada || calcularProxima(false);
@@ -660,7 +674,7 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
       // el deal más cargado de la base tiene 93.
       hist: ['crm.activity.list', {
         filter: { OWNER_TYPE_ID:2, OWNER_ID:dealId, TYPE_ID:2, DIRECTION:2 },
-        select: ['ID','CREATED','SUBJECT'], order: { ID:'ASC' }, start: -1
+        select: ['ID','CREATED','SUBJECT','RESPONSIBLE_ID'], order: { ID:'ASC' }, start: -1
       }],
       // CUANDO VOLVIO A DEJAR SU NUMERO. Cada entrada a RECONTACTAR es un
       // reingreso; la mas nueva manda, asi que ID DESC y se toma la primera.
@@ -679,6 +693,11 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
         var d = (r.hist && !r.hist.error()) ? (r.hist.data() || []) : [];
         for (var i = 0; i < d.length; i++)
           llamadas.push({ ts: String(d[i].CREATED || '').substr(0,19),
+                          // 'iso' conserva el desfase (+03:00) para poder medir
+                          // tiempo transcurrido de verdad. 'ts' va cortado a 19
+                          // porque las comparaciones de ciclo son de cadena.
+                          iso: String(d[i].CREATED || ''),
+                          resp: parseInt(d[i].RESPONSIBLE_ID || 0, 10),
                           contesto: String(d[i].SUBJECT || '').indexOf('1234') >= 0 });
       } catch (e) {}
 
@@ -881,9 +900,57 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
    * "Deshacer" de la franja de botones: si alguien entró sin querer, un clic
    * borra la actividad y deja el deal como estaba.
    */
+  /**
+   * ⭐ NO REGISTRAR DOS VECES POR ABRIR LA PESTAÑA DOS VECES.
+   *
+   * EL BUG (encontrado el 24-ago-2026 por una queja de Ana María). El panel se
+   * diseñó con "apretar la pestaña ES la acción": sin botón de confirmar, un
+   * solo toque. Pero eso convirtió una pestaña de la ficha en un botón
+   * irreversible: abrirla para MIRAR —ver la fecha que quedó, revisar después
+   * de una contestada— se registraba como "llamé y no contestaron".
+   *
+   * Medido desde el 6-ago: 136 pares de llamadas con menos de 10 minutos entre
+   * sí, sobre 4.000. El deal 400211 acumuló CINCO registros en seis minutos.
+   * Nadie llama cinco veces en seis minutos: eso es alguien navegando su ficha.
+   *
+   * Cada fantasma hacía tres daños a la vez:
+   *   · subía un escalón  -> la próxima real se agendaba a +6 en vez de +1
+   *   · sumaba al contador "# Llamada No Contestada"
+   *   · restaba 0,4 al puntaje del deal
+   *
+   * ⚠ EL VENDEDOR NO ESTABA HACIENDO NADA MAL. Era el panel.
+   *
+   * EL FRENO. Si ya hay una llamada de este mismo asesor en los últimos 30
+   * minutos, no se registra nada: se muestra lo que ya quedó. El que llama de
+   * verdad no nota el cambio — nadie marca dos veces al mismo cliente en media
+   * hora. Y se usa 'iso' con su desfase, no 'ts' cortado: comparar una fecha
+   * del servidor (+03:00) contra el reloj del navegador (-05:00) sin la zona
+   * da ocho horas de error, que es justo la ventana que se quiere medir.
+   */
+  var VENTANA_REPETIDO = 30 * 60 * 1000;   // 30 minutos
+  var yaHabia = null;                      // { minutos, contesto } si se frenó
+
+  function ultimaDelAsesor() {
+    if (!ctx || !ctx.resp) return null;
+    for (var i = llamadas.length - 1; i >= 0; i--) {
+      var l = llamadas[i];
+      if (!l.iso || l.resp !== parseInt(ctx.resp, 10)) continue;
+      var t = Date.parse(l.iso);
+      if (isNaN(t)) return null;
+      return { hace: Date.now() - t, contesto: l.contesto };
+    }
+    return null;
+  }
+
   function autoRegistrar() {
     if (yaIntento || !protocolo || !dealId) return;
     yaIntento = true;
+    var u = ultimaDelAsesor();
+    if (u && u.hace >= 0 && u.hace < VENTANA_REPETIDO) {
+      yaHabia = { minutos: Math.max(1, Math.round(u.hace / 60000)), contesto: u.contesto };
+      redibujar();
+      return;                              // ya estaba registrada: no se duplica
+    }
     registrar(false);
   }
 
