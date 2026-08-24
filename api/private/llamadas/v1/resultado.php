@@ -2,11 +2,61 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__, 4);
-require_once $root . '/appauth.php';
 require_once $root . '/lib/private-api-auth.php';
 require_once $root . '/lib/llamada-resultado-service.php';
 
 const LLAMADA_RESULTADO_MAX_BODY_BYTES = 65_536;
+
+function llamada_resultado_bitrix_transport(string $url, array $params): array {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => http_build_query($params),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_CONNECTTIMEOUT => 10,
+    ]);
+    $body = curl_exec($ch);
+    $error = curl_errno($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return [
+        'status' => $status,
+        'body' => is_string($body) ? $body : '',
+        'error' => $error,
+    ];
+}
+
+function llamada_resultado_webhook_bx(array $env, ?callable $transport = null): callable {
+    $base = rtrim(trim((string)($env['BITRIX_WEBHOOK'] ?? '')), '/');
+    $transport ??= 'llamada_resultado_bitrix_transport';
+
+    return static function (string $method, array $params) use ($base, $transport): array {
+        if ($base === '' || preg_match('/^[a-z0-9_.]+$/iD', $method) !== 1) {
+            return ['ok' => false, 'error' => 'not-configured'];
+        }
+        try {
+            $response = $transport($base . '/' . $method . '.json', $params);
+        } catch (Throwable) {
+            return ['ok' => false, 'error' => 'network-error'];
+        }
+        if (!is_array($response) || (int)($response['error'] ?? 0) !== 0) {
+            return ['ok' => false, 'error' => 'network-error'];
+        }
+        $decoded = json_decode((string)($response['body'] ?? ''), true);
+        if (!is_array($decoded)) {
+            return ['ok' => false, 'error' => 'bad-json'];
+        }
+        if (array_key_exists('error', $decoded)) {
+            return [
+                'ok' => false,
+                'error' => (string)$decoded['error'],
+                'desc' => (string)($decoded['error_description'] ?? ''),
+            ];
+        }
+        return ['ok' => true, 'result' => $decoded['result'] ?? null];
+    };
+}
 
 function llamada_resultado_error(int $status, string $error): array {
     return ['status' => $status, 'body' => ['error' => $error]];
@@ -102,15 +152,32 @@ function llamada_resultado_http(
     }
 }
 
+function llamada_resultado_production_http(
+    string $method,
+    string $body,
+    array $headers,
+    array $env,
+    int $now,
+    ?callable $transport = null
+): array {
+    return llamada_resultado_http(
+        $method,
+        $body,
+        $headers,
+        $env,
+        llamada_resultado_webhook_bx($env, $transport),
+        $now
+    );
+}
+
 if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
     $requestHeaders = function_exists('getallheaders') ? getallheaders() : [];
     $environment = getenv();
-    $result = llamada_resultado_http(
+    $result = llamada_resultado_production_http(
         (string)($_SERVER['REQUEST_METHOD'] ?? 'GET'),
         (string)file_get_contents('php://input'),
         is_array($requestHeaders) ? $requestHeaders : [],
         is_array($environment) ? ($_ENV + $environment) : $_ENV,
-        'app_bx',
         time()
     );
 

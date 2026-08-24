@@ -156,6 +156,65 @@ function endpoint_test_response(int $expectedStatus, array $expectedBody, array 
 
 $now = 1787238000;
 
+test_same(
+    true,
+    function_exists('llamada_resultado_production_http'),
+    'production result endpoint has a server-webhook execution path'
+);
+
+if (function_exists('llamada_resultado_production_http')) {
+    $directory = endpoint_test_dir();
+    try {
+        $fake = new EndpointFakeBitrix();
+        $requestedUrls = [];
+        $transport = static function (string $url, array $params) use ($fake, &$requestedUrls): array {
+            $requestedUrls[] = $url;
+            $path = (string)parse_url($url, PHP_URL_PATH);
+            $method = preg_replace('/\.json$/D', '', basename($path));
+            if (!is_string($method) || $method === '') {
+                throw new RuntimeException('invalid Bitrix method URL');
+            }
+            $response = $fake($method, $params);
+            if (($response['ok'] ?? false) !== true) {
+                return [
+                    'status' => 400,
+                    'body' => json_encode([
+                        'error' => $response['error'] ?? 'unknown',
+                        'error_description' => $response['desc'] ?? '',
+                    ], JSON_THROW_ON_ERROR),
+                ];
+            }
+            return [
+                'status' => 200,
+                'body' => json_encode(['result' => $response['result']], JSON_THROW_ON_ERROR),
+            ];
+        };
+        $body = endpoint_test_body([
+            'callRequestId' => '10101010-1010-4010-8010-101010101010',
+        ]);
+        $env = endpoint_test_env($directory) + [
+            'BITRIX_WEBHOOK' => 'https://bitrix.example/rest/1/server-secret/',
+        ];
+        $result = llamada_resultado_production_http(
+            'POST',
+            $body,
+            endpoint_test_headers($body, $now),
+            $env,
+            $now,
+            $transport
+        );
+        test_same(200, $result['status'] ?? null, 'production webhook result status');
+        test_same('processed', $result['body']['status'] ?? null, 'production webhook result processed');
+        test_same(
+            'https://bitrix.example/rest/1/server-secret/crm.deal.get.json',
+            $requestedUrls[0] ?? null,
+            'production result reads Bitrix through the configured server webhook'
+        );
+    } finally {
+        endpoint_test_cleanup($directory);
+    }
+}
+
 $directory = endpoint_test_dir();
 try {
     $fake = new EndpointFakeBitrix();

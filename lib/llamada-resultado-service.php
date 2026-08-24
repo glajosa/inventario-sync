@@ -419,7 +419,8 @@ function llamada_telefono_pertenece_contexto(
 
     foreach ($sources as $candidate) {
         try {
-            if (llamada_normalizar_telefono($candidate) === $selectedPhone) return true;
+            if (ltrim(llamada_normalizar_telefono($candidate), '+')
+                === ltrim($selectedPhone, '+')) return true;
         } catch (LlamadaValidationError) {
             continue;
         }
