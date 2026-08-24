@@ -700,7 +700,20 @@
           "H": "EDIFICIOS G H",
           "I": "EDIFICIO I",
           "J": "EDIFICIO J"
-        }
+        },
+        "parqueos_edificio": {
+          "B": 1,
+          "C": 1,
+          "D": 1,
+          "E": 1,
+          "A": 1,
+          "F": 1,
+          "G": 2,
+          "H": 2,
+          "I": 1,
+          "J": 1
+        },
+        "parqueos_defecto": 1
       }
     }
   }

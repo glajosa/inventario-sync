@@ -106,6 +106,17 @@ if ($DER) {
         $ed = count($eds) === 1 ? (string)array_key_first($eds) : '';
         $grupos[$k]['nombre'] = trim($cat . ($cara !== '' ? ' ' . $cara : '')
                                           . ($ed !== '' ? ' · ' . $ed : ''));
+        // Parqueos por edificio: G y H llevan 2 por ser de 3 dormitorios. Sale del
+        // bloque `parqueos` del archivo del director.
+        if ($grupos[$k]['parq'] === null && !empty($DER['parqueos_edificio'])) {
+            $pq = [];
+            foreach ($g['cods'] as $cod)
+                if (preg_match('/^([A-Z])-/', $cod, $mp))
+                    $pq[(int)($DER['parqueos_edificio'][$mp[1]] ?? $DER['parqueos_defecto'] ?? 1)] = true;
+            // Si el grupo mezcla edificios con distinto parqueo se toma el MENOR: no
+            // se le promete al cliente un parqueo que su unidad puede no traer.
+            if ($pq) $grupos[$k]['parq'] = min(array_keys($pq));
+        }
         $grupos[$k]['zona']   = $cara;
         if ($grupos[$k]['sing'] === '') $grupos[$k]['sing'] = (string)($DER['singular'] ?? '');
     }
