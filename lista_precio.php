@@ -92,7 +92,10 @@ if ($DER) {
         }
         // Si el grupo mezcla categorias o caras se deja el nombre generico: inventar
         // uno seria prometerle al cliente una ubicacion que no todas tienen.
-        $cat  = count($cats) === 1 ? (string)array_key_first($cats) : (string)($DER['mezcla'] ?? '');
+        // $nomCat y no $cat: $cat es la CATEGORIA del proyecto y viene de lista.php.
+        // Pisarla aca rompio las tres familias que derivan el nombre —
+        // lst_logo() recibia el texto de la tipologia en vez del numero.
+        $nomCat = count($cats) === 1 ? (string)array_key_first($cats) : (string)($DER['mezcla'] ?? '');
         $cara = count($caras) === 1 ? (string)array_key_first($caras) : '';
         // El EDIFICIO entra al nombre cuando la familia va en una sola tabla y el
         // precio cambia por edificio: sin eso, en Apartments el vendedor lee
@@ -104,7 +107,7 @@ if ($DER) {
                     $eds[(string)($DER['grupos_edificio'][$me[1]] ?? $me[1])] = true;
         }
         $ed = count($eds) === 1 ? (string)array_key_first($eds) : '';
-        $grupos[$k]['nombre'] = trim($cat . ($cara !== '' ? ' ' . $cara : '')
+        $grupos[$k]['nombre'] = trim($nomCat . ($cara !== '' ? ' ' . $cara : '')
                                           . ($ed !== '' ? ' · ' . $ed : ''));
         // Parqueos por edificio: G y H llevan 2 por ser de 3 dormitorios. Sale del
         // bloque `parqueos` del archivo del director.
@@ -235,7 +238,7 @@ foreach ($grupos as $g) if (!empty($g['union']) && $g['cods'] === ['', '']) $nUn
   <div class="cab">
     <?php /* Dos logos, como las listas de la direccion: el de Galjosa y el del
              PROYECTO. Sin el propio el documento parece de otra empresa. */
-          $lg = lst_logo($cat, $L); ?>
+          $lg = lst_logo((int)$cat, $L); ?>
     <img class="logo" src="assets/logo_galjosa_transparente.png"
          alt="Galjosa" onerror="this.style.display='none'">
     <?php if ($lg): ?>
