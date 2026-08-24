@@ -2,8 +2,8 @@ FROM php:8.2-apache
 
 # curl para hablar con Bitrix
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libcurl4-openssl-dev \
- && docker-php-ext-install curl \
+ && apt-get install -y --no-install-recommends libcurl4-openssl-dev libsqlite3-dev \
+ && docker-php-ext-install curl pdo_sqlite \
  && rm -rf /var/lib/apt/lists/*
 
 # volumen persistente para allowlist.json + sync.log (montar en EasyPanel como /data)
@@ -11,7 +11,12 @@ RUN mkdir -p /data && chmod 777 /data
 
 # código de la app
 COPY . /var/www/html/
-RUN rm -f /var/www/html/Dockerfile /var/www/html/README.md
+COPY apache-tests-deny.conf /etc/apache2/conf-available/tests-deny.conf
+RUN test ! -e /var/www/html/.git \
+ && test ! -e /var/www/html/app_auth.json \
+ && ! find /var/www/html -type f \( -name '*.bak' -o -name '*.bak-*' -o -name '*.pre-*' -o -name '*.orig' -o -name '*.rej' -o -name '*.pem' -o -name '*.key' \) -print -quit | grep -q . \
+ && a2enconf tests-deny \
+ && rm -f /var/www/html/Dockerfile /var/www/html/README.md /var/www/html/apache-tests-deny.conf
 
 # crons (cargan env desde /data/env.sh que escribe entrypoint):
 #  - reconcile cada 15 min (~5 llamadas): red de seguridad, re-sincroniza parentId2.
@@ -38,7 +43,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends cron && rm -rf 
 
 # arrancar cron + apache
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh \
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh \
+ && chmod +x /usr/local/bin/entrypoint.sh \
  && rm -f /var/www/html/entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
