@@ -511,7 +511,7 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
   //   ⑤ contestó             → +3 días, salvo que el cliente pacte fecha
   //   ⑥ volvió a dejar su número → SALE de la escalera y vuelve al ①
   //
-  // El ⑥ es el que faltaba hasta el 20-ago. El cliente que vuelve a llenar el
+  // El ⑥ es el que faltaba hasta el 22-ago. El cliente que vuelve a llenar el
   // formulario es un lead caliente: la escalera arranca de nuevo y la próxima
   // llamada es un primer contacto, no un mantenimiento a 99 días. Lo que NO se
   // reinicia es la nota del asesor — esa es del asesor y las obligaciones
@@ -585,7 +585,7 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
    * asesor -"la nota del asesor es del asesor"- pero eso lo lleva el motor.)
    *
    * ESTO TIENE QUE DECIR LO MISMO QUE protocolo_de() DEL MOTOR.
-   * Hasta el 20-ago no miraba el reingreso: agendaba la proxima llamada a +99
+   * Hasta el 22-ago no miraba el reingreso: agendaba la proxima llamada a +99
    * dias cuando reglas_de() la media contra el techo de 2, o sea que el
    * vendedor perdia los 10 puntos de la obligacion POR OBEDECER AL PANEL.
    * Medido sobre los 399 reingresos reales mas recientes: 136 (34%) con el
@@ -662,7 +662,7 @@ $FERIADOS_JS = json_encode(fer_lista((int)date('Y'), (int)date('Y') + 2));
       // CUANDO VOLVIO A DEJAR SU NUMERO. Cada entrada a RECONTACTAR es un
       // reingreso; la mas nueva manda, asi que ID DESC y se toma la primera.
       // Va en el MISMO batch: un comando mas, cero viajes mas.
-      // (Verificado el 20-ago: crm.stagehistory.list acepta OWNER_ID y
+      // (Verificado el 22-ago: crm.stagehistory.list acepta OWNER_ID y
       //  STAGE_ID juntos y no devuelve filas de otros deals ni de otras etapas.)
       reing: ['crm.stagehistory.list', {
         entityTypeId: 2,
