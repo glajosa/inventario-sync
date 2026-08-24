@@ -599,7 +599,7 @@
       "No se reinventa: el equipo comercial reconoce este documento y el cliente ya lo vio asi."
     ],
     "1793": {
-      "forma": "tipologia",
+      "forma": "precio",
       "titulo": "NORAL APARTMENTS",
       "subtitulo": "40% de Entrada a 44 Meses",
       "grupos": [
@@ -615,29 +615,10 @@
         "PA",
         "4P"
       ],
-      "orden": [
-        "M",
-        "E1",
-        "E2",
-        "E3"
-      ],
       "encabezado_cat": "ESQUINERO/<br>MEDIANERO",
-      "nombre": {
-        "M": "MEDIANEROS",
-        "E1": "ESQUINEROS",
-        "E2": "ESQUINEROS 2",
-        "E3": "ESQUINERO 3"
-      },
-      "lado": {},
-      "parqueos": {
-        "E3": 1,
-        "E2": 1,
-        "E1": 1,
-        "M": 1
-      },
       "pie": {
         "rotulo": "NORAL APARTMENTS",
-        "medidas": "75 - 85,15m2"
+        "medidas": "65 - 75 - 85,15 - 106 - 118m2"
       },
       "financiamiento": {
         "separa": 1000,
@@ -647,67 +628,80 @@
         "contra_pct": 60,
         "fecha_entrega": "2030-04",
         "vigencia_horas": 48,
-        "_nota": "Todo del archivo del director (noral_precios.json). El PLAZO no se escribe: se deriva de fecha_entrega, y las extraordinarias son ceil(meses/12). Hoy da 44 meses y 4."
+        "_nota": "Del archivo del director. Plazo derivado de fecha_entrega (2030-04): hoy 44 meses y 4 extraordinarias."
       },
-      "columna_patio_m2": true,
-      "nivel_patio": "PB",
-      "una_tabla_por_edificio": true,
-      "excluir_edificios": [
-        "J"
-      ],
       "_nota_edificios": "Nueve tablas, una por edificio A..I, como la lista de la direccion. J queda fuera: se ve en la matriz pero no se escribe ni se ofrece.",
       "badge_uno": "ÚLTIMA UNIDAD",
       "badge_dos": "2 ÚLTIMAS DISPONIBLES",
-      "nombre_por_grupo": {
-        "GH": {
-          "M": "3 DORM",
-          "E1": "3 DORM",
-          "E2": "3 DORM",
-          "E3": "3 DORM"
-        }
-      },
       "_nota_gh": "G y H son los unicos de 3 dormitorios (106 y 118 m2) y la direccion los rotula '3 DORM' en vez de esquinero/medianero.",
-      "origen_metraje": "config",
-      "etiqueta_nivel": {
-        "PB": "PB",
-        "PA": "PLANTA",
-        "4P": "4TO"
-      },
-      "nombre_por_nivel": {
-        "PB": {
-          "M": "MEDIANEROS",
-          "E1": "ESQUINEROS",
-          "E2": "ESQUINEROS 2",
-          "E3": "ESQUINERO 3"
-        },
-        "PA": {
-          "M": "MEDIANEROS",
-          "E1": "ESQUINEROS",
-          "E2": "ESQUINEROS 2",
-          "E3": "ESQUINEROS 3"
-        },
-        "4P": {
-          "M": "4TO PISO MED",
-          "E1": "4TO PISO ESQ 1",
-          "E2": "4TO PISO ESQ 2",
-          "E3": "4TO PISO ESQ 3"
-        }
-      },
       "parqueos_por_grupo": {
         "GH": 2
       },
       "parqueos_default": 1,
       "parqueos_combo": 2,
-      "combo": {
-        "rotulo_por_nivel": {
-          "PB": "DESDE",
-          "PA": "3 DORM",
-          "4P": "3 DORM"
+      "columna_parqueos": true,
+      "_una_tabla_nota": "UNA sola tabla, no nueve: lo pide la spec del director del 24-ago. Como el precio cambia por edificio, el EDIFICIO va en el nombre de cada fila; si no, el vendedor no sabe de cual es.",
+      "bloques": [
+        {
+          "id": "PB",
+          "etiqueta": "PB",
+          "pisos": [
+            1
+          ]
         },
-        "_nota": "El precio de la fila DESDE sale del par contiguo DISPONIBLE mas barato, calculado al abrir. La tabla `combos` del director queda como referencia del metraje: su valor de precio envejece — decia $306.750 (dos medianeros) cuando hoy no hay dos medianeros contiguos libres.",
-        "mostrar_par": true
-      },
-      "mostrar_par": true
+        {
+          "id": "PA",
+          "etiqueta": "Planta",
+          "pisos": [
+            2,
+            3
+          ]
+        },
+        {
+          "id": "4P",
+          "etiqueta": "4to",
+          "pisos": [
+            4
+          ]
+        }
+      ],
+      "tipologias": {},
+      "derivar_nombre": {
+        "singular": "DEPARTAMENTO",
+        "mezcla": "DEPARTAMENTOS",
+        "categoria_por_defecto": "MEDIANEROS",
+        "categorias": {
+          "ESQUINEROS 3": [
+            1
+          ],
+          "ESQUINEROS 2": [
+            8
+          ],
+          "ESQUINEROS": [
+            4,
+            5
+          ],
+          "MEDIANEROS": [
+            2,
+            3,
+            6,
+            7
+          ]
+        },
+        "caras": {},
+        "grupos_edificio": {
+          "B": "EDIFICIOS B C D E",
+          "C": "EDIFICIOS B C D E",
+          "D": "EDIFICIOS B C D E",
+          "E": "EDIFICIOS B C D E",
+          "A": "EDIFICIO A",
+          "F": "EDIFICIO F",
+          "G": "EDIFICIOS G H",
+          "H": "EDIFICIOS G H",
+          "I": "EDIFICIO I",
+          "J": "EDIFICIO J"
+        }
+      }
     }
   }
 }

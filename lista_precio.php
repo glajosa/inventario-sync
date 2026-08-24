@@ -94,7 +94,18 @@ if ($DER) {
         // uno seria prometerle al cliente una ubicacion que no todas tienen.
         $cat  = count($cats) === 1 ? (string)array_key_first($cats) : (string)($DER['mezcla'] ?? '');
         $cara = count($caras) === 1 ? (string)array_key_first($caras) : '';
-        $grupos[$k]['nombre'] = trim($cat . ($cara !== '' ? ' ' . $cara : ''));
+        // El EDIFICIO entra al nombre cuando la familia va en una sola tabla y el
+        // precio cambia por edificio: sin eso, en Apartments el vendedor lee
+        // "MEDIANEROS 75 m2 $150.875" y no sabe de cual de los diez edificios es.
+        $eds = [];
+        if (!empty($DER['grupos_edificio'])) {
+            foreach ($g['cods'] as $cod)
+                if (preg_match('/^([A-Z])-/', $cod, $me))
+                    $eds[(string)($DER['grupos_edificio'][$me[1]] ?? $me[1])] = true;
+        }
+        $ed = count($eds) === 1 ? (string)array_key_first($eds) : '';
+        $grupos[$k]['nombre'] = trim($cat . ($cara !== '' ? ' ' . $cara : '')
+                                          . ($ed !== '' ? ' · ' . $ed : ''));
         $grupos[$k]['zona']   = $cara;
         if ($grupos[$k]['sing'] === '') $grupos[$k]['sing'] = (string)($DER['singular'] ?? '');
     }
