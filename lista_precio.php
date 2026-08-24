@@ -233,8 +233,15 @@ foreach ($grupos as $g) if (!empty($g['union']) && $g['cods'] === ['', '']) $nUn
 ?>
 <section class="hoja">
   <div class="cab">
+    <?php /* Dos logos, como las listas de la direccion: el de Galjosa y el del
+             PROYECTO. Sin el propio el documento parece de otra empresa. */
+          $lg = lst_logo($cat, $L); ?>
     <img class="logo" src="assets/logo_galjosa_transparente.png"
-         alt="<?= lh($proyecto) ?>" onerror="this.style.display='none'">
+         alt="Galjosa" onerror="this.style.display='none'">
+    <?php if ($lg): ?>
+      <img class="logo logo-proy" src="<?= lh($lg[0]) ?>"
+           alt="<?= lh($lg[1] !== '' ? $lg[1] : $proyecto) ?>" onerror="this.style.display='none'">
+    <?php endif; ?>
     <div class="tit">
       <table><tr><th class="titulo"><?= lh((string)($L['titulo'] ?? strtoupper($proyecto))) ?></th></tr>
              <tr><th class="sub"><?= lh((string)($L['subtitulo'] ?? '')) ?></th></tr></table>

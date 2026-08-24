@@ -67,6 +67,34 @@ function lst_familias(array $unidades, int $cat): array {
 }
 
 /**
+ * El LOGO del proyecto, por categoria del SPA.
+ *
+ * Las listas del director llevan siempre dos: el de Galjosa y el del PROYECTO —el de
+ * Galero en Torre C, D, Suites y Casas; el de Noral Plaza en sus tres familias; el de
+ * Sun Bay en los solares—. Sin el logo propio el documento parece de otra empresa, y
+ * es lo primero que ve el cliente.
+ *
+ * Una familia puede pisarlo con `logo` en su bloque de lista; si no, manda este mapa.
+ * Un proyecto sin logo propio devuelve null y solo sale el de Galjosa: es preferible
+ * a poner uno que no le corresponde.
+ */
+const LST_LOGOS = [
+    33 => ['assets/logo_noral_plaza.png',      'Noral Plaza'],
+    39 => ['assets/logo_noral_apartments.png', 'Noral Apartments'],
+    47 => ['assets/logo_galero.png',           'Galero'],
+    49 => ['assets/logo_sunbay.png',           'Sun Bay Engabao'],
+    51 => ['assets/logo_galero.png',           'Galero'],
+    53 => ['assets/logo_galero.png',           'Galero'],
+    55 => ['assets/logo_galero.png',           'Galero'],
+];
+
+/** @return array{0:string,1:string}|null  [ruta, alt] del logo del proyecto */
+function lst_logo(int $cat, array $L): ?array {
+    if (!empty($L['logo'])) return [(string)$L['logo'], (string)($L['logo_alt'] ?? '')];
+    return LST_LOGOS[$cat] ?? null;
+}
+
+/**
  * Meses de plazo y numero de extraordinarias, DERIVADOS de la fecha de entrega.
  *
  * Lo dice el propio archivo de la direccion: "EL PLAZO NO SE GUARDA: se calcula como

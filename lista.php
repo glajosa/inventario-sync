@@ -79,7 +79,11 @@ $hoy = new DateTimeImmutable('now');
   .hoja{background:#fff;padding:20px 26px 26px;margin:0 auto;max-width:1120px;
         box-shadow:0 1px 5px rgba(0,0,0,.16)}
   .cab{display:flex;align-items:center;gap:20px;margin-bottom:6px}
-  .cab .logo{height:60px;width:auto}
+  /* Dos logos: el de Galjosa y el del proyecto, separados por una linea fina como en
+     las listas de la direccion. El del proyecto va un poco mas alto porque son
+     marcas con mas texto y a la misma altura se leen mas chicas. */
+  .cab .logo{height:52px;width:auto}
+  .cab .logo-proy{height:60px;padding-left:18px;margin-left:2px;border-left:1px solid #d7d7d2}
   .cab .tit{flex:1}
   .wrap{display:flex;gap:0;align-items:stretch}
   .wrap .lat{background:#3b5323;color:#fff;writing-mode:vertical-rl;transform:rotate(180deg);
@@ -267,8 +271,15 @@ $hoy = new DateTimeImmutable('now');
               : strtoupper((string)($cfg['grupos'][$hoja['grupo']]['etiqueta'] ?? ('EDIFICIO ' . $hoja['grupo'])))); ?>
 <section class="hoja">
   <div class="cab">
+    <?php /* Dos logos, como las listas de la direccion: el de Galjosa y el del
+             PROYECTO. Sin el propio el documento parece de otra empresa. */
+          $lg = lst_logo($cat, $L); ?>
     <img class="logo" src="assets/logo_galjosa_transparente.png"
-         alt="<?= lh($proyecto) ?>" onerror="this.style.display='none'">
+         alt="Galjosa" onerror="this.style.display='none'">
+    <?php if ($lg): ?>
+      <img class="logo logo-proy" src="<?= lh($lg[0]) ?>"
+           alt="<?= lh($lg[1] !== '' ? $lg[1] : $proyecto) ?>" onerror="this.style.display='none'">
+    <?php endif; ?>
     <div class="tit">
       <table><tr><th class="titulo"><?= lh($tit) ?></th></tr>
              <tr><th class="sub"><?= lh((string)($L['subtitulo'] ?? '')) ?></th></tr></table>
