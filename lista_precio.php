@@ -66,6 +66,115 @@ foreach ($unidades as $u => $d) {
 foreach ($grupos as &$g) natsort($g['cods']);
 unset($g);
 
+// ── nombre DERIVADO, cuando la familia no lista precio por precio ───────────
+// Los monoambientes cambian de precio seguido y mantener una tabla de 9 llaves
+// `precio|m2` a mano se desactualiza sola. Si la familia declara el mapa de
+// posiciones, el nombre se arma de las unidades del grupo: su categoria y su cara.
+$DER = $L['derivar_nombre'] ?? null;
+if ($DER) {
+    $catDe = function (int $pos) use ($DER): string {
+        foreach ((array)($DER['categorias'] ?? []) as $nom => $poss)
+            if (in_array($pos, (array)$poss, true)) return (string)$nom;
+        return (string)($DER['categoria_por_defecto'] ?? '');
+    };
+    $caraDe = function (int $pos) use ($DER): string {
+        foreach ((array)($DER['caras'] ?? []) as $nom => $r)
+            if ($pos >= (int)$r[0] && $pos <= (int)$r[1]) return (string)$nom;
+        return '';
+    };
+    foreach ($grupos as $k => $g) {
+        if ($g['nombre'] !== '') continue;
+        $cats = []; $caras = [];
+        foreach ($g['cods'] as $cod) {
+            if (!preg_match('/^[A-Z]-\d+-(\d+)$/', $cod, $mm)) continue;
+            $cats[$catDe((int)$mm[1])] = true;
+            $caras[$caraDe((int)$mm[1])] = true;
+        }
+        // Si el grupo mezcla categorias o caras se deja el nombre generico: inventar
+        // uno seria prometerle al cliente una ubicacion que no todas tienen.
+        $cat  = count($cats) === 1 ? (string)array_key_first($cats) : (string)($DER['mezcla'] ?? '');
+        $cara = count($caras) === 1 ? (string)array_key_first($caras) : '';
+        $grupos[$k]['nombre'] = trim($cat . ($cara !== '' ? ' ' . $cara : ''));
+        $grupos[$k]['zona']   = $cara;
+        if ($grupos[$k]['sing'] === '') $grupos[$k]['sing'] = (string)($DER['singular'] ?? '');
+    }
+}
+
+// ── filas de UNIDADES UNIDAS ────────────────────────────────────────────────
+// Dos o tres monoambientes contiguos se venden como un departamento de 2 o 3
+// dormitorios. Precio = suma de los PVP menos $20.000, UNA sola vez: al unirse
+// viene un parqueo menos, y con tres unidades vienen dos parqueos, asi que
+// tambien se resta una vez. Regla del director.
+//
+// Se muestra la combinacion MAS BARATA de cada tamaño y cara, que es lo que hace
+// la lista: es un "desde", y prometer una union que hoy no se puede armar seria
+// vender algo que no existe.
+$UN = $L['uniones'] ?? null;
+if ($UN) {
+    $libres = [];   // [edificio][piso][pos] = unidad
+    foreach ($unidades as $u => $d) {
+        if (($d['etapa'] ?? '') !== 'DISPONIBLE') continue;
+        if ((int)($d['tipo'] ?? 0) !== $fam) continue;
+        $pvp = (float)($d['pvp'] ?? 0);
+        if ($pvp <= 0) continue;
+        [$ed, $piso, $pos] = array_pad(explode('-', $u), 3, '0');
+        $libres[$ed][(int)$piso][(int)$pos] = [
+            'pvp' => $pvp,
+            'm2'  => (float)str_replace(',', '.', (string)($d['m2'] ?? 0)),
+        ];
+    }
+    $caraDeU = function (int $pos) use ($UN): ?string {
+        foreach ((array)($UN['caras'] ?? []) as $nom => $r)
+            if ($pos >= (int)$r[0] && $pos <= (int)$r[1]) return (string)$nom;
+        return null;
+    };
+    $prohibido = function (int $a, int $b) use ($UN): bool {
+        foreach ((array)($UN['prohibidos'] ?? []) as $par)
+            if ((int)$par[0] === $a && (int)$par[1] === $b) return true;
+        return false;
+    };
+    $excl = array_map('intval', (array)($UN['excluir_posiciones'] ?? []));
+    $mejores = [];
+    foreach ((array)($UN['tamanos'] ?? []) as $t) {
+        $n = (int)($t['n'] ?? 0);
+        if ($n < 2) continue;
+        foreach ($libres as $ed => $porPiso) {
+            foreach ($porPiso as $piso => $m) {
+                foreach (array_keys($m) as $pos) {
+                    $ok = true; $suma = 0.0; $m2 = 0.0; $cara = $caraDeU($pos);
+                    if ($cara === null || in_array($pos, $excl, true)) continue;
+                    for ($i = 0; $i < $n; $i++) {
+                        $q = $pos + $i;
+                        if (!isset($m[$q]) || in_array($q, $excl, true)
+                            || $caraDeU($q) !== $cara
+                            || ($i > 0 && $prohibido($q - 1, $q))) { $ok = false; break; }
+                        $suma += $m[$q]['pvp']; $m2 += $m[$q]['m2'];
+                    }
+                    if (!$ok) continue;
+                    $precio = $suma - (float)($UN['descuento'] ?? 20000);
+                    $k = $n . '|' . $cara;
+                    if (!isset($mejores[$k]) || $precio < $mejores[$k]['precio'])
+                        $mejores[$k] = ['precio' => $precio, 'm2' => $m2, 'n' => $n,
+                                        'cara' => $cara, 'parq' => (int)($t['parqueos'] ?? 1),
+                                        'nombre' => str_replace('{cara}', $cara, (string)($t['nombre'] ?? ''))];
+                }
+            }
+        }
+    }
+    // Van al final del bloque que declare la familia, como en la lista original.
+    $blqU = (string)($UN['bloque'] ?? array_key_first($porBloque ?: ['' => null]));
+    foreach ($mejores as $mj) {
+        $grupos['UNION|' . $mj['n'] . '|' . $mj['cara']] = [
+            'bloque' => $blqU, 'precio' => $mj['precio'], 'm2' => $mj['m2'],
+            'nombre' => $mj['nombre'], 'sing' => '', 'zona' => $mj['cara'],
+            'parq' => $mj['parq'], 'union' => true,
+            // Sin codigos: una union no es una unidad, es una combinacion. Asi
+            // tampoco recibe etiqueta de escasez, que no tendria sentido.
+            'cods' => ['', ''],
+        ];
+    }
+}
+
 // ── ordenar: bloque, después el LINEAL antes que el resto, después precio ────
 // Es el orden del fixture: en el 1er piso van 94.500 · 124.300 · 229.181 (lineal) y
 // recién ahí 101.900 · 111.000 · 136.500 · 237.767 (central). No es precio ascendente
@@ -75,6 +184,10 @@ uasort($grupos, function ($a, $b) use ($ordenBloque) {
     $ba = $ordenBloque[$a['bloque']] ?? 99;
     $bb = $ordenBloque[$b['bloque']] ?? 99;
     if ($ba !== $bb) return $ba <=> $bb;
+    // Las uniones van al final del bloque: son la opcion grande, no el piso de precio.
+    $ua = !empty($a['union']) ? 1 : 0;
+    $ub = !empty($b['union']) ? 1 : 0;
+    if ($ua !== $ub) return $ua <=> $ub;
     $za = $a['zona'] === 'LINEAL' ? 0 : 1;
     $zb = $b['zona'] === 'LINEAL' ? 0 : 1;
     if ($za !== $zb) return $za <=> $zb;
@@ -122,11 +235,13 @@ foreach ($grupos as $g) $totDisp += count($g['cods']);
               // Con UNA disponible la fila se nombra con el codigo real, no con la
               // tipologia: "LOCAL A-1-12", "RESTAURANTE C-7". Lo pide la spec y es lo
               // que hace la presion de escasez concreta.
+              if (!empty($g['union'])) $n = 99;   // no es una unidad: no aplica escasez
               $texto = $n === 1 && $g['sing'] !== ''
                      ? trim($g['sing'] . ' ' . $g['cods'][array_key_first($g['cods'])])
                      : ($n === 1 ? $g['cods'][array_key_first($g['cods'])] : $g['nombre']);
-              $ult = $n === 1 ? (string)($L['badge_uno'] ?? 'ÚLTIMA UNIDAD')
-                   : ($n === 2 ? (string)($L['badge_dos'] ?? '2 ÚLTIMAS DISPONIBLES') : ''); ?>
+              $ult = !empty($g['union']) ? ''
+                   : ($n === 1 ? (string)($L['badge_uno'] ?? 'ÚLTIMA UNIDAD')
+                   : ($n === 2 ? (string)($L['badge_dos'] ?? '2 ÚLTIMAS DISPONIBLES') : '')); ?>
           <tr>
             <?php if ($primera): $primera = false; ?>
               <td class="niv <?= $clsNiv ?>" rowspan="<?= count($filas) ?>"><span><?= lh(strtoupper($etBloque[$blq] ?? $blq)) ?></span></td>

@@ -1373,57 +1373,138 @@
       }
     },
     "1793": {
-      "forma": "tipologia",
-      "titulo": "EDIFICIOS D - E - F  (monoambientes)",
-      "subtitulo": "40% de Entrada a 54 Meses",
-      "grupos": [
-        "D",
-        "E",
-        "F"
+      "forma": "precio",
+      "titulo": "MONOAMBIENTES — EDIFICIOS E &amp; F",
+      "subtitulo": "40% de Entrada",
+      "encabezado_cat": "UBICACI&Oacute;N",
+      "columna_parqueos": true,
+      "badge_uno": "ÚLTIMA UNIDAD",
+      "badge_dos": "2 ÚLTIMAS DISPONIBLES",
+      "_una_tabla_nota": "UNA sola tabla, no una por edificio: lo pide la spec del director — 'Monoambientes va como EDIFICIOS E & F, no partido en dos hojas'.",
+      "bloques": [
+        {
+          "id": "P2",
+          "etiqueta": "2do Piso",
+          "pisos": [
+            2
+          ]
+        },
+        {
+          "id": "P3",
+          "etiqueta": "3er Piso",
+          "pisos": [
+            3
+          ]
+        },
+        {
+          "id": "P4",
+          "etiqueta": "4to Piso",
+          "pisos": [
+            4
+          ]
+        }
       ],
-      "niveles": [
-        "P2",
-        "P3",
-        "P4"
+      "tipologias": {},
+      "_derivar_nota": [
+        "El nombre se arma de las posiciones de cada grupo en vez de una tabla",
+        "`precio|m2` a mano: los monoambientes cambian de precio seguido y una tabla fija",
+        "se desactualiza sola. Las posiciones salen del archivo del director."
       ],
-      "orden": [
-        "E3L",
-        "E2L",
-        "E1L",
-        "ML",
-        "E3C",
-        "E2C",
-        "E1C",
-        "MC",
-        "U25"
-      ],
-      "encabezado_cat": "ESQUINERO/<br>MEDIANERO &amp; VISTA",
-      "nombre": {
-        "E3L": "ESQUINERO EXTERNO - PARQUE LINEAL",
-        "E2L": "ESQUINERO EXTERNO 2 - PARQUE LINEAL",
-        "E1L": "ESQUINERO INTERNO - PARQUE LINEAL",
-        "ML": "MEDIANERO - PARQUE LINEAL",
-        "E3C": "ESQUINERO EXTERNO - PARQUE CENTRAL",
-        "E2C": "ESQUINERO EXTERNO 2 - PARQUE CENTRAL",
-        "E1C": "ESQUINERO INTERNO - PARQUE CENTRAL",
-        "MC": "MEDIANERO - PARQUE CENTRAL",
-        "U25": "UNIDAD DEL VACIO CENTRAL"
+      "derivar_nombre": {
+        "singular": "MONOAMBIENTE",
+        "mezcla": "MONOAMBIENTES",
+        "categoria_por_defecto": "MEDIANEROS",
+        "categorias": {
+          "ESQUINEROS 3": [
+            1,
+            13
+          ],
+          "ESQUINEROS 2": [
+            12,
+            24
+          ],
+          "ESQUINEROS": [
+            6,
+            7,
+            18,
+            19
+          ],
+          "MEDIANEROS": [
+            2,
+            3,
+            4,
+            5,
+            8,
+            9,
+            10,
+            11,
+            14,
+            15,
+            16,
+            17,
+            20,
+            21,
+            22,
+            23
+          ],
+          "UNIDAD CENTRAL": [
+            25
+          ]
+        },
+        "caras": {
+          "PARQUE CENTRAL": [
+            1,
+            12
+          ],
+          "PARQUE LINEAL": [
+            13,
+            24
+          ]
+        }
       },
-      "lado": {
-        "E3L": "lineal",
-        "E2L": "lineal",
-        "E1L": "lineal",
-        "ML": "lineal",
-        "E3C": "central",
-        "E2C": "central",
-        "E1C": "central",
-        "MC": "central",
-        "U25": ""
+      "uniones": {
+        "_nota": "Dos o tres contiguos = un departamento de 2 o 3 dormitorios. Precio = suma - 20.000, UNA sola vez: al unirse viene un parqueo menos, y con tres vienen dos parqueos, asi que tambien se resta una vez. Se muestra la combinacion MAS BARATA de cada tamaño y cara: es un 'desde'.",
+        "descuento": 20000,
+        "caras": {
+          "PARQUE CENTRAL": [
+            1,
+            12
+          ],
+          "PARQUE LINEAL": [
+            13,
+            24
+          ]
+        },
+        "prohibidos": [
+          [
+            6,
+            7
+          ],
+          [
+            18,
+            19
+          ]
+        ],
+        "excluir_posiciones": [
+          25
+        ],
+        "bloque": "P4",
+        "tamanos": [
+          {
+            "n": 2,
+            "nombre": "2 DORM. {cara}",
+            "parqueos": 1
+          },
+          {
+            "n": 3,
+            "nombre": "3 DORM. {cara}",
+            "parqueos": 2
+          }
+        ]
       },
-      "parqueos": {},
       "pie": {
-        "rotulo": "EDIFICIOS D - E - F",
-        "medidas": "31 - 32,5m2"
+        "rotulo": "EDIFICIOS E &amp; F",
+        "medidas": "31 - 32,5 - 35m2"
       },
       "financiamiento": {
         "separa": 1000,
@@ -1431,14 +1512,10 @@
         "cuotas_pct": 20,
         "extra_pct": 10,
         "contra_pct": 60,
-        "_nota": "El plazo NO se escribe: se deriva de fecha_entrega (2031-02), y las extraordinarias son ceil(meses/12). Hoy da 54 meses y 5, que es lo que dice la lista de la direccion.",
-        "fecha_entrega": "2031-02"
-      },
-      "una_tabla_por_grupo": true,
-      "_nota": "Una tabla por edificio, como la lista de Apartments de la direccion: D, E y F tienen precios distintos y juntarlos bajo el mismo rotulo de piso los mezclaba.",
-      "origen_metraje": "config",
-      "badge_uno": "ÚLTIMA DISPONIBLE",
-      "badge_dos": "2 ÚLTIMAS DISPONIBLES"
+        "fecha_entrega": "2031-02",
+        "vigencia_horas": 48,
+        "_nota": "Del archivo del director. Plazo derivado de fecha_entrega (2031-02)."
+      }
     },
     "1791": {
       "forma": "precio",
