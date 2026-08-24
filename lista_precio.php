@@ -301,5 +301,5 @@ foreach ($grupos as $g) if (!empty($g['union']) && $g['cods'] === ['', '']) $nUn
     <?= (int)($fin['vigencia_horas'] ?? 48) ?> HRS NATURALES</div>
   <div class="meta">Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo ·
     <?= count($grupos) - $nUnion ?> tipologías · <?= $totDisp ?> disponibles<?php
-      if ($nUnion) echo ' · ' . $nUnion . ' opción' . ($nUnion > 1 ? 'es' : '') . ' de unidades unidas'; ?></div>
+      if ($nUnion) echo ' · ' . $nUnion . ($nUnion > 1 ? ' opciones' : ' opción') . ' de unidades unidas'; ?></div>
 </section>
