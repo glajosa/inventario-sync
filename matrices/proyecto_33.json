@@ -1396,7 +1396,9 @@
       },
       "union_fuerte": true,
       "pie2": "EDIFICIO A - B - C",
-      "sin_vigencia": false
+      "sin_vigencia": false,
+      "pie2_lista": true,
+      "_pie_nota": "El documento de Oficinas LISTA los metrajes (50 - 58 - 100m2); el de Departamentos da el rango. Se calcula de las filas: si entra un metraje nuevo aparece solo."
     },
     "1793": {
       "forma": "precio",

@@ -434,8 +434,19 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
       foreach ($grupos as $g) if ($g['m2'] > 0) $mm[] = (float)$g['m2'];
       $fmt = fn($v) => rtrim(rtrim(number_format($v, 2, ',', ''), '0'), ',');
     ?>
-    <div class="pie2"><b><?= lh((string)$L['pie2']) ?></b><span><?= $mm
-        ? lh($fmt(min($mm)) . 'm2 hasta ' . $fmt(max($mm)) . 'm2') : '' ?></span></div>
+    <?php /* Las medidas del pie: cada documento las escribe distinto. Oficinas lista
+             los metrajes ("50 - 58 - 100m2") y Departamentos da el rango ("31m2 hasta
+             94.5m2"). Si la familia declara `pie2_medidas` manda lo suyo; si no, se
+             calcula el rango de las filas, que se ajusta solo. */ ?>
+    <div class="pie2"><b><?= lh((string)$L['pie2']) ?></b><span><?php
+        if (!empty($L['pie2_medidas'])) {
+            echo lh((string)$L['pie2_medidas']);
+        } elseif ($L['pie2_medidas'] ?? null === 'lista' || ($L['pie2_lista'] ?? false)) {
+            $u = array_values(array_unique($mm)); sort($u);
+            echo lh(implode(' - ', array_map($fmt, $u)) . 'm2');
+        } elseif ($mm) {
+            echo lh($fmt(min($mm)) . 'm2 hasta ' . $fmt(max($mm)) . 'm2');
+        } ?></span></div>
   <?php endif; ?>
   <?php if (!empty($L['notas'])): ?>
     <div class="notas"><?php foreach ((array)$L['notas'] as $nt): ?><p><?= $nt ?></p><?php endforeach; ?></div>
