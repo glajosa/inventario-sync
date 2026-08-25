@@ -163,6 +163,22 @@ function bot_recommendation_validate_response(array $response): void {
             || !is_numeric($pvp) || (float)$pvp <= 0 || ($option['currency'] ?? '') !== 'USD') {
             throw new InvalidArgumentException('invalid_option');
         }
+        $attributes = $option['attributes'] ?? [];
+        if (!is_array($attributes) || array_diff(array_keys($attributes), ['position','tower','floor','view','bedrooms'])) {
+            throw new InvalidArgumentException('invalid_option_attributes');
+        }
+        foreach (['position','tower','floor','view'] as $attribute) {
+            if (!array_key_exists($attribute, $attributes)) continue;
+            if (!is_string($attributes[$attribute]) || bot_nullable_string($attributes[$attribute], 80) === null) {
+                throw new InvalidArgumentException('invalid_option_attributes');
+            }
+        }
+        if (array_key_exists('bedrooms', $attributes)) {
+            $bedrooms = $attributes['bedrooms'];
+            if (!is_int($bedrooms) || $bedrooms < 0 || $bedrooms > 20) {
+                throw new InvalidArgumentException('invalid_option_attributes');
+            }
+        }
         $seen[$code] = true;
     }
 }

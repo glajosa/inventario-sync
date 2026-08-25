@@ -45,6 +45,57 @@ function bot_project_matrix(array $profile): array {
     return $cache[$category] = (is_array($matrix) ? $matrix : []);
 }
 
+function bot_matrix_level_key(array $matrix, int $floor): ?string {
+    foreach (($matrix['niveles'] ?? []) as $key => $level) {
+        if (!is_array($level)) continue;
+        foreach (($level['pisos'] ?? []) as $candidateFloor) {
+            if ((int)$candidateFloor === $floor) return (string)$key;
+        }
+    }
+    return null;
+}
+
+function bot_matrix_position_category(array $matrix, array $parts): ?string {
+    $code = (string)($parts['matrix_code'] ?? '');
+    $override = $matrix['overrides_unidad'][$code]['categoria'] ?? null;
+    if (is_string($override) && trim($override) !== '') return trim($override);
+
+    $tower = (string)($parts['tower'] ?? '');
+    $position = (string)((int)($parts['position'] ?? 0));
+    $positions = $matrix['posiciones'][$tower] ?? null;
+    if (!is_array($positions)) return null;
+
+    $direct = $positions[$position] ?? null;
+    if (is_string($direct) && trim($direct) !== '') return trim($direct);
+
+    $levelKey = bot_matrix_level_key($matrix, (int)($parts['floor'] ?? 0));
+    if ($levelKey === null || !is_array($positions[$levelKey] ?? null)) return null;
+    $nested = $positions[$levelKey][$position] ?? null;
+    return is_string($nested) && trim($nested) !== '' ? trim($nested) : null;
+}
+
+function bot_unit_commercial_attributes(array $candidate, array $profile): array {
+    $parts = bot_unit_parts((string)($candidate['code'] ?? ''));
+    if ($parts === null) return [];
+    $matrix = bot_project_matrix($profile);
+    $categoryCode = bot_matrix_position_category($matrix, $parts);
+    $category = $categoryCode !== null ? ($matrix['categorias'][$categoryCode] ?? null) : null;
+
+    $attributes = [
+        'tower'=>(string)($candidate['tower'] ?? $parts['tower']),
+        'floor'=>(string)($candidate['floor'] ?? $parts['floor']),
+    ];
+    if (is_array($category)) {
+        $label = trim(strip_tags((string)($category['etiqueta'] ?? '')));
+        if ($label !== '') $attributes['position'] = $label;
+        $note = bot_contract_plain(strip_tags((string)($category['nota'] ?? '')));
+        if (preg_match('/(?:^| )(\d{1,2}) dormitorios?(?: |$)/D', $note, $m)) {
+            $attributes['bedrooms'] = (int)$m[1];
+        }
+    }
+    return array_filter($attributes, static fn(mixed $value): bool => $value !== '');
+}
+
 function bot_unit_is_commercially_released(array $unit, array $profile): bool {
     $parts = bot_unit_parts((string)($unit['codigo'] ?? ''));
     if ($parts === null) return false;

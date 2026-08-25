@@ -44,6 +44,9 @@ test_same(1, count($calls), 'validation stops after filling the requested maximu
 test_same(true, array_reduce($calls, fn(bool $ok, array $call): bool => $ok && $call[0] === 'crm.item.get', true), 'live validation is read only');
 test_same('2030-04', $validated['options'][0]['delivery']['date'], 'delivery is sourced from profile');
 test_same(44, $validated['options'][0]['standard_payment']['installment_months'], 'payment months derive from delivery date');
+test_same('A', $validated['options'][0]['attributes']['tower'] ?? null, 'final option includes the verified tower');
+test_same('1', $validated['options'][0]['attributes']['floor'] ?? null, 'final option includes the verified floor');
+test_same('Esquinero 3', $validated['options'][0]['attributes']['position'] ?? null, 'final option includes the official position label');
 
 $requestTwo = $request;
 $requestTwo['max_options'] = 2;

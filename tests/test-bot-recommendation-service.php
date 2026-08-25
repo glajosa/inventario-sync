@@ -62,3 +62,16 @@ test_same(3, count(array_unique(array_column($top['candidates'], 'tower'))), 'us
 test_same(true, isset($top['candidates'][0]['score']['components']), 'score is auditable');
 test_same(true, is_array($top['candidates'][0]['score']['reason_codes']), 'reasons are structured codes');
 
+$noralAttributes = bot_unit_commercial_attributes($top['candidates'][0], $profile);
+test_same('A', $noralAttributes['tower'] ?? null, 'commercial attributes expose the real tower');
+test_same('1', $noralAttributes['floor'] ?? null, 'commercial attributes expose the real floor');
+test_same('Esquinero 3', $noralAttributes['position'] ?? null, 'commercial attributes resolve the official position label');
+
+$galeroD = bot_commercial_profile('Galero Torre D');
+$galeroCandidate = [
+    'code'=>'D-2-2', 'tower'=>'D', 'floor'=>'2', 'position'=>2,
+];
+$galeroAttributes = bot_unit_commercial_attributes($galeroCandidate, $galeroD);
+test_same('Pos. 2 · Medianero', $galeroAttributes['position'] ?? null, 'position label is read from the project matrix');
+test_same(3, $galeroAttributes['bedrooms'] ?? null, 'explicit bedroom count is read from the official matrix');
+

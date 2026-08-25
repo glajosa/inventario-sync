@@ -97,6 +97,7 @@ function bot_live_candidate(
             'months'=>$delivery['months'] ?? null,
         ],
         'standard_payment'=>bot_standard_payment_exact($fresh['pvp'], $profile, $now),
+        'attributes'=>bot_unit_commercial_attributes($fresh, $profile),
         'fit'=>[
             'score'=>$fresh['score']['total'],
             'reason_codes'=>$fresh['score']['reason_codes'],

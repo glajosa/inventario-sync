@@ -68,3 +68,11 @@ test_throws(
     'response cannot expose more than three options'
 );
 
+$badAttributes = $fixture;
+$badAttributes['options'][0]['attributes'] = ['bedrooms'=>'tres'];
+test_throws(
+    fn() => bot_recommendation_validate_response($badAttributes),
+    InvalidArgumentException::class,
+    'commercial attributes are strictly validated'
+);
+
