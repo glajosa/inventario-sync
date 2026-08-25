@@ -44,6 +44,7 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
 <meta charset="utf-8">
 <title>Registrar llamada</title>
 <script src="//api.bitrix24.com/api/v1/"></script>
+<script src="assets/llamada-no-contesto-client.js"></script>
 </head>
 <body>
 <script>
@@ -265,7 +266,7 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
    */
   function botones() {
     return {
-      primaryButton:   { title: registrado ? 'Deshacer' : '', state: registrado ? 'normal' : 'disabled' },
+      primaryButton:   { title: '', state: 'disabled' },
       secondaryButton: { title: '' }
     };
   }
@@ -361,23 +362,17 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
       value: (TOCA[protocolo.estado] || protocolo.estado) + '  \u00b7  '
              + protocolo.estado + reciclado } };
 
-    if (deshecho) {
-      blocks.caja = { type:'section', properties:{ type:'warning', blocks:{
-        a: { type:'text', properties:{ bold:true, value:'Deshecho. No qued\u00f3 registrada.' } } }}};
-      var b2 = botones(); b2.blocks = blocks; return b2;
-    }
-
     // Se abrio la pestaña de nuevo sobre algo ya registrado. Se avisa en vez de
     // duplicar en silencio: el vendedor tiene que saber que NO se sumo otra.
     if (yaHabia) {
-      var hace = yaHabia.minutos === 1 ? 'hace 1 minuto'
+      var hace = yaHabia.minutos === 0 ? 'recientemente'
+               : yaHabia.minutos === 1 ? 'hace 1 minuto'
                : 'hace ' + yaHabia.minutos + ' minutos';
       blocks.caja = { type:'section', properties:{ type:'primary', blocks:{
         a: { type:'text', properties:{ bold:true,
-             value:'Ya registraste esta llamada ' + hace + '.' } },
+             value:'Esta llamada ya se registr\u00f3 ' + hace + '.' } },
         b: { type:'text', properties:{ size:'sm', color:'base_70',
-             value:'No se sum\u00f3 otra. Si de verdad volviste a llamar, '
-                 + 'reg\u00edstrala desde la pesta\u00f1a de llamada de Bitrix.' } } }}};
+             value:'No se duplic\u00f3 la actividad ni la pr\u00f3xima llamada.' } } }}};
       var b3 = botones(); b3.blocks = blocks; return b3;
     }
 
@@ -510,7 +505,7 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
 
   // ── Precarga ──────────────────────────────────────────────────────────
   // Antes cada click disparaba TRES viajes al servidor en fila:
-  //   crm.deal.get  ->  crm.contact.get  ->  crm.activity.add
+  //   crm.deal.get  ->  crm.contact.get  ->  servicio compartido
   // Los dos primeros no dependen de nada que el vendedor elija, así que se
   // piden apenas se abre el panel, mientras mira el calendario. Al momento de
   // apretar ya están y solo queda el tercero: de 3 viajes a 1.
@@ -627,9 +622,8 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
   }
   var llamadas  = [];      // [{ts, contesto}] en orden de CREATED, tal como vino
   var reingreso = '';      // ISO del ultimo RECONTACTAR real ('' = no hubo)
-  var registrado = 0;      // id de la actividad recién creada (0 = todavía nada)
   var yaIntento  = false;  // el auto-registro corre UNA sola vez por apertura
-  var deshecho   = false;
+  var requestIdNoContesto = null;
   var protocolo = null;    // { estado, sinContestar }
   var modoPacto = false;   // el cliente dijo una fecha -> ahí sí calendario
 
@@ -791,158 +785,75 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
     });
   }
 
-  /** Publica el comentario en la línea de tiempo, igual que la pestaña nativa. */
-  function mandarComentario(luego) {
-    var txt = comentario.replace(/^\s+|\s+$/g, '');
-    if (!dealId || !txt) { if (luego) luego(); return; }
-    BX24.placement.call('lock');
-    BX24.callMethod('crm.timeline.comment.add', {
-      fields: { ENTITY_ID: dealId, ENTITY_TYPE: 'deal', COMMENT: txt }
-    }, function (r) {
-      BX24.placement.call('unlock');
-      if (r.error()) { aviso = 'No se pudo comentar: ' + r.error(); redibujar(); return; }
-      if (luego) luego();
+  function uuidV4() {
+    try {
+      if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+    } catch (e) {}
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      var r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 3 | 8)).toString(16);
     });
   }
 
-  function registrar(contesto) {
-    if (!dealId) return;
-    BX24.placement.call('lock');
-    // Una sola consulta del motivo por registro. Vive ACÁ y no dentro de
-    // guardar() para que no se reinicie si se vuelve a entrar.
-    var yaPreguntoMotivo = false;
-    // Si nunca tocó la hora, se sella la de ESTE momento, no la del render.
-    if (!horaManual) hhmm = ahoraHHMM();
+  function ponerProxima(iso) {
+    if (!iso) return;
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return;
+    proxAgendada = {
+      f: { y:d.getFullYear(), m:d.getMonth(), d:d.getDate() },
+      hm: pad(d.getHours()) + ':' + pad(d.getMinutes())
+    };
+  }
 
-    function guardar() {
-      var inicio = inicioIso(contesto);
-      if (!ctx) {
-        BX24.placement.call('unlock');
-        aviso = 'No se pudo leer la negociación'; redibujar(); return;
-      }
-      var fields = {
-        OWNER_TYPE_ID:2, OWNER_ID:dealId,
-        TYPE_ID:2, DIRECTION:2,
-        PROVIDER_ID:LLAMADA_CONFIG.provider_id, PROVIDER_TYPE_ID:LLAMADA_CONFIG.provider_type_id,
-        SUBJECT: contesto ? '1234' : ('Llamada saliente ' + (ctx.nombre || 'cliente')),
-        COMPLETED:'N', RESPONSIBLE_ID:ctx.resp,
-        START_TIME:inicio, END_TIME:masUnaHora(inicio), DEADLINE:inicio,
-        PRIORITY: importante ? 3 : 2,      // 3 = high = el fuego
-        NOTIFY_TYPE:1, NOTIFY_VALUE:15, DESCRIPTION_TYPE:1
-      };
-      if (ctx.contactId && ctx.tel) {
-        fields.COMMUNICATIONS = [{ VALUE:ctx.tel, ENTITY_ID:ctx.contactId, ENTITY_TYPE_ID:3, TYPE:'PHONE' }];
-      }
-      // ⭐ EL ERROR TIENE QUE DECIR EL MOTIVO, y NADA se arregla solo.
-      //
-      // Hubo una version que alineaba el responsable del contacto y reintentaba
-      // sin avisar. Se quito por decision del usuario (18-ago): reasignar el
-      // dueno de un cliente es tocar la cartera de otro asesor, y eso lo decide
-      // una persona, no el panel. Ahora se explica y el vendedor actua.
-      function pedirMotivo(cb) {
-        var a = '';
-        try { a = (BX24.getAuth() || {}).access_token || ''; } catch (e) {}
-        if (!a) { cb(null); return; }
-        var x = new XMLHttpRequest();
-        x.open('POST', 'motivo.php', true);
-        x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-        x.timeout = 12000;
-        x.onload = function () {
-          var j = null;
-          try { j = JSON.parse(x.responseText); } catch (e) {}
-          cb(j);
-        };
-        x.onerror = function () { cb(null); };
-        x.ontimeout = function () { cb(null); };
-        x.send('deal=' + encodeURIComponent(dealId) + '&auth=' + encodeURIComponent(a));
-      }
-
-      BX24.callMethod('crm.activity.add', { fields: fields }, function (ra) {
-        BX24.placement.call('unlock');
-        if (ra.error() && !yaPreguntoMotivo) {
-          yaPreguntoMotivo = true;
-          aviso = 'No se pudo guardar. Averiguando por qu\u00e9\u2026'; redibujar();
-          pedirMotivo(function (j) {
-            if (j && j.motivo === 'contacto_ajeno') {
-              aviso = 'NO SE GUARD\u00d3  \u00b7  el cliente est\u00e1 a nombre de '
-                    + j.dueno + ', y el CRM no deja registrar actividades en un '
-                    + 'contacto de otro asesor. Pide que te lo transfieran y volv\u00e9 a intentar.';
-            } else {
-              // No era el contacto: se muestra el detalle crudo para no adivinar.
-              var cod = '', des = '';
-              try { cod = ra.error() ? String(ra.error()) : ''; } catch (e) {}
-              try { des = ra.error_description ? String(ra.error_description()) : ''; } catch (e) {}
-              aviso = 'NO SE GUARD\u00d3  \u00b7  cod: ' + (cod || '(vac\u00edo)')
-                    + (des && des !== cod ? '  \u00b7  ' + des : '')
-                    + '  \u00b7  resp:' + (fields.RESPONSIBLE_ID || '?')
-                    + ' contacto:' + (ctx.contactId || 'sin')
-                    + ' prov:' + fields.PROVIDER_ID;
-            }
-            redibujar();
-          });
-          return;
-        }
-        if (ra.error()) {
-          // ⚠ EL MENSAJE TIENE QUE DECIR QUÉ FALLÓ.
-          //
-          // El 18-ago a Andrea le salió "No se pudo guardar: : Access denied.
-          // (400)" — con el código VACÍO, así que no se sabía qué campo ni qué
-          // permiso. Se perdieron dos diagnósticos equivocados por eso.
-          //
-          // Ahora se muestra el código, la descripción, y los campos que Bitrix
-          // podría estar rechazando por permisos: el responsable que se le
-          // asigna, el contacto al que se liga, y el proveedor de telefonía
-          // (VOXIMPLANT_CALL exige permisos de telefonía aparte).
-          var cod = '';
-          var des = '';
-          try { cod = ra.error() ? String(ra.error()) : ''; } catch (e) {}
-          try { des = ra.error_description ? String(ra.error_description()) : ''; } catch (e) {}
-          aviso = 'No se pudo guardar'
-                + (cod ? '  ·  cod: ' + cod : '  ·  cod: (vacío)')
-                + (des && des !== cod ? '  ·  ' + des : '')
-                + '  ·  resp:' + (fields.RESPONSIBLE_ID || '?')
-                + ' contacto:' + (ctx.contactId || 'sin')
-                + ' prov:' + fields.PROVIDER_ID;
-          redibujar(); return;
-        }
-        registrado = parseInt(ra.data(), 10) || 0;   // para poder deshacerlo
-        // Sin texto de "Guardado": la actividad recien creada YA sale ahi
-        // abajo en la linea de tiempo con su fecha limite.
-        // La caja muestra proxAgendada, LO QUE DE VERDAD SE GUARDO.
-        //
-        // Aca quedaba un resto del bug viejo: recalculaba con
-        // fechaMas(diasProxima(contesto)) y eso se salta habilCercano(), asi
-        // que la caja podia decir "sabado" mientras en Bitrix quedaba el lunes.
-        // proxAgendada lo fijo inicioIso() con la fecha exacta del deadline.
-        aviso = 'Guardado \u2713  ' + (contesto ? 'contest\u00f3' : 'no contest\u00f3')
-              + ' \u00b7 vuelvo a llamar el '
-              + textoFecha(proxAgendada ? proxAgendada.f : fechaMas(diasProxima(contesto)));
-        // UNA sola verdad: se empuja la llamada a la lista y se recalcula.
-        //
-        // Antes se sumaba 1 a sinContestar a mano, y deshacer() restaba 1. Dos
-        // copias de la misma regla, y la de deshacer estaba mal: al bajar de 1
-        // a 0 dejaba el estado en CONTACTADO aunque el deal no hubiera
-        // contestado nunca (o aunque la escalera viniera de un reingreso).
-        //
-        // El ts va con un centinela porque la llamada que acaba de crearse
-        // SIEMPRE pertenece al ciclo actual: el reingreso esta en el pasado, y
-        // no hay que adivinar la zona del navegador para saberlo.
-        llamadas.push({ ts: '9999-12-31T00:00:00', contesto: contesto });
-        protocolo = calcularProtocolo(llamadas, reingreso);
-        modoPacto = false; horaManual = false; diaManual = false; importante = false;
-        // si escribió algo, se publica junto con la llamada: un solo paso
-        mandarComentario(function(){
-          comentario = '';
-          aviso = 'Guardado \u2713';
-          redibujar();
-        });
-      });
+  /**
+   * Ejecuta la MISMA operación compartida que usa la web app móvil. El panel
+   * ya no crea actividades por su cuenta: el servidor decide una sola vez y
+   * protege los dos canales contra dobles clics, pestañas repetidas y carreras.
+   */
+  function registrarNoContestoCompartido() {
+    if (!dealId || !ctx || !ctx.tel) {
+      aviso = 'No se pudo leer la negociación o su teléfono'; redibujar(); return;
     }
+    var auth = '';
+    try { auth = (BX24.getAuth() || {}).access_token || ''; } catch (e) {}
+    if (!auth || !window.GaljosaNoContesto) {
+      aviso = 'No se pudo iniciar el registro compartido'; redibujar(); return;
+    }
+    if (!requestIdNoContesto) requestIdNoContesto = uuidV4();
 
-    // Caso normal: ya está precargado y sale directo. Si el vendedor fue más
-    // rápido que la precarga, se encola y arranca sola en cuanto llegue.
-    if (ctx) guardar();
-    else { ctxCola.push(guardar); precargar(); }
+    BX24.placement.call('lock');
+    window.GaljosaNoContesto.enviar({
+      requestId: requestIdNoContesto,
+      auth: auth,
+      dealId: dealId,
+      selectedPhone: ctx.tel,
+      comment: comentario.replace(/^\s+|\s+$/g, '')
+    }).then(function (r) {
+      if (r.status === 'already_processed') {
+        yaHabia = { minutos:0, contesto:false };
+      } else {
+        ponerProxima(r.nextActivityAt);
+        llamadas.push({ ts:'9999-12-31T00:00:00', contesto:false });
+        protocolo = calcularProtocolo(llamadas, reingreso);
+        comentario = '';
+        aviso = 'Guardado \u2713';
+      }
+      redibujar();
+    }).catch(function (e) {
+      if (e && e.code === 'manual_review') {
+        aviso = 'No se pudo registrar automáticamente. Revisa la actividad pendiente en Bitrix.';
+      } else if (e && e.code === 'conflict') {
+        yaHabia = { minutos:0, contesto:false };
+        aviso = '';
+      } else if (e && e.code === 'authentication') {
+        aviso = 'No se pudo validar tu sesión de Bitrix. Recarga la página e intenta nuevamente.';
+      } else {
+        aviso = 'No se pudo registrar. Intenta nuevamente.';
+      }
+      redibujar();
+    }).then(function () {
+      BX24.placement.call('unlock');
+    });
   }
 
   /**
@@ -1004,36 +915,7 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
       redibujar();
       return;                              // ya estaba registrada: no se duplica
     }
-    registrar(false);
-  }
-
-  /** Borra la actividad recién creada y devuelve el protocolo a como estaba. */
-  function deshacer() {
-    if (!registrado) return;
-    BX24.placement.call('lock');
-    var id = registrado;
-    BX24.callMethod('crm.activity.delete', { id: id }, function (r) {
-      BX24.placement.call('unlock');
-      if (r.error()) { aviso = 'No se pudo deshacer: ' + r.error(); redibujar(); return; }
-      registrado = 0; deshecho = true;
-      // Se saca la que se acaba de crear y se recalcula con la misma funcion
-      // que la calculo: deshacer no puede tener su propia version de la regla.
-      if (llamadas.length && llamadas[llamadas.length - 1].ts === '9999-12-31T00:00:00')
-        llamadas.pop();
-      protocolo = calcularProtocolo(llamadas, reingreso);
-      redibujar();
-
-      // Borrar la actividad NO alcanza: el puntaje ya se había recalculado con
-      // ella. Y el evento de borrado no sirve para arreglarlo, porque cuando
-      // llega la actividad ya no existe y no hay forma de saber de qué deal era.
-      //
-      // Acá sí se sabe. Escribir el estado corregido dispara ONCRMDEALUPDATE,
-      // y ese evento sí recalcula todo lo demás — puntaje, contadores y días.
-      if (protocolo) {
-        var campos = {}; campos[F_PROTOCOLO] = protocolo.estado;
-        BX24.callMethod('crm.deal.update', { id: dealId, fields: campos }, function(){});
-      }
-    });
+    registrarNoContestoCompartido();
   }
 
   BX24.init(function () {
@@ -1082,7 +964,7 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
       if (antes !== !!comentario.replace(/\s/g,'')) redibujar();
     });
 
-    BX24.placement.call('bindPrimaryButtonClickCallback',   null, deshacer);
+    BX24.placement.call('bindPrimaryButtonClickCallback',   null, function(){});
     BX24.placement.call('bindSecondaryButtonClickCallback', null, function(){});
   });
 })();
