@@ -441,7 +441,7 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
     <div class="pie2"><b><?= lh((string)$L['pie2']) ?></b><span><?php
         if (!empty($L['pie2_medidas'])) {
             echo lh((string)$L['pie2_medidas']);
-        } elseif ($L['pie2_medidas'] ?? null === 'lista' || ($L['pie2_lista'] ?? false)) {
+        } elseif (!empty($L['pie2_lista'])) {
             $u = array_values(array_unique($mm)); sort($u);
             echo lh(implode(' - ', array_map($fmt, $u)) . 'm2');
         } elseif ($mm) {
