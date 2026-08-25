@@ -84,6 +84,24 @@ foreach ($unidades as $u => $d) {
 foreach ($grupos as &$g) natsort($g['cods']);
 unset($g);
 
+/* M2 PATIO. Solo la planta baja tiene patio, y su medida depende del grupo de precio
+   del edificio (16,25 en A/B/C/D/E/F · 18,75 en G y H · 16 en I). Sale de `metraje` y
+   `grupos` de la matriz del director, no de una tabla aparte que se desincronice.
+   Los demas pisos llevan un guion, que es lo que imprime su documento. */
+if (!empty($L['columna_patio'])) {
+    $patioDe = [];
+    foreach ((array)($cfg['grupos'] ?? []) as $gr => $info) {
+        $pt = $cfg['metraje'][$gr]['patio_pb'] ?? null;
+        if ($pt === null) continue;
+        foreach ((array)($info['edificios'] ?? []) as $edg)
+            $patioDe[(string)$edg] = rtrim(rtrim(number_format((float)$pt, 2, ',', ''), '0'), ',') . 'm2';
+    }
+    $blqPatio = (string)($L['bloque_patio'] ?? 'PB');
+    foreach ($grupos as $k => $g)
+        if ((string)$g['bloque'] === $blqPatio && isset($patioDe[(string)$g['ed']]))
+            $grupos[$k]['patio'] = $patioDe[(string)$g['ed']];
+}
+
 /* EXCEPCIONES por unidad. Hay productos dentro de una familia que no siguen la regla
    general y no se pueden deducir de la posicion ni del metraje: los dos loft duplex de
    Galero Torre D (D-10-2 y D-10-4) llevan 2 parqueos, no 1, y parten su 5% de
@@ -114,13 +132,39 @@ if ($DER) {
        Aplicarle a la lineal el mapa de la central partia la categoria en dos y sacaba dos
        filas casi identicas, las dos marcadas "ULTIMA DISPONIBLE", a precios distintos
        (E-4-13 $84.863 contra F-4-24 $82.863). */
-    $catDe = function (int $pos, string $cara = '') use ($DER): string {
-        $mapas = (array)($DER['categorias_por_cara'] ?? []);
-        $mapa  = ($cara !== '' && isset($mapas[$cara])) ? (array)$mapas[$cara]
-                                                       : (array)($DER['categorias'] ?? []);
+    /* La misma posicion se llama distinto segun el PISO. En Apartments la 8 es
+       "ESQUINEROS 2" en planta baja y "4TO PISO ESQ 2" en el cuarto, y la 2 pasa de
+       "MEDIANEROS" a "4TO PISO MED". Sale de `etiquetas_lista` del archivo de la
+       direccion, que esta por nivel. */
+    /* Modelo de DOS pasos, el del archivo de la direccion: la POSICION da la categoria
+       y la categoria se rotula segun el NIVEL.
+         posiciones[edificio][pos] -> 'M' | 'E1' | 'E2' | 'E3'
+         etiquetas_lista[nivel][cat] -> 'MEDIANEROS' | '4TO PISO MED' | ...
+       Hace falta porque la misma posicion no es la misma categoria en todos los
+       edificios —la 1 es E3 en el A y E2 en el B, D, E y F— y porque la misma categoria
+       se nombra distinto en el 4to piso. Un solo mapa plano no puede con las dos cosas.
+       El valor "@algo" apunta al bloque `algo` de la raiz del proyecto para no duplicar
+       la matriz del director. */
+    $ref = function ($v) use ($cfg) {
+        return (is_string($v) && $v !== '' && $v[0] === '@') ? (array)($cfg[substr($v, 1)] ?? []) : (array)$v;
+    };
+    $POS_ED = $ref($DER['posiciones_edificio'] ?? []);
+    $ETI_BL = $ref($DER['etiquetas_por_bloque'] ?? []);
+    $catDe = function (int $pos, string $cara = '', string $blq = '', string $ed = '') use ($DER, $POS_ED, $ETI_BL): string {
+        if ($POS_ED && $ETI_BL) {
+            $ck = (string)($POS_ED[$ed][(string)$pos] ?? '');
+            if ($ck !== '' && isset($ETI_BL[$blq][$ck])) return (string)$ETI_BL[$blq][$ck];
+            return (string)($DER['categoria_por_defecto'] ?? '');
+        }
+        {
+            $mapas = (array)($DER['categorias_por_cara'] ?? []);
+            $mapa  = ($cara !== '' && isset($mapas[$cara])) ? (array)$mapas[$cara]
+                                                           : (array)($DER['categorias'] ?? []);
+        }
         foreach ($mapa as $nom => $poss)
             if (in_array($pos, (array)$poss, true)) return (string)$nom;
-        return (string)($DER['categoria_por_defecto'] ?? '');
+        return (string)($DER['categoria_por_defecto_por_bloque'][$blq]
+                     ?? $DER['categoria_por_defecto'] ?? '');
     };
     $caraDe = function (int $pos) use ($DER): string {
         foreach ((array)($DER['caras'] ?? []) as $nom => $r)
@@ -133,7 +177,8 @@ if ($DER) {
         foreach ($g['cods'] as $cod) {
             if (!preg_match('/^[A-Z]-\d+-(\d+)$/', $cod, $mm)) continue;
             $caraU = $caraDe((int)$mm[1]);
-            $cats[$catDe((int)$mm[1], $caraU)] = true;
+            $edU   = preg_match('/^([A-Z])/', $cod, $me) ? $me[1] : '';
+            $cats[$catDe((int)$mm[1], $caraU, (string)$g['bloque'], $edU)] = true;
             $caras[$caraU] = true;
         }
         // Si el grupo mezcla categorias o caras se deja el nombre generico: inventar
@@ -357,7 +402,7 @@ $GRUPOS_TODOS = $grupos;
 // grupo un lugar a la izquierda: el "20%" quedaba sobre A LA FIRMA y el "10%" sobre
 // CUOTAS MENSUALES, cuando el 10% es el de las EXTRAORDINARIAS. Ademas la banda del
 // titulo se quedaba una columna corta.
-$nCols   = 4 + ($conParq ? 1 : 0);
+$nCols   = 4 + ($conParq ? 1 : 0) + ($conPatio ? 1 : 0);
 // Las uniones NO suman al conteo: no son unidades, son combinaciones de las que ya
 // estan contadas. Sumarlas hacia decir 26 disponibles donde hay 24.
 ?>
@@ -457,6 +502,7 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
           <th><?= (int)($fin['extra_pct'] ?? 10) ?>%</th></tr>
         <tr class="c"><th></th><th><?= $L['encabezado_cat'] ?? 'CARACTER&Iacute;STICAS' ?></th>
           <th><?= $L['encabezado_metros'] ?? 'METROS (m2)' ?></th><?php if ($conParq): ?><th>PARQUEOS</th><?php endif; ?>
+          <?php if ($conPatio): ?><th><?= $L['encabezado_patio'] ?? 'M2 PATIO' ?></th><?php endif; ?>
           <th><?= $L['encabezado_precio'] ?? 'PRECIO' ?></th>
           <th>SEPARA CON</th><th>A LA FIRMA</th>
           <th>CUOTAS<br>MENSUALES</th>
@@ -535,6 +581,9 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
                      mezcle las dos formas. */ ?>
             <td class="c"><?= lh(rtrim(rtrim(number_format($g['m2'], 2, '.', ''), '0'), '.')) ?></td>
             <?php if ($conParq): ?><td class="c"><?= (int)($g['parq'] ?? 1) ?></td><?php endif; ?>
+            <?php /* El patio solo existe en planta baja; en los demas pisos su documento
+                     imprime un guion, no una celda vacia. */ ?>
+            <?php if ($conPatio): ?><td class="c"><?= $g['patio'] ?? '-' ?></td><?php endif; ?>
             <?php /* Locales escribe "$94,500" pegado; Oficinas y Departamentos
                      "$ 144,420" con espacio. Es del documento, no del formateador. */ ?>
             <td class="p"><?= lh(empty($L['precio_pegado']) ? lp($g['precio'])

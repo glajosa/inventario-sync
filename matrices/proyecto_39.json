@@ -669,24 +669,6 @@
         "singular": "DEPARTAMENTO",
         "mezcla": "DEPARTAMENTOS",
         "categoria_por_defecto": "MEDIANEROS",
-        "categorias": {
-          "ESQUINEROS 3": [
-            1
-          ],
-          "ESQUINEROS 2": [
-            8
-          ],
-          "ESQUINEROS": [
-            4,
-            5
-          ],
-          "MEDIANEROS": [
-            2,
-            3,
-            6,
-            7
-          ]
-        },
         "caras": {},
         "parqueos_edificio": {
           "B": 1,
@@ -700,7 +682,10 @@
           "I": 1,
           "J": 1
         },
-        "parqueos_defecto": 1
+        "parqueos_defecto": 1,
+        "posiciones_edificio": "@posiciones",
+        "etiquetas_por_bloque": "@etiquetas_lista",
+        "_dos_pasos_nota": "La posicion da la categoria (varia por edificio: la 1 es E3 en el A y E2 en B, D, E y F) y el nivel la rotula (la 8 es 'ESQUINEROS 2' en PB y '4TO PISO ESQ 2' en el cuarto). Se leen de `posiciones` y `etiquetas_lista` de la raiz, que son del director."
       },
       "paginar_por": "edificio",
       "titulo_hoja": "EDIFICIO {ed}",
@@ -715,7 +700,11 @@
         "ocre"
       ],
       "_hojas_nota": "Su PDF aprobado son NUEVE hojas, una por edificio, cada una con su titulo, su pie y sus filas DESDE y 3 DORM. La linea `una_sola_tabla` de la spec pone de ejemplo Monoambientes, y Apartments no figura en ninguno de los 32 hallazgos: manda su documento.",
-      "pie2_lista": true
+      "pie2_lista": true,
+      "columna_patio": true,
+      "encabezado_patio": "M2 PATIO",
+      "bloque_patio": "PB",
+      "encabezado_metros": "METROS"
     }
   }
 }
