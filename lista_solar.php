@@ -29,14 +29,16 @@ $meses = $filas ? (int)$filas[0]['plan']['meses'] : (int)($fin['meses'] ?? 49);
 ?>
 <section class="hoja">
   <div class="cab">
-    <?php /* Dos logos, como las listas de la direccion: el de Galjosa y el del
-             PROYECTO. Sin el propio el documento parece de otra empresa. */
-          $lg = lst_logo($cat, $L); ?>
-    <img class="logo" src="assets/logo_galjosa_transparente.png"
-         alt="Galjosa" onerror="this.style.display='none'">
+    <?php /* El logo del PROYECTO, solo. En los documentos de la direccion la lista de
+             precios lleva la marca del proyecto —Galero, Sun Bay, Noral— y NO la de
+             Galjosa: es material de venta de ese proyecto, no corporativo. */
+          $lg = lst_logo((int)$cat, $L); ?>
     <?php if ($lg): ?>
-      <img class="logo logo-proy" src="<?= lh($lg[0]) ?>"
+      <img class="logo" src="<?= lh($lg[0]) ?>"
            alt="<?= lh($lg[1] !== '' ? $lg[1] : $proyecto) ?>" onerror="this.style.display='none'">
+    <?php else: ?>
+      <img class="logo" src="assets/logo_galjosa_transparente.png"
+           alt="Galjosa" onerror="this.style.display='none'">
     <?php endif; ?>
     <div class="tit">
       <table><tr><th class="titulo"><?= lh((string)($L['titulo'] ?? 'TERRENOS DISPONIBLES')) ?></th></tr>
