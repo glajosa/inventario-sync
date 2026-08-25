@@ -317,7 +317,12 @@ function lst_metros(array $m2, array $cfg, string $grupo, string $cat,
  * Ojo: una unidad sin codigo utilizable (como la ficha #3091 de Sun Bay) no llega
  * hasta aca — el catalogo la descarta antes. Esa se ve en Bitrix, no en la lista.
  */
-function lst_incompletas(array $unidades, int $tipo): array {
+function lst_incompletas(array $unidades, int $tipo, ?array $L = null): array {
+    /* La busqueda de pareja solo tiene sentido donde la familia ADMITE uniones. En
+       Galero Casas no hay ninguna, asi que sin este corte el H-32 —disponible con PVP
+       $0, activo de un dueno— pasaba por "mitad de union" solo porque su vecino de
+       solar mide 1.6 veces mas, cosa normal entre solares. */
+    $admiteUniones = $L !== null && !empty($L['uniones']);
     $base = null;
     foreach ($unidades as $d)
         if ((int)($d['tipo'] ?? 0) === $tipo && (float)($d['pvp'] ?? 0) > 0) {
@@ -331,6 +336,7 @@ function lst_incompletas(array $unidades, int $tipo): array {
         if ((float)($d['pvp'] ?? 0) > 0) continue;
         if (!preg_match('/^([A-Z])-(\d+)-(\d+)$/', $k, $m)) { $fuera[] = (string)($d['cod'] ?? $k); continue; }
         $tienePareja = false;
+        if ($L !== null && !$admiteUniones) { $fuera[] = (string)($d['cod'] ?? $k); continue; }
         foreach ([-1, 1] as $paso) {
             $v = $unidades["{$m[1]}-{$m[2]}-" . ((int)$m[3] + $paso)] ?? null;
             if (!$v) continue;

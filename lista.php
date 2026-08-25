@@ -75,7 +75,7 @@ $sinFormato = [];
 foreach ($familias as $t => $f)
     if (!isset($LISTAS[(string)$t])) { $sinFormato[(int)$t] = $f; unset($familias[$t]); }
 $nombreFam   = lst_nombre_familia($cat, $fam);
-$incompletas = $fam ? lst_incompletas($unidades, $fam) : [];
+$incompletas = $fam ? lst_incompletas($unidades, $fam, $LISTAS[(string)$fam] ?? null) : [];
 
 $hoy = new DateTimeImmutable('now');
 ?>
