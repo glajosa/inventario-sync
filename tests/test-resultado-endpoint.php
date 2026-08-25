@@ -47,6 +47,7 @@ final class EndpointFakeBitrix {
             ]],
             'crm.activity.list' => ['ok' => true, 'result' => []],
             'crm.activity.update' => ['ok' => true, 'result' => true],
+            'crm.activity.add' => ['ok' => true, 'result' => 901],
             'crm.timeline.comment.add' => ['ok' => true, 'result' => 801],
             'crm.deal.update' => ['ok' => true, 'result' => true],
             default => ['ok' => false, 'error' => 'unexpected-method'],

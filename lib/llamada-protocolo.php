@@ -29,13 +29,18 @@ function llamada_calcular_protocolo(
     foreach ($actividades as $actividad) {
         if ($excluirId !== null && (int)$actividad['ID'] === $excluirId) continue;
         if ((int)$actividad['TYPE_ID'] !== 2 || (int)$actividad['DIRECTION'] !== 2) continue;
+        $originId = (string)($actividad['ORIGIN_ID'] ?? '');
+        $subject = (string)($actividad['SUBJECT'] ?? '');
+        $technicalMobileCall = str_starts_with($originId, 'VI_externalCall')
+            || str_starts_with($subject, 'App móvil ·');
+        if ($technicalMobileCall && stripos($subject, '1234') === false) continue;
         $creada = substr((string)($actividad['CREATED'] ?? ''), 0, 19);
         if ($reingreso !== '' && $creada !== '' && $creada < $reingreso) {
             $viejas++;
             continue;
         }
 
-        if (stripos((string)$actividad['SUBJECT'], '1234') !== false) {
+        if (stripos($subject, '1234') !== false) {
             $estado = 'CONTACTADO';
             $sinContestar = 0;
             continue;
