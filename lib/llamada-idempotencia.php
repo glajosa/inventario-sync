@@ -44,6 +44,18 @@ final class LlamadaIdempotenciaStore {
         if (!in_array('lease_until', $columnNames, true)) {
             $this->pdo->exec('ALTER TABLE result_operations ADD COLUMN lease_until INTEGER');
         }
+        $this->pdo->exec('CREATE TABLE IF NOT EXISTS result_cycles (
+            operation_key TEXT PRIMARY KEY,
+            deal_id INTEGER NOT NULL,
+            bitrix_user_id INTEGER NOT NULL,
+            pending_activity_id INTEGER,
+            source TEXT NOT NULL,
+            outcome TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        )');
+        $this->pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS result_cycles_pending
+            ON result_cycles(pending_activity_id)
+            WHERE pending_activity_id IS NOT NULL');
     }
 
     public function now(): int {
@@ -105,6 +117,89 @@ final class LlamadaIdempotenciaStore {
             if ($transactionOpen) {
                 $this->pdo->exec('ROLLBACK');
             }
+            throw $error;
+        }
+    }
+
+    public function claimCycle(
+        string $operationKey,
+        int $dealId,
+        int $bitrixUserId,
+        ?int $pendingActivityId,
+        string $source,
+        string $outcome,
+        int $now
+    ): array {
+        if ($operationKey === '' || $dealId <= 0 || $bitrixUserId <= 0
+            || ($pendingActivityId !== null && $pendingActivityId <= 0)) {
+            throw new InvalidArgumentException('invalid call cycle identity');
+        }
+        if (!in_array($source, ['mobile', 'panel'], true)) {
+            throw new InvalidArgumentException('invalid call cycle source');
+        }
+        if (!in_array($outcome, ['no_answer', 'answered', 'not_interested'], true)) {
+            throw new InvalidArgumentException('invalid call cycle outcome');
+        }
+
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        $transactionOpen = true;
+        try {
+            $record = null;
+            if ($pendingActivityId !== null) {
+                $statement = $this->pdo->prepare('SELECT operation_key, source, outcome
+                    FROM result_cycles WHERE pending_activity_id = :pending_activity_id LIMIT 1');
+                $statement->execute([':pending_activity_id' => $pendingActivityId]);
+                $found = $statement->fetch();
+                if ($found !== false) $record = $found;
+            }
+
+            if ($record === null) {
+                $statement = $this->pdo->prepare('SELECT operation_key, source, outcome
+                    FROM result_cycles
+                    WHERE deal_id = :deal_id
+                      AND bitrix_user_id = :bitrix_user_id
+                      AND created_at >= :created_after
+                      AND (source = \'panel\' OR :request_source = \'panel\')
+                    ORDER BY created_at DESC, operation_key DESC
+                    LIMIT 1');
+                $statement->execute([
+                    ':deal_id' => $dealId,
+                    ':bitrix_user_id' => $bitrixUserId,
+                    ':created_after' => $now - 1_800,
+                    ':request_source' => $source,
+                ]);
+                $found = $statement->fetch();
+                if ($found !== false) $record = $found;
+            }
+
+            $isNew = false;
+            if ($record === null) {
+                $statement = $this->pdo->prepare('INSERT INTO result_cycles
+                    (operation_key, deal_id, bitrix_user_id, pending_activity_id, source, outcome, created_at)
+                    VALUES (:operation_key, :deal_id, :bitrix_user_id, :pending_activity_id,
+                            :source, :outcome, :created_at)');
+                $statement->execute([
+                    ':operation_key' => $operationKey,
+                    ':deal_id' => $dealId,
+                    ':bitrix_user_id' => $bitrixUserId,
+                    ':pending_activity_id' => $pendingActivityId,
+                    ':source' => $source,
+                    ':outcome' => $outcome,
+                    ':created_at' => $now,
+                ]);
+                $record = [
+                    'operation_key' => $operationKey,
+                    'source' => $source,
+                    'outcome' => $outcome,
+                ];
+                $isNew = true;
+            }
+
+            $this->pdo->exec('COMMIT');
+            $transactionOpen = false;
+            return $record + ['is_new' => $isNew];
+        } catch (Throwable $error) {
+            if ($transactionOpen) $this->pdo->exec('ROLLBACK');
             throw $error;
         }
     }
