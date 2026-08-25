@@ -1370,13 +1370,14 @@
       "leyenda_vista": [
         "Vista al parque lineal",
         "Vista al parque central"
-      ]
+      ],
+      "central_fuerte": true
     },
     "1793": {
       "forma": "precio",
-      "titulo": "MONOAMBIENTES — EDIFICIOS E & F",
+      "titulo": "EDIFICIOS E & F",
       "subtitulo": "40% de Entrada a {meses} Meses",
-      "encabezado_cat": "UBICACIÓN",
+      "encabezado_cat": "VISTA HACIA EL PARQUE LINEAL<br>O AL PARQUE CENTRAL",
       "columna_parqueos": true,
       "badge_uno": "ÚLTIMA UNIDAD",
       "badge_dos": "2 ÚLTIMAS DISPONIBLES",
@@ -1411,25 +1412,25 @@
         "se desactualiza sola. Las posiciones salen del archivo del director."
       ],
       "derivar_nombre": {
-        "singular": "MONOAMBIENTE",
-        "mezcla": "MONOAMBIENTES",
-        "categoria_por_defecto": "MEDIANEROS",
+        "singular": "",
+        "mezcla": "VISTA {cara}",
+        "categoria_por_defecto": "VISTA {cara}",
         "categorias": {
-          "ESQUINEROS 3": [
+          "VISTA {cara} ESQ. 3": [
             1,
             13
           ],
-          "ESQUINEROS 2": [
+          "VISTA {cara} ESQ. 2": [
             12,
             24
           ],
-          "ESQUINEROS": [
+          "VISTA {cara} ESQ. 1": [
             6,
             7,
             18,
             19
           ],
-          "MEDIANEROS": [
+          "VISTA {cara}": [
             2,
             3,
             4,
@@ -1447,7 +1448,7 @@
             22,
             23
           ],
-          "UNIDAD CENTRAL": [
+          "VISTA {cara} CENTRAL DEL PISO": [
             25
           ]
         },
@@ -1460,7 +1461,8 @@
             13,
             24
           ]
-        }
+        },
+        "_nota": "Los nombres son los del documento: 'VISTA PARQUE CENTRAL ESQ. 1'. El {cara} se reemplaza por la cara real del grupo."
       },
       "uniones": {
         "_nota": "Dos o tres contiguos = un departamento de 2 o 3 dormitorios. Precio = suma - 20.000, UNA sola vez: al unirse viene un parqueo menos, y con tres vienen dos parqueos, asi que tambien se resta una vez. Se muestra la combinacion MAS BARATA de cada tamaño y cara: es un 'desde'.",
@@ -1512,10 +1514,17 @@
         "vigencia_horas": 48,
         "_nota": "Del archivo del director. Plazo derivado de fecha_entrega (2031-02)."
       },
-      "leyenda_vista": [
-        "Vista al parque lineal",
-        "Vista al parque central"
-      ]
+      "layout": "al_lado",
+      "encabezado_precio": "PRECIO<br>INCLUYENDO PARQUEO",
+      "codigo_sin_prefijo": true,
+      "sin_vigencia": true,
+      "pie2": "EDIFICIOS - E & F",
+      "notas": [
+        "<b>Monoambientes de 31 m²</b> en los edificios E y F. Los esquineros de los extremos miden 32,50 m².",
+        "<b>Dos o tres unidades contiguas pueden unirse</b> en un departamento de dos o tres dormitorios. No todas las parejas se pueden unir: el ascensor separa algunas."
+      ],
+      "union_fuerte": true,
+      "central_fuerte": false
     },
     "1791": {
       "forma": "precio",
@@ -1632,7 +1641,8 @@
       "leyenda_vista": [
         "Vista al parque lineal",
         "Vista al parque central"
-      ]
+      ],
+      "central_fuerte": true
     }
   }
 }

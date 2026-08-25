@@ -107,8 +107,15 @@ if ($DER) {
                     $eds[(string)($DER['grupos_edificio'][$me[1]] ?? $me[1])] = true;
         }
         $ed = count($eds) === 1 ? (string)array_key_first($eds) : '';
-        $grupos[$k]['nombre'] = trim($nomCat . ($cara !== '' ? ' ' . $cara : '')
-                                          . ($ed !== '' ? ' · ' . $ed : ''));
+        // {cara} en el nombre: el documento escribe "VISTA PARQUE CENTRAL ESQ. 1",
+        // con la cara EN MEDIO, no pegada al final. Si el nombre trae el hueco se
+        // reemplaza ahi; si no, la cara se agrega detras como antes.
+        if (strpos($nomCat, '{cara}') !== false) {
+            $nom = str_replace('{cara}', $cara, $nomCat);
+        } else {
+            $nom = trim($nomCat . ($cara !== '' ? ' ' . $cara : ''));
+        }
+        $grupos[$k]['nombre'] = trim($nom . ($ed !== '' ? ' · ' . $ed : ''));
         // Parqueos por edificio: G y H llevan 2 por ser de 3 dormitorios. Sale del
         // bloque `parqueos` del archivo del director.
         if ($grupos[$k]['parq'] === null && !empty($DER['parqueos_edificio'])) {
@@ -251,16 +258,29 @@ if ($sub !== '' && strpos($sub, '{meses}') !== false)
     $sub = str_replace('{meses}', (string)$pz['meses'], $sub);
 $lg = lst_logo((int)$cat, $L);
 ?>
+<?php
+// DOS layouts de cabecera, porque los documentos de la direccion usan dos:
+//   'arriba'  (Locales)   el logo arriba a la izquierda y el titulo en banda a TODO
+//                         el ancho de la tabla, debajo del logo.
+//   'al_lado' (Oficinas, Departamentos)  el logo a la izquierda y la banda del titulo
+//                         a su derecha, a la misma altura, FUERA de la tabla.
+// Es exactamente como esta en su HTML: `.cab` en flex con el logo y una tablita
+// `.tit` al lado. Forzar un solo layout no se parece a ninguno de los dos.
+$layout = (string)($L['layout'] ?? 'arriba');
+$titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
+?>
 <section class="hoja">
-  <?php /* El logo del PROYECTO, solo y arriba a la izquierda, encima de la tabla.
-           Asi esta en el documento de la direccion: el de Galjosa no va en la lista
-           de precios. A la derecha, la leyenda de los dos colores de vista. */ ?>
-  <div class="cab">
+  <div class="cab<?= $layout === 'al_lado' ? ' cab-lado' : '' ?>">
     <?php if ($lg): ?>
       <img class="logo" src="<?= lh($lg[0]) ?>"
            alt="<?= lh($lg[1] !== '' ? $lg[1] : $proyecto) ?>" onerror="this.style.display='none'">
     <?php else: ?><span></span><?php endif; ?>
-    <?php if (!empty($L['leyenda_vista'])): ?>
+    <?php if ($layout === 'al_lado'): ?>
+      <div class="tit">
+        <table><tr><th class="titulo"><?= lh($titulo) ?></th></tr>
+               <tr><th class="sub"><?= lh($sub) ?></th></tr></table>
+      </div>
+    <?php elseif (!empty($L['leyenda_vista'])): ?>
       <div class="leyenda">
         <span><i class="lin"></i><?= lh((string)$L['leyenda_vista'][0]) ?></span>
         <span><i class="cen"></i><?= lh((string)$L['leyenda_vista'][1]) ?></span>
@@ -270,16 +290,20 @@ $lg = lst_logo((int)$cat, $L);
   <div class="wrap">
     <table>
       <thead>
-        <?php /* El titulo es una banda a TODO el ancho de la tabla, dentro de ella.
-                 Antes iba en una tablita al lado del logo y no se parecia en nada. */ ?>
-        <tr><th class="titulo" colspan="<?= $nCols + 4 ?>"><?= lh((string)($L['titulo'] ?? strtoupper($proyecto))) ?></th></tr>
+      <?php if ($layout !== 'al_lado'): ?>
+        <?php /* Solo en el layout 'arriba' el titulo es una banda dentro de la tabla,
+                 a todo su ancho. En 'al_lado' ya salio junto al logo. */ ?>
+        <tr><th class="titulo" colspan="<?= $nCols + 4 ?>"><?= lh($titulo) ?></th></tr>
         <tr><th class="sub" colspan="<?= $nCols + 4 ?>"><?= lh($sub) ?></th></tr>
-        <tr class="g"><th colspan="<?= $nCols ?>">CARACTER&Iacute;STICAS</th>
+      <?php endif; ?>
+        <tr class="g"><?php if ($layout === 'al_lado'): ?><th colspan="<?= $nCols - $colLogo ?>">CARACTER&Iacute;STICAS</th><?php
+                      else: ?><th colspan="<?= $nCols ?>">CARACTER&Iacute;STICAS</th><?php endif; ?>
           <th colspan="2" class="it"><?= (int)($fin['reserva_pct'] ?? 10) ?>% DE RESERVA</th>
           <th><?= (int)($fin['cuotas_pct'] ?? 20) ?>%</th>
           <th><?= (int)($fin['extra_pct'] ?? 10) ?>%</th></tr>
         <tr class="c"><th></th><th><?= $L['encabezado_cat'] ?? 'CARACTER&Iacute;STICAS' ?></th>
-          <th>METROS (m2)</th><?php if ($conParq): ?><th>PARQUEOS</th><?php endif; ?><th>PRECIO</th>
+          <th>METROS (m2)</th><?php if ($conParq): ?><th>PARQUEOS</th><?php endif; ?>
+          <th><?= $L['encabezado_precio'] ?? 'PRECIO' ?></th>
           <th>SEPARA CON</th><th>A LA FIRMA</th>
           <th>CUOTAS<br>MENSUALES</th>
           <th>CUOTAS EXTRAORDINARIAS<br>(1 VEZ AL A&Ntilde;O)</th></tr>
@@ -293,9 +317,13 @@ $lg = lst_logo((int)$cat, $L);
               // tipologia: "LOCAL A-1-12", "RESTAURANTE C-7". Lo pide la spec y es lo
               // que hace la presion de escasez concreta.
               if (!empty($g['union'])) $n = 99;   // no es una unidad: no aplica escasez
-              $texto = $n === 1 && $g['sing'] !== ''
-                     ? trim($g['sing'] . ' ' . $g['cods'][array_key_first($g['cods'])])
-                     : ($n === 1 ? $g['cods'][array_key_first($g['cods'])] : $g['nombre']);
+              // Con UNA disponible la fila se nombra con el codigo. El prefijo
+              // ("LOCAL A-1-12", "RESTAURANTE C-7") solo va donde el documento lo pone:
+              // en Departamentos la fila dice "F-4-18" a secas.
+              $texto = $n !== 1 ? $g['nombre']
+                     : (($g['sing'] !== '' && empty($L['codigo_sin_prefijo']))
+                          ? trim($g['sing'] . ' ' . $g['cods'][array_key_first($g['cods'])])
+                          : $g['cods'][array_key_first($g['cods'])]);
               $ult = !empty($g['union']) ? ''
                    : ($n === 1 ? (string)($L['badge_uno'] ?? 'ÚLTIMA UNIDAD')
                    : ($n === 2 ? (string)($L['badge_dos'] ?? '2 ÚLTIMAS DISPONIBLES') : '')); ?>
@@ -303,7 +331,16 @@ $lg = lst_logo((int)$cat, $L);
             <?php if ($primera): $primera = false; ?>
               <td class="niv <?= $clsNiv ?>" rowspan="<?= count($filas) ?>"><span><?= lh(strtoupper($etBloque[$blq] ?? $blq)) ?></span></td>
             <?php endif; ?>
-            <td class="cat <?= $g['zona'] === 'LINEAL' ? 'lineal' : ($g['zona'] !== '' ? 'central' : '') ?>"><?php
+            <?php /* El verde OSCURO no significa lo mismo en los dos documentos: en
+                     Locales marca la vista al parque central, y en Departamentos las
+                     unidades UNIDAS (2 y 3 dorm). Cada familia dice cual usa. */
+              $esLin = strpos($g['zona'], 'LINEAL') !== false;
+              $cls   = $esLin ? 'lineal' : ($g['zona'] !== '' ? 'central' : '');
+              $fuerte = !empty($g['union'])
+                          ? !empty($L['union_fuerte'])
+                          : (!$esLin && !empty($L['central_fuerte']));
+            ?>
+            <td class="cat <?= $cls ?><?= $fuerte ? ' fuerte' : '' ?>"><?php
                 echo lh($texto);
                 if ($ult !== '') echo '<span class="ult">' . lh($ult) . '</span>'; ?></td>
             <td class="c"><?= lh(rtrim(rtrim(number_format($g['m2'], 2, ',', ''), '0'), ',')) ?></td>
@@ -324,8 +361,23 @@ $lg = lst_logo((int)$cat, $L);
     </table>
     <?php if (!empty($L['lat'])): ?><div class="lat"><?= $L['lat'] ?></div><?php endif; ?>
   </div>
+  <?php if (!empty($L['pie2'])): ?>
+    <?php /* Cierre de dos bloques: el rotulo y el rango de metros. El rango se calcula
+             de las filas, no se escribe: si entra una tipologia nueva se ajusta solo. */
+      $mm = [];
+      foreach ($grupos as $g) if ($g['m2'] > 0) $mm[] = (float)$g['m2'];
+      $fmt = fn($v) => rtrim(rtrim(number_format($v, 2, ',', ''), '0'), ',');
+    ?>
+    <div class="pie2"><b><?= lh((string)$L['pie2']) ?></b><span><?= $mm
+        ? lh($fmt(min($mm)) . 'm2 hasta ' . $fmt(max($mm)) . 'm2') : '' ?></span></div>
+  <?php endif; ?>
+  <?php if (!empty($L['notas'])): ?>
+    <div class="notas"><?php foreach ((array)$L['notas'] as $nt): ?><p><?= $nt ?></p><?php endforeach; ?></div>
+  <?php endif; ?>
+  <?php if (empty($L['sin_vigencia'])): ?>
   <div class="vig">ESTA COTIZACI&Oacute;N TIENE UNA VIGENCIA DE
     <?= (int)($pz['meses'] > 0 ? ($fin['vigencia_horas'] ?? 48) : 48) ?> HRS NATURALES</div>
+  <?php endif; ?>
   <?php /* La nota del documento de la direccion. El detalle de cuando se genero y
            cuantas tipologias hay es interno: va en un title, no impreso. */ ?>
   <div class="meta" title="Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo · <?= count($grupos) - $nUnion ?> tipologías · <?= $totDisp ?> disponibles<?php

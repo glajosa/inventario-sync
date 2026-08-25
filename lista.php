@@ -89,6 +89,20 @@ $hoy = new DateTimeImmutable('now');
   .leyenda i.lin{background:#eef4e4}
   .leyenda i.cen{background:#4a6329}
   .cab .tit{flex:1}
+  /* Layout 'al_lado': el logo a la izquierda y la banda del titulo a su derecha, a la
+     misma altura, como en los documentos de Oficinas y Departamentos. */
+  .cab-lado{align-items:stretch;margin-bottom:0}
+  .cab-lado .logo{height:auto;max-height:78px;align-self:center}
+  .cab-lado .tit table{height:100%}
+  /* Notas al pie del documento: van en negrita la primera parte, como en el PDF. */
+  .notas{margin-top:10px;font-size:10.5px;line-height:1.7;color:#1a1a18}
+  .notas p{margin:0}
+  .notas b{font-weight:700}
+  /* Pie de dos bloques: el rotulo verde oscuro y el rango de metros en verde claro,
+     a todo el ancho. Asi cierra el documento de Departamentos. */
+  .pie2{display:flex;margin-top:0;border:1px solid #000;border-top:0;font-size:11px;font-weight:700}
+  .pie2 b{background:#4a6329;color:#fff;padding:5px 14px;white-space:nowrap}
+  .pie2 span{background:#8fae5d;color:#1a1a1a;padding:5px 14px;flex:1;text-align:center}
   .wrap{display:flex;gap:0;align-items:stretch}
   .wrap .lat{background:#3b5323;color:#fff;writing-mode:vertical-rl;transform:rotate(180deg);
        display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;
@@ -117,9 +131,12 @@ $hoy = new DateTimeImmutable('now');
          background:#eef4e4;color:#1f2d16}
   /* Codigo de color de la vista, tomado de la hoja de Excel original:
      crema para el parque lineal, verde palido para el parque central. */
-  td.cat.lineal {background:#eef4e4;color:#1f2d16}
-  td.cat.central{background:#4a6329;color:#fff}
-  td.cat.central .ult{color:#cfe0b4}
+  td.cat.lineal {background:#fdf6e3;color:#1f2d16}
+  td.cat.central{background:#e8f0dc;color:#1f2d16}
+  /* `fuerte` = verde oscuro con texto blanco. En Locales lo lleva la vista al parque
+     central; en Departamentos, las unidades UNIDAS. Cada familia declara cual. */
+  td.cat.fuerte{background:#4a6329;color:#fff}
+  td.cat.fuerte .ult{color:#cfe0b4}
   .cat.combo{background:#3b5323;color:#fff;text-align:center;letter-spacing:.04em}
   .cat .ult{display:block;font-weight:600;font-size:6.5px;letter-spacing:.09em;
        margin-top:2px;color:#9a6a63;opacity:.9}
