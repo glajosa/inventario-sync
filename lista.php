@@ -78,12 +78,16 @@ $hoy = new DateTimeImmutable('now');
   body{font-family:Calibri,'Segoe UI',Arial,sans-serif;background:#e9e9e6;color:#000;padding:18px}
   .hoja{background:#fff;padding:20px 26px 26px;margin:0 auto;max-width:1120px;
         box-shadow:0 1px 5px rgba(0,0,0,.16)}
-  .cab{display:flex;align-items:center;gap:20px;margin-bottom:6px}
-  /* Dos logos: el de Galjosa y el del proyecto, separados por una linea fina como en
-     las listas de la direccion. El del proyecto va un poco mas alto porque son
-     marcas con mas texto y a la misma altura se leen mas chicas. */
-  .cab .logo{height:52px;width:auto}
-  .cab .logo-proy{height:60px;padding-left:18px;margin-left:2px;border-left:1px solid #d7d7d2}
+  /* El logo va SOLO y arriba a la izquierda, ENCIMA de la tabla — asi esta en el
+     documento de la direccion. El de Galjosa no aparece en la lista de precios, y el
+     titulo no va al lado del logo sino como banda a todo el ancho de la tabla. */
+  .cab{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:9px}
+  .cab .logo{height:58px;width:auto}
+  .leyenda{display:flex;gap:22px;font-size:10.5px;color:#3b3b38;padding-bottom:3px}
+  .leyenda span{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+  .leyenda i{width:26px;height:12px;display:inline-block;border:1px solid #7d7d76}
+  .leyenda i.lin{background:#eef4e4}
+  .leyenda i.cen{background:#4a6329}
   .cab .tit{flex:1}
   .wrap{display:flex;gap:0;align-items:stretch}
   .wrap .lat{background:#3b5323;color:#fff;writing-mode:vertical-rl;transform:rotate(180deg);
@@ -92,8 +96,9 @@ $hoy = new DateTimeImmutable('now');
   .lat em{font-style:italic}
   table{width:100%;border-collapse:collapse;font-size:11px}
   th,td{border:1px solid #000;padding:4px 6px}
-  .titulo{background:#3b5323;color:#fff;font-size:15px;font-weight:700;text-align:center;padding:7px}
-  .sub{text-align:center;font-size:11.5px;font-weight:700;padding:5px}
+  .titulo{background:#4a6329;color:#fff;font-size:15px;font-weight:700;
+          text-align:center;padding:7px;letter-spacing:.02em}
+  .sub{text-align:center;font-size:11.5px;font-weight:700;padding:5px;background:#fff}
   .g th{font-weight:700;text-align:center;font-size:11px}
   .g .it{font-style:italic}
   .c th{font-weight:700;text-align:center;font-size:9px;line-height:1.2;padding:5px 4px}
@@ -118,7 +123,7 @@ $hoy = new DateTimeImmutable('now');
        font-size:9.5px;display:inline-flex;align-items:center}
   .vig{margin-top:12px;background:#ffff00;border:1px solid #000;text-align:center;
        font-size:11px;font-weight:700;padding:6px}
-  .meta{margin-top:6px;font-size:9.5px;color:#555;text-align:center}
+  .meta{margin-top:7px;font-size:9.5px;color:#777;text-align:center}
   /* Barra de familias: es navegacion nuestra y NO va en el papel. */
   .barra{max-width:1120px;margin:0 auto 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .barra a,.barra button{font:600 12.5px/1 Calibri,'Segoe UI',Arial,sans-serif;padding:8px 13px;

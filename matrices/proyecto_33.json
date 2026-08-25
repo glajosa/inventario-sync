@@ -1249,8 +1249,8 @@
     "1951": {
       "forma": "precio",
       "titulo": "EDIFICIO A - B - C",
-      "subtitulo": "40% de Entrada",
-      "encabezado_cat": "ESQUINERO/<br>MEDIANERO &amp; VISTA",
+      "subtitulo": "40% de Entrada a {meses} Meses",
+      "encabezado_cat": "ESQUINERO / MEDIANERO & VISTA",
       "columna_parqueos": true,
       "badge_uno": "ÚLTIMA DISPONIBLE",
       "badge_dos": "2 ÚLTIMAS DISPONIBLES",
@@ -1357,10 +1357,6 @@
         }
       },
       "lat": "CONSULTORIOS: Solo en el&nbsp;<em>2DO PISO del EDIFICIO B</em>",
-      "pie": {
-        "rotulo": "EDIFICIO A - B - C",
-        "medidas": "50 - 58 - 100m2"
-      },
       "financiamiento": {
         "separa": 1000,
         "reserva_pct": 10,
@@ -1370,13 +1366,17 @@
         "fecha_entrega": "2031-02",
         "vigencia_horas": 48,
         "_nota": "Del archivo del director. El plazo NO se escribe: sale de fecha_entrega (2031-02) y las extraordinarias son ceil(meses/12)."
-      }
+      },
+      "leyenda_vista": [
+        "Vista al parque lineal",
+        "Vista al parque central"
+      ]
     },
     "1793": {
       "forma": "precio",
       "titulo": "MONOAMBIENTES — EDIFICIOS E & F",
-      "subtitulo": "40% de Entrada",
-      "encabezado_cat": "UBICACI&Oacute;N",
+      "subtitulo": "40% de Entrada a {meses} Meses",
+      "encabezado_cat": "UBICACIÓN",
       "columna_parqueos": true,
       "badge_uno": "ÚLTIMA UNIDAD",
       "badge_dos": "2 ÚLTIMAS DISPONIBLES",
@@ -1502,10 +1502,6 @@
           }
         ]
       },
-      "pie": {
-        "rotulo": "EDIFICIOS E & F",
-        "medidas": "31 - 32,5 - 35m2"
-      },
       "financiamiento": {
         "separa": 1000,
         "reserva_pct": 10,
@@ -1515,13 +1511,17 @@
         "fecha_entrega": "2031-02",
         "vigencia_horas": 48,
         "_nota": "Del archivo del director. Plazo derivado de fecha_entrega (2031-02)."
-      }
+      },
+      "leyenda_vista": [
+        "Vista al parque lineal",
+        "Vista al parque central"
+      ]
     },
     "1791": {
       "forma": "precio",
       "titulo": "LOCALES COMERCIALES",
-      "subtitulo": "40% de Entrada",
-      "encabezado_cat": "UBICACI&Oacute;N",
+      "subtitulo": "40% de Entrada a {meses} Meses",
+      "encabezado_cat": "LOCALES / RESTAURANTES",
       "badge_uno": "ÚLTIMA UNIDAD",
       "badge_dos": "2 ÚLTIMAS DISPONIBLES",
       "bloques": [
@@ -1566,8 +1566,7 @@
         "229181|77": {
           "nombre": "LOCALES PARQUE LINEAL ESQUINERO",
           "singular": "LOCAL",
-          "zona": "LINEAL",
-          "union": true
+          "zona": "LINEAL"
         },
         "101900|30": {
           "nombre": "LOCALES PARQUE CENTRAL (EDIFICIO D)",
@@ -1587,8 +1586,7 @@
         "237767|70": {
           "nombre": "LOCALES PARQUE CENTRAL ESQUINERO",
           "singular": "LOCAL",
-          "zona": "CENTRAL",
-          "union": true
+          "zona": "CENTRAL"
         },
         "205255|69": {
           "nombre": "LOCALES PARQUE LINEAL",
@@ -1621,10 +1619,6 @@
           "zona": "CENTRAL"
         }
       },
-      "pie": {
-        "rotulo": "LOCALES COMERCIALES",
-        "medidas": "30 - 39 - 69 - 70 - 77m2"
-      },
       "financiamiento": {
         "separa": 1000,
         "reserva_pct": 10,
@@ -1634,7 +1628,11 @@
         "fecha_entrega": "2031-02",
         "vigencia_horas": 48,
         "_nota": "Del archivo del director. El plazo NO se escribe: sale de fecha_entrega (2031-02) y las extraordinarias son ceil(meses/12)."
-      }
+      },
+      "leyenda_vista": [
+        "Vista al parque lineal",
+        "Vista al parque central"
+      ]
     }
   }
 }

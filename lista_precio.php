@@ -192,7 +192,7 @@ if ($UN) {
         $grupos['UNION|' . $mj['n'] . '|' . $mj['cara']] = [
             'bloque' => $blqU, 'precio' => $mj['precio'], 'm2' => $mj['m2'],
             'nombre' => $mj['nombre'], 'sing' => '', 'zona' => $mj['cara'],
-            'parq' => $mj['parq'], 'union' => true,
+            'parq' => $mj['parq'], 'union' => true, 'calculada' => true,
             // Sin codigos: una union no es una unidad, es una combinacion. Asi
             // tampoco recibe etiqueta de escasez, que no tendria sentido.
             'cods' => ['', ''],
@@ -209,9 +209,12 @@ uasort($grupos, function ($a, $b) use ($ordenBloque) {
     $ba = $ordenBloque[$a['bloque']] ?? 99;
     $bb = $ordenBloque[$b['bloque']] ?? 99;
     if ($ba !== $bb) return $ba <=> $bb;
-    // Las uniones van al final del bloque: son la opcion grande, no el piso de precio.
-    $ua = !empty($a['union']) ? 1 : 0;
-    $ub = !empty($b['union']) ? 1 : 0;
+    // Las uniones NO van al final: en el documento de la direccion el esquinero de
+    // 77 m2 va tercero, entre el de 39 y el primer central, o sea en su lugar por
+    // precio como cualquier otra fila. Solo las filas CALCULADAS (2 y 3 dormitorios
+    // de los monoambientes) van al final, porque no son unidades del inventario.
+    $ua = !empty($a['calculada']) ? 1 : 0;
+    $ub = !empty($b['calculada']) ? 1 : 0;
     if ($ua !== $ub) return $ua <=> $ub;
     $za = $a['zona'] === 'LINEAL' ? 0 : 1;
     $zb = $b['zona'] === 'LINEAL' ? 0 : 1;
@@ -234,25 +237,38 @@ foreach ($grupos as $g) if (empty($g['union'])) $totDisp += count($g['cods']);
 $nUnion = 0;
 foreach ($grupos as $g) if (!empty($g['union']) && $g['cods'] === ['', '']) $nUnion++;
 ?>
+<?php
+// Subtitulo con el PLAZO: "40% de Entrada a 54 Meses". Los meses NO se escriben —
+// salen de la fecha de entrega, asi que el rotulo baja solo con el calendario.
+$pz  = lst_plazo($fin);
+$sub = (string)($L['subtitulo'] ?? '');
+if ($sub !== '' && strpos($sub, '{meses}') !== false)
+    $sub = str_replace('{meses}', (string)$pz['meses'], $sub);
+$lg = lst_logo((int)$cat, $L);
+?>
 <section class="hoja">
+  <?php /* El logo del PROYECTO, solo y arriba a la izquierda, encima de la tabla.
+           Asi esta en el documento de la direccion: el de Galjosa no va en la lista
+           de precios. A la derecha, la leyenda de los dos colores de vista. */ ?>
   <div class="cab">
-    <?php /* Dos logos, como las listas de la direccion: el de Galjosa y el del
-             PROYECTO. Sin el propio el documento parece de otra empresa. */
-          $lg = lst_logo((int)$cat, $L); ?>
-    <img class="logo" src="assets/logo_galjosa_transparente.png"
-         alt="Galjosa" onerror="this.style.display='none'">
     <?php if ($lg): ?>
-      <img class="logo logo-proy" src="<?= lh($lg[0]) ?>"
+      <img class="logo" src="<?= lh($lg[0]) ?>"
            alt="<?= lh($lg[1] !== '' ? $lg[1] : $proyecto) ?>" onerror="this.style.display='none'">
+    <?php else: ?><span></span><?php endif; ?>
+    <?php if (!empty($L['leyenda_vista'])): ?>
+      <div class="leyenda">
+        <span><i class="lin"></i><?= lh((string)$L['leyenda_vista'][0]) ?></span>
+        <span><i class="cen"></i><?= lh((string)$L['leyenda_vista'][1]) ?></span>
+      </div>
     <?php endif; ?>
-    <div class="tit">
-      <table><tr><th class="titulo"><?= lh((string)($L['titulo'] ?? strtoupper($proyecto))) ?></th></tr>
-             <tr><th class="sub"><?= lh((string)($L['subtitulo'] ?? '')) ?></th></tr></table>
-    </div>
   </div>
   <div class="wrap">
     <table>
       <thead>
+        <?php /* El titulo es una banda a TODO el ancho de la tabla, dentro de ella.
+                 Antes iba en una tablita al lado del logo y no se parecia en nada. */ ?>
+        <tr><th class="titulo" colspan="<?= $nCols + 4 ?>"><?= lh((string)($L['titulo'] ?? strtoupper($proyecto))) ?></th></tr>
+        <tr><th class="sub" colspan="<?= $nCols + 4 ?>"><?= lh($sub) ?></th></tr>
         <tr class="g"><th colspan="<?= $nCols ?>">CARACTER&Iacute;STICAS</th>
           <th colspan="2" class="it"><?= (int)($fin['reserva_pct'] ?? 10) ?>% DE RESERVA</th>
           <th><?= (int)($fin['cuotas_pct'] ?? 20) ?>%</th>
@@ -303,13 +319,10 @@ foreach ($grupos as $g) if (!empty($g['union']) && $g['cods'] === ['', '']) $nUn
     </table>
     <?php if (!empty($L['lat'])): ?><div class="lat"><?= $L['lat'] ?></div><?php endif; ?>
   </div>
-  <?php if (!empty($L['pie'])): ?>
-    <div class="pie"><?= lh((string)($L['pie']['rotulo'] ?? '')) ?><?php
-        if (!empty($L['pie']['medidas'])) echo '<span>' . lh((string)$L['pie']['medidas']) . '</span>'; ?></div>
-  <?php endif; ?>
   <div class="vig">ESTA COTIZACI&Oacute;N TIENE UNA VIGENCIA DE
-    <?= (int)($fin['vigencia_horas'] ?? 48) ?> HRS NATURALES</div>
-  <div class="meta">Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo ·
-    <?= count($grupos) - $nUnion ?> tipologías · <?= $totDisp ?> disponibles<?php
-      if ($nUnion) echo ' · ' . $nUnion . ($nUnion > 1 ? ' opciones' : ' opción') . ' de unidades unidas'; ?></div>
+    <?= (int)($pz['meses'] > 0 ? ($fin['vigencia_horas'] ?? 48) : 48) ?> HRS NATURALES</div>
+  <?php /* La nota del documento de la direccion. El detalle de cuando se genero y
+           cuantas tipologias hay es interno: va en un title, no impreso. */ ?>
+  <div class="meta" title="Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo · <?= count($grupos) - $nUnion ?> tipologías · <?= $totDisp ?> disponibles<?php
+      if ($nUnion) echo ' · ' . $nUnion . ($nUnion > 1 ? ' opciones' : ' opción') . ' de unidades unidas'; ?>">Precios sujetos a disponibilidad</div>
 </section>
