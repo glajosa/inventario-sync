@@ -7,5 +7,6 @@ require_once __DIR__ . '/test-llamada-resultado-service.php';
 require_once __DIR__ . '/test-resultado-endpoint.php';
 require_once __DIR__ . '/test-bot-recommendation-contract.php';
 require_once __DIR__ . '/test-bot-recommendation-service.php';
+require_once __DIR__ . '/test-bot-recommendation-endpoint.php';
 
 echo "OK\n";

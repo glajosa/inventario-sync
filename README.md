@@ -13,6 +13,27 @@ Env vars requeridas (EasyPanel):
 - `OUTBOUND_TOKEN` — token del webhook de SALIDA (valida quién llama)
 - `DATA_DIR` — default `/data` (montar volumen persistente ahí)
 
+## API privada de recomendaciones del bot
+
+`POST /api/private/bot/v1/recommendations` devuelve como máximo tres unidades
+exactas. La selección parte del catálogo compartido, pero cada finalista se
+vuelve a leer con `crm.item.get` antes de responder. La ruta es estrictamente de
+solo lectura: no reserva, no cotiza formalmente y no actualiza unidades, deals,
+etapas ni el campo Proyecto.
+
+Variables:
+
+- `BOT_INVENTORY_API_ENABLED=1` habilita la ruta; con `0` la reversión es
+  inmediata y el resto de Inventario Sync sigue funcionando.
+- `BOT_INVENTORY_SHARED_SECRET` es un secreto exclusivo de 32 caracteres o más.
+- `DATA_DIR` debe conservar `selector_cache.json` en el volumen existente.
+
+La firma usa las mismas cabeceras HMAC que la API de llamadas. No se envían
+nombres, teléfonos, mensajes ni IDs de deals. El contrato de respuesta v1 está
+en `tests/fixtures/bot-recommendation-v1.json`. Un catálogo parcial o con más de
+una hora devuelve `503 inventory_unavailable`; entre 15 y 60 minutos se admite
+solo como preselección y la lectura final de Bitrix sigue siendo obligatoria.
+
 ## API privada de resultados de llamada
 
 `POST /api/private/llamadas/v1/resultado` recibe un objeto JSON de hasta
