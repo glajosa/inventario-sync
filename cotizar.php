@@ -459,6 +459,8 @@ $hoy  = new DateTimeImmutable('now');
   .resumen div{border:1px solid var(--linea);border-radius:9px;padding:11px 13px}
   .resumen span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--gris);margin-bottom:3px}
   .resumen b{font-size:16px}
+  .resumen b small{font-size:11.5px;font-weight:600;color:var(--gris);margin-left:5px;
+                   white-space:nowrap}
   .resumen div.destacado{background:#eef4fb;border-color:#bcd3ea}
   .resumen div.destacado span{color:#3f6a99}
   .resumen div.destacado b{color:#1c4e80}
@@ -1067,8 +1069,10 @@ $hoy  = new DateTimeImmutable('now');
              cierra o no. El mismo numero que la fila TOTAL CUOTA INICIAL de la tabla. */ ?>
     <div class="destacado"><span>Crédito directo <?= h($pc($plan['financiarPct'] / 100)) ?></span><b><?= h(cot_money($plan['totalInicial'])) ?></b></div>
     <div><span>Contraentrega <?= h($pc($plan['contraPct'])) ?></span><b><?= h(cot_money($plan['contraentrega'])) ?></b></div>
-    <div><span>Cuota mensual</span><b><?= h(cot_money($plan['mensual'])) ?></b></div>
-    <div><span>Total cuotas</span><b><?= (int)$plan['cuotas'] ?></b></div>
+    <?php /* Las cuotas van DENTRO del cuadro de la mensual, no en uno propio: con
+             cinco cuadros el quinto caia solo en una segunda fila y se veia mal. Y
+             ademas se lee mejor junto — "396,43 al mes, 56 veces" es una sola idea. */ ?>
+    <div><span>Cuota mensual</span><b><?= h(cot_money($plan['mensual'])) ?><small>/ <?= (int)$plan['cuotas'] ?> cuotas</small></b></div>
   </div>
 
   <table>
