@@ -51,6 +51,10 @@ $COL = (array)($L['colores_manzana'] ?? []);
              <tr><th class="sub"><?= lh((string)($L['subtitulo'] ?? '')) ?></th></tr></table>
     </div>
   </div>
+  <?php /* C-04: en la lista aprobada la banda de vigencia va ARRIBA, debajo del rotulo
+           amarillo del financiamiento — no al final. */ ?>
+  <div class="vig" style="margin-top:6px">ESTA COTIZACI&Oacute;N TIENE UNA VIGENCIA DE
+    <?= (int)($fin['vigencia_horas'] ?? 48) ?> HRS NATURALES</div>
 
 <?php foreach ($modelos as $k):
     $casa = $px[array_key_first($cfg['precios'])]['U'][$k] ?? null;
@@ -77,7 +81,7 @@ $COL = (array)($L['colores_manzana'] ?? []);
         <?php /* El rotulo dice el plazo de ENTREGA (36), no el numero de mensuales
                  (24). Asi lo escribe la lista de la direccion: `meses_rotulo`. */ ?>
         <th colspan="4">FINANCIADO HASTA <?= (int)($fin['meses_rotulo'] ?? $fin['meses'] ?? 36) ?> MESES</th></tr>
-      <tr class="c"><th>MZ.</th><th># SOLAR</th><th>AREA M2<br>del Solar</th>
+      <tr class="c cab-modelo"><th>MZ.</th><th># SOLAR</th><th>AREA M2<br>del Solar</th>
         <th><?= lh(strtoupper($nom)) ?><?php if ($m2c !== null) echo '<br>(' . (int)$m2c . 'mts)'; ?></th>
         <th>SEPARE<br>CON</th>
         <th>A LA FIRMA<br>(<?= (int)($fin['reserva_pct'] ?? 10) ?>%)</th>
@@ -102,9 +106,18 @@ $COL = (array)($L['colores_manzana'] ?? []);
   </table>
 <?php endforeach; ?>
 
-  <?php if (!empty($L['nota'])): ?><div class="nota"><?= $L['nota'] ?></div><?php endif; ?>
-  <div class="vig">ESTA COTIZACI&Oacute;N TIENE UNA VIGENCIA DE
-    <?= (int)($fin['vigencia_horas'] ?? 48) ?> HRS NATURALES</div>
+  <?php /* {entrega} es la fecha VIVA: hoy + los meses de financiamiento. Es de lo
+           primero que pregunta el cliente y se mueve sola con el calendario. */
+    $nota = (string)($L['nota'] ?? '');
+    if ($nota !== '' && strpos($nota, '{entrega}') !== false) {
+        $mesesFin = (int)($fin['meses_rotulo'] ?? $fin['meses'] ?? 36);
+        $MES = ['','enero','febrero','marzo','abril','mayo','junio','julio','agosto',
+                'septiembre','octubre','noviembre','diciembre'];
+        $fe  = $hoy->modify("+$mesesFin months");
+        $nota = str_replace(['{entrega}', '{meses}'],
+                            [$MES[(int)$fe->format('n')] . ' de ' . $fe->format('Y'), (string)$mesesFin], $nota);
+    } ?>
+  <?php if ($nota !== ''): ?><div class="nota"><?= $nota ?></div><?php endif; ?>
   <div class="meta">Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo ·
     <?= count($solares) ?> solares disponibles</div>
 </section>

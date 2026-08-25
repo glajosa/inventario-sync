@@ -441,9 +441,9 @@
       "titulo": "GALERO - CASAS",
       "subtitulo": "LISTA DE PRECIOS - Financiamiento del 40% de la casa, hasta 36 meses",
       "orden": [
-        "PELICANO_3",
         "PELICANO_1",
         "PELICANO_2",
+        "PELICANO_3",
         "PELICANO_4"
       ],
       "nombre": {
@@ -482,7 +482,7 @@
           "#FFFFFF"
         ]
       },
-      "nota": "<b>Todas las casas son de tres dormitorios y dos plantas.</b> La fachada de cada casa deberá respetarse.<br>Los solares <em>F-7</em> y <em>G-7</em> solo admiten el Pelícano 3.<br>El saldo podrá ser cubierto contra entrega o con crédito hipotecario.",
+      "nota": "<b>Todas las casas son de tres dormitorios y dos plantas.</b> La fachada de cada casa deberá respetarse.<br>Los solares <em>F-7</em> y <em>G-7</em> solo admiten el Pelícano 3.<br>El financiamiento es de hasta <b>{meses} meses</b> y la entrega se realiza en ese mismo plazo: quien contrate hoy recibe su casa en <b>{entrega}</b>. El saldo podrá ser cubierto contra entrega o con crédito hipotecario.",
       "financiamiento": {
         "meses": 24,
         "separa": 1000,
@@ -495,7 +495,8 @@
         "meses_rotulo": 36,
         "_nota": "40% de entrada: 10% a la firma, 20% en 24 mensuales y 10% en 3 extraordinarias (una por anio). El rotulo dice 36 meses porque es el plazo de ENTREGA; las mensuales son 24."
       },
-      "tema": "azul"
+      "tema": "azul",
+      "_orden_nota": "C-03: el orden es el del catalogo (1, 2, 3, 4), no el del metraje de construccion."
     }
   }
 }

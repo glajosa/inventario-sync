@@ -242,6 +242,8 @@ $hoy = new DateTimeImmutable('now');
        padding:10px 14px;font-size:12px}
   /* ── forma SOLAR (Sun Bay) ── */
   td.mz{font-weight:700;text-align:center}
+  /* C-03: el encabezado de cada tabla de modelo lleva color, no blanco. */
+  tr.cab-modelo th{background:#D9E1F2;color:#000}
   td.sal{text-align:right;font-variant-numeric:tabular-nums;background:#fce9e2;white-space:nowrap}
   .esp{height:14px;border:0}
   .nota{max-width:1120px;margin:12px auto 0;background:#ffff00;border:1px solid #000;
