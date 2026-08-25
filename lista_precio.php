@@ -78,14 +78,41 @@ foreach ($unidades as $u => $d) {
 foreach ($grupos as &$g) natsort($g['cods']);
 unset($g);
 
+/* EXCEPCIONES por unidad. Hay productos dentro de una familia que no siguen la regla
+   general y no se pueden deducir de la posicion ni del metraje: los dos loft duplex de
+   Galero Torre D (D-10-2 y D-10-4) llevan 2 parqueos, no 1, y parten su 5% de
+   extraordinarias en DOS cuotas mientras el resto de la torre la paga en una. Estaba en
+   el archivo del director (`parqueos: {_normal:1,_lofts:2}` y
+   `cuotas_extraordinarias: {pct:5, n:1, n_lofts:2}`) y la lista lo ignoraba: la unica
+   cuota fuerte del plan salia al doble. */
+foreach ((array)($L['excepciones'] ?? []) as $codExc => $exc) {
+    foreach ($grupos as $k => $g) {
+        if (!in_array((string)$codExc, $g['cods'], true)) continue;
+        if (isset($exc['parqueos'])) $grupos[$k]['parq']    = (int)$exc['parqueos'];
+        if (isset($exc['extra_n']))  $grupos[$k]['extra_n'] = (int)$exc['extra_n'];
+        if (!empty($exc['sufijo']))  $grupos[$k]['sufijo']  = (string)$exc['sufijo'];
+    }
+}
+
 // ── nombre DERIVADO, cuando la familia no lista precio por precio ───────────
 // Los monoambientes cambian de precio seguido y mantener una tabla de 9 llaves
 // `precio|m2` a mano se desactualiza sola. Si la familia declara el mapa de
 // posiciones, el nombre se arma de las unidades del grupo: su categoria y su cara.
 $DER = $L['derivar_nombre'] ?? null;
 if ($DER) {
-    $catDe = function (int $pos) use ($DER): string {
-        foreach ((array)($DER['categorias'] ?? []) as $nom => $poss)
+    /* La CARA manda sobre el mapa de categorias (M-06 de la direccion, 24-ago-2026):
+       en la cara central los dos esquineros valen distinto —la posicion 1 da a la garita
+       y tiene las dos fachadas libres, la 12 colinda con el edificio vecino—, pero en la
+       cara LINEAL los dos extremos colindan con un edificio, uno por cada punta: las
+       posiciones 13 y 24 son UNA sola categoria y valen lo mismo.
+       Aplicarle a la lineal el mapa de la central partia la categoria en dos y sacaba dos
+       filas casi identicas, las dos marcadas "ULTIMA DISPONIBLE", a precios distintos
+       (E-4-13 $84.863 contra F-4-24 $82.863). */
+    $catDe = function (int $pos, string $cara = '') use ($DER): string {
+        $mapas = (array)($DER['categorias_por_cara'] ?? []);
+        $mapa  = ($cara !== '' && isset($mapas[$cara])) ? (array)$mapas[$cara]
+                                                       : (array)($DER['categorias'] ?? []);
+        foreach ($mapa as $nom => $poss)
             if (in_array($pos, (array)$poss, true)) return (string)$nom;
         return (string)($DER['categoria_por_defecto'] ?? '');
     };
@@ -99,8 +126,9 @@ if ($DER) {
         $cats = []; $caras = [];
         foreach ($g['cods'] as $cod) {
             if (!preg_match('/^[A-Z]-\d+-(\d+)$/', $cod, $mm)) continue;
-            $cats[$catDe((int)$mm[1])] = true;
-            $caras[$caraDe((int)$mm[1])] = true;
+            $caraU = $caraDe((int)$mm[1]);
+            $cats[$catDe((int)$mm[1], $caraU)] = true;
+            $caras[$caraU] = true;
         }
         // Si el grupo mezcla categorias o caras se deja el nombre generico: inventar
         // uno seria prometerle al cliente una ubicacion que no todas tienen.
@@ -403,7 +431,7 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
             $clsNiv = $bandas ? 'niv-' . preg_replace('/[^a-z]/', '', (string)($bandas[$iB - 1] ?? end($bandas)))
                               : 'niv' . (($iB - 1) % 5 + 2);
             $primera = true; ?>
-        <?php foreach ($filas as $g): $pl = lst_plan($g['precio'], $fin);
+        <?php foreach ($filas as $g): $pl = lst_plan($g['precio'], $fin, $g['extra_n'] ?? null);
               $n = count($g['cods']);
               // Con UNA disponible la fila se nombra con el codigo real, no con la
               // tipologia: "LOCAL A-1-12", "RESTAURANTE C-7". Lo pide la spec y es lo
@@ -416,7 +444,10 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
                      : (($g['sing'] !== '' && empty($L['codigo_sin_prefijo']))
                           ? trim($g['sing'] . ' ' . $g['cods'][array_key_first($g['cods'])])
                           : $g['cods'][array_key_first($g['cods'])]);
-              $ult = !empty($g['union']) ? ''
+              /* Hay listas donde cada fila ES una unidad —Torre D tiene 13 filas y 13
+                 unidades— y ahi la etiqueta de escasez se repite en todas y no dice
+                 nada: quema la unica palanca de urgencia que tiene el asesor. */
+              $ult = (!empty($L['sin_badges']) || !empty($g['union'])) ? ''
                    : ($n === 1 ? (string)($L['badge_uno'] ?? 'ÚLTIMA UNIDAD')
                    : ($n === 2 ? (string)($L['badge_dos'] ?? '2 ÚLTIMAS DISPONIBLES') : '')); ?>
           <tr>

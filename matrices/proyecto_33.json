@@ -1507,7 +1507,55 @@
             ]
           ]
         },
-        "_nota": "Los nombres son los del documento: 'VISTA PARQUE CENTRAL ESQ. 1'. El {cara} se reemplaza por la cara real del grupo."
+        "_nota": "Los nombres son los del documento: 'VISTA PARQUE CENTRAL ESQ. 1'. El {cara} se reemplaza por la cara real del grupo.",
+        "categorias_por_cara": {
+          "PARQUE CENTRAL": {
+            "VISTA {cara} ESQ. 3": [
+              1
+            ],
+            "VISTA {cara} ESQ. 2": [
+              12
+            ],
+            "VISTA {cara} ESQ. 1": [
+              6,
+              7
+            ],
+            "VISTA {cara} CENTRAL DEL PISO": [
+              25
+            ],
+            "VISTA {cara}": [
+              2,
+              3,
+              4,
+              5,
+              8,
+              9,
+              10,
+              11
+            ]
+          },
+          "PARQUE LINEAL": {
+            "VISTA {cara} ESQUINERO": [
+              13,
+              24
+            ],
+            "VISTA {cara} ESQ. 1": [
+              18,
+              19
+            ],
+            "VISTA {cara}": [
+              14,
+              15,
+              16,
+              17,
+              20,
+              21,
+              22,
+              23
+            ]
+          }
+        },
+        "_cara_nota": "M-06 de la direccion: en la cara CENTRAL los dos esquineros valen distinto (la 1 da a la garita con dos fachadas libres, la 12 colinda con el vecino). En la cara LINEAL los dos extremos colindan con un edificio: 13 y 24 son UNA categoria y valen igual. `categorias` queda como respaldo para familias que no distinguen cara."
       },
       "uniones": {
         "_nota": "Dos o tres contiguos = un departamento de 2 o 3 dormitorios. Precio = suma - 20.000, UNA sola vez: al unirse viene un parqueo menos, y con tres vienen dos parqueos, asi que tambien se resta una vez. Se muestra la combinacion MAS BARATA de cada tamaño y cara: es un 'desde'.",

@@ -134,11 +134,15 @@ function lst_plazo(array $fin): array {
  * las oficinas y los monoambientes no comparten plazo, y el cotizador —que resuelve
  * por categoria de pipeline— no puede distinguirlos.
  */
-function lst_plan(float $p, array $fin): array {
+/* $nExtra fuerza el numero de cuotas extraordinarias de ESTA fila. Hace falta por los
+   dos lofts duplex de Galero Torre D: parten el mismo 5% en DOS cuotas y el resto de la
+   torre lo paga en una. Cobrarles la del resto es pedirles mas del doble en la unica
+   cuota fuerte del plan — D-10-2 salia a $12.817,70 cuando son $6.408,86. */
+function lst_plan(float $p, array $fin, ?int $nExtra = null): array {
     $sep   = (float)($fin['separa'] ?? 1000);
     $pz    = lst_plazo($fin);
     $meses = $pz['meses'];
-    $nEx   = $pz['extra_n'];
+    $nEx   = $nExtra !== null && $nExtra > 0 ? $nExtra : $pz['extra_n'];
     $reserva = $p * ((float)($fin['reserva_pct'] ?? 10) / 100);
     $cuotas  = $p * ((float)($fin['cuotas_pct']  ?? 20) / 100);
     $extras  = $p * ((float)($fin['extra_pct']   ?? 10) / 100);
@@ -295,4 +299,49 @@ function lst_metros(array $m2, array $cfg, string $grupo, string $cat,
     if ($origen === 'config' && $cfgM !== null) return $fmt((float)$cfgM);
     if ($m2) return implode(' - ', array_map($fmt, $m2));
     return $cfgM !== null ? $fmt((float)$cfgM) : '—';
+}
+
+/**
+ * Fichas INCOMPLETAS: disponibles sin precio que tampoco son la mitad de una union.
+ *
+ * La direccion lo pidio textual: "una DISPONIBLE sin precio y sin pareja valida es una
+ * ficha incompleta, no una union: tampoco se publica, pero se REPORTA al equipo
+ * comercial en vez de esconderse".
+ *
+ * Las tres condiciones de la pareja son suyas, y las tres hacen falta. Con solo "le
+ * falta el PVP" su detector dio 45 uniones en Noral Plaza donde hay 21: una unidad
+ * BLOQUEADA o de un dueno tambien puede no tener precio. Y sin el 1.6x se equivoca de
+ * pareja — C-1-23 tiene dos vecinos disponibles, C-1-22 (30 m2, medianero suelto) y
+ * C-1-24 (77 m2, la union real).
+ *
+ * Ojo: una unidad sin codigo utilizable (como la ficha #3091 de Sun Bay) no llega
+ * hasta aca — el catalogo la descarta antes. Esa se ve en Bitrix, no en la lista.
+ */
+function lst_incompletas(array $unidades, int $tipo): array {
+    $base = null;
+    foreach ($unidades as $d)
+        if ((int)($d['tipo'] ?? 0) === $tipo && (float)($d['pvp'] ?? 0) > 0) {
+            $m = (float)str_replace(',', '.', (string)($d['m2'] ?? 0));
+            if ($m > 0) $base = $base === null ? $m : min($base, $m);
+        }
+    $fuera = [];
+    foreach ($unidades as $k => $d) {
+        if ((int)($d['tipo'] ?? 0) !== $tipo) continue;
+        if (($d['etapa'] ?? '') !== 'DISPONIBLE') continue;
+        if ((float)($d['pvp'] ?? 0) > 0) continue;
+        if (!preg_match('/^([A-Z])-(\d+)-(\d+)$/', $k, $m)) { $fuera[] = (string)($d['cod'] ?? $k); continue; }
+        $tienePareja = false;
+        foreach ([-1, 1] as $paso) {
+            $v = $unidades["{$m[1]}-{$m[2]}-" . ((int)$m[3] + $paso)] ?? null;
+            if (!$v) continue;
+            if (($v['etapa'] ?? '') !== ($d['etapa'] ?? '')) continue;      // misma etapa
+            if ((float)($v['pvp'] ?? 0) <= 0) continue;                    // la pareja tiene precio
+            $mv = (float)str_replace(',', '.', (string)($v['m2'] ?? 0));
+            if ($base !== null && $mv < $base * 1.6) continue;             // mide lo que dos
+            $tienePareja = true; break;
+        }
+        if (!$tienePareja) $fuera[] = (string)($d['cod'] ?? $k);
+    }
+    sort($fuera);
+    return $fuera;
 }

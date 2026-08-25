@@ -61,8 +61,21 @@ if ($fam === 0) {
     foreach ($familias as $t => $_) if (isset($LISTAS[(string)$t])) { $fam = $t; break; }
     if ($fam === 0 && $familias) $fam = (int)array_key_first($familias);
 }
+if (!isset($LISTAS[(string)$fam])) {
+    // Pidieron una familia sin formato por URL: se cae a la primera que si lo tenga
+    // en vez de mostrar una hoja vacia con un mensaje tecnico.
+    foreach ($familias as $t => $_) if (isset($LISTAS[(string)$t])) { $fam = (int)$t; break; }
+}
 $L = $LISTAS[(string)$fam] ?? null;
-$nombreFam = lst_nombre_familia($cat, $fam);
+/* Las familias SIN formato no llevan pestana. La de "Terrenos" de Galero es el caso:
+   todos los solares disponibles se venden con casa, esa familia no deberia existir, y
+   la pestana solo servia para mostrarle al cliente un error interno. Se cuentan aparte
+   y se reportan en el aviso interno, que no se imprime. */
+$sinFormato = [];
+foreach ($familias as $t => $f)
+    if (!isset($LISTAS[(string)$t])) { $sinFormato[(int)$t] = $f; unset($familias[$t]); }
+$nombreFam   = lst_nombre_familia($cat, $fam);
+$incompletas = $fam ? lst_incompletas($unidades, $fam) : [];
 
 $hoy = new DateTimeImmutable('now');
 ?>
@@ -91,7 +104,8 @@ $hoy = new DateTimeImmutable('now');
   .cab .tit{flex:1}
   /* Departamentos mete el logo DENTRO de la tabla: ocupa la banda y el nombre durante
      las tres filas de cabecera. */
-  td.celda-logo{background:#fff;text-align:center;vertical-align:middle;padding:8px 10px}
+  td.celda-logo{background:transparent;border-top:0;border-left:0;
+       text-align:center;vertical-align:middle;padding:8px 10px}
   td.celda-logo img{height:56px;width:auto;max-width:100%}
   /* Layout 'al_lado': el logo a la izquierda y la banda del titulo a su derecha, a la
      misma altura, como en los documentos de Oficinas y Departamentos. */
@@ -129,6 +143,7 @@ $hoy = new DateTimeImmutable('now');
        padding:8px 5px;border:1px solid #000;border-left:0;letter-spacing:.03em}
   .lat em{font-style:italic}
   table{width:100%;border-collapse:collapse;font-size:11.5px}
+  td.p,td.n{white-space:nowrap}   /* el "$" se partia solo en dos lineas */
   th,td{border:1px solid #000;padding:5.5px 6px}
   .titulo{background:#4a6329;color:#fff;font-size:15px;font-weight:700;
           text-align:center;padding:7px;letter-spacing:.02em}
@@ -221,12 +236,25 @@ $hoy = new DateTimeImmutable('now');
   <button class="imp" onclick="window.print()">Descargar PDF</button>
 </div>
 
-<?php if (!$L): ?>
+<?php /* Aviso INTERNO (no se imprime): fichas que no pueden salir en la lista. La
+         direccion lo pidio expreso — "una disponible sin precio y sin pareja valida es
+         una ficha incompleta, no una union: tampoco se publica, pero se REPORTA al
+         equipo comercial en vez de esconderse". */ ?>
+<?php if ($sinFormato || !empty($incompletas)): ?>
   <div class="aviso">
-    <b><?= lh($nombreFam) ?></b> todavía no tiene el formato de lista declarado en
-    <code>matrices/proyecto_<?= $cat ?>.json</code> (bloque <code>listas</code>).
-    Las familias con formato están en la barra de arriba.
+    <?php if ($sinFormato): $ns = [];
+      foreach ($sinFormato as $t => $f) $ns[] = $f['nombre'] . ' (' . (int)$f['n'] . ')'; ?>
+      <b>Sin lista de precios:</b> <?= lh(implode(' · ', $ns)) ?>.
+      Esas unidades no se publican. Si deben venderse, hay que reclasificarlas en Bitrix.
+    <?php endif; ?>
+    <?php if (!empty($incompletas)): ?>
+      <div><b>Fichas incompletas</b> (disponibles sin precio y sin pareja):
+        <?= lh(implode(' · ', $incompletas)) ?>. No salen en la lista — revisar en Bitrix.</div>
+    <?php endif; ?>
   </div>
+<?php endif; ?>
+<?php if (!$L): ?>
+  <div class="aviso">No hay ninguna familia con lista de precios en este proyecto.</div>
 <?php else:
   $forma = (string)($L['forma'] ?? 'tipologia');
   if ($forma !== 'tipologia') {

@@ -265,7 +265,7 @@
     ],
     "1793": {
       "forma": "precio",
-      "titulo": "EDIFICIO D - (departamentos de 2 dormitorios)",
+      "titulo": "EDIFICIO D",
       "subtitulo": "30% de Entrada a 9 Meses",
       "grupos": [
         "D"
@@ -284,7 +284,7 @@
       ],
       "pie": {
         "rotulo": "EDIFICIO D",
-        "medidas": "70 - 81,10m2"
+        "medidas": "70 - 141.32m2"
       },
       "financiamiento": {
         "meses": 9,
@@ -394,7 +394,21 @@
           "D": 1
         },
         "parqueos_defecto": 1
-      }
+      },
+      "_titulo_nota": "Decia 'EDIFICIO D - (departamentos de 2 dormitorios)' y adentro salian cinco de 3 dormitorios (D-2-2, D-4-2, D-7-2 y los dos lofts). Pendiente: la lista aprobada los separa en DOS tablas — posiciones 1 y 3 son de 2 dormitorios; 2 y 4, de 3.",
+      "sin_badges": true,
+      "_badges_nota": "D-04: en Torre D cada fila es una unidad, asi que las 13 decian ULTIMA DISPONIBLE.",
+      "excepciones": {
+        "D-10-2": {
+          "parqueos": 2,
+          "extra_n": 2
+        },
+        "D-10-4": {
+          "parqueos": 2,
+          "extra_n": 2
+        }
+      },
+      "_excepciones_nota": "Del archivo del director: `parqueos: {_normal:1,_lofts:2}` y `cuotas_extraordinarias: {pct:5, n:1, n_lofts:2}`. D-10-2 (138,57 m2) y D-10-4 (141,32 m2) son duplex de dos plantas con 2 parqueos, y parten el 5% en DOS cuotas."
     }
   }
 }
