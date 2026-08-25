@@ -27,6 +27,21 @@ foreach ($unidades as $u => $d) {
 usort($filas, fn($a, $b) => [$a['mz'], $a['n']] <=> [$b['mz'], $b['n']]);
 $meses = $filas ? (int)$filas[0]['plan']['meses'] : (int)($fin['meses'] ?? 49);
 ?>
+<?php
+/* S-03: una HOJA POR GRUPO DE MANZANAS (B·D·F · H · J · L), no una tabla continua de 63
+   filas. En 63 renglones seguidos el chip de color de la manzana es lo unico que deja
+   ubicarse, y aun asi el vendedor pierde el hilo. Los grupos los declara el JSON. */
+$GRUPOS_HOJA = (array)($L['hojas_manzanas'] ?? []);
+if (!$GRUPOS_HOJA) {
+    $mzs = [];
+    foreach ($filas as $r) $mzs[$r['mz']] = true;
+    $GRUPOS_HOJA = [array_keys($mzs)];
+}
+$TODAS = $filas;
+foreach ($GRUPOS_HOJA as $GRUPO):
+    $filas = array_values(array_filter($TODAS, fn($r) => in_array($r['mz'], (array)$GRUPO, true)));
+    if (!$filas) continue;
+?>
 <section class="hoja"<?= !empty($L['tema']) ? ' data-tema="' . lh((string)$L['tema']) . '"' : '' ?>>
   <div class="cab">
     <?php /* El logo del PROYECTO, solo. En los documentos de la direccion la lista de
@@ -41,7 +56,7 @@ $meses = $filas ? (int)$filas[0]['plan']['meses'] : (int)($fin['meses'] ?? 49);
            alt="Galjosa" onerror="this.style.display='none'">
     <?php endif; ?>
     <div class="tit">
-      <table><tr><th class="titulo"><?= lh((string)($L['titulo'] ?? 'TERRENOS DISPONIBLES')) ?></th></tr>
+      <table><tr><th class="titulo"><?= $L['titulo_html'] ?? lh((string)($L['titulo'] ?? 'TERRENOS DISPONIBLES')) ?></th></tr>
              <tr><th class="sub"><?= lh((string)($L['subtitulo'] ?? '')) ?></th></tr></table>
     </div>
   </div>
@@ -68,7 +83,12 @@ $meses = $filas ? (int)$filas[0]['plan']['meses'] : (int)($fin['meses'] ?? 49);
             <tr><td class="esp" colspan="9"></td></tr>
           <?php endif; $mzPrev = $r['mz']; ?>
       <tr>
-        <td class="mz"><?= lh($r['mz']) ?></td>
+        <?php /* El chip de color de la manzana. En 63 filas es lo unico que deja
+                 ubicarse de un vistazo, y el color es el del plano: B y D dorado,
+                 F azul marino, H ciruela, J verde, L azul. */
+          $clMz = ($L['colores_manzana'] ?? [])[$r['mz']] ?? null; ?>
+        <td class="mz"<?= $clMz ? ' style="background:' . lh((string)$clMz[0]) . ';color:'
+              . lh((string)($clMz[1] ?? '#000')) . '"' : '' ?>><?= lh($r['mz']) ?></td>
         <td class="c"><?= (int)$r['n'] ?></td>
         <td class="c"><?= $r['m2'] !== null ? lh(rtrim(rtrim(number_format($r['m2'], 2, ',', ''), '0'), ',')) : '—' ?></td>
         <td class="p"><?= lh(ln($r['pvp'])) ?></td>
@@ -84,9 +104,11 @@ $meses = $filas ? (int)$filas[0]['plan']['meses'] : (int)($fin['meses'] ?? 49);
     <?php endif; ?>
     </tbody>
   </table>
-  <?php if (!empty($L['nota'])): ?><div class="nota"><?= $L['nota'] ?></div><?php endif; ?>
-  <div class="vig">ESTA COTIZACI&Oacute;N TIENE UNA VIGENCIA DE
-    <?= (int)($fin['vigencia_horas'] ?? 48) ?> HRS NATURALES</div>
+  <?php /* Su documento cierra con UNA nota amarilla que ya incluye la vigencia. */ ?>
+  <div class="nota"><?= str_replace(['{horas}', '{meses}'],
+        [(string)(int)($fin['vigencia_horas'] ?? 48), (string)$meses],
+        (string)($L['nota'] ?? '')) ?></div>
   <div class="meta">Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo ·
     <?= count($filas) ?> solares disponibles</div>
 </section>
+<?php endforeach; $filas = $TODAS; ?>

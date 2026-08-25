@@ -543,9 +543,8 @@
     ],
     "1795": {
       "forma": "solar",
-      "titulo": "TERRENOS DISPONIBLES",
-      "subtitulo": "Financiamiento del terreno hasta 49 meses plazo",
-      "nota": "La fachada de cada casa deberá respetarse. Financiamiento del terreno <em>SIN INTERESES</em>.",
+      "subtitulo": "LISTA DE PRECIOS  -  Financiamiento del terreno hasta 49 meses plazo",
+      "nota": "NOTA: ESTA COTIZACIÓN TIENE UNA VIGENCIA DE <em>{horas} HRS NATURALES</em> &nbsp;||&nbsp; La fachada de cada casa deberá respetarse.<br>El financiamiento del Terreno es hasta {meses} meses plazo mediante crédito directo SIN INTERESES",
       "financiamiento": {
         "separa": 1000,
         "entrada_pct": 70,
@@ -557,7 +556,51 @@
         "_nota": "Plazo derivado de fecha_entrega (2030-09): hoy 49 meses y 5 extraordinarias, los mismos de la lista de la direccion.",
         "fecha_entrega": "2030-09"
       },
-      "tema": "blanco"
+      "tema": "blanco",
+      "titulo_html": "SUN BAY ENGABAO - <em>BEACH RESIDENCES</em>",
+      "colores_manzana": {
+        "B": [
+          "#FFFF00",
+          "#000000"
+        ],
+        "D": [
+          "#FFFF00",
+          "#000000"
+        ],
+        "F": [
+          "#1F3864",
+          "#FFFFFF"
+        ],
+        "H": [
+          "#F2CCD4",
+          "#000000"
+        ],
+        "J": [
+          "#375623",
+          "#FFFFFF"
+        ],
+        "L": [
+          "#2E75B6",
+          "#FFFFFF"
+        ]
+      },
+      "hojas_manzanas": [
+        [
+          "B",
+          "D",
+          "F"
+        ],
+        [
+          "H"
+        ],
+        [
+          "J"
+        ],
+        [
+          "L"
+        ]
+      ],
+      "_hojas_nota": "S-03: su lista aprobada va una hoja por grupo de manzanas (B·D·F / H / J / L). La app entregaba una tabla continua de 63 filas."
     }
   }
 }

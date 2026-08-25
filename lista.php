@@ -177,6 +177,7 @@ $hoy = new DateTimeImmutable('now');
   table{width:100%;border-collapse:collapse;font-size:11.5px}
   td.p,td.n{white-space:nowrap}   /* el "$" se partia solo en dos lineas */
   th,td{border:1px solid #000;padding:5.5px 6px}
+  .titulo em{font-style:italic}
   .titulo{background:var(--banda);color:var(--banda-txt);font-size:15px;font-weight:700;
           text-align:center;padding:7px;letter-spacing:.02em}
   .sub{text-align:center;font-size:11.5px;font-weight:700;padding:5px;background:#fff}
