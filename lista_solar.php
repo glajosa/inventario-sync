@@ -62,9 +62,14 @@ foreach ($GRUPOS_HOJA as $GRUPO):
   </div>
   <table>
     <thead>
+      <?php /* La fila de grupo estaba CORRIDA una columna: "70% de Entrada" caia sobre
+               MZ./#SOLAR/AREA/PRECIO, que es donde va "TERRENOS DISPONIBLES", y todo lo
+               demas se desplazaba. Es el mismo error que la direccion marco en Noral con
+               el "10%" sobre la columna equivocada. */ ?>
       <tr class="g">
-        <th colspan="4"><?= (int)($fin['entrada_pct'] ?? 70) ?>% de Entrada</th>
-        <th colspan="4">FINANCIADO A <?= $meses ?> MESES PLAZO</th>
+        <th colspan="4">TERRENOS DISPONIBLES</th>
+        <th colspan="4"><?= (int)($fin['entrada_pct'] ?? 70) ?>% de Entrada<br>
+          <em>FINANCIADO A <?= $meses ?> MESES PLAZO</em></th>
         <th><?= (int)($fin['contra_pct'] ?? 30) ?>%</th>
       </tr>
       <tr class="c">

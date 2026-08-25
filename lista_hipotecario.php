@@ -58,21 +58,26 @@ $pl0 = $filas ? $filas[0]['plan'] : lst_plan_hipo(0.0, $fin);
       <img class="logo" src="assets/logo_galjosa_transparente.png"
            alt="Galjosa" onerror="this.style.display='none'">
     <?php endif; ?>
-    <div class="tit">
-      <table><tr><th class="titulo"><?= lh((string)($L['titulo'] ?? strtoupper($proyecto))) ?></th></tr>
-             <tr><th class="sub"><?= lh((string)($L['subtitulo'] ?? '')) ?></th></tr></table>
+    <?php /* Su documento arma la cabecera en TRES bloques a la misma altura: el logo,
+             el nombre del producto en un recuadro naranja, y a la derecha el titulo del
+             financiamiento con sus dos mitades debajo. Estaba como dos bandas a todo el
+             ancho, una encima de la otra: no se parecia. */ ?>
+    <div class="tit-prod"><?= lh((string)($L['titulo'] ?? strtoupper($proyecto))) ?></div>
+    <div class="tit-fin">
+      <table>
+        <tr><th class="fin-tit" colspan="2"><?= lh((string)($L['subtitulo'] ?? '')) ?></th></tr>
+        <tr><th class="fin-a"><?= (int)($fin['entrada_pct'] ?? 30) ?>% DE ENTRADA</th>
+            <th class="fin-b"><?= 100 - (int)($fin['entrada_pct'] ?? 30) ?>% - Cr&eacute;dito Hipotecario</th></tr>
+      </table>
     </div>
   </div>
   <table>
     <thead>
-      <tr class="g">
-        <th colspan="<?= $conPatio ? 5 : 4 ?>"><?= (int)($fin['entrada_pct'] ?? 30) ?>% DE ENTRADA</th>
-        <th colspan="4"><?= 100 - (int)($fin['entrada_pct'] ?? 30) ?>% - Cr&eacute;dito Hipotecario</th>
-      </tr>
       <tr class="c">
         <th>DEPARTAMENTO TIPO</th><th>M2</th><th>PARQUEOS</th>
         <?php if ($conPatio): ?><th>PATIO</th><?php endif; ?>
-        <th>PRECIO</th><th>SEPARA CON</th><th>ENTRADA</th><th>PR&Eacute;STAMO</th>
+        <th>PRECIO</th><th class="h-sep">SEPARA CON</th><th class="h-ent">ENTRADA</th>
+        <th class="h-pre">PR&Eacute;STAMO</th>
         <th>Cuotas del Pr&eacute;stamo a <?= (int)$pl0['anios'] ?><br>a&ntilde;os - Tasa
           <?= lh(number_format($pl0['tasa'], 2, ',', '')) ?>%<br>(tentativo)</th>
       </tr>
@@ -111,7 +116,8 @@ $pl0 = $filas ? $filas[0]['plan'] : lst_plan_hipo(0.0, $fin);
                 $cod = $fmt === 'guion'
                     ? preg_replace('/^([A-Z])(\d+)-/', '$1-$2-', $r['cod'])
                     : $r['cod'];
-                echo lh($cod) . ($et !== '' ? ' &nbsp;·&nbsp; ' . lh(strtoupper($et)) : '');
+                $sep = (string)($L['separador_codigo'] ?? ' &nbsp;·&nbsp; ');
+                echo lh($cod) . ($et !== '' ? $sep . lh(strtoupper($et)) : '');
             }
         ?></td>
         <td class="c"><?= $r['m2'] !== null ? lh(rtrim(rtrim(number_format($r['m2'], 2, ',', ''), '0'), ',')) : '—' ?></td>

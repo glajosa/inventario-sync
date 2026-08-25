@@ -138,6 +138,18 @@ $hoy = new DateTimeImmutable('now');
      cabecera caia sobre la banda naranja del titulo y no se leia. */
   .leyenda-arriba{justify-content:flex-end;margin-bottom:8px}
   .pieh.destacado{background:#1f3864;color:#fff;padding:5px 14px;border-color:#1f3864}
+  /* Cabecera de las listas con credito hipotecario (Torre C, Suites): tres bloques a la
+     misma altura — logo, nombre del producto en naranja, y el financiamiento al lado. */
+  .tit-prod{background:var(--banda);color:var(--banda-txt);font-size:19px;font-weight:700;
+       letter-spacing:.22em;display:flex;align-items:center;justify-content:center;
+       padding:10px 26px;border:1px solid #000;align-self:stretch;min-width:270px}
+  .tit-fin{flex:1;align-self:stretch}
+  .tit-fin table{width:100%;height:100%;border-collapse:collapse}
+  .tit-fin th{border:1px solid #000;padding:7px;font-size:11.5px;font-weight:700;background:#fff}
+  .tit-fin .fin-a,.tit-fin .fin-b{font-style:italic}
+  th.h-sep{background:#1F4E79;color:#fff}
+  th.h-ent{background:#FDF2EC}
+  th.h-pre{background:#DDEBF7}
   .cab .tit-galero{flex:1}
   .tit-galero h1{font-size:22px;font-weight:700;letter-spacing:.01em;line-height:1.15}
   .tit-galero p{font-size:11.5px;color:#4a4a45;margin-top:2px}
@@ -192,6 +204,7 @@ $hoy = new DateTimeImmutable('now');
        background:var(--sub);color:var(--sub-txt)}
   .g th{font-weight:700;text-align:center;font-size:11px}
   .g .it{font-style:italic}
+  .g th em{font-style:italic;font-weight:700}
   .c th{font-weight:700;text-align:center;font-size:9.5px;line-height:1.25;padding:6px 4px}
   .niv{color:#fff;font-weight:700;font-size:10px;text-align:center;width:34px;padding:2px}
   .niv span{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap}
