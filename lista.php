@@ -104,13 +104,22 @@ $hoy = new DateTimeImmutable('now');
   .c th{font-weight:700;text-align:center;font-size:9px;line-height:1.2;padding:5px 4px}
   .niv{color:#fff;font-weight:700;font-size:9px;text-align:center;width:26px;padding:2px}
   .niv span{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap}
-  .niv2{background:#3b5323}.niv3{background:#6b8e3d}.niv4{background:#8a6d1f}
+  /* La banda del bloque es OCRE en el documento de la direccion, no verde: el verde
+     ya lo usa la vista al parque central y repetirlo confundia las dos cosas. */
+  .niv2{background:#b8860b}.niv3{background:#a8780a}.niv4{background:#986c09}
   .niv5{background:#4a5d6b}.niv6{background:#7a4b00}
-  .cat{font-weight:700;font-size:10px;background:#fdf6e3;line-height:1.25}
+  /* Codigo de color de la VISTA, calcado del PDF de la direccion: el parque lineal va
+     en un verde muy palido y el CENTRAL en verde OSCURO con texto blanco. No son dos
+     tonos del mismo palo — el central es el producto caro y se ve de lejos.
+     td.cat y no .cat: `td:first-child{text-align:left}` le gana por especificidad y
+     los nombres quedaban a la izquierda cuando en el documento van centrados. */
+  td.cat{font-weight:700;font-size:10.5px;line-height:1.2;text-align:center;
+         background:#eef4e4;color:#1f2d16}
   /* Codigo de color de la vista, tomado de la hoja de Excel original:
      crema para el parque lineal, verde palido para el parque central. */
-  .cat.lineal {background:#fff2cc}
-  .cat.central{background:#e2efda}
+  td.cat.lineal {background:#eef4e4;color:#1f2d16}
+  td.cat.central{background:#4a6329;color:#fff}
+  td.cat.central .ult{color:#cfe0b4}
   .cat.combo{background:#3b5323;color:#fff;text-align:center;letter-spacing:.04em}
   .cat .ult{display:block;font-weight:600;font-size:6.5px;letter-spacing:.09em;
        margin-top:2px;color:#9a6a63;opacity:.9}
