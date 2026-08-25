@@ -640,7 +640,6 @@
       "parqueos_default": 1,
       "parqueos_combo": 2,
       "columna_parqueos": true,
-      "_una_tabla_nota": "UNA sola tabla, no nueve: lo pide la spec del director del 24-ago. Como el precio cambia por edificio, el EDIFICIO va en el nombre de cada fila; si no, el vendedor no sabe de cual es.",
       "bloques": [
         {
           "id": "PB",
@@ -651,7 +650,7 @@
         },
         {
           "id": "PA",
-          "etiqueta": "Planta",
+          "etiqueta": "Planta Alta",
           "pisos": [
             2,
             3
@@ -659,7 +658,7 @@
         },
         {
           "id": "4P",
-          "etiqueta": "4to",
+          "etiqueta": "4to Piso",
           "pisos": [
             4
           ]
@@ -689,18 +688,6 @@
           ]
         },
         "caras": {},
-        "grupos_edificio": {
-          "B": "EDIFICIOS B C D E",
-          "C": "EDIFICIOS B C D E",
-          "D": "EDIFICIOS B C D E",
-          "E": "EDIFICIOS B C D E",
-          "A": "EDIFICIO A",
-          "F": "EDIFICIO F",
-          "G": "EDIFICIOS G H",
-          "H": "EDIFICIOS G H",
-          "I": "EDIFICIO I",
-          "J": "EDIFICIO J"
-        },
         "parqueos_edificio": {
           "B": 1,
           "C": 1,
@@ -714,7 +701,21 @@
           "J": 1
         },
         "parqueos_defecto": 1
-      }
+      },
+      "paginar_por": "edificio",
+      "titulo_hoja": "EDIFICIO {ed}",
+      "pie2_hoja": "EDIFICIO - {ed} -",
+      "pie2_sep": " & ",
+      "pie2_decimal": ",",
+      "sin_meta": true,
+      "alineacion_nombre": "centro",
+      "colores_banda": [
+        "ocre",
+        "medio",
+        "ocre"
+      ],
+      "_hojas_nota": "Su PDF aprobado son NUEVE hojas, una por edificio, cada una con su titulo, su pie y sus filas DESDE y 3 DORM. La linea `una_sola_tabla` de la spec pone de ejemplo Monoambientes, y Apartments no figura en ninguno de los 32 hallazgos: manda su documento.",
+      "pie2_lista": true
     }
   }
 }

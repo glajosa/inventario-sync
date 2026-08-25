@@ -64,10 +64,16 @@ foreach ($unidades as $u => $d) {
     $blq = $bloqueDe((int)$piso);
     if ($blq === null) continue;
     $m2  = (float)str_replace(',', '.', (string)($d['m2'] ?? 0));
-    $key = $blq . '|' . round($pvp) . '|' . rtrim(rtrim(number_format($m2, 2, '.', ''), '0'), '.');
+    /* Cuando la lista se pagina por edificio, el EDIFICIO entra a la llave: si no, dos
+       hojas distintas comparten grupo y la escasez sale mal. "ESQUINEROS 2 · 75 m2 ·
+       $158.875" existe en el B y en el D con dos disponibles cada uno, y su documento
+       marca "2 ULTIMAS" en las dos hojas. Con la llave sin edificio quedaban cuatro y
+       ninguna etiqueta. */
+    $pref = ($L['paginar_por'] ?? '') === 'edificio' ? $ed . '|' : '';
+    $key = $pref . $blq . '|' . round($pvp) . '|' . rtrim(rtrim(number_format($m2, 2, '.', ''), '0'), '.');
     if (!isset($grupos[$key])) {
         $t = $TIPOS[round($pvp) . '|' . rtrim(rtrim(number_format($m2, 2, '.', ''), '0'), '.')] ?? [];
-        $grupos[$key] = ['bloque' => $blq, 'precio' => $pvp, 'm2' => $m2,
+        $grupos[$key] = ['bloque' => $blq, 'precio' => $pvp, 'm2' => $m2, 'ed' => $ed,
                          'catKey' => (string)($t['cat'] ?? ''),
                          'nombre' => (string)($t['nombre'] ?? ''), 'sing' => (string)($t['singular'] ?? ''),
                          'zona' => (string)($t['zona'] ?? ''), 'parq' => $t['parqueos'] ?? null,
@@ -317,13 +323,35 @@ uasort($grupos, function ($a, $b) use ($ordenBloque, $ORDEN, $PRIO) {
     return $a['precio'] <=> $b['precio'];
 });
 
-// por bloque, para la banda vertical
-$porBloque = [];
-foreach ($grupos as $g) $porBloque[$g['bloque']][] = $g;
+/* HOJAS. Noral Apartments no es una lista sino NUEVE: el PDF aprobado de la direccion
+   trae una hoja por edificio, con su titulo ("EDIFICIO A"), su pie y sus filas DESDE y
+   3 DORM. Tiene sentido porque ahi el precio cambia de un edificio a otro: cada hoja es
+   la lista de ese edificio. En los demas proyectos hay una sola hoja y este bucle da
+   una vuelta.
+   Ojo con la escasez: dentro de una hoja se cuenta lo de ESE edificio, que es lo que
+   hace su documento — "ESQUINEROS 2 · 75 m2 · $158.875" sale con "2 ULTIMAS" en el
+   edificio B y otra vez en el D, porque son dos por edificio. La regla general de
+   contar en todo el proyecto es para las familias que van en una sola hoja. */
+$PAGINAS = [];
+if (($L['paginar_por'] ?? '') === 'edificio') {
+    $porEd = [];
+    foreach ($grupos as $k => $g) {
+        $ed = (string)($g['ed'] ?? '');
+        if ($ed === '') foreach ($g['cods'] as $c)
+            if (preg_match('/^([A-Z])/', (string)$c, $me)) { $ed = $me[1]; break; }
+        $porEd[$ed][$k] = $g;
+    }
+    ksort($porEd);
+    foreach ($porEd as $ed => $gs) $PAGINAS[] = ['ed' => (string)$ed, 'grupos' => $gs];
+} else {
+    $PAGINAS[] = ['ed' => '', 'grupos' => $grupos];
+}
 
 $etBloque = [];
 foreach ($BLOQUES as $b) $etBloque[(string)$b['id']] = (string)($b['etiqueta'] ?? $b['id']);
-$conParq = !empty($L['columna_parqueos']);
+$conParq  = !empty($L['columna_parqueos']);
+$conPatio = !empty($L['columna_patio']);
+$GRUPOS_TODOS = $grupos;
 // CUATRO columnas caen bajo CARACTERISTICAS: la banda del bloque, el nombre, los
 // metros y el precio. Estaba en 3, y esa columna de menos corria toda la fila de
 // grupo un lugar a la izquierda: el "20%" quedaba sobre A LA FIRMA y el "10%" sobre
@@ -332,10 +360,15 @@ $conParq = !empty($L['columna_parqueos']);
 $nCols   = 4 + ($conParq ? 1 : 0);
 // Las uniones NO suman al conteo: no son unidades, son combinaciones de las que ya
 // estan contadas. Sumarlas hacia decir 26 disponibles donde hay 24.
-$totDisp = 0;
-foreach ($grupos as $g) if (empty($g['union'])) $totDisp += count($g['cods']);
-$nUnion = 0;
-foreach ($grupos as $g) if (!empty($g['union']) && $g['cods'] === ['', '']) $nUnion++;
+?>
+<?php foreach ($PAGINAS as $PAG):
+    $grupos = $PAG['grupos'];
+    $porBloque = [];
+    foreach ($grupos as $g) $porBloque[$g['bloque']][] = $g;
+    $totDisp = 0;
+    foreach ($grupos as $g) if (empty($g['union'])) $totDisp += count($g['cods']);
+    $nUnion = 0;
+    foreach ($grupos as $g) if (!empty($g['union']) && $g['cods'] === ['', '']) $nUnion++;
 ?>
 <?php
 // Subtitulo con el PLAZO: "40% de Entrada a 54 Meses". Los meses NO se escriben —
@@ -355,7 +388,14 @@ $lg = lst_logo((int)$cat, $L);
 // Es exactamente como esta en su HTML: `.cab` en flex con el logo y una tablita
 // `.tit` al lado. Forzar un solo layout no se parece a ninguno de los dos.
 $layout = (string)($L['layout'] ?? 'arriba');
-$titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
+$tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
+?>
+<?php /* El titulo y el pie llevan la letra del edificio cuando la lista va paginada:
+         "EDIFICIO A" arriba y "EDIFICIO - A -" abajo, como en su PDF. */
+  $titulo = $PAG['ed'] !== '' && !empty($L['titulo_hoja'])
+          ? str_replace('{ed}', $PAG['ed'], (string)$L['titulo_hoja']) : $tituloBase;
+  $pieRotulo = $PAG['ed'] !== '' && !empty($L['pie2_hoja'])
+          ? str_replace('{ed}', $PAG['ed'], (string)$L['pie2_hoja']) : (string)($L['pie2'] ?? '');
 ?>
 <section class="hoja">
   <?php /* En los DOS documentos el logo va FUERA de la tabla, arriba a la izquierda,
@@ -518,23 +558,27 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
     <?php if (!empty($L['lat'])): ?><div class="lat"><?= $L['lat'] ?></div><?php endif; ?>
 
   </div>
-  <?php if (!empty($L['pie2'])): ?>
+  <?php if ($pieRotulo !== ''): ?>
     <?php /* Cierre de dos bloques: el rotulo y el rango de metros. El rango se calcula
              de las filas, no se escribe: si entra una tipologia nueva se ajusta solo. */
       $mm = [];
       foreach ($grupos as $g) if ($g['m2'] > 0) $mm[] = (float)$g['m2'];
-      $fmt = fn($v) => rtrim(rtrim(number_format($v, 2, '.', ''), '0'), '.');
+      /* Apartments escribe "75m2 & 85,15m2 & 150m2": separador " & " y decimales con
+         COMA. Departamentos escribe "31m2 hasta 94.5m2", con punto. Es del documento. */
+      $dec = (string)($L['pie2_decimal'] ?? '.');
+      $fmt = fn($v) => rtrim(rtrim(number_format($v, 2, $dec, ''), '0'), $dec);
     ?>
     <?php /* Las medidas del pie: cada documento las escribe distinto. Oficinas lista
              los metrajes ("50 - 58 - 100m2") y Departamentos da el rango ("31m2 hasta
              94.5m2"). Si la familia declara `pie2_medidas` manda lo suyo; si no, se
              calcula el rango de las filas, que se ajusta solo. */ ?>
-    <div class="pie2<?= !empty($L['pie2_lista']) ? ' corto' : '' ?>"><b><?= lh((string)$L['pie2']) ?></b><span><?php
+    <div class="pie2<?= !empty($L['pie2_lista']) ? ' corto' : '' ?>"><b><?= lh($pieRotulo) ?></b><span><?php
         if (!empty($L['pie2_medidas'])) {
             echo lh((string)$L['pie2_medidas']);
         } elseif (!empty($L['pie2_lista'])) {
             $u = array_values(array_unique($mm)); sort($u);
-            echo lh(implode(' - ', array_map($fmt, $u)) . 'm2');
+            $sep = (string)($L['pie2_sep'] ?? ' - ');
+            echo lh(implode('m2' . $sep, array_map($fmt, $u)) . 'm2');
         } elseif ($mm) {
             echo lh($fmt(min($mm)) . 'm2 hasta ' . $fmt(max($mm)) . 'm2');
         } ?></span></div>
@@ -554,3 +598,4 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
          Departamentos terminan en el pie verde. */
       if (empty($L['sin_meta'])) echo 'Precios sujetos a disponibilidad'; ?></div>
 </section>
+<?php endforeach; $grupos = $GRUPOS_TODOS; ?>
