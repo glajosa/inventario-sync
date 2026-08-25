@@ -102,6 +102,12 @@ $hoy = new DateTimeImmutable('now');
   .hoja[data-tema="azul"]{--banda:#1f3864; --banda-txt:#fff;
         --vig-fondo:#1f3864; --vig-txt:#ffe14d; --vig-borde:#1f3864;
         --pie-b:#fff; --pie-b-txt:#1a1a1a; --pie-span:#fce9b0; --pie-span-txt:#1a1a1a}
+  /* Casas comparte el azul marino de Galero en los chips, pero sus DOS bandas de arriba
+     —el rotulo del financiamiento y la vigencia— son amarillas, y el titulo va en blanco
+     con filete azul. Es su documento, distinto del de Torre D. */
+  .hoja[data-tema="casas"]{--banda:#fff; --banda-txt:#1f3864;
+        --sub:#ffff00; --sub-txt:#000;
+        --vig-fondo:#ffff00; --vig-txt:#000; --vig-borde:#000}
   .hoja[data-tema="naranja"]{--banda:#c55a11; --banda-txt:#fff;
         --pie-b:#c55a11; --pie-b-txt:#fff; --pie-span:#fbe2d5; --pie-span-txt:#1a1a1a}
   .hoja[data-tema="blanco"]{--banda:#fff; --banda-txt:#1a1a1a; --sub:#fdf2e9; --sub-txt:#1f3864;
