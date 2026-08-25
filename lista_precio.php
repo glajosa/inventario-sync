@@ -239,7 +239,9 @@ if ($UN) {
 $ordenBloque = array_flip(array_map(fn($b) => (string)$b['id'], $BLOQUES));
 $ORDEN = (string)($L['orden_filas'] ?? 'precio');
 $PRIO  = array_flip(array_map('strval', (array)($L['orden_categorias'] ?? [])));
-uasort($grupos, function ($a, $b) use ($ordenBloque) {
+// $ORDEN y $PRIO tienen que entrar al `use`: sin ellos el closure los ve indefinidos,
+// imprime un Warning y el orden por categoria no se aplica nunca.
+uasort($grupos, function ($a, $b) use ($ordenBloque, $ORDEN, $PRIO) {
     $ba = $ordenBloque[$a['bloque']] ?? 99;
     $bb = $ordenBloque[$b['bloque']] ?? 99;
     if ($ba !== $bb) return $ba <=> $bb;
