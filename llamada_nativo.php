@@ -582,7 +582,22 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
   var F_PROTOCOLO = 'UF_CRM_1786279719022';   // ESTADO DE PROTOCOLO
   var F_VECES     = LLAMADA_CONFIG.reentry_count_field; // VECES QUE DEJO EL NUMERO
   var ETAPA_REING = LLAMADA_CONFIG.reentry_stage_id;    // RECONTACTAR
-  var ORIGEN_NO_CONTESTO = 'galjosa-no-contesto';
+  /**
+   * ⚠ NO USAR ORIGINATOR_ID PARA MARCAR NUESTRAS LLAMADAS.
+   *
+   * El 25-ago se marcaron con ORIGINATOR_ID='galjosa-no-contesto' para poder
+   * distinguirlas de las planificadas. La idea era correcta, el campo NO:
+   * ORIGINATOR_ID le dice a Bitrix que la actividad viene de un sistema
+   * EXTERNO, y la linea de tiempo la dibuja como registro importado — sin
+   * sujeto, sin fecha limite, y rotulada "llamada terminada" en vez de
+   * "planificada". Los vendedores lo reportaron el mismo dia: veian una
+   * tarjeta vacia donde antes veian la fecha de la proxima llamada.
+   *
+   * El discriminador ya existia y es gratis: NUESTRO asunto empieza con
+   * "Llamada saliente" y el de Bitrix con "Outbound call". Verificado en el
+   * deal 372049, donde estan las dos una al lado de la otra.
+   */
+  var PREFIJO_NUESTRO = 'Llamada saliente';
   var llamadas  = [];      // [{ts, contesto}] en orden de CREATED, tal como vino
   var reingreso = '';      // ISO del ultimo RECONTACTAR real ('' = no hubo)
   var registrado = 0;      // id de la actividad recién creada (0 = todavía nada)
@@ -675,7 +690,7 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
       // el deal más cargado de la base tiene 93.
       hist: ['crm.activity.list', {
         filter: { OWNER_TYPE_ID:2, OWNER_ID:dealId, TYPE_ID:2, DIRECTION:2 },
-        select: ['ID','CREATED','SUBJECT','RESPONSIBLE_ID','ORIGINATOR_ID'], order: { ID:'ASC' }, start: -1
+        select: ['ID','CREATED','SUBJECT','RESPONSIBLE_ID'], order: { ID:'ASC' }, start: -1
       }],
       // CUANDO VOLVIO A DEJAR SU NUMERO. Cada entrada a RECONTACTAR es un
       // reingreso; la mas nueva manda, asi que ID DESC y se toma la primera.
@@ -699,7 +714,8 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
                           // porque las comparaciones de ciclo son de cadena.
                           iso: String(d[i].CREATED || ''),
                           resp: parseInt(d[i].RESPONSIBLE_ID || 0, 10),
-                          origen: String(d[i].ORIGINATOR_ID || ''),
+                          // nuestra o nativa: se distingue por el asunto
+                          nuestra: String(d[i].SUBJECT || '').indexOf(PREFIJO_NUESTRO) === 0,
                           contesto: String(d[i].SUBJECT || '').indexOf('1234') >= 0 });
       } catch (e) {}
 
@@ -774,8 +790,6 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
         OWNER_TYPE_ID:2, OWNER_ID:dealId,
         TYPE_ID:2, DIRECTION:2,
         PROVIDER_ID:LLAMADA_CONFIG.provider_id, PROVIDER_TYPE_ID:LLAMADA_CONFIG.provider_type_id,
-        ORIGINATOR_ID:ORIGEN_NO_CONTESTO,
-        ORIGIN_ID:'deal-' + dealId + '-' + Date.now(),
         SUBJECT: contesto ? '1234' : ('Llamada saliente ' + (ctx.nombre || 'cliente')),
         COMPLETED:'N', RESPONSIBLE_ID:ctx.resp,
         START_TIME:inicio, END_TIME:masUnaHora(inicio), DEADLINE:inicio,
@@ -924,9 +938,10 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
    *
    * ⚠ EL VENDEDOR NO ESTABA HACIENDO NADA MAL. Era el panel.
    *
-   * EL FRENO. Solo cuenta una llamada creada por ESTE panel, identificada con
-   * ORIGINATOR_ID. Una llamada planificada o tradicional reciente no prueba que
-   * el vendedor ya haya registrado "No contestó" y por eso no puede bloquearlo.
+   * EL FRENO. Solo cuenta una llamada creada por ESTE panel, reconocida por su
+   * asunto ("Llamada saliente ..."; las nativas dicen "Outbound call ..."). Una
+   * llamada planificada o tradicional reciente no prueba que el vendedor ya haya
+   * registrado "No contestó" y por eso no puede bloquearlo.
    * Se usa 'iso' con su desfase, no 'ts' cortado: comparar una fecha del servidor
    * (+03:00) contra el reloj del navegador (-05:00) sin la zona da ocho horas de
    * error, que es justo la ventana que se quiere medir.
@@ -938,7 +953,7 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
     if (!ctx || !ctx.resp) return null;
     for (var i = llamadas.length - 1; i >= 0; i--) {
       var l = llamadas[i];
-      if (!l.iso || l.resp !== parseInt(ctx.resp, 10) || l.origen !== ORIGEN_NO_CONTESTO) continue;
+      if (!l.iso || l.resp !== parseInt(ctx.resp, 10) || !l.nuestra) continue;
       var t = Date.parse(l.iso);
       if (isNaN(t)) return null;
       return { hace: Date.now() - t, contesto: l.contesto };
