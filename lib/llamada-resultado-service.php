@@ -21,9 +21,10 @@ function llamada_procesar_resultado(
     callable $bx,
     LlamadaIdempotenciaStore $store,
     DateTimeImmutable $now,
-    string $noInterestStage
+    string $noInterestStage,
+    string $source = 'mobile'
 ): array {
-    $request = llamada_validar_resultado($input, $now, $noInterestStage);
+    $request = llamada_validar_resultado($input, $now, $noInterestStage, $source);
     $idempotencyKey = ($request['memberId'] !== '' ? $request['memberId'] . ':' : '') . $request['callRequestId'];
     $requestHash = hash('sha256', json_encode([
         'request' => $request,
@@ -72,20 +73,23 @@ function llamada_procesar_resultado(
         throw new LlamadaForbidden('deal owner mismatch');
     }
 
-    $activity = llamada_bx_array($bx, 'crm.activity.get', ['id' => $activityId]);
-    if ((int)($activity['ID'] ?? 0) !== $activityId
-        || (int)($activity['OWNER_TYPE_ID'] ?? 0) !== 2
-        || (int)($activity['OWNER_ID'] ?? 0) !== $dealId) {
-        throw new LlamadaForbidden('activity owner mismatch');
-    }
-    if ((int)($activity['TYPE_ID'] ?? 0) !== 2) {
-        throw new LlamadaForbidden('activity type mismatch');
-    }
-    if ((int)($activity['DIRECTION'] ?? 0) !== 2) {
-        throw new LlamadaForbidden('activity direction mismatch');
-    }
-    if ((int)($activity['RESPONSIBLE_ID'] ?? 0) !== $bitrixUserId) {
-        throw new LlamadaForbidden('activity responsible mismatch');
+    $activity = [];
+    if ($source === 'mobile') {
+        $activity = llamada_bx_array($bx, 'crm.activity.get', ['id' => $activityId]);
+        if ((int)($activity['ID'] ?? 0) !== $activityId
+            || (int)($activity['OWNER_TYPE_ID'] ?? 0) !== 2
+            || (int)($activity['OWNER_ID'] ?? 0) !== $dealId) {
+            throw new LlamadaForbidden('activity owner mismatch');
+        }
+        if ((int)($activity['TYPE_ID'] ?? 0) !== 2) {
+            throw new LlamadaForbidden('activity type mismatch');
+        }
+        if ((int)($activity['DIRECTION'] ?? 0) !== 2) {
+            throw new LlamadaForbidden('activity direction mismatch');
+        }
+        if ((int)($activity['RESPONSIBLE_ID'] ?? 0) !== $bitrixUserId) {
+            throw new LlamadaForbidden('activity responsible mismatch');
+        }
     }
 
     $contactId = (int)($deal['CONTACT_ID'] ?? 0);
@@ -114,6 +118,63 @@ function llamada_procesar_resultado(
             $request['selectedPhone']
         );
         $progress['pendingActivityResolved'] = true;
+    }
+
+    $cycle = $progress['pendingActivityId'] === null
+        ? $store->findCycle($dealId, $bitrixUserId, null, $source, $store->now())
+        : $store->claimCycle(
+            $idempotencyKey,
+            $dealId,
+            $bitrixUserId,
+            $progress['pendingActivityId'],
+            $source,
+            $request['outcome'],
+            $store->now()
+        );
+    if ($cycle !== null
+        && (string)$cycle['operation_key'] !== $idempotencyKey
+        && ($cycle['is_new'] ?? false) !== true) {
+        if ((string)$cycle['outcome'] !== $request['outcome']) {
+            throw new LlamadaIdempotenciaConflict('call already has another result');
+        }
+        $previousOperation = $store->get((string)$cycle['operation_key']);
+        if ($previousOperation === null
+            || in_array((string)$previousOperation['state'], ['processing', 'retryable'], true)) {
+            return [
+                'status' => 'processing',
+                'callRequestId' => $request['callRequestId'],
+            ];
+        }
+        if ((string)$previousOperation['state'] === 'forbidden') {
+            throw new LlamadaForbidden('call result was previously forbidden');
+        }
+        $response = llamada_resultado_repetido($previousOperation, $request['callRequestId']);
+        $response['bitrixActivityId'] = $activityId;
+        $store->complete(
+            $idempotencyKey,
+            json_encode($response, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            (string)($previousOperation['comment_state'] ?? 'skipped'),
+            $previousOperation['comment_id'] === null ? null : (int)$previousOperation['comment_id'],
+            $store->now(),
+            $leaseToken
+        );
+        return $response;
+    }
+    if ($progress['pendingActivityId'] === null) {
+        $response = [
+            'status' => 'manual_review',
+            'callRequestId' => $request['callRequestId'],
+            'reason' => 'pending_activity_not_found',
+        ];
+        $store->complete(
+            $idempotencyKey,
+            json_encode($response, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'skipped',
+            null,
+            $store->now(),
+            $leaseToken
+        );
+        return $response;
     }
     $contactName = trim(implode(' ', array_filter([
         trim((string)($contact['NAME'] ?? '')),
@@ -153,7 +214,7 @@ function llamada_procesar_resultado(
     $progress['nextActivityAt'] = $nextAt?->format(DateTimeInterface::ATOM);
     llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken);
 
-    if (!$progress['activityUpdated']) {
+    if ($source === 'mobile' && !$progress['activityUpdated']) {
         try {
             llamada_bx_true($bx, 'crm.activity.update', [
                 'id' => $activityId,
@@ -347,7 +408,15 @@ function llamada_guardar_progreso(
     );
 }
 
-function llamada_validar_resultado(array $input, DateTimeImmutable $now, string $noInterestStage): array {
+function llamada_validar_resultado(
+    array $input,
+    DateTimeImmutable $now,
+    string $noInterestStage,
+    string $source = 'mobile'
+): array {
+    if (!in_array($source, ['mobile', 'panel'], true)) {
+        throw new LlamadaValidationError('invalid source');
+    }
     $callRequestId = trim((string)($input['callRequestId'] ?? ''));
     if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iD', $callRequestId)) {
         throw new LlamadaValidationError('invalid callRequestId');
@@ -355,7 +424,9 @@ function llamada_validar_resultado(array $input, DateTimeImmutable $now, string 
 
     $dealId = llamada_entero_positivo($input['dealId'] ?? null, 'dealId');
     $bitrixUserId = llamada_entero_positivo($input['bitrixUserId'] ?? null, 'bitrixUserId');
-    $activityId = llamada_entero_positivo($input['bitrixActivityId'] ?? null, 'bitrixActivityId');
+    $activityId = $source === 'mobile'
+        ? llamada_entero_positivo($input['bitrixActivityId'] ?? null, 'bitrixActivityId')
+        : null;
     $outcome = trim((string)($input['outcome'] ?? ''));
     if (!in_array($outcome, ['no_answer', 'answered', 'not_interested'], true)) {
         throw new LlamadaValidationError('invalid outcome');
@@ -414,6 +485,7 @@ function llamada_validar_resultado(array $input, DateTimeImmutable $now, string 
         'selectedPhone' => $selectedPhone,
         'nextActivityAt' => $nextActivityAt?->format(DateTimeInterface::ATOM),
         'comment' => $comment,
+        'source' => $source,
     ];
 }
 
@@ -505,7 +577,10 @@ function llamada_resultado_repetido(array $operation, string $callRequestId): ar
     if (!is_array($previous)) {
         throw new RuntimeException('stored idempotency response is invalid');
     }
-    $previous['status'] = 'already_processed';
+    $previous['callRequestId'] = $callRequestId;
+    if ((string)($previous['status'] ?? '') !== 'manual_review') {
+        $previous['status'] = 'already_processed';
+    }
     return $previous;
 }
 
@@ -609,7 +684,7 @@ function llamada_buscar_actividad_pendiente(
     callable $bx,
     int $dealId,
     int $bitrixUserId,
-    int $technicalActivityId,
+    ?int $technicalActivityId,
     string $selectedPhone
 ): ?int {
     $result = llamada_bx_array($bx, 'crm.activity.list', [
@@ -631,7 +706,8 @@ function llamada_buscar_actividad_pendiente(
     foreach ($result as $activity) {
         if (!is_array($activity)) continue;
         $candidateId = (int)($activity['ID'] ?? 0);
-        if ($candidateId <= 0 || $candidateId === $technicalActivityId) continue;
+        if ($candidateId <= 0
+            || ($technicalActivityId !== null && $candidateId === $technicalActivityId)) continue;
         if ((string)($activity['COMPLETED'] ?? 'N') === 'Y') continue;
         if (isset($activity['RESPONSIBLE_ID'])
             && (int)$activity['RESPONSIBLE_ID'] !== $bitrixUserId) continue;

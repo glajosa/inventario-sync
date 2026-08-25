@@ -45,7 +45,20 @@ final class EndpointFakeBitrix {
                     'VALUE_TYPE' => 'MOBILE',
                 ]],
             ]],
-            'crm.activity.list' => ['ok' => true, 'result' => []],
+            'crm.activity.list' => ['ok' => true, 'result' =>
+                ($params['filter']['COMPLETED'] ?? null) === 'N'
+                    ? [[
+                        'ID' => '630',
+                        'SUBJECT' => 'Llamada pendiente',
+                        'DEADLINE' => '2026-08-20T10:00:00-05:00',
+                        'RESPONSIBLE_ID' => '42',
+                        'COMPLETED' => 'N',
+                        'COMMUNICATIONS' => [[
+                            'VALUE' => '+593991234567',
+                            'TYPE' => 'PHONE',
+                        ]],
+                    ]]
+                    : []],
             'crm.activity.update' => ['ok' => true, 'result' => true],
             'crm.activity.add' => ['ok' => true, 'result' => 901],
             'crm.timeline.comment.add' => ['ok' => true, 'result' => 801],
