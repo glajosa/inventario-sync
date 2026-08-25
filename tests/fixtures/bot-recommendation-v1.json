@@ -77,15 +77,10 @@
     "project": "Noral Apartments",
     "snapshot_id": "11111111-1111-4111-8111-111111111111",
     "expires_at": "2026-08-25T14:05:48+00:00",
-    "pages": [
-      {
-        "page": 3,
-        "unavailable_codes": ["C1.1"],
-        "recommendations": [
-          {"number": 1, "code": "C1.2"},
-          {"number": 2, "code": "C2.1"}
-        ]
-      }
+    "unavailable_codes": ["C1.1"],
+    "recommendations": [
+      {"number": 1, "code": "C1.2"},
+      {"number": 2, "code": "C2.1"}
     ]
   },
   "expires_at": "2026-08-25T14:05:48+00:00"
