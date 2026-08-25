@@ -459,7 +459,8 @@
       "sin_meta": true,
       "_hojas_nota": "D-01 del director: la posicion define los dormitorios (1 y 3 son de 2; 2 y 4, de 3), y su lista aprobada son DOS hojas. Publicar las 13 juntas bajo un titulo que dice '2 dormitorios' vendia cinco de 3 dormitorios como otra cosa.",
       "orden_filas": "codigo",
-      "codigo_con_guion": true
+      "codigo_con_guion": true,
+      "vigencia_antes_de_notas": true
     }
   }
 }

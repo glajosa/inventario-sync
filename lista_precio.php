@@ -747,6 +747,19 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
             echo lh($fmt(min($mm)) . 'm2 hasta ' . $fmt(max($mm)) . 'm2');
         } ?></span></div>
   <?php endif; ?>
+  <?php /* El ORDEN de los cierres es del documento: Torre D pone la banda de vigencia
+           antes de las notas, y Departamentos las notas sin banda ninguna. */ ?>
+  <?php if (!empty($L['vigencia_antes_de_notas'])): ?>
+  <?php if (empty($L['sin_vigencia'])): ?>
+  <div class="vig">ESTA COTIZACI&Oacute;N TIENE UNA VIGENCIA DE
+    <?= (int)($pz['meses'] > 0 ? ($fin['vigencia_horas'] ?? 48) : 48) ?> HRS NATURALES</div>
+  <?php endif; ?>
+  <?php if (!empty($L['notas'])): ?>
+    <?php /* {meses} en una nota se reemplaza por el plazo VIVO, que baja solo con el
+             calendario. Escribirlo a mano deja la nota mintiendo el mes que viene. */ ?>
+    <div class="notas"><?php foreach ((array)$L['notas'] as $nt): ?><p><?= str_replace('{meses}', (string)$pz['meses'], (string)$nt) ?></p><?php endforeach; ?></div>
+  <?php endif; ?>
+  <?php else: ?>
   <?php if (!empty($L['notas'])): ?>
     <?php /* {meses} en una nota se reemplaza por el plazo VIVO, que baja solo con el
              calendario. Escribirlo a mano deja la nota mintiendo el mes que viene. */ ?>
@@ -755,6 +768,7 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
   <?php if (empty($L['sin_vigencia'])): ?>
   <div class="vig">ESTA COTIZACI&Oacute;N TIENE UNA VIGENCIA DE
     <?= (int)($pz['meses'] > 0 ? ($fin['vigencia_horas'] ?? 48) : 48) ?> HRS NATURALES</div>
+  <?php endif; ?>
   <?php endif; ?>
   <?php /* La nota del documento de la direccion. El detalle de cuando se genero y
            cuantas tipologias hay es interno: va en un title, no impreso. */ ?>
