@@ -4,8 +4,8 @@ declare(strict_types=1);
 function bot_contract_plain(string $value): string {
     $value = trim($value);
     if ($value === '') return '';
-    $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
-    return strtolower(preg_replace('/[^a-z0-9]+/', ' ', (string)$ascii) ?? '');
+    $ascii = strtolower((string)iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value));
+    return trim(preg_replace('/[^a-z0-9]+/', ' ', $ascii) ?? '');
 }
 
 function bot_commercial_profiles(): array {
@@ -166,4 +166,3 @@ function bot_recommendation_validate_response(array $response): void {
         $seen[$code] = true;
     }
 }
-
