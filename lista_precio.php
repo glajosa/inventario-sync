@@ -229,7 +229,12 @@ foreach ($grupos as $g) $porBloque[$g['bloque']][] = $g;
 $etBloque = [];
 foreach ($BLOQUES as $b) $etBloque[(string)$b['id']] = (string)($b['etiqueta'] ?? $b['id']);
 $conParq = !empty($L['columna_parqueos']);
-$nCols   = 3 + ($conParq ? 1 : 0);
+// CUATRO columnas caen bajo CARACTERISTICAS: la banda del bloque, el nombre, los
+// metros y el precio. Estaba en 3, y esa columna de menos corria toda la fila de
+// grupo un lugar a la izquierda: el "20%" quedaba sobre A LA FIRMA y el "10%" sobre
+// CUOTAS MENSUALES, cuando el 10% es el de las EXTRAORDINARIAS. Ademas la banda del
+// titulo se quedaba una columna corta.
+$nCols   = 4 + ($conParq ? 1 : 0);
 // Las uniones NO suman al conteo: no son unidades, son combinaciones de las que ya
 // estan contadas. Sumarlas hacia decir 26 disponibles donde hay 24.
 $totDisp = 0;
