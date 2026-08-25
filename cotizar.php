@@ -466,6 +466,13 @@ $hoy  = new DateTimeImmutable('now');
   td{padding:8px 12px;border-bottom:1px solid #eef2f6}
   td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
   tr.hito td{background:#f5f8fa;font-weight:700}
+  /* El total a la empresa se destaca: es la cifra que el cliente compara contra lo
+     que le pide el banco, y en la tabla de pagos del equipo va resaltada. */
+  tr.total-ini td{background:#eef4fb;color:#1c4e80}
+  tr.gran-total td{background:#e8efe9;color:#1f4d2e;border-top:2px solid #1f4d2e}
+  .pct{font-weight:600;font-size:10.5px;color:#5a6472;margin-left:5px}
+  .etq3{display:inline-block;background:#e8eaed;color:#4a5158;font-size:9.5px;font-weight:700;
+        letter-spacing:.04em;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:1px}
   tr.extra td{background:#fff8e6}
   tr.diferido td{background:#eef5ff}
   .etq{display:inline-block;background:#f0b429;color:#4a3200;font-size:9.5px;font-weight:700;
@@ -1063,14 +1070,30 @@ $hoy  = new DateTimeImmutable('now');
       <?php if ($plan['firma'] > 0): ?>
       <tr class="hito"><td></td><td>A LA FIRMA</td><td><?= h(cot_money($plan['firma'])) ?></td></tr>
       <?php endif; ?>
+      <?php /* La etiqueta FIRMA va SOLO en la primera cuota diferida. Repetirla en
+               todas está mal legalmente: da a entender que hay varias firmas del
+               contrato, y firma hay una. En las siguientes se entiende por el monto. */
+            $primerDiferido = true; ?>
       <?php foreach ($plan['filas'] as $f): ?>
       <tr class="<?= $f['extra'] ? 'extra' : ($f['diferido'] ? 'diferido' : '') ?>">
         <td><?= (int)$f['n'] ?></td>
-        <td><?= h($f['fecha']) ?><?= $f['extra'] ? '<span class="etq">EXTRA</span>' : '' ?><?= $f['diferido'] ? '<span class="etq2">FIRMA</span>' : '' ?></td>
+        <td><?= h($f['fecha']) ?><?= $f['extra'] ? '<span class="etq">EXTRA</span>' : '' ?><?php
+            if (!empty($f['diferido']) && $primerDiferido) { echo '<span class="etq2">FIRMA</span>'; $primerDiferido = false; }
+            /* La cuota que absorbe el redondeo va marcada: sin esto, el cliente ve una
+               cuota distinta a las demas y parece un error. Con el rotulo se entiende
+               que es el ajuste que hace cuadrar la suma al centavo. */
+            if (!empty($f['ajuste'])) echo '<span class="etq3">AJUSTE</span>'; ?></td>
         <td><?= h(cot_money($f['monto'])) ?></td>
       </tr>
       <?php endforeach; ?>
+      <?php /* El total que el cliente le paga a la EMPRESA — el crédito directo.
+               Va arriba de la contraentrega, igual que en la tabla de pagos que usa
+               el equipo, para que se lea "esto a la empresa, esto al banco". */ ?>
+      <tr class="hito total-ini"><td></td><td>TOTAL CUOTA INICIAL<?php
+        if ($plan['valor'] > 0): ?> <span class="pct"><?= number_format($plan['totalInicial'] / $plan['valor'] * 100, 1) ?>%</span><?php endif; ?></td>
+        <td><?= h(cot_money($plan['totalInicial'])) ?></td></tr>
       <tr class="hito"><td></td><td>CONTRAENTREGA</td><td><?= h(cot_money($plan['contraentrega'])) ?></td></tr>
+      <tr class="hito gran-total"><td></td><td>TOTAL</td><td><?= h(cot_money($plan['totalInicial'] + $plan['contraentrega'])) ?></td></tr>
     </tbody>
   </table>
 
@@ -1176,6 +1199,17 @@ $hoy  = new DateTimeImmutable('now');
       de <?= h(cot_money($plan['valorExtra'])) ?>
       (<?= $plan['extraPartes'] === 2 ? 'dos por año, en abril y diciembre' : 'una por año' ?>), que van sumadas a la cuota de ese mes.
     <?php endif; ?>
+    <?php /* Si una cuota absorbe el redondeo, se dice. Antes el papel imprimia todas
+             iguales y al sumarlo a mano daba centavos de mas — nos devolvieron una
+             tabla marcada por 24 centavos. */
+          $filaAjuste = null;
+          foreach ($plan['filas'] as $fa) if (!empty($fa['ajuste'])) { $filaAjuste = $fa; break; }
+          if ($filaAjuste): ?>
+      La cuota <?= (int)$filaAjuste['n'] ?> es de <?= h(cot_money($filaAjuste['monto'])) ?>
+      para que la suma cierre exacta con el precio.
+    <?php endif; ?>
+    El total que se paga a la empresa antes de la entrega es
+    <b><?= h(cot_money($plan['totalInicial'])) ?></b>.
   </p>
   <?php endforeach; ?>
 

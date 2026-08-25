@@ -508,6 +508,38 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         ];
     }
 
+    /* ── CUADRE AL CENTAVO ──────────────────────────────────────────────────
+     * Por dentro el plan siempre cerraba, porque la contraentrega se calculaba con
+     * la cuota SIN redondear. El problema era el papel: 28.926,00 / 56 da
+     * 516,535714…, cada fila se imprimía 516,54 y sumando la columna a mano salía
+     * 28.926,24. El documento cuadraba solo si nadie lo sumaba — y el cliente lo
+     * suma siempre. Pasó de verdad con E-3-18: nos devolvieron la tabla marcada.
+     *
+     * Se redondean las filas a centavos y la DIFERENCIA se carga a una sola cuota,
+     * así la columna impresa suma exacto. Se elige la última cuota común (no una
+     * extraordinaria: mezclar el ajuste con la extra hace ilegible de dónde sale el
+     * número).
+     */
+    // El objetivo es la suma REAL sin redondear, no una formula re-derivada: cada
+    // rama de arriba (mensual fija, firma fija, sin extraordinarias, diferido) llega
+    // al monto por un camino distinto, y re-deducirlo se equivocaba de miles.
+    $objetivo = round(array_sum(array_column($filas, 'monto')), 2);
+    foreach ($filas as &$fl) $fl['monto'] = round($fl['monto'], 2);
+    unset($fl);
+    $sumaRed  = round(array_sum(array_column($filas, 'monto')), 2);
+    $ajuste   = round($objetivo - $sumaRed, 2);
+    if (abs($ajuste) >= 0.01) {
+        $idx = null;
+        for ($k = count($filas) - 1; $k >= 0; $k--) {
+            if (empty($filas[$k]['extra'])) { $idx = $k; break; }
+        }
+        if ($idx === null) $idx = count($filas) - 1;        // todas extra: la última
+        if ($idx >= 0) {
+            $filas[$idx]['monto'] = round($filas[$idx]['monto'] + $ajuste, 2);
+            $filas[$idx]['ajuste'] = true;                  // la pantalla lo marca
+        }
+    }
+
     // Cierre: la contraentrega es lo que falta para llegar al precio, sumando la
     // tabla REAL (ya con extraordinarias y diferido de firma adentro).
     $sumaCuotas = array_sum(array_column($filas, 'monto'));
@@ -523,6 +555,13 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         $sumaCuotas = array_sum(array_column($filas, 'monto'));
         $mensual *= $factor; $valorExtra *= $factor; $diferidoCuota *= $factor;
     }
+    // Los hitos también a centavos: si la contraentrega queda con más decimales, el
+    // total del documento no cierra aunque las cuotas sí.
+    $separacion    = round($separacion, 2);
+    $firma         = round($firma, 2);
+    $contraentrega = round($v - $separacion - $firma - round($sumaCuotas, 2), 2);
+    $sumaCuotas    = round($sumaCuotas, 2);
+
     if ($contraentrega < $contraPct * $v - 1.0) $bajaContraentrega = true;
 
     return [
@@ -535,6 +574,11 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         'reserva'       => $separacion + $firma,
         'reservaPct'    => $v > 0 ? ($separacion + $firma) / $v : 0.0,
         'contraentrega' => $contraentrega,
+        // Lo que el cliente le paga a la EMPRESA antes de la entrega: separación +
+        // firma + todas las cuotas (mensuales y extraordinarias). Es el "Total Cuota
+        // Inicial" de la tabla de pagos, y el crédito directo de la empresa.
+        'totalInicial'  => round($separacion + $firma + $sumaCuotas, 2),
+        'sumaCuotas'    => $sumaCuotas,
         'contraPct'     => $v > 0 ? $contraentrega / $v : 0.0,
         // Objetivo elegido (financiarPct, ya con el piso 35 aplicado) ANTES de que
         // firma/cuota fija pudieran empujar la contraentrega más abajo todavía —
