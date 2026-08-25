@@ -326,7 +326,12 @@ function lst_incompletas(array $unidades, int $tipo, ?array $L = null): array {
         }
     $fuera = [];
     foreach ($unidades as $k => $d) {
-        if ((int)($d['tipo'] ?? 0) !== $tipo) continue;
+        /* Tambien las que no tienen ni "Tipo de bien": una ficha a medio llenar suele
+           quedarse sin ese campo y entonces no pertenece a ninguna familia — o sea que
+           no aparece en ninguna pestana y desaparece del todo. Es el caso de H-32 de
+           Galero Casas, disponible con PVP $0. */
+        $tp = (int)($d['tipo'] ?? 0);
+        if ($tp !== $tipo && $tp !== 0) continue;
         if (($d['etapa'] ?? '') !== 'DISPONIBLE') continue;
         if ((float)($d['pvp'] ?? 0) > 0) continue;
         if (!preg_match('/^([A-Z])-(\d+)-(\d+)$/', $k, $m)) { $fuera[] = (string)($d['cod'] ?? $k); continue; }
