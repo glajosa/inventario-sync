@@ -598,6 +598,33 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
    * deal 372049, donde estan las dos una al lado de la otra.
    */
   var PREFIJO_NUESTRO = 'Llamada saliente';
+  /**
+   * ⚠ EL ASUNTO SOLO NO ALCANZA. Medido el 25-ago sobre 1.559 actividades con
+   * el prefijo "Llamada saliente" desde el 6-ago: apenas el 8% tiene una hora
+   * del panel. El otro 92% lleva la hora de creacion redondeada, que es la
+   * forma NATIVA de Bitrix — o el vendedor apretando "Llamar" en nuestra propia
+   * tarjeta, que abre el flujo nativo copiando el asunto.
+   *
+   * Si el guardian se cree que esas son nuestras, bloquea un registro legitimo
+   * y le dice al vendedor "ya registraste hace 3 minutos" cuando no lo hizo.
+   *
+   * Se exigen las DOS senales: el asunto Y una hora del panel. El panel siempre
+   * agenda a una de estas cinco, nunca a una hora suelta.
+   */
+  var HORAS_PANEL = ['09:30','12:30','16:00','19:00','10:00'];
+
+  /** ¿esta actividad la creo este panel? asunto + hora, las dos. */
+  function esNuestra(subject, deadline) {
+    if (String(subject || '').indexOf(PREFIJO_NUESTRO) !== 0) return false;
+    var m = String(deadline || '').match(/T(\d{2}:\d{2})/);
+    if (!m) return false;
+    // el deadline viene en hora del servidor: se convierte antes de comparar
+    var d = new Date(deadline);
+    if (isNaN(d.getTime())) return false;
+    var hh = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    for (var i = 0; i < HORAS_PANEL.length; i++) if (HORAS_PANEL[i] === hh) return true;
+    return false;
+  }
   var llamadas  = [];      // [{ts, contesto}] en orden de CREATED, tal como vino
   var reingreso = '';      // ISO del ultimo RECONTACTAR real ('' = no hubo)
   var registrado = 0;      // id de la actividad recién creada (0 = todavía nada)
@@ -690,7 +717,7 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
       // el deal más cargado de la base tiene 93.
       hist: ['crm.activity.list', {
         filter: { OWNER_TYPE_ID:2, OWNER_ID:dealId, TYPE_ID:2, DIRECTION:2 },
-        select: ['ID','CREATED','SUBJECT','RESPONSIBLE_ID'], order: { ID:'ASC' }, start: -1
+        select: ['ID','CREATED','SUBJECT','RESPONSIBLE_ID','DEADLINE'], order: { ID:'ASC' }, start: -1
       }],
       // CUANDO VOLVIO A DEJAR SU NUMERO. Cada entrada a RECONTACTAR es un
       // reingreso; la mas nueva manda, asi que ID DESC y se toma la primera.
@@ -714,8 +741,8 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
                           // porque las comparaciones de ciclo son de cadena.
                           iso: String(d[i].CREATED || ''),
                           resp: parseInt(d[i].RESPONSIBLE_ID || 0, 10),
-                          // nuestra o nativa: se distingue por el asunto
-                          nuestra: String(d[i].SUBJECT || '').indexOf(PREFIJO_NUESTRO) === 0,
+                          // nuestra o nativa: asunto Y hora del panel, las dos
+                          nuestra: esNuestra(d[i].SUBJECT, d[i].DEADLINE),
                           contesto: String(d[i].SUBJECT || '').indexOf('1234') >= 0 });
       } catch (e) {}
 
