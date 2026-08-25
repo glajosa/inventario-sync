@@ -252,6 +252,16 @@ uasort($grupos, function ($a, $b) use ($ordenBloque, $ORDEN, $PRIO) {
     $ua = !empty($a['calculada']) ? 1 : 0;
     $ub = !empty($b['calculada']) ? 1 : 0;
     if ($ua !== $ub) return $ua <=> $ub;
+    /* Departamentos NO ordena por vista: su 4to piso pone primero las cuatro filas
+       de ULTIMA DISPONIBLE (80.315 · 82.863 · 84.863 · 93.760) y despues las cuatro
+       tipologias (85.445 · 85.445 · 89.338 · 92.338), cada grupo ascendente. Es el
+       mismo criterio con que pinta el color: primero lo que se acaba. */
+    if ($ORDEN === 'escasez') {
+        $ea = (!empty($a['union']) || count($a['cods']) !== 1) ? 1 : 0;
+        $eb = (!empty($b['union']) || count($b['cods']) !== 1) ? 1 : 0;
+        if ($ea !== $eb) return $ea <=> $eb;
+        return $a['precio'] <=> $b['precio'];
+    }
     $za = strpos($a['zona'], 'LINEAL') !== false ? 0 : 1;
     $zb = strpos($b['zona'], 'LINEAL') !== false ? 0 : 1;
     if ($za !== $zb) return $za <=> $zb;
@@ -314,6 +324,7 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
            donde vive el TITULO: en 'al_lado' va en su propio recuadro a la derecha del
            logo (Oficinas, Departamentos); en 'arriba', como banda a todo el ancho de
            la tabla (Locales). */ ?>
+  <?php if ($layout !== 'en_tabla'): ?>
   <div class="cab<?= $layout === 'al_lado' ? ' cab-lado' : '' ?>">
     <?php if ($lg): ?>
       <img class="logo" src="<?= lh($lg[0]) ?>"
@@ -331,10 +342,28 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
       </div>
     <?php endif; ?>
   </div>
+  <?php endif; ?>
   <div class="wrap">
     <table>
       <thead>
-      <?php if ($layout !== 'al_lado'): ?>
+      <?php
+        /* El LOGO entra a la tabla solo en 'en_tabla' (Departamentos): ocupa la banda
+           y el nombre durante las tres filas de cabecera, y el titulo, el subtitulo y
+           la fila de porcentajes van a su derecha. Ese es el unico documento donde la
+           banda del titulo arranca en la columna de METROS y no en el borde de la
+           tabla. Como el logo se come 2 columnas, todo lo que va a su derecha resta 2. */
+        $enTabla = $layout === 'en_tabla';
+        $resta   = $enTabla ? 2 : 0;
+      ?>
+      <?php if ($enTabla): ?>
+        <tr>
+          <?php if ($lg): ?>
+            <td class="celda-logo" rowspan="3" colspan="2"><img src="<?= lh($lg[0]) ?>"
+                 alt="<?= lh($lg[1] !== '' ? $lg[1] : $proyecto) ?>" onerror="this.style.display='none'"></td>
+          <?php else: ?><td rowspan="3" colspan="2"></td><?php endif; ?>
+          <th class="titulo" colspan="<?= $nCols + 4 - $resta ?>"><?= lh($titulo) ?></th></tr>
+        <tr><th class="sub" colspan="<?= $nCols + 4 - $resta ?>"><?= lh($sub) ?></th></tr>
+      <?php elseif ($layout !== 'al_lado'): ?>
         <tr><th class="titulo" colspan="<?= $nCols + 4 ?>"><?= lh($titulo) ?></th></tr>
         <tr><th class="sub" colspan="<?= $nCols + 4 ?>"><?= lh($sub) ?></th></tr>
       <?php endif; ?>
@@ -343,12 +372,12 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
                  [parqueos] + precio. Habia quedado una version con $colLogo, que ya
                  no existe: el Warning se imprimia DENTRO de la celda y el colspan
                  salia mal, con lo que los porcentajes volvian a quedar corridos. */ ?>
-        <tr class="g"><th colspan="<?= $nCols ?>">CARACTER&Iacute;STICAS</th>
+        <tr class="g"><th colspan="<?= $nCols - $resta ?>">CARACTER&Iacute;STICAS</th>
           <th colspan="2" class="it"><?= (int)($fin['reserva_pct'] ?? 10) ?>% DE RESERVA</th>
           <th><?= (int)($fin['cuotas_pct'] ?? 20) ?>%</th>
           <th><?= (int)($fin['extra_pct'] ?? 10) ?>%</th></tr>
         <tr class="c"><th></th><th><?= $L['encabezado_cat'] ?? 'CARACTER&Iacute;STICAS' ?></th>
-          <th>METROS (m2)</th><?php if ($conParq): ?><th>PARQUEOS</th><?php endif; ?>
+          <th><?= $L['encabezado_metros'] ?? 'METROS (m2)' ?></th><?php if ($conParq): ?><th>PARQUEOS</th><?php endif; ?>
           <th><?= $L['encabezado_precio'] ?? 'PRECIO' ?></th>
           <th>SEPARA CON</th><th>A LA FIRMA</th>
           <th>CUOTAS<br>MENSUALES</th>
@@ -356,7 +385,13 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
       </thead>
       <tbody>
       <?php $iB = 0; foreach ($porBloque as $blq => $filas): $iB++;
-            $clsNiv = 'niv' . (($iB - 1) % 5 + 2); $primera = true; ?>
+            /* El color de la banda del piso lo fija el documento, no el numero de
+               piso: en Locales los DOS bloques son ocres, en Oficinas van oscuro,
+               medio y ocre. Si el JSON no lo dice, se cae al ciclo de siempre. */
+            $bandas = (array)($L['colores_banda'] ?? []);
+            $clsNiv = $bandas ? 'niv-' . preg_replace('/[^a-z]/', '', (string)($bandas[$iB - 1] ?? end($bandas)))
+                              : 'niv' . (($iB - 1) % 5 + 2);
+            $primera = true; ?>
         <?php foreach ($filas as $g): $pl = lst_plan($g['precio'], $fin);
               $n = count($g['cods']);
               // Con UNA disponible la fila se nombra con el codigo real, no con la
@@ -392,11 +427,18 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
                  fuera la vista, esa seria verde. */
               $porEscasez = ($L['color_por'] ?? 'vista') === 'escasez';
               $esLin  = strpos($g['zona'], 'LINEAL') !== false;
+              /* Los tres documentos usan pares de color DISTINTOS:
+                   Locales      palido (lineal)  + fuerte (central)
+                   Oficinas     crema  (lineal)  + palido (central)
+                   Departamentos crema (ultima)  + palido (tipologia)
+                 Por eso el par se declara en el JSON y no se hornea en el CSS. */
+              $colA = (string)($L['color_a'] ?? 'crema');
+              $colB = (string)($L['color_b'] ?? 'palido');
               if ($porEscasez) {
-                  $cls    = $n === 1 ? 'lineal' : 'central';
+                  $cls    = $n === 1 ? $colA : $colB;
                   $fuerte = !empty($g['union']);
               } else {
-                  $cls    = $esLin ? 'lineal' : ($g['zona'] !== '' ? 'central' : '');
+                  $cls    = $esLin ? $colA : ($g['zona'] !== '' ? $colB : '');
                   $fuerte = !empty($g['union'])
                               ? !empty($L['union_fuerte'])
                               : (!$esLin && !empty($L['central_fuerte']));
@@ -405,9 +447,15 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
             <td class="cat <?= $cls ?><?= $fuerte ? ' fuerte' : '' ?>"><?php
                 echo lh($texto);
                 if ($ult !== '') echo '<span class="ult">' . lh($ult) . '</span>'; ?></td>
-            <td class="c"><?= lh(rtrim(rtrim(number_format($g['m2'], 2, ',', ''), '0'), ',')) ?></td>
+            <?php /* Sus documentos escriben 32.5 y 94.5 con PUNTO. Bitrix guarda el
+                     metraje como texto con coma; convertirlo aqui evita que la lista
+                     mezcle las dos formas. */ ?>
+            <td class="c"><?= lh(rtrim(rtrim(number_format($g['m2'], 2, '.', ''), '0'), '.')) ?></td>
             <?php if ($conParq): ?><td class="c"><?= (int)($g['parq'] ?? 1) ?></td><?php endif; ?>
-            <td class="p"><?= lh(lp($g['precio'])) ?></td>
+            <?php /* Locales escribe "$94,500" pegado; Oficinas y Departamentos
+                     "$ 144,420" con espacio. Es del documento, no del formateador. */ ?>
+            <td class="p"><?= lh(empty($L['precio_pegado']) ? lp($g['precio'])
+                                  : '$' . number_format($g['precio'], 0)) ?></td>
             <td class="n"><?= lh(ln($pl['separa'])) ?></td>
             <td class="n"><?= lh(ln($pl['firma'])) ?></td>
             <td class="n"><?= lh(ln($pl['mensual'])) ?></td>
@@ -432,13 +480,13 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
              de las filas, no se escribe: si entra una tipologia nueva se ajusta solo. */
       $mm = [];
       foreach ($grupos as $g) if ($g['m2'] > 0) $mm[] = (float)$g['m2'];
-      $fmt = fn($v) => rtrim(rtrim(number_format($v, 2, ',', ''), '0'), ',');
+      $fmt = fn($v) => rtrim(rtrim(number_format($v, 2, '.', ''), '0'), '.');
     ?>
     <?php /* Las medidas del pie: cada documento las escribe distinto. Oficinas lista
              los metrajes ("50 - 58 - 100m2") y Departamentos da el rango ("31m2 hasta
              94.5m2"). Si la familia declara `pie2_medidas` manda lo suyo; si no, se
              calcula el rango de las filas, que se ajusta solo. */ ?>
-    <div class="pie2"><b><?= lh((string)$L['pie2']) ?></b><span><?php
+    <div class="pie2<?= !empty($L['pie2_lista']) ? ' corto' : '' ?>"><b><?= lh((string)$L['pie2']) ?></b><span><?php
         if (!empty($L['pie2_medidas'])) {
             echo lh((string)$L['pie2_medidas']);
         } elseif (!empty($L['pie2_lista'])) {
@@ -458,5 +506,8 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
   <?php /* La nota del documento de la direccion. El detalle de cuando se genero y
            cuantas tipologias hay es interno: va en un title, no impreso. */ ?>
   <div class="meta" title="Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo · <?= count($grupos) - $nUnion ?> tipologías · <?= $totDisp ?> disponibles<?php
-      if ($nUnion) echo ' · ' . $nUnion . ($nUnion > 1 ? ' opciones' : ' opción') . ' de unidades unidas'; ?>">Precios sujetos a disponibilidad</div>
+      if ($nUnion) echo ' · ' . $nUnion . ($nUnion > 1 ? ' opciones' : ' opción') . ' de unidades unidas'; ?>"><?php
+      /* Solo el documento de LOCALES lleva impresa esta linea. Los de Oficinas y
+         Departamentos terminan en el pie verde. */
+      if (empty($L['sin_meta'])) echo 'Precios sujetos a disponibilidad'; ?></div>
 </section>

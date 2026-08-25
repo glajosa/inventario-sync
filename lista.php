@@ -86,9 +86,13 @@ $hoy = new DateTimeImmutable('now');
   .leyenda{display:flex;gap:22px;font-size:10.5px;color:#3b3b38;padding-bottom:3px}
   .leyenda span{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
   .leyenda i{width:26px;height:12px;display:inline-block;border:1px solid #7d7d76}
-  .leyenda i.lin{background:#eef4e4}
+  .leyenda i.lin{background:#e3ecd4}
   .leyenda i.cen{background:#4a6329}
   .cab .tit{flex:1}
+  /* Departamentos mete el logo DENTRO de la tabla: ocupa la banda y el nombre durante
+     las tres filas de cabecera. */
+  td.celda-logo{background:#fff;text-align:center;vertical-align:middle;padding:8px 10px}
+  td.celda-logo img{height:56px;width:auto;max-width:100%}
   /* Layout 'al_lado': el logo a la izquierda y la banda del titulo a su derecha, a la
      misma altura, como en los documentos de Oficinas y Departamentos. */
   /* La celda del logo dentro de la tabla: sin bordes internos que la partan y con
@@ -114,6 +118,11 @@ $hoy = new DateTimeImmutable('now');
   .pie2{display:flex;margin-top:0;border:1px solid #000;border-top:0;font-size:11px;font-weight:700}
   .pie2 b{background:#4a6329;color:#fff;padding:5px 14px;white-space:nowrap}
   .pie2 span{background:#8fae5d;color:#1a1a1a;padding:5px 14px;flex:1;text-align:center}
+  /* Oficinas cierra con una pastilla corta pegada al rotulo y el resto en blanco;
+     Departamentos estira la banda a todo el ancho. */
+  .pie2.corto{border:0}
+  .pie2.corto b{border:1px solid #000;border-top:0}
+  .pie2.corto span{flex:0 0 auto;border:1px solid #000;border-top:0;border-left:0}
   .wrap{display:flex;gap:0;align-items:stretch}
   .wrap .lat{background:#3b5323;color:#fff;writing-mode:vertical-rl;transform:rotate(180deg);
        display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;
@@ -136,7 +145,9 @@ $hoy = new DateTimeImmutable('now');
      hacia imposible ver de un golpe donde empieza cada piso. */
   .niv2{background:#3b5323}.niv3{background:#6b8e3d}.niv4{background:#b8860b}
   .niv5{background:#4a5d6b}.niv6{background:#7a4b00}
-  .niv5{background:#4a5d6b}.niv6{background:#7a4b00}
+  /* Bandas por NOMBRE: el documento decide el color, no el numero de piso. En
+     Locales los dos bloques son ocres; en Oficinas van oscuro, medio y ocre. */
+  .niv-oscuro{background:#3b5323}.niv-medio{background:#6b8e3d}.niv-ocre{background:#b8860b}
   /* Codigo de color de la VISTA, calcado del PDF de la direccion: el parque lineal va
      en un verde muy palido y el CENTRAL en verde OSCURO con texto blanco. No son dos
      tonos del mismo palo — el central es el producto caro y se ve de lejos.
@@ -146,8 +157,11 @@ $hoy = new DateTimeImmutable('now');
          background:#eef4e4;color:#1f2d16}
   /* Codigo de color de la vista, tomado de la hoja de Excel original:
      crema para el parque lineal, verde palido para el parque central. */
-  td.cat.lineal {background:#fdf6e3;color:#1f2d16}
-  td.cat.central{background:#e8f0dc;color:#1f2d16}
+  /* Tres tonos, y cada documento arma su par (ver `color_a`/`color_b` en el JSON).
+     `lineal`/`central` quedan como alias de los dos claros para no romper las listas
+     que todavia los nombran asi. */
+  td.cat.crema, td.cat.lineal {background:#fdf6e3;color:#1f2d16}
+  td.cat.palido,td.cat.central{background:#e3ecd4;color:#1f2d16}
   /* `fuerte` = verde oscuro con texto blanco. En Locales lo lleva la vista al parque
      central; en Departamentos, las unidades UNIDAS. Cada familia declara cual. */
   td.cat.fuerte{background:#4a6329;color:#fff}

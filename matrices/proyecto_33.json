@@ -1398,7 +1398,16 @@
       "pie2": "EDIFICIO A - B - C",
       "sin_vigencia": false,
       "pie2_lista": true,
-      "_pie_nota": "El documento de Oficinas LISTA los metrajes (50 - 58 - 100m2); el de Departamentos da el rango. Se calcula de las filas: si entra un metraje nuevo aparece solo."
+      "_pie_nota": "El documento de Oficinas LISTA los metrajes (50 - 58 - 100m2); el de Departamentos da el rango. Se calcula de las filas: si entra un metraje nuevo aparece solo.",
+      "color_a": "crema",
+      "color_b": "palido",
+      "colores_banda": [
+        "oscuro",
+        "medio",
+        "ocre"
+      ],
+      "sin_meta": true,
+      "encabezado_metros": "METROS (m2)"
     },
     "1793": {
       "forma": "precio",
@@ -1541,7 +1550,7 @@
         "vigencia_horas": 48,
         "_nota": "Del archivo del director. Plazo derivado de fecha_entrega (2031-02)."
       },
-      "layout": "al_lado",
+      "layout": "en_tabla",
       "encabezado_precio": "PRECIO<br>INCLUYENDO PARQUEO",
       "codigo_sin_prefijo": true,
       "sin_vigencia": true,
@@ -1551,7 +1560,18 @@
         "<b>Dos o tres unidades contiguas pueden unirse</b> en un departamento de dos o tres dormitorios. No todas las parejas se pueden unir: el ascensor separa algunas."
       ],
       "color_por": "escasez",
-      "_color_nota": "En este documento el color NO es la vista: crema = ULTIMA DISPONIBLE, verde palido = tipologia, verde oscuro = union. Verificado fila por fila contra su PDF: F-4-12 es posicion 12 (central) y va en CREMA porque es la ultima. Por eso este documento no lleva leyenda de colores y el de Locales si."
+      "_color_nota": "En este documento el color NO es la vista: crema = ULTIMA DISPONIBLE, verde palido = tipologia, verde oscuro = union. Verificado fila por fila contra su PDF: F-4-12 es posicion 12 (central) y va en CREMA porque es la ultima. Por eso este documento no lleva leyenda de colores y el de Locales si.",
+      "color_a": "crema",
+      "color_b": "palido",
+      "colores_banda": [
+        "medio",
+        "ocre"
+      ],
+      "orden_filas": "escasez",
+      "encabezado_metros": "METROS",
+      "pie2_medidas": "31m2 hasta 94.5m2",
+      "sin_meta": true,
+      "_pie_nota": "El rango del pie es del edificio (31 a 94,5 m2), no de las filas: si hoy no hay una unida de 3, el calculo daria 93 y el documento dice 94.5."
     },
     "1791": {
       "forma": "precio",
@@ -1670,7 +1690,15 @@
         "Vista al parque central"
       ],
       "central_fuerte": true,
-      "color_por": "vista"
+      "color_por": "vista",
+      "color_a": "palido",
+      "color_b": "palido",
+      "colores_banda": [
+        "ocre",
+        "ocre"
+      ],
+      "precio_pegado": true,
+      "encabezado_metros": "METROS<br>(m2)"
     }
   }
 }
