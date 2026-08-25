@@ -97,13 +97,14 @@ $hoy = new DateTimeImmutable('now');
         box-shadow:0 1px 5px rgba(0,0,0,.16);
         --banda:#4a6329; --banda-txt:#fff;
         --vig-fondo:#ffff00; --vig-txt:#000; --vig-borde:#000;
-        --pie-b:#4a6329; --pie-b-txt:#fff; --pie-span:#8fae5d; --pie-span-txt:#1a1a1a}
+        --pie-b:#4a6329; --pie-b-txt:#fff; --pie-span:#8fae5d; --pie-span-txt:#1a1a1a;
+        --sub:#fff; --sub-txt:#000}
   .hoja[data-tema="azul"]{--banda:#1f3864; --banda-txt:#fff;
         --vig-fondo:#1f3864; --vig-txt:#ffe14d; --vig-borde:#1f3864;
         --pie-b:#fff; --pie-b-txt:#1a1a1a; --pie-span:#fce9b0; --pie-span-txt:#1a1a1a}
   .hoja[data-tema="naranja"]{--banda:#c55a11; --banda-txt:#fff;
         --pie-b:#c55a11; --pie-b-txt:#fff; --pie-span:#fbe2d5; --pie-span-txt:#1a1a1a}
-  .hoja[data-tema="blanco"]{--banda:#fff; --banda-txt:#1a1a1a;
+  .hoja[data-tema="blanco"]{--banda:#fff; --banda-txt:#1a1a1a; --sub:#fdf2e9; --sub-txt:#1f3864;
         --pie-b:#fff; --pie-b-txt:#1a1a1a; --pie-span:#f7efe2; --pie-span-txt:#1a1a1a}
   /* El logo va SOLO y arriba a la izquierda, ENCIMA de la tabla — asi esta en el
      documento de la direccion. El de Galjosa no aparece en la lista de precios, y el
@@ -180,7 +181,8 @@ $hoy = new DateTimeImmutable('now');
   .titulo em{font-style:italic}
   .titulo{background:var(--banda);color:var(--banda-txt);font-size:15px;font-weight:700;
           text-align:center;padding:7px;letter-spacing:.02em}
-  .sub{text-align:center;font-size:11.5px;font-weight:700;padding:5px;background:#fff}
+  .sub{text-align:center;font-size:11.5px;font-weight:700;padding:5px;
+       background:var(--sub);color:var(--sub-txt)}
   .g th{font-weight:700;text-align:center;font-size:11px}
   .g .it{font-style:italic}
   .c th{font-weight:700;text-align:center;font-size:9.5px;line-height:1.25;padding:6px 4px}
