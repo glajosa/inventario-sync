@@ -1,6 +1,6 @@
 # Diseño: `No contestó` compartido entre Bitrix y la web app
 
-**Fecha:** 2026-08-25  
+**Fecha:** 2026-08-25
 **Estado:** aprobado por Martín Hidalgo
 
 ## Objetivo
