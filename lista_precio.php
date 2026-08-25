@@ -444,7 +444,8 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
                               : (!$esLin && !empty($L['central_fuerte']));
               }
             ?>
-            <td class="cat <?= $cls ?><?= $fuerte ? ' fuerte' : '' ?>"><?php
+            <?php $alin = ($L['alineacion_nombre'] ?? 'centro') === 'izquierda' ? ' izq' : ''; ?>
+            <td class="cat <?= $cls ?><?= $alin ?><?= $fuerte ? ' fuerte' : '' ?>"><?php
                 echo lh($texto);
                 if ($ult !== '') echo '<span class="ult">' . lh($ult) . '</span>'; ?></td>
             <?php /* Sus documentos escriben 32.5 y 94.5 con PUNTO. Bitrix guarda el

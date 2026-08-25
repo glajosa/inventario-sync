@@ -128,15 +128,15 @@ $hoy = new DateTimeImmutable('now');
        display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;
        padding:8px 5px;border:1px solid #000;border-left:0;letter-spacing:.03em}
   .lat em{font-style:italic}
-  table{width:100%;border-collapse:collapse;font-size:11px}
-  th,td{border:1px solid #000;padding:4px 6px}
+  table{width:100%;border-collapse:collapse;font-size:11.5px}
+  th,td{border:1px solid #000;padding:5.5px 6px}
   .titulo{background:#4a6329;color:#fff;font-size:15px;font-weight:700;
           text-align:center;padding:7px;letter-spacing:.02em}
   .sub{text-align:center;font-size:11.5px;font-weight:700;padding:5px;background:#fff}
   .g th{font-weight:700;text-align:center;font-size:11px}
   .g .it{font-style:italic}
-  .c th{font-weight:700;text-align:center;font-size:9px;line-height:1.2;padding:5px 4px}
-  .niv{color:#fff;font-weight:700;font-size:9px;text-align:center;width:26px;padding:2px}
+  .c th{font-weight:700;text-align:center;font-size:9.5px;line-height:1.25;padding:6px 4px}
+  .niv{color:#fff;font-weight:700;font-size:10px;text-align:center;width:34px;padding:2px}
   .niv span{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap}
   /* La banda del bloque es OCRE en el documento de la direccion, no verde: el verde
      ya lo usa la vista al parque central y repetirlo confundia las dos cosas. */
@@ -153,8 +153,12 @@ $hoy = new DateTimeImmutable('now');
      tonos del mismo palo — el central es el producto caro y se ve de lejos.
      td.cat y no .cat: `td:first-child{text-align:left}` le gana por especificidad y
      los nombres quedaban a la izquierda cuando en el documento van centrados. */
-  td.cat{font-weight:700;font-size:10.5px;line-height:1.2;text-align:center;
+  td.cat{font-weight:700;font-size:11px;line-height:1.25;text-align:center;
          background:#eef4e4;color:#1f2d16}
+  /* Locales centra los nombres; Oficinas y Departamentos los pegan a la izquierda.
+     Las filas fuertes (DESDE, unidades unidas) van centradas en los tres. */
+  td.cat.izq{text-align:left;padding-left:10px}
+  td.cat.izq.fuerte{text-align:center;padding-left:6px}
   /* Codigo de color de la vista, tomado de la hoja de Excel original:
      crema para el parque lineal, verde palido para el parque central. */
   /* Tres tonos, y cada documento arma su par (ver `color_a`/`color_b` en el JSON).

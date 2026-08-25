@@ -1407,7 +1407,8 @@
         "ocre"
       ],
       "sin_meta": true,
-      "encabezado_metros": "METROS (m2)"
+      "encabezado_metros": "METROS (m2)",
+      "alineacion_nombre": "izquierda"
     },
     "1793": {
       "forma": "precio",
@@ -1571,7 +1572,8 @@
       "encabezado_metros": "METROS",
       "pie2_medidas": "31m2 hasta 94.5m2",
       "sin_meta": true,
-      "_pie_nota": "El rango del pie es del edificio (31 a 94,5 m2), no de las filas: si hoy no hay una unida de 3, el calculo daria 93 y el documento dice 94.5."
+      "_pie_nota": "El rango del pie es del edificio (31 a 94,5 m2), no de las filas: si hoy no hay una unida de 3, el calculo daria 93 y el documento dice 94.5.",
+      "alineacion_nombre": "izquierda"
     },
     "1791": {
       "forma": "precio",
@@ -1698,7 +1700,8 @@
         "ocre"
       ],
       "precio_pegado": true,
-      "encabezado_metros": "METROS<br>(m2)"
+      "encabezado_metros": "METROS<br>(m2)",
+      "alineacion_nombre": "centro"
     }
   }
 }
