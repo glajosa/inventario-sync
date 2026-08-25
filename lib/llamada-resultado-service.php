@@ -105,6 +105,16 @@ function llamada_procesar_resultado(
         : null;
     $history = llamada_historial_actividades($bx, $dealId);
     $protocol = llamada_calcular_protocolo($history, $activityId, $reentry);
+    if (!$progress['pendingActivityResolved']) {
+        $progress['pendingActivityId'] = llamada_buscar_actividad_pendiente(
+            $bx,
+            $dealId,
+            $bitrixUserId,
+            $activityId,
+            $request['selectedPhone']
+        );
+        $progress['pendingActivityResolved'] = true;
+    }
     $contactName = trim(implode(' ', array_filter([
         trim((string)($contact['NAME'] ?? '')),
         trim((string)($contact['LAST_NAME'] ?? '')),
@@ -156,6 +166,24 @@ function llamada_procesar_resultado(
             throw $error;
         }
         $progress['activityUpdated'] = true;
+        llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken);
+    }
+
+    if (!$progress['pendingActivityCompleted']) {
+        if ($progress['pendingActivityId'] !== null) {
+            try {
+                llamada_bx_true($bx, 'crm.activity.update', [
+                    'id' => $progress['pendingActivityId'],
+                    'fields' => ['COMPLETED' => 'Y'],
+                ]);
+            } catch (LlamadaForbidden $error) {
+                throw $error;
+            } catch (Throwable $error) {
+                llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken, 'retryable');
+                throw $error;
+            }
+        }
+        $progress['pendingActivityCompleted'] = true;
         llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken);
     }
 
@@ -284,6 +312,11 @@ function llamada_cargar_progreso(mixed $responseJson): array {
             ? $stored['nextActivityAt']
             : null,
         'activityUpdated' => (bool)($stored['activityUpdated'] ?? false),
+        'pendingActivityResolved' => (bool)($stored['pendingActivityResolved'] ?? false),
+        'pendingActivityId' => isset($stored['pendingActivityId']) && (int)$stored['pendingActivityId'] > 0
+            ? (int)$stored['pendingActivityId']
+            : null,
+        'pendingActivityCompleted' => (bool)($stored['pendingActivityCompleted'] ?? false),
         'plannedActivityId' => isset($stored['plannedActivityId']) && (int)$stored['plannedActivityId'] > 0
             ? (int)$stored['plannedActivityId']
             : null,
@@ -570,6 +603,86 @@ function llamada_buscar_actividad_por_marca(array $history, string $marker): ?in
         if ($activityId > 0) return $activityId;
     }
     return null;
+}
+
+function llamada_buscar_actividad_pendiente(
+    callable $bx,
+    int $dealId,
+    int $bitrixUserId,
+    int $technicalActivityId,
+    string $selectedPhone
+): ?int {
+    $result = llamada_bx_array($bx, 'crm.activity.list', [
+        'filter' => [
+            'OWNER_TYPE_ID' => 2,
+            'OWNER_ID' => $dealId,
+            'TYPE_ID' => 2,
+            'DIRECTION' => 2,
+            'RESPONSIBLE_ID' => $bitrixUserId,
+            'COMPLETED' => 'N',
+        ],
+        'select' => ['ID', 'SUBJECT', 'DEADLINE', 'CREATED', 'RESPONSIBLE_ID', 'COMMUNICATIONS', 'COMPLETED'],
+        'order' => ['DEADLINE' => 'ASC', 'ID' => 'ASC'],
+        'start' => -1,
+    ]);
+    if (isset($result['items']) && is_array($result['items'])) $result = $result['items'];
+
+    $candidates = [];
+    foreach ($result as $activity) {
+        if (!is_array($activity)) continue;
+        $candidateId = (int)($activity['ID'] ?? 0);
+        if ($candidateId <= 0 || $candidateId === $technicalActivityId) continue;
+        if ((string)($activity['COMPLETED'] ?? 'N') === 'Y') continue;
+        if (isset($activity['RESPONSIBLE_ID'])
+            && (int)$activity['RESPONSIBLE_ID'] !== $bitrixUserId) continue;
+        if (str_starts_with((string)($activity['SUBJECT'] ?? ''), 'App móvil ·')) continue;
+        $candidates[] = $activity;
+    }
+
+    usort($candidates, static function (array $left, array $right): int {
+        $leftDate = (string)($left['DEADLINE'] ?? $left['CREATED'] ?? '9999-12-31T23:59:59');
+        $rightDate = (string)($right['DEADLINE'] ?? $right['CREATED'] ?? '9999-12-31T23:59:59');
+        return $leftDate <=> $rightDate ?: (int)$left['ID'] <=> (int)$right['ID'];
+    });
+
+    $selectedDigits = llamada_clave_comparacion_telefono($selectedPhone);
+    foreach ($candidates as $candidate) {
+        foreach (llamada_telefonos_actividad($candidate) as $candidatePhone) {
+            if (llamada_clave_comparacion_telefono($candidatePhone) === $selectedDigits) {
+                return (int)$candidate['ID'];
+            }
+        }
+    }
+
+    if (count($candidates) === 1 && llamada_telefonos_actividad($candidates[0]) === []) {
+        return (int)$candidates[0]['ID'];
+    }
+    return null;
+}
+
+function llamada_telefonos_actividad(array $activity): array {
+    $phones = [];
+    foreach (($activity['COMMUNICATIONS'] ?? []) as $communication) {
+        if (!is_array($communication)
+            || strtoupper((string)($communication['TYPE'] ?? '')) !== 'PHONE') continue;
+        try {
+            $phones[] = llamada_normalizar_telefono($communication['VALUE'] ?? null);
+        } catch (LlamadaValidationError) {
+            continue;
+        }
+    }
+    return array_values(array_unique($phones));
+}
+
+function llamada_clave_comparacion_telefono(string $phone): string {
+    $digits = ltrim($phone, '+');
+    if (strlen($digits) === 12 && str_starts_with($digits, '593')) {
+        return 'EC:' . substr($digits, 3);
+    }
+    if (strlen($digits) === 10 && str_starts_with($digits, '0')) {
+        return 'EC:' . substr($digits, 1);
+    }
+    return $digits;
 }
 
 function llamada_ultimo_reingreso(callable $bx, array $deal, int $dealId): ?string {
