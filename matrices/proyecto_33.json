@@ -1491,12 +1491,20 @@
         },
         "caras": {
           "PARQUE CENTRAL": [
-            1,
-            12
+            [
+              1,
+              12
+            ],
+            [
+              25,
+              25
+            ]
           ],
           "PARQUE LINEAL": [
-            13,
-            24
+            [
+              13,
+              24
+            ]
           ]
         },
         "_nota": "Los nombres son los del documento: 'VISTA PARQUE CENTRAL ESQ. 1'. El {cara} se reemplaza por la cara real del grupo."
@@ -1560,15 +1568,14 @@
         "<b>Monoambientes de 31 m²</b> en los edificios E y F. Los esquineros de los extremos miden 32,50 m².",
         "<b>Dos o tres unidades contiguas pueden unirse</b> en un departamento de dos o tres dormitorios. No todas las parejas se pueden unir: el ascensor separa algunas."
       ],
-      "color_por": "escasez",
-      "_color_nota": "En este documento el color NO es la vista: crema = ULTIMA DISPONIBLE, verde palido = tipologia, verde oscuro = union. Verificado fila por fila contra su PDF: F-4-12 es posicion 12 (central) y va en CREMA porque es la ultima. Por eso este documento no lleva leyenda de colores y el de Locales si.",
+      "color_por": "vista",
+      "_color_nota": "Direccion 25-ago-2026: el color es la VISTA. Las posiciones 1 a 12 dan al parque CENTRAL (verde) y las 13 a 24 al parque LINEAL (amarillo). El E-4-25 esta solo en el 4to piso, en el medio del edificio, y da al CENTRAL. El orden dentro de cada piso es lineal primero y central despues.",
       "color_a": "crema",
       "color_b": "palido",
       "colores_banda": [
         "medio",
         "ocre"
       ],
-      "orden_filas": "escasez",
       "encabezado_metros": "METROS",
       "pie2_medidas": "31m2 hasta 94.5m2",
       "sin_meta": true,

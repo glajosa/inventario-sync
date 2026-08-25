@@ -43,6 +43,17 @@ $bloqueDe = function (int $piso) use ($BLOQUES): ?string {
 };
 
 // ── agrupar ─────────────────────────────────────────────────────────────────
+/* Un rango de caras puede venir como un par plano [1,12] o como una LISTA de pares
+   [[1,12],[25,25]]. Hizo falta porque el E-4-25 esta solo en el 4to piso, en el medio
+   del edificio, y da al parque CENTRAL: no cabe en el corte 1-12 / 13-24. */
+if (!function_exists('lp_en_rango')):
+function lp_en_rango(int $pos, $r): bool {
+    if (!is_array($r) || !$r) return false;
+    if (is_array($r[0])) { foreach ($r as $sub) if (lp_en_rango($pos, $sub)) return true; return false; }
+    return $pos >= (int)$r[0] && $pos <= (int)$r[1];
+}
+endif;
+
 $grupos = [];
 foreach ($unidades as $u => $d) {
     if (($d['etapa'] ?? '') !== 'DISPONIBLE') continue;
@@ -80,7 +91,7 @@ if ($DER) {
     };
     $caraDe = function (int $pos) use ($DER): string {
         foreach ((array)($DER['caras'] ?? []) as $nom => $r)
-            if ($pos >= (int)$r[0] && $pos <= (int)$r[1]) return (string)$nom;
+            if (lp_en_rango($pos, $r)) return (string)$nom;
         return '';
     };
     foreach ($grupos as $k => $g) {
@@ -182,7 +193,7 @@ if ($UN) {
     }
     $caraDeU = function (int $pos) use ($UN): ?string {
         foreach ((array)($UN['caras'] ?? []) as $nom => $r)
-            if ($pos >= (int)$r[0] && $pos <= (int)$r[1]) return (string)$nom;
+            if (lp_en_rango($pos, $r)) return (string)$nom;
         return null;
     };
     $prohibido = function (int $a, int $b) use ($UN): bool {
