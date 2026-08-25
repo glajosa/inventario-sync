@@ -704,7 +704,11 @@
       "columna_patio": true,
       "encabezado_patio": "M2 PATIO",
       "bloque_patio": "PB",
-      "encabezado_metros": "METROS"
+      "encabezado_metros": "METROS",
+      "combo_por_edificio": true,
+      "union_fuerte": true,
+      "codigo_sin_prefijo": true,
+      "decimal_metros": ","
     }
   }
 }

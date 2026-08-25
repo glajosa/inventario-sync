@@ -202,7 +202,8 @@ function lst_par_mas_barato(array $cfg, array $unidades, array $edificios, strin
         [$ed, $piso, $pos] = array_pad(explode('-', $k), 3, '0');
         if (!in_array($ed, $edificios, true)) continue;
         if (mz_nivel_de_piso($cfg, (int)$piso) !== $niv) continue;
-        $porPiso["$ed-$piso"][(int)$pos] = ['pvp' => $pvp, 'cod' => (string)($d['cod'] ?? $k)];
+        $porPiso["$ed-$piso"][(int)$pos] = ['pvp' => $pvp, 'cod' => (string)($d['cod'] ?? $k),
+            'm2' => (float)str_replace(',', '.', (string)($d['m2'] ?? 0))];
     }
     $validos = $cfg['combos']['pares_validos'] ?? null;
     $mejor = null;
@@ -224,7 +225,11 @@ function lst_par_mas_barato(array $cfg, array $unidades, array $edificios, strin
             if (!isset($m[$a], $m[$b])) continue;
             $sum = $m[$a]['pvp'] + $m[$b]['pvp'];
             if ($mejor === null || $sum < $mejor['precio'])
-                $mejor = ['precio' => $sum, 'a' => $m[$a]['cod'], 'b' => $m[$b]['cod']];
+                /* El metraje de la fila unida es la SUMA de las dos unidades del par que
+                   se ofrece, no un numero de tabla: en el edificio F el 3 DORM de planta
+                   alta mide 160,15 (75 + 85,15) y en el A mide 150 (75 + 75). */
+                $mejor = ['precio' => $sum, 'a' => $m[$a]['cod'], 'b' => $m[$b]['cod'],
+                          'm2' => $m[$a]['m2'] + $m[$b]['m2'], 'ed' => $ed];
         }
     }
     return $mejor;

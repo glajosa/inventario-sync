@@ -368,6 +368,45 @@ uasort($grupos, function ($a, $b) use ($ordenBloque, $ORDEN, $PRIO) {
     return $a['precio'] <=> $b['precio'];
 });
 
+/* Fila de UNIDADES UNIDAS por edificio y por piso: "DESDE" en planta baja y "3 DORM"
+   arriba. El precio y el metraje NO salen de la tabla `combos`, que envejece: son el par
+   contiguo DISPONIBLE mas barato de ese piso. Se comprueba contra su documento —
+   EDIFICIO A, planta baja, $312.250: la tabla dice 306.750 (dos medianeros), pero esos
+   dos no estan contiguos hoy; el par real es el medianero de la 7 con el esquinero de la
+   8 (153.375 + 158.875). El par que cruza el nucleo de ascensores no se puede unir y
+   queda fuera por `nucleo_entre`. */
+if (!empty($L['combo_por_edificio'])) {
+    $etCombo = (array)($cfg['etiquetas_lista']['combo'] ?? []);
+    $parqCb  = (int)($cfg['parqueos']['_combo'] ?? 2);
+    $eds = [];
+    foreach ($grupos as $g) if ((string)($g['ed'] ?? '') !== '') $eds[(string)$g['ed']] = true;
+    foreach (array_keys($eds) as $edc) {
+        foreach ($BLOQUES as $b) {
+            $bid = (string)$b['id'];
+            $hay = false;
+            foreach ($grupos as $g) if ($g['ed'] === $edc && $g['bloque'] === $bid) { $hay = true; break; }
+            if (!$hay) continue;
+            $par = lst_par_mas_barato($cfg, $unidades, [$edc], $bid);
+            if (!$par) continue;
+            $fila = [
+                'bloque' => $bid, 'ed' => $edc, 'precio' => (float)$par['precio'],
+                'm2' => (float)($par['m2'] ?? 0),
+                'nombre' => (string)($etCombo[$bid] ?? 'DESDE'), 'sing' => '',
+                'zona' => '', 'catKey' => '', 'parq' => $parqCb,
+                'union' => true, 'calculada' => true, 'cods' => ['', ''],
+            ];
+            /* El patio de la fila unida es el de las DOS unidades: 32,5 donde cada una
+               tiene 16,25. */
+            if (!empty($patioDe) && $bid === (string)($L['bloque_patio'] ?? 'PB')
+                && isset($cfg['metraje'][mz_grupo_de($cfg, $edc)]['patio_pb'])) {
+                $pt = 2 * (float)$cfg['metraje'][mz_grupo_de($cfg, $edc)]['patio_pb'];
+                $fila['patio'] = rtrim(rtrim(number_format($pt, 2, ',', ''), '0'), ',') . 'm2';
+            }
+            $grupos['COMBO|' . $edc . '|' . $bid] = $fila;
+        }
+    }
+}
+
 /* HOJAS. Noral Apartments no es una lista sino NUEVE: el PDF aprobado de la direccion
    trae una hoja por edificio, con su titulo ("EDIFICIO A"), su pie y sus filas DESDE y
    3 DORM. Tiene sentido porque ahi el precio cambia de un edificio a otro: cada hoja es
@@ -579,7 +618,8 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
             <?php /* Sus documentos escriben 32.5 y 94.5 con PUNTO. Bitrix guarda el
                      metraje como texto con coma; convertirlo aqui evita que la lista
                      mezcle las dos formas. */ ?>
-            <td class="c"><?= lh(rtrim(rtrim(number_format($g['m2'], 2, '.', ''), '0'), '.')) ?></td>
+            <?php $dm = (string)($L['decimal_metros'] ?? '.'); ?>
+            <td class="c"><?= lh(rtrim(rtrim(number_format($g['m2'], 2, $dm, ''), '0'), $dm)) ?></td>
             <?php if ($conParq): ?><td class="c"><?= (int)($g['parq'] ?? 1) ?></td><?php endif; ?>
             <?php /* El patio solo existe en planta baja; en los demas pisos su documento
                      imprime un guion, no una celda vacia. */ ?>
