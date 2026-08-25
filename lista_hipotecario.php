@@ -98,7 +98,10 @@ $pl0 = $filas ? $filas[0]['plan'] : lst_plan_hipo(0.0, $fin);
           if ($clsR === '') foreach ((array)($L['colores_nivel'] ?? []) as $cl => $vals)
               if (in_array($nivR, (array)$vals, true)) { $clsR = (string)$cl; break; }
         ?>
-        <td class="cat <?= lh($clsR) ?>"><?php
+        <?php /* Torre C centra el nombre de la fila y Suites lo pega a la izquierda.
+                 Cada documento el suyo. */
+          $alin = ($L['alineacion_nombre'] ?? 'centro') === 'izquierda' ? ' izq' : ''; ?>
+        <td class="cat <?= lh($clsR) . $alin ?>"><?php
             $et = (string)($cfg['niveles'][$nivR]['etiqueta'] ?? '');
             /* La etiqueta del nivel solo se imprime donde su documento la imprime: en
                Suites "SUITE 1-5 (Planta Baja)" lleva parentesis y "SUITE 2-2" no. */
