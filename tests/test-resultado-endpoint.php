@@ -627,7 +627,7 @@ try {
     $manualBody = endpoint_test_body([
         'callRequestId' => '77777777-7777-4777-8777-777777777777',
         'outcome' => 'answered',
-        'nextActivityAt' => '2026-08-25T10:15:00-05:00',
+        'nextActivityAt' => (new DateTimeImmutable('tomorrow 10:15', new DateTimeZone('America/Guayaquil')))->format(DateTimeInterface::ATOM),
         'comment' => 'Necesita seguimiento',
     ]);
     $manualInput = json_decode($manualBody, true, 32, JSON_THROW_ON_ERROR);
