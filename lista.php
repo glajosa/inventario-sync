@@ -89,8 +89,22 @@ $hoy = new DateTimeImmutable('now');
   @page { size: A4 landscape; margin: 12mm; }
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Calibri,'Segoe UI',Arial,sans-serif;background:#e9e9e6;color:#000;padding:18px}
+  /* TEMA POR PROYECTO. El director lo puso como hallazgo critico (F-00): "una sola
+     plantilla verde para siete proyectos". El color no es decoracion — en cada lista
+     codifica un atributo que explica el precio, y el cliente compra Noral Plaza, Galero
+     o Sun Bay, no GALJOSA. Las variables se pisan por tema en `.hoja[data-tema]`. */
   .hoja{background:#fff;padding:20px 26px 26px;margin:0 auto;max-width:1120px;
-        box-shadow:0 1px 5px rgba(0,0,0,.16)}
+        box-shadow:0 1px 5px rgba(0,0,0,.16);
+        --banda:#4a6329; --banda-txt:#fff;
+        --vig-fondo:#ffff00; --vig-txt:#000; --vig-borde:#000;
+        --pie-b:#4a6329; --pie-b-txt:#fff; --pie-span:#8fae5d; --pie-span-txt:#1a1a1a}
+  .hoja[data-tema="azul"]{--banda:#1f3864; --banda-txt:#fff;
+        --vig-fondo:#1f3864; --vig-txt:#ffe14d; --vig-borde:#1f3864;
+        --pie-b:#fff; --pie-b-txt:#1a1a1a; --pie-span:#fce9b0; --pie-span-txt:#1a1a1a}
+  .hoja[data-tema="naranja"]{--banda:#c55a11; --banda-txt:#fff;
+        --pie-b:#c55a11; --pie-b-txt:#fff; --pie-span:#fbe2d5; --pie-span-txt:#1a1a1a}
+  .hoja[data-tema="blanco"]{--banda:#fff; --banda-txt:#1a1a1a;
+        --pie-b:#fff; --pie-b-txt:#1a1a1a; --pie-span:#f7efe2; --pie-span-txt:#1a1a1a}
   /* El logo va SOLO y arriba a la izquierda, ENCIMA de la tabla — asi esta en el
      documento de la direccion. El de Galjosa no aparece en la lista de precios, y el
      titulo no va al lado del logo sino como banda a todo el ancho de la tabla. */
@@ -101,6 +115,21 @@ $hoy = new DateTimeImmutable('now');
   .leyenda i{width:26px;height:12px;display:inline-block;border:1px solid #7d7d76}
   .leyenda i.lin{background:#e3ecd4}
   .leyenda i.cen{background:#4a6329}
+  /* Chips de Galero: azul marino = esquinera, amarillo = medianera. El codigo de color
+     de Torre D, con su leyenda arriba a la derecha. */
+  .leyenda i.chip-osc{background:#1f3864;border-color:#1f3864}
+  .leyenda i.chip-ama{background:#ffd966;border-color:#c8a33a}
+  td.cat.chip-osc{background:#1f3864;color:#fff}
+  td.cat.chip-osc .ult{color:#c9d6ea}
+  td.cat.chip-ama{background:#ffd966;color:#1a1a1a}
+  /* Torre C: azul 70 m2 / durazno 75 m2. Suites: durazno planta baja / azul altas. */
+  td.cat.chip-azul{background:#dceaf7;color:#14304f}
+  td.cat.chip-durazno{background:#fbe2d5;color:#5a2c10}
+  .leyenda i.chip-azul{background:#dceaf7;border-color:#8fb4d6}
+  .leyenda i.chip-durazno{background:#fbe2d5;border-color:#d8a184}
+  .cab .tit-galero{flex:1}
+  .tit-galero h1{font-size:22px;font-weight:700;letter-spacing:.01em;line-height:1.15}
+  .tit-galero p{font-size:11.5px;color:#4a4a45;margin-top:2px}
   .cab .tit{flex:1}
   /* Departamentos mete el logo DENTRO de la tabla: ocupa la banda y el nombre durante
      las tres filas de cabecera. */
@@ -130,8 +159,8 @@ $hoy = new DateTimeImmutable('now');
   /* Pie de dos bloques: el rotulo verde oscuro y el rango de metros en verde claro,
      a todo el ancho. Asi cierra el documento de Departamentos. */
   .pie2{display:flex;margin-top:0;border:1px solid #000;border-top:0;font-size:11px;font-weight:700}
-  .pie2 b{background:#4a6329;color:#fff;padding:5px 14px;white-space:nowrap}
-  .pie2 span{background:#8fae5d;color:#1a1a1a;padding:5px 14px;flex:1;text-align:center}
+  .pie2 b{background:var(--pie-b);color:var(--pie-b-txt);padding:5px 14px;white-space:nowrap}
+  .pie2 span{background:var(--pie-span);color:var(--pie-span-txt);padding:5px 14px;flex:1;text-align:center}
   /* Oficinas cierra con una pastilla corta pegada al rotulo y el resto en blanco;
      Departamentos estira la banda a todo el ancho. */
   .pie2.corto{border:0}
@@ -145,7 +174,7 @@ $hoy = new DateTimeImmutable('now');
   table{width:100%;border-collapse:collapse;font-size:11.5px}
   td.p,td.n{white-space:nowrap}   /* el "$" se partia solo en dos lineas */
   th,td{border:1px solid #000;padding:5.5px 6px}
-  .titulo{background:#4a6329;color:#fff;font-size:15px;font-weight:700;
+  .titulo{background:var(--banda);color:var(--banda-txt);font-size:15px;font-weight:700;
           text-align:center;padding:7px;letter-spacing:.02em}
   .sub{text-align:center;font-size:11.5px;font-weight:700;padding:5px;background:#fff}
   .g th{font-weight:700;text-align:center;font-size:11px}
@@ -195,7 +224,8 @@ $hoy = new DateTimeImmutable('now');
        border:1px solid #000;border-top:0;font-size:10.5px;font-weight:700}
   .pie span{background:#8fae5d;color:#1a1a1a;margin-left:14px;padding:0 10px;
        font-size:9.5px;display:inline-flex;align-items:center}
-  .vig{margin-top:12px;background:#ffff00;border:1px solid #000;text-align:center;
+  .vig{margin-top:12px;background:var(--vig-fondo);color:var(--vig-txt);
+       border:1px solid var(--vig-borde);text-align:center;
        font-size:11px;font-weight:700;padding:6px}
   .meta{margin-top:7px;font-size:9.5px;color:#777;text-align:center}
   /* Barra de familias: es navegacion nuestra y NO va en el papel. */

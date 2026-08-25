@@ -556,7 +556,8 @@
         "vigencia_horas": 48,
         "_nota": "Plazo derivado de fecha_entrega (2030-09): hoy 49 meses y 5 extraordinarias, los mismos de la lista de la direccion.",
         "fecha_entrega": "2030-09"
-      }
+      },
+      "tema": "blanco"
     }
   }
 }

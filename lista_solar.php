@@ -27,7 +27,7 @@ foreach ($unidades as $u => $d) {
 usort($filas, fn($a, $b) => [$a['mz'], $a['n']] <=> [$b['mz'], $b['n']]);
 $meses = $filas ? (int)$filas[0]['plan']['meses'] : (int)($fin['meses'] ?? 49);
 ?>
-<section class="hoja">
+<section class="hoja"<?= !empty($L['tema']) ? ' data-tema="' . lh((string)$L['tema']) . '"' : '' ?>>
   <div class="cab">
     <?php /* El logo del PROYECTO, solo. En los documentos de la direccion la lista de
              precios lleva la marca del proyecto —Galero, Sun Bay, Noral— y NO la de

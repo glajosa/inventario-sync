@@ -494,7 +494,8 @@
         "vigencia_horas": 48,
         "meses_rotulo": 36,
         "_nota": "40% de entrada: 10% a la firma, 20% en 24 mensuales y 10% en 3 extraordinarias (una por anio). El rotulo dice 36 meses porque es el plazo de ENTREGA; las mensuales son 24."
-      }
+      },
+      "tema": "azul"
     }
   }
 }

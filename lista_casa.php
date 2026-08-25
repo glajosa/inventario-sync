@@ -33,7 +33,7 @@ foreach ($unidades as $u => $d) {
 usort($solares, fn($a, $b) => [$a['mz'], $a['n']] <=> [$b['mz'], $b['n']]);
 $COL = (array)($L['colores_manzana'] ?? []);
 ?>
-<section class="hoja">
+<section class="hoja"<?= !empty($L['tema']) ? ' data-tema="' . lh((string)$L['tema']) . '"' : '' ?>>
   <div class="cab">
     <?php /* El logo del PROYECTO, solo. En los documentos de la direccion la lista de
              precios lleva la marca del proyecto —Galero, Sun Bay, Noral— y NO la de

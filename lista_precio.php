@@ -417,7 +417,24 @@ if (!empty($L['combo_por_edificio'])) {
    edificio B y otra vez en el D, porque son dos por edificio. La regla general de
    contar en todo el proyecto es para las familias que van en una sola hoja. */
 $PAGINAS = [];
-if (($L['paginar_por'] ?? '') === 'edificio') {
+/* Torre D se parte por POSICION dentro del piso, no por edificio: la lista aprobada son
+   dos hojas — "2 dormitorios" (posiciones 1 y 3) y "2 & 3 dormitorios" (posiciones 2 y 4,
+   mas los dos lofts). Es lo que dice `dormitorios_por_posicion` del archivo del director:
+   la posicion define los dormitorios, y publicar las 13 juntas bajo un titulo que dice
+   "2 dormitorios" es vender un 3 dormitorios como si fuera otra cosa. */
+if (($L['paginar_por'] ?? '') === 'posiciones') {
+    foreach ((array)($L['hojas'] ?? []) as $hj) {
+        $poss = array_map('intval', (array)($hj['posiciones'] ?? []));
+        $gs = [];
+        foreach ($grupos as $k => $g) {
+            foreach ($g['cods'] as $c)
+                if (preg_match('/(\d+)$/', (string)$c, $mp) && in_array((int)$mp[1], $poss, true)) {
+                    $gs[$k] = $g; break;
+                }
+        }
+        if ($gs) $PAGINAS[] = ['ed' => '', 'grupos' => $gs, 'hoja' => $hj];
+    }
+} elseif (($L['paginar_por'] ?? '') === 'edificio') {
     $porEd = [];
     foreach ($grupos as $k => $g) {
         $ed = (string)($g['ed'] ?? '');
@@ -435,13 +452,17 @@ $etBloque = [];
 foreach ($BLOQUES as $b) $etBloque[(string)$b['id']] = (string)($b['etiqueta'] ?? $b['id']);
 $conParq  = !empty($L['columna_parqueos']);
 $conPatio = !empty($L['columna_patio']);
+/* Torre D no lleva banda vertical de piso: su lista pone el piso en una COLUMNA, porque
+   las filas no vienen agrupadas por piso sino por dormitorios. */
+$conPiso  = !empty($L['columna_piso']);
+$sinBanda = !empty($L['sin_banda']);
 $GRUPOS_TODOS = $grupos;
 // CUATRO columnas caen bajo CARACTERISTICAS: la banda del bloque, el nombre, los
 // metros y el precio. Estaba en 3, y esa columna de menos corria toda la fila de
 // grupo un lugar a la izquierda: el "20%" quedaba sobre A LA FIRMA y el "10%" sobre
 // CUOTAS MENSUALES, cuando el 10% es el de las EXTRAORDINARIAS. Ademas la banda del
 // titulo se quedaba una columna corta.
-$nCols   = 4 + ($conParq ? 1 : 0) + ($conPatio ? 1 : 0);
+$nCols   = 4 + ($conParq ? 1 : 0) + ($conPatio ? 1 : 0) + ($conPiso ? 1 : 0) - ($sinBanda ? 1 : 0);
 // Las uniones NO suman al conteo: no son unidades, son combinaciones de las que ya
 // estan contadas. Sumarlas hacia decir 26 disponibles donde hay 24.
 ?>
@@ -476,12 +497,14 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
 ?>
 <?php /* El titulo y el pie llevan la letra del edificio cuando la lista va paginada:
          "EDIFICIO A" arriba y "EDIFICIO - A -" abajo, como en su PDF. */
-  $titulo = $PAG['ed'] !== '' && !empty($L['titulo_hoja'])
-          ? str_replace('{ed}', $PAG['ed'], (string)$L['titulo_hoja']) : $tituloBase;
-  $pieRotulo = $PAG['ed'] !== '' && !empty($L['pie2_hoja'])
-          ? str_replace('{ed}', $PAG['ed'], (string)$L['pie2_hoja']) : (string)($L['pie2'] ?? '');
+  $HJ = (array)($PAG['hoja'] ?? []);
+  $titulo = $HJ['titulo'] ?? ($PAG['ed'] !== '' && !empty($L['titulo_hoja'])
+          ? str_replace('{ed}', $PAG['ed'], (string)$L['titulo_hoja']) : $tituloBase);
+  $pieRotulo = $HJ['pie2'] ?? ($PAG['ed'] !== '' && !empty($L['pie2_hoja'])
+          ? str_replace('{ed}', $PAG['ed'], (string)$L['pie2_hoja']) : (string)($L['pie2'] ?? ''));
+  $pieMed = $HJ['pie2_medidas'] ?? ($L['pie2_medidas'] ?? null);
 ?>
-<section class="hoja">
+<section class="hoja"<?= !empty($L['tema']) ? ' data-tema="' . lh((string)$L['tema']) . '"' : '' ?>>
   <?php /* En los DOS documentos el logo va FUERA de la tabla, arriba a la izquierda,
            y la tabla empieza debajo alineada con el. La diferencia entre layouts es
            donde vive el TITULO: en 'al_lado' va en su propio recuadro a la derecha del
@@ -493,7 +516,21 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
       <img class="logo" src="<?= lh($lg[0]) ?>"
            alt="<?= lh($lg[1] !== '' ? $lg[1] : $proyecto) ?>" onerror="this.style.display='none'">
     <?php else: ?><span></span><?php endif; ?>
-    <?php if ($layout === 'al_lado'): ?>
+    <?php if ($layout === 'galero'): ?>
+      <?php /* Cabecera de Galero: el logo, el nombre del producto en grande con la fecha
+               de entrega debajo, y la leyenda de color arriba a la derecha. */ ?>
+      <div class="tit-galero">
+        <h1><?= $L['rotulo'] ?? lh(strtoupper($proyecto)) ?></h1>
+        <?php if (!empty($L['entrega_rotulo'])): ?><p><?= lh((string)$L['entrega_rotulo']) ?></p><?php endif; ?>
+      </div>
+      <?php if (!empty($L['leyenda'])): ?>
+        <div class="leyenda">
+          <?php foreach ((array)$L['leyenda'] as $cl => $tx): ?>
+            <span><i class="<?= lh((string)$cl) ?>"></i><?= lh((string)$tx) ?></span>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+    <?php elseif ($layout === 'al_lado'): ?>
       <div class="tit">
         <table><tr><th class="titulo"><?= lh($titulo) ?></th></tr>
                <tr><th class="sub"><?= lh($sub) ?></th></tr></table>
@@ -539,11 +576,13 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
           <th colspan="2" class="it"><?= (int)($fin['reserva_pct'] ?? 10) ?>% DE RESERVA</th>
           <th><?= (int)($fin['cuotas_pct'] ?? 20) ?>%</th>
           <th><?= (int)($fin['extra_pct'] ?? 10) ?>%</th></tr>
-        <tr class="c"><th></th><th><?= $L['encabezado_cat'] ?? 'CARACTER&Iacute;STICAS' ?></th>
+        <tr class="c"><?php if (!$sinBanda): ?><th></th><?php endif; ?>
+          <th><?= $L['encabezado_cat'] ?? 'CARACTER&Iacute;STICAS' ?></th>
+          <?php if ($conPiso): ?><th>PISO</th><?php endif; ?>
           <th><?= $L['encabezado_metros'] ?? 'METROS (m2)' ?></th><?php if ($conParq): ?><th>PARQUEOS</th><?php endif; ?>
           <?php if ($conPatio): ?><th><?= $L['encabezado_patio'] ?? 'M2 PATIO' ?></th><?php endif; ?>
           <th><?= $L['encabezado_precio'] ?? 'PRECIO' ?></th>
-          <th>SEPARA CON</th><th>A LA FIRMA</th>
+          <th>SEPARA CON</th><th><?= $L['encabezado_firma'] ?? 'A LA FIRMA' ?></th>
           <th>CUOTAS<br>MENSUALES</th>
           <th>CUOTAS EXTRAORDINARIAS<br>(1 VEZ AL A&Ntilde;O)</th></tr>
       </thead>
@@ -576,7 +615,7 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
                    : ($n === 1 ? (string)($L['badge_uno'] ?? 'ÚLTIMA UNIDAD')
                    : ($n === 2 ? (string)($L['badge_dos'] ?? '2 ÚLTIMAS DISPONIBLES') : '')); ?>
           <tr>
-            <?php if ($primera): $primera = false; ?>
+            <?php if (!$sinBanda && $primera): $primera = false; ?>
               <td class="niv <?= $clsNiv ?>" rowspan="<?= count($filas) ?>"><span><?= lh(strtoupper($etBloque[$blq] ?? $blq)) ?></span></td>
             <?php endif; ?>
 
@@ -592,6 +631,18 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
                  filas crema son exactamente las cinco que dicen "ULTIMA DISPONIBLE",
                  incluida F-4-12, que es posicion 12 y da al parque CENTRAL. Si el color
                  fuera la vista, esa seria verde. */
+              /* Torre D pinta por CATEGORIA: el chip del departamento va azul marino si
+                 es esquinera (posiciones 1 y 4) y amarillo si es medianera (2 y 3), con
+                 su leyenda arriba a la derecha. Es lo que explica el precio en esa torre,
+                 igual que la vista lo explica en Noral. */
+              if (($L['color_por'] ?? '') === 'categoria') {
+                  $pos1 = 0;
+                  foreach ($g['cods'] as $c) if (preg_match('/(\d+)$/', (string)$c, $mpc)) { $pos1 = (int)$mpc[1]; break; }
+                  $cls = '';
+                  foreach ((array)($L['colores_categoria'] ?? []) as $clase => $poss)
+                      if (in_array($pos1, array_map('intval', (array)$poss), true)) { $cls = (string)$clase; break; }
+                  $fuerte = false;
+              } else {
               $porEscasez = ($L['color_por'] ?? 'vista') === 'escasez';
               $esLin  = strpos($g['zona'], 'LINEAL') !== false;
               /* Los tres documentos usan pares de color DISTINTOS:
@@ -610,6 +661,7 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
                               ? !empty($L['union_fuerte'])
                               : (!$esLin && !empty($L['central_fuerte']));
               }
+              }
             ?>
             <?php $alin = ($L['alineacion_nombre'] ?? 'centro') === 'izquierda' ? ' izq' : ''; ?>
             <td class="cat <?= $cls ?><?= $alin ?><?= $fuerte ? ' fuerte' : '' ?>"><?php
@@ -619,6 +671,10 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
                      metraje como texto con coma; convertirlo aqui evita que la lista
                      mezcle las dos formas. */ ?>
             <?php $dm = (string)($L['decimal_metros'] ?? '.'); ?>
+            <?php if ($conPiso): $pz1 = '';
+                foreach ($g['cods'] as $c) if (preg_match('/^[A-Z]-?(\d+)-/', (string)$c, $mpi)) { $pz1 = $mpi[1]; break; } ?>
+              <td class="c"><?= lh($pz1) ?></td>
+            <?php endif; ?>
             <td class="c"><?= lh(rtrim(rtrim(number_format($g['m2'], 2, $dm, ''), '0'), $dm)) ?></td>
             <?php if ($conParq): ?><td class="c"><?= (int)($g['parq'] ?? 1) ?></td><?php endif; ?>
             <?php /* El patio solo existe en planta baja; en los demas pisos su documento
@@ -626,8 +682,9 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
             <?php if ($conPatio): ?><td class="c"><?= $g['patio'] ?? '-' ?></td><?php endif; ?>
             <?php /* Locales escribe "$94,500" pegado; Oficinas y Departamentos
                      "$ 144,420" con espacio. Es del documento, no del formateador. */ ?>
-            <td class="p"><?= lh(empty($L['precio_pegado']) ? lp($g['precio'])
-                                  : '$' . number_format($g['precio'], 0)) ?></td>
+            <td class="p"><?= lh(!empty($L['precio_centavos']) ? ln($g['precio'])
+                                  : (empty($L['precio_pegado']) ? lp($g['precio'])
+                                  : '$' . number_format($g['precio'], 0))) ?></td>
             <td class="n"><?= lh(ln($pl['separa'])) ?></td>
             <td class="n"><?= lh(ln($pl['firma'])) ?></td>
             <td class="n"><?= lh(ln($pl['mensual'])) ?></td>
@@ -662,8 +719,8 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
              94.5m2"). Si la familia declara `pie2_medidas` manda lo suyo; si no, se
              calcula el rango de las filas, que se ajusta solo. */ ?>
     <div class="pie2<?= !empty($L['pie2_lista']) ? ' corto' : '' ?>"><b><?= lh($pieRotulo) ?></b><span><?php
-        if (!empty($L['pie2_medidas'])) {
-            echo lh((string)$L['pie2_medidas']);
+        if (!empty($pieMed)) {
+            echo lh((string)$pieMed);
         } elseif (!empty($L['pie2_lista'])) {
             $u = array_values(array_unique($mm)); sort($u);
             $sep = (string)($L['pie2_sep'] ?? ' - ');
@@ -673,7 +730,9 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
         } ?></span></div>
   <?php endif; ?>
   <?php if (!empty($L['notas'])): ?>
-    <div class="notas"><?php foreach ((array)$L['notas'] as $nt): ?><p><?= $nt ?></p><?php endforeach; ?></div>
+    <?php /* {meses} en una nota se reemplaza por el plazo VIVO, que baja solo con el
+             calendario. Escribirlo a mano deja la nota mintiendo el mes que viene. */ ?>
+    <div class="notas"><?php foreach ((array)$L['notas'] as $nt): ?><p><?= str_replace('{meses}', (string)$pz['meses'], (string)$nt) ?></p><?php endforeach; ?></div>
   <?php endif; ?>
   <?php if (empty($L['sin_vigencia'])): ?>
   <div class="vig">ESTA COTIZACI&Oacute;N TIENE UNA VIGENCIA DE

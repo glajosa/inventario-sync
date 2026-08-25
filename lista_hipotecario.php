@@ -34,7 +34,7 @@ usort($filas, fn($a, $b) => strnatcmp($a['cod'], $b['cod']));
 $conPatio = !empty($L['columna_patio']);
 $pl0 = $filas ? $filas[0]['plan'] : lst_plan_hipo(0.0, $fin);
 ?>
-<section class="hoja">
+<section class="hoja"<?= !empty($L['tema']) ? ' data-tema="' . lh((string)$L['tema']) . '"' : '' ?>>
   <div class="cab">
     <?php /* El logo del PROYECTO, solo. En los documentos de la direccion la lista de
              precios lleva la marca del proyecto —Galero, Sun Bay, Noral— y NO la de

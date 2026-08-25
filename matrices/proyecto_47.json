@@ -286,7 +286,8 @@
         "vigencia_horas": 48,
         "_nota": "Entrega inmediata: no hay cuotas del constructor. La cuota del prestamo es amortizacion francesa a 20 anios y 7,35%, y es tentativa hasta que el banco la fije."
       },
-      "codigo_formato": "guion"
+      "codigo_formato": "guion",
+      "tema": "naranja"
     }
   }
 }
