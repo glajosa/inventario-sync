@@ -112,14 +112,9 @@ function llamada_procesar_resultado(
     if ($contactName === '') $contactName = 'cliente';
 
     $nextAt = null;
+    $plannedFields = null;
     if ($request['outcome'] === 'not_interested') {
-        $fields = llamada_campos_actividad_completada([
-            'dealId' => $dealId,
-            'responsibleId' => $bitrixUserId,
-            'contactId' => $contactId,
-            'selectedPhone' => $request['selectedPhone'],
-            'subject' => '1234 · No le interesa',
-        ]);
+        $technicalFields = llamada_campos_registro_tecnico('not_interested');
     } else {
         if (is_string($progress['nextActivityAt']) && $progress['nextActivityAt'] !== '') {
             $nextAt = new DateTimeImmutable($progress['nextActivityAt']);
@@ -132,7 +127,8 @@ function llamada_procesar_resultado(
                 )['at'];
         }
         $nextAt = $nextAt->setTimezone(new DateTimeZone('America/Guayaquil'));
-        $fields = llamada_campos_actividad([
+        $technicalFields = llamada_campos_registro_tecnico($request['outcome']);
+        $plannedFields = llamada_campos_actividad([
             'nextAt' => $nextAt,
             'dealId' => $dealId,
             'subject' => $request['outcome'] === 'answered' ? '1234' : 'Llamada saliente ' . $contactName,
@@ -141,6 +137,7 @@ function llamada_procesar_resultado(
             'contactId' => $contactId,
             'selectedPhone' => $request['selectedPhone'],
         ]);
+        $plannedFields['DESCRIPTION'] = llamada_marca_actividad($request['callRequestId']);
     }
 
     $progress['nextActivityAt'] = $nextAt?->format(DateTimeInterface::ATOM);
@@ -150,7 +147,7 @@ function llamada_procesar_resultado(
         try {
             llamada_bx_true($bx, 'crm.activity.update', [
                 'id' => $activityId,
-                'fields' => $fields,
+                'fields' => $technicalFields,
             ]);
         } catch (LlamadaForbidden $error) {
             throw $error;
@@ -159,6 +156,34 @@ function llamada_procesar_resultado(
             throw $error;
         }
         $progress['activityUpdated'] = true;
+        llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken);
+    }
+
+    if ($plannedFields !== null && $progress['plannedActivityId'] === null) {
+        $plannedActivityId = llamada_buscar_actividad_por_marca(
+            $history,
+            llamada_marca_actividad($request['callRequestId'])
+        );
+        if ($plannedActivityId === null) {
+            try {
+                $plannedActivityResult = llamada_bx_result($bx, 'crm.activity.add', [
+                    'fields' => $plannedFields,
+                ]);
+            } catch (LlamadaForbidden $error) {
+                throw $error;
+            } catch (Throwable $error) {
+                llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken, 'retryable');
+                throw $error;
+            }
+            $plannedActivityId = is_int($plannedActivityResult) || is_string($plannedActivityResult)
+                ? (int)$plannedActivityResult
+                : 0;
+            if ($plannedActivityId <= 0) {
+                llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken, 'retryable');
+                throw new LlamadaBitrixError('Bitrix crm.activity.add did not return an activity id', true);
+            }
+        }
+        $progress['plannedActivityId'] = $plannedActivityId;
         llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken);
     }
 
@@ -259,6 +284,9 @@ function llamada_cargar_progreso(mixed $responseJson): array {
             ? $stored['nextActivityAt']
             : null,
         'activityUpdated' => (bool)($stored['activityUpdated'] ?? false),
+        'plannedActivityId' => isset($stored['plannedActivityId']) && (int)$stored['plannedActivityId'] > 0
+            ? (int)$stored['plannedActivityId']
+            : null,
         'commentProcessed' => (bool)($stored['commentProcessed'] ?? false),
         'stageAttempted' => (bool)($stored['stageAttempted'] ?? false),
         'stageProcessed' => (bool)($stored['stageProcessed'] ?? false),
@@ -509,7 +537,7 @@ function llamada_historial_actividades(callable $bx, int $dealId): array {
 
         $page = llamada_bx_array($bx, 'crm.activity.list', [
             'filter' => $filter,
-            'select' => ['ID', 'TYPE_ID', 'DIRECTION', 'SUBJECT', 'CREATED'],
+            'select' => ['ID', 'TYPE_ID', 'DIRECTION', 'SUBJECT', 'DESCRIPTION', 'ORIGIN_ID', 'CREATED'],
             'order' => ['ID' => 'ASC'],
             'start' => -1,
         ]);
@@ -531,6 +559,19 @@ function llamada_historial_actividades(callable $bx, int $dealId): array {
 
     usort($history, fn(array $left, array $right): int => (int)$left['ID'] <=> (int)$right['ID']);
     return $history;
+}
+
+function llamada_marca_actividad(string $callRequestId): string {
+    return 'Registrada desde la app de llamadas Galjosa. Referencia: ' . $callRequestId;
+}
+
+function llamada_buscar_actividad_por_marca(array $history, string $marker): ?int {
+    foreach ($history as $activity) {
+        if (!is_array($activity) || trim((string)($activity['DESCRIPTION'] ?? '')) !== $marker) continue;
+        $activityId = (int)($activity['ID'] ?? 0);
+        if ($activityId > 0) return $activityId;
+    }
+    return null;
 }
 
 function llamada_ultimo_reingreso(callable $bx, array $deal, int $dealId): ?string {
@@ -562,30 +603,15 @@ function llamada_ultimo_reingreso(callable $bx, array $deal, int $dealId): ?stri
     return $created !== '' ? $created : null;
 }
 
-function llamada_campos_actividad_completada(array $context): array {
-    $fields = [
-        'OWNER_TYPE_ID' => 2,
-        'OWNER_ID' => (int)$context['dealId'],
-        'TYPE_ID' => 2,
-        'DIRECTION' => 2,
-        'PROVIDER_ID' => llamada_config()['provider_id'],
-        'PROVIDER_TYPE_ID' => llamada_config()['provider_type_id'],
-        'SUBJECT' => (string)$context['subject'],
+function llamada_campos_registro_tecnico(string $outcome): array {
+    $label = match ($outcome) {
+        'no_answer' => 'No contestó',
+        'answered' => 'Sí contestó',
+        'not_interested' => 'No le interesa',
+        default => throw new InvalidArgumentException('invalid technical call outcome'),
+    };
+    return [
+        'SUBJECT' => 'App móvil · ' . $label,
         'COMPLETED' => 'Y',
-        'RESPONSIBLE_ID' => (int)$context['responsibleId'],
-        'PRIORITY' => 2,
-        'NOTIFY_TYPE' => 1,
-        'NOTIFY_VALUE' => 15,
-        'DESCRIPTION_TYPE' => 1,
     ];
-
-    if ((int)$context['contactId'] > 0 && (string)$context['selectedPhone'] !== '') {
-        $fields['COMMUNICATIONS'] = [[
-            'VALUE' => (string)$context['selectedPhone'],
-            'ENTITY_ID' => (int)$context['contactId'],
-            'ENTITY_TYPE_ID' => 3,
-            'TYPE' => 'PHONE',
-        ]];
-    }
-    return $fields;
 }
