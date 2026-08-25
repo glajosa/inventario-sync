@@ -459,6 +459,9 @@ $hoy  = new DateTimeImmutable('now');
   .resumen div{border:1px solid var(--linea);border-radius:9px;padding:11px 13px}
   .resumen span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--gris);margin-bottom:3px}
   .resumen b{font-size:16px}
+  .resumen div.destacado{background:#eef4fb;border-color:#bcd3ea}
+  .resumen div.destacado span{color:#3f6a99}
+  .resumen div.destacado b{color:#1c4e80}
   table{width:100%;border-collapse:collapse;font-size:13.5px}
   thead th{background:var(--tinta);color:#fff;padding:9px 12px;text-align:left;font-size:11.5px;
            letter-spacing:1px;text-transform:uppercase}
@@ -1058,6 +1061,11 @@ $hoy  = new DateTimeImmutable('now');
 
   <div class="resumen">
     <div><span>Reserva <?= h($pc($plan['reservaPct'])) ?></span><b><?= h(cot_money($plan['reserva'])) ?></b></div>
+    <?php /* El credito directo va ANTES de la contraentrega porque ese es el orden en
+             que se paga, y es la cifra que el cliente compara contra lo que le pide el
+             banco. Se resalta: de los cinco cuadros, es el que define si la compra le
+             cierra o no. El mismo numero que la fila TOTAL CUOTA INICIAL de la tabla. */ ?>
+    <div class="destacado"><span>Crédito directo <?= h($pc($plan['financiarPct'] / 100)) ?></span><b><?= h(cot_money($plan['totalInicial'])) ?></b></div>
     <div><span>Contraentrega <?= h($pc($plan['contraPct'])) ?></span><b><?= h(cot_money($plan['contraentrega'])) ?></b></div>
     <div><span>Cuota mensual</span><b><?= h(cot_money($plan['mensual'])) ?></b></div>
     <div><span>Total cuotas</span><b><?= (int)$plan['cuotas'] ?></b></div>
