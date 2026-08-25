@@ -346,6 +346,17 @@ uasort($grupos, function ($a, $b) use ($ordenBloque, $ORDEN, $PRIO) {
        de ULTIMA DISPONIBLE (80.315 · 82.863 · 84.863 · 93.760) y despues las cuatro
        tipologias (85.445 · 85.445 · 89.338 · 92.338), cada grupo ascendente. Es el
        mismo criterio con que pinta el color: primero lo que se acaba. */
+    /* Torre D ordena por PISO y posicion, no por precio: su hoja va D-1-1, D-2-3, D-5-3,
+       D-7-1, D-8-1, D-9-3, D-10-1, D-10-3 — y ahi el 10-1 ($149.400) va antes que el 10-3
+       ($145.250). Es una lista de unidades, no de tipologias. */
+    if ($ORDEN === 'codigo') {
+        $cl = function (array $g): array {
+            foreach ($g['cods'] as $c)
+                if (preg_match('/^[A-Z]-?(\d+)-(\d+)$/', (string)$c, $m)) return [(int)$m[1], (int)$m[2]];
+            return [99, 99];
+        };
+        return $cl($a) <=> $cl($b);
+    }
     if ($ORDEN === 'escasez') {
         $ea = (!empty($a['union']) || count($a['cods']) !== 1) ? 1 : 0;
         $eb = (!empty($b['union']) || count($b['cods']) !== 1) ? 1 : 0;
@@ -604,10 +615,17 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
               // Con UNA disponible la fila se nombra con el codigo. El prefijo
               // ("LOCAL A-1-12", "RESTAURANTE C-7") solo va donde el documento lo pone:
               // en Departamentos la fila dice "F-4-18" a secas.
+              /* Las torres de Galero guardan el codigo pegado ("D10-2") y el documento lo
+                 escribe con guion ("D-10-2"). Es el mismo codigo, escrito como lo lee el
+                 cliente. */
+              $codTxt = function (string $c) use ($L): string {
+                  return empty($L['codigo_con_guion']) ? $c
+                       : preg_replace('/^([A-Z])(\d)/', '$1-$2', $c);
+              };
               $texto = $n !== 1 ? $g['nombre']
                      : (($g['sing'] !== '' && empty($L['codigo_sin_prefijo']))
-                          ? trim($g['sing'] . ' ' . $g['cods'][array_key_first($g['cods'])])
-                          : $g['cods'][array_key_first($g['cods'])]);
+                          ? trim($g['sing'] . ' ' . $codTxt($g['cods'][array_key_first($g['cods'])]))
+                          : $codTxt($g['cods'][array_key_first($g['cods'])]));
               /* Hay listas donde cada fila ES una unidad —Torre D tiene 13 filas y 13
                  unidades— y ahi la etiqueta de escasez se repite en todas y no dice
                  nada: quema la unica palanca de urgencia que tiene el asesor. */
