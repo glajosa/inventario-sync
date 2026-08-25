@@ -476,8 +476,6 @@ $hoy  = new DateTimeImmutable('now');
   tr.total-ini td{background:#eef4fb;color:#1c4e80}
   tr.gran-total td{background:#e8efe9;color:#1f4d2e;border-top:2px solid #1f4d2e}
   .pct{font-weight:600;font-size:10.5px;color:#5a6472;margin-left:5px}
-  .etq3{display:inline-block;background:#e8eaed;color:#4a5158;font-size:9.5px;font-weight:700;
-        letter-spacing:.04em;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:1px}
   tr.extra td{background:#fff8e6}
   tr.diferido td{background:#eef5ff}
   .etq{display:inline-block;background:#f0b429;color:#4a3200;font-size:9.5px;font-weight:700;
@@ -1091,10 +1089,10 @@ $hoy  = new DateTimeImmutable('now');
         <td><?= (int)$f['n'] ?></td>
         <td><?= h($f['fecha']) ?><?= $f['extra'] ? '<span class="etq">EXTRA</span>' : '' ?><?php
             if (!empty($f['diferido']) && $primerDiferido) { echo '<span class="etq2">FIRMA</span>'; $primerDiferido = false; }
-            /* La cuota que absorbe el redondeo va marcada: sin esto, el cliente ve una
-               cuota distinta a las demas y parece un error. Con el rotulo se entiende
-               que es el ajuste que hace cuadrar la suma al centavo. */
-            if (!empty($f['ajuste'])) echo '<span class="etq3">AJUSTE</span>'; ?></td>
+            /* La cuota que absorbe el redondeo NO se rotula. Se probo con una etiqueta
+               AJUSTE y el usuario la saco: al cliente no le aporta y mete una palabra
+               tecnica en un documento comercial. El pie sigue diciendo cual es y por
+               que, que es donde corresponde explicarlo. */ ?></td>
         <td><?= h(cot_money($f['monto'])) ?></td>
       </tr>
       <?php endforeach; ?>
