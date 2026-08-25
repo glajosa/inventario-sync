@@ -399,16 +399,16 @@
       "sin_badges": true,
       "_badges_nota": "D-04: en Torre D cada fila es una unidad, asi que las 13 decian ULTIMA DISPONIBLE.",
       "excepciones": {
-        "D-10-2": {
+        "D10-2": {
           "parqueos": 2,
           "extra_n": 2
         },
-        "D-10-4": {
+        "D10-4": {
           "parqueos": 2,
           "extra_n": 2
         }
       },
-      "_excepciones_nota": "Del archivo del director: `parqueos: {_normal:1,_lofts:2}` y `cuotas_extraordinarias: {pct:5, n:1, n_lofts:2}`. D-10-2 (138,57 m2) y D-10-4 (141,32 m2) son duplex de dos plantas con 2 parqueos, y parten el 5% en DOS cuotas."
+      "_excepciones_nota": "Del archivo del director: `parqueos: {_normal:1,_lofts:2}` y `cuotas_extraordinarias: {pct:5, n:1, n_lofts:2}`. D-10-2 (138,57 m2) y D-10-4 (141,32 m2) son duplex de dos plantas con 2 parqueos, y parten el 5% en DOS cuotas. El codigo va como lo escribe Bitrix (D10-2, sin guion tras la letra): las torres de Galero pegan el piso a la letra."
     }
   }
 }
