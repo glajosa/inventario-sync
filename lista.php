@@ -91,9 +91,10 @@ $hoy = new DateTimeImmutable('now');
   .cab .tit{flex:1}
   /* Layout 'al_lado': el logo a la izquierda y la banda del titulo a su derecha, a la
      misma altura, como en los documentos de Oficinas y Departamentos. */
-  .cab-lado{align-items:stretch;margin-bottom:0}
-  .cab-lado .logo{height:auto;max-height:78px;align-self:center}
-  .cab-lado .tit table{height:100%}
+  /* La celda del logo dentro de la tabla: sin bordes internos que la partan y con
+     aire alrededor, como en el documento. */
+  td.celda-logo{border:1px solid #000;padding:10px 16px;text-align:center;vertical-align:middle;background:#fff}
+  td.celda-logo .logo{height:52px;width:auto;display:inline-block}
   /* Notas al pie del documento: van en negrita la primera parte, como en el PDF. */
   .notas{margin-top:10px;font-size:10.5px;line-height:1.7;color:#1a1a18}
   .notas p{margin:0}

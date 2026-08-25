@@ -270,29 +270,38 @@ $layout = (string)($L['layout'] ?? 'arriba');
 $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
 ?>
 <section class="hoja">
-  <div class="cab<?= $layout === 'al_lado' ? ' cab-lado' : '' ?>">
+  <?php if ($layout !== 'al_lado'): ?>
+  <div class="cab">
     <?php if ($lg): ?>
       <img class="logo" src="<?= lh($lg[0]) ?>"
            alt="<?= lh($lg[1] !== '' ? $lg[1] : $proyecto) ?>" onerror="this.style.display='none'">
     <?php else: ?><span></span><?php endif; ?>
-    <?php if ($layout === 'al_lado'): ?>
-      <div class="tit">
-        <table><tr><th class="titulo"><?= lh($titulo) ?></th></tr>
-               <tr><th class="sub"><?= lh($sub) ?></th></tr></table>
-      </div>
-    <?php elseif (!empty($L['leyenda_vista'])): ?>
+    <?php if (!empty($L['leyenda_vista'])): ?>
       <div class="leyenda">
         <span><i class="lin"></i><?= lh((string)$L['leyenda_vista'][0]) ?></span>
         <span><i class="cen"></i><?= lh((string)$L['leyenda_vista'][1]) ?></span>
       </div>
     <?php endif; ?>
   </div>
+  <?php endif; ?>
   <div class="wrap">
     <table>
       <thead>
-      <?php if ($layout !== 'al_lado'): ?>
-        <?php /* Solo en el layout 'arriba' el titulo es una banda dentro de la tabla,
-                 a todo su ancho. En 'al_lado' ya salio junto al logo. */ ?>
+      <?php if ($layout === 'al_lado'): ?>
+        <?php /* El logo va DENTRO de la tabla, en una celda que ocupa las dos primeras
+                 columnas y las dos primeras filas, con la banda del titulo a su
+                 derecha. Asi el logo y la tabla forman UN bloque continuo, con los
+                 mismos bordes — que es como se ve el documento. Estando fuera quedaba
+                 un hueco y parecian dos cosas pegadas. */ ?>
+        <tr>
+          <td class="celda-logo" colspan="2" rowspan="2"><?php if ($lg): ?>
+            <img class="logo" src="<?= lh($lg[0]) ?>"
+                 alt="<?= lh($lg[1] !== '' ? $lg[1] : $proyecto) ?>" onerror="this.style.display='none'">
+          <?php endif; ?></td>
+          <th class="titulo" colspan="<?= $nCols + 2 ?>"><?= lh($titulo) ?></th>
+        </tr>
+        <tr><th class="sub" colspan="<?= $nCols + 2 ?>"><?= lh($sub) ?></th></tr>
+      <?php else: ?>
         <tr><th class="titulo" colspan="<?= $nCols + 4 ?>"><?= lh($titulo) ?></th></tr>
         <tr><th class="sub" colspan="<?= $nCols + 4 ?>"><?= lh($sub) ?></th></tr>
       <?php endif; ?>
@@ -335,14 +344,29 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
             <?php if ($primera): $primera = false; ?>
               <td class="niv <?= $clsNiv ?>" rowspan="<?= count($filas) ?>"><span><?= lh(strtoupper($etBloque[$blq] ?? $blq)) ?></span></td>
             <?php endif; ?>
-            <?php /* El verde OSCURO no significa lo mismo en los dos documentos: en
-                     Locales marca la vista al parque central, y en Departamentos las
-                     unidades UNIDAS (2 y 3 dorm). Cada familia dice cual usa. */
-              $esLin = strpos($g['zona'], 'LINEAL') !== false;
-              $cls   = $esLin ? 'lineal' : ($g['zona'] !== '' ? 'central' : '');
-              $fuerte = !empty($g['union'])
-                          ? !empty($L['union_fuerte'])
-                          : (!$esLin && !empty($L['central_fuerte']));
+            <?php
+              /* El COLOR no significa lo mismo en los dos documentos, y hay que
+                 respetar cada uno:
+                   'vista'   (Locales, Oficinas) crema = parque lineal · verde = central
+                             Por eso esos documentos llevan LEYENDA que lo explica.
+                   'escasez' (Departamentos) crema = ULTIMA DISPONIBLE · verde = tipologia
+                             Ese documento NO lleva leyenda, justamente porque el color
+                             no habla de la vista.
+                 Se comprobo fila por fila contra su PDF de Departamentos: las cinco
+                 filas crema son exactamente las cinco que dicen "ULTIMA DISPONIBLE",
+                 incluida F-4-12, que es posicion 12 y da al parque CENTRAL. Si el color
+                 fuera la vista, esa seria verde. */
+              $porEscasez = ($L['color_por'] ?? 'vista') === 'escasez';
+              $esLin  = strpos($g['zona'], 'LINEAL') !== false;
+              if ($porEscasez) {
+                  $cls    = $n === 1 ? 'lineal' : 'central';
+                  $fuerte = !empty($g['union']);
+              } else {
+                  $cls    = $esLin ? 'lineal' : ($g['zona'] !== '' ? 'central' : '');
+                  $fuerte = !empty($g['union'])
+                              ? !empty($L['union_fuerte'])
+                              : (!$esLin && !empty($L['central_fuerte']));
+              }
             ?>
             <td class="cat <?= $cls ?><?= $fuerte ? ' fuerte' : '' ?>"><?php
                 echo lh($texto);

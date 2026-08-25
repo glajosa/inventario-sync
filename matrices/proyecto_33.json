@@ -1371,7 +1371,8 @@
         "Vista al parque lineal",
         "Vista al parque central"
       ],
-      "central_fuerte": true
+      "central_fuerte": true,
+      "color_por": "vista"
     },
     "1793": {
       "forma": "precio",
@@ -1379,7 +1380,7 @@
       "subtitulo": "40% de Entrada a {meses} Meses",
       "encabezado_cat": "VISTA HACIA EL PARQUE LINEAL<br>O AL PARQUE CENTRAL",
       "columna_parqueos": true,
-      "badge_uno": "ÚLTIMA UNIDAD",
+      "badge_uno": "ÚLTIMA DISPONIBLE",
       "badge_dos": "2 ÚLTIMAS DISPONIBLES",
       "_una_tabla_nota": "UNA sola tabla, no una por edificio: lo pide la spec del director — 'Monoambientes va como EDIFICIOS E & F, no partido en dos hojas'.",
       "bloques": [
@@ -1523,8 +1524,8 @@
         "<b>Monoambientes de 31 m²</b> en los edificios E y F. Los esquineros de los extremos miden 32,50 m².",
         "<b>Dos o tres unidades contiguas pueden unirse</b> en un departamento de dos o tres dormitorios. No todas las parejas se pueden unir: el ascensor separa algunas."
       ],
-      "union_fuerte": true,
-      "central_fuerte": false
+      "color_por": "escasez",
+      "_color_nota": "En este documento el color NO es la vista: crema = ULTIMA DISPONIBLE, verde palido = tipologia, verde oscuro = union. Verificado fila por fila contra su PDF: F-4-12 es posicion 12 (central) y va en CREMA porque es la ultima. Por eso este documento no lleva leyenda de colores y el de Locales si."
     },
     "1791": {
       "forma": "precio",
@@ -1642,7 +1643,8 @@
         "Vista al parque lineal",
         "Vista al parque central"
       ],
-      "central_fuerte": true
+      "central_fuerte": true,
+      "color_por": "vista"
     }
   }
 }
