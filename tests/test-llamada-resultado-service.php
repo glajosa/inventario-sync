@@ -39,6 +39,7 @@ final class FakeBitrix {
         ]],
     ];
     public array $historyPages = [];
+    public array $pendingActivities = [];
     public array $reentryHistory = [];
     public array $errors = [];
     public array $responseQueues = [];
@@ -68,6 +69,9 @@ final class FakeBitrix {
     }
 
     private function historyPage(array $params): array {
+        if (($params['filter']['COMPLETED'] ?? null) === 'N') {
+            return $this->pendingActivities;
+        }
         $afterId = (int)($params['filter']['>ID'] ?? 0);
         return $this->historyPages[$afterId] ?? [];
     }
@@ -205,6 +209,113 @@ try {
     test_same([], llamada_calls($fake, 'crm.timeline.comment.add'), 'empty comment creates no timeline entry');
     $stored = $store->get('member-1:11111111-1111-4111-8111-111111111111');
     test_same($now->getTimestamp(), (int)($stored['updated_at'] ?? 0), 'result service lease clock is deterministic');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->pendingActivities = [[
+        'ID' => '630',
+        'SUBJECT' => 'Única llamada pendiente',
+        'DEADLINE' => '2026-08-19T10:00:00-05:00',
+    ]];
+
+    llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '30303030-3030-4030-8030-303030303030',
+        'outcome' => 'answered',
+    ]), $fake, $store, $now, $noInterestStage);
+
+    test_same([731, 630], array_map(
+        fn(array $call): int => (int)$call[1]['id'],
+        llamada_calls($fake, 'crm.activity.update')
+    ), 'the only pending call is completed when Bitrix omitted its communications');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->pendingActivities = [
+        [
+            'ID' => '610',
+            'SUBJECT' => 'Llamada pendiente anterior',
+            'DEADLINE' => '2026-08-19T10:00:00-05:00',
+            'COMMUNICATIONS' => [[
+                'VALUE' => '099 123 4567',
+                'TYPE' => 'PHONE',
+            ]],
+        ],
+        [
+            'ID' => '611',
+            'SUBJECT' => 'Otra llamada del mismo número',
+            'DEADLINE' => '2026-08-20T10:00:00-05:00',
+            'COMMUNICATIONS' => [[
+                'VALUE' => '+593991234567',
+                'TYPE' => 'PHONE',
+            ]],
+        ],
+        [
+            'ID' => '612',
+            'SUBJECT' => 'Llamada de otro número',
+            'DEADLINE' => '2026-08-18T10:00:00-05:00',
+            'COMMUNICATIONS' => [[
+                'VALUE' => '+593 98 765 4321',
+                'TYPE' => 'PHONE',
+            ]],
+        ],
+        [
+            'ID' => '731',
+            'SUBJECT' => 'Outbound call',
+            'DEADLINE' => '2026-08-17T10:00:00-05:00',
+            'COMMUNICATIONS' => [[
+                'VALUE' => '+593 99 123 4567',
+                'TYPE' => 'PHONE',
+            ]],
+        ],
+    ];
+
+    llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '10101010-1010-4010-8010-101010101010',
+    ]), $fake, $store, $now, $noInterestStage);
+
+    $updates = llamada_calls($fake, 'crm.activity.update');
+    test_same([731, 610], array_map(
+        fn(array $call): int => (int)$call[1]['id'],
+        $updates
+    ), 'result closes the technical call and the oldest pending call for the selected number');
+    test_same(['COMPLETED' => 'Y'], $updates[1][1]['fields'], 'previous pending call is completed without rewriting its details');
+    $writes = array_values(array_filter(
+        $fake->calls,
+        fn(array $call): bool => in_array($call[0], ['crm.activity.update', 'crm.activity.add'], true)
+    ));
+    test_same(['crm.activity.update', 'crm.activity.update', 'crm.activity.add'], array_map(
+        fn(array $call): string => $call[0],
+        $writes
+    ), 'previous pending call is completed before the next activity is created');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->pendingActivities = [
+        ['ID' => '620', 'SUBJECT' => 'Pendiente sin teléfono 1', 'DEADLINE' => '2026-08-19T10:00:00-05:00'],
+        ['ID' => '621', 'SUBJECT' => 'Pendiente sin teléfono 2', 'DEADLINE' => '2026-08-20T10:00:00-05:00'],
+    ];
+
+    llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '20202020-2020-4020-8020-202020202020',
+        'outcome' => 'answered',
+    ]), $fake, $store, $now, $noInterestStage);
+
+    test_same([731], array_map(
+        fn(array $call): int => (int)$call[1]['id'],
+        llamada_calls($fake, 'crm.activity.update')
+    ), 'ambiguous pending calls are left untouched');
 } finally {
     llamada_test_cleanup($directory);
 }
@@ -949,7 +1060,10 @@ try {
     llamada_procesar_resultado(llamada_test_input([
         'callRequestId' => '99999999-9999-4999-8999-999999999999',
     ]), $fake, $store, $now, $noInterestStage);
-    $historyCalls = llamada_calls($fake, 'crm.activity.list');
+    $historyCalls = array_values(array_filter(
+        llamada_calls($fake, 'crm.activity.list'),
+        fn(array $call): bool => !array_key_exists('COMPLETED', $call[1]['filter'])
+    ));
     test_same(2, count($historyCalls), 'activity history is paginated by id');
     test_same(50, $historyCalls[1][1]['filter']['>ID'], 'next history page starts after last id');
     test_same('2026-08-21T19:00:00-05:00', llamada_calls($fake, 'crm.activity.add')[0][1]['fields']['START_TIME'], 'current activity is excluded after paginated answered marker');
