@@ -1250,7 +1250,7 @@
       "forma": "precio",
       "titulo": "EDIFICIO A - B - C",
       "subtitulo": "40% de Entrada a {meses} Meses",
-      "encabezado_cat": "ESQUINERO / MEDIANERO & VISTA",
+      "encabezado_cat": "ESQUINERO/<br>MEDIANERO &amp; VISTA",
       "columna_parqueos": true,
       "badge_uno": "ÚLTIMA DISPONIBLE",
       "badge_dos": "2 ÚLTIMAS DISPONIBLES",
@@ -1284,76 +1284,88 @@
       ],
       "tipologias": {
         "125500|50": {
-          "nombre": "MEDIANEROS - VISTA AL PARQUE LINEAL",
+          "nombre": "MEDIANERO - VISTA AL PARQUE LINEAL",
           "singular": "OFICINA",
           "zona": "LINEAL",
-          "parqueos": 1
+          "parqueos": 1,
+          "cat": "M"
         },
         "144420|58": {
-          "nombre": "ESQUINEROS - VISTA AL PARQUE LINEAL",
+          "nombre": "ESQUINERO - VISTA AL PARQUE LINEAL",
           "singular": "OFICINA",
           "zona": "LINEAL",
-          "parqueos": 1
+          "parqueos": 1,
+          "cat": "E"
         },
         "132500|50": {
-          "nombre": "MEDIANEROS - VISTA AL PARQUE CENTRAL",
+          "nombre": "MEDIANERO - VISTA AL PARQUE CENTRAL",
           "singular": "OFICINA",
           "zona": "CENTRAL",
-          "parqueos": 1
+          "parqueos": 1,
+          "cat": "M"
         },
         "153700|58": {
-          "nombre": "ESQUINEROS - VISTA AL PARQUE CENTRAL",
+          "nombre": "ESQUINERO - VISTA AL PARQUE CENTRAL",
           "singular": "OFICINA",
           "zona": "CENTRAL",
-          "parqueos": 1
+          "parqueos": 1,
+          "cat": "E"
         },
         "129500|50": {
-          "nombre": "MEDIANEROS - VISTA AL PARQUE LINEAL",
+          "nombre": "MEDIANERO - VISTA AL PARQUE LINEAL",
           "singular": "OFICINA",
           "zona": "LINEAL",
-          "parqueos": 1
+          "parqueos": 1,
+          "cat": "M"
         },
         "150220|58": {
-          "nombre": "ESQUINEROS - VISTA AL PARQUE LINEAL",
+          "nombre": "ESQUINERO - VISTA AL PARQUE LINEAL",
           "singular": "OFICINA",
           "zona": "LINEAL",
-          "parqueos": 1
+          "parqueos": 1,
+          "cat": "E"
         },
         "134500|50": {
-          "nombre": "MEDIANEROS - VISTA AL PARQUE CENTRAL",
+          "nombre": "MEDIANERO - VISTA AL PARQUE CENTRAL",
           "singular": "OFICINA",
           "zona": "CENTRAL",
-          "parqueos": 1
+          "parqueos": 1,
+          "cat": "M"
         },
         "156020|58": {
-          "nombre": "ESQUINEROS - VISTA AL PARQUE CENTRAL",
+          "nombre": "ESQUINERO - VISTA AL PARQUE CENTRAL",
           "singular": "OFICINA",
           "zona": "CENTRAL",
-          "parqueos": 1
+          "parqueos": 1,
+          "cat": "E"
         },
         "139500|50": {
-          "nombre": "MEDIANEROS - VISTA AL PARQUE LINEAL",
+          "nombre": "MEDIANERO - VISTA AL PARQUE LINEAL",
           "singular": "OFICINA",
           "zona": "LINEAL",
-          "parqueos": 1
+          "parqueos": 1,
+          "cat": "M"
         },
         "161820|58": {
-          "nombre": "ESQUINEROS - VISTA AL PARQUE LINEAL",
+          "nombre": "ESQUINERO - VISTA AL PARQUE LINEAL",
           "singular": "OFICINA",
           "zona": "LINEAL",
-          "parqueos": 1
+          "parqueos": 1,
+          "cat": "E"
         },
         "144500|50": {
-          "nombre": "MEDIANEROS - VISTA AL PARQUE CENTRAL",
+          "nombre": "MEDIANERO - VISTA AL PARQUE CENTRAL",
           "singular": "OFICINA",
           "zona": "CENTRAL",
-          "parqueos": 1
+          "parqueos": 1,
+          "cat": "M"
         },
         "167620|58": {
-          "nombre": "ESQUINEROS - VISTA AL PARQUE CENTRAL",
+          "nombre": "ESQUINERO - VISTA AL PARQUE CENTRAL",
           "singular": "OFICINA",
           "zona": "CENTRAL",
-          "parqueos": 1
+          "parqueos": 1,
+          "cat": "E"
         }
       },
       "lat": "CONSULTORIOS: Solo en el&nbsp;<em>2DO PISO del EDIFICIO B</em>",
@@ -1367,12 +1379,24 @@
         "vigencia_horas": 48,
         "_nota": "Del archivo del director. El plazo NO se escribe: sale de fecha_entrega (2031-02) y las extraordinarias son ceil(meses/12)."
       },
-      "leyenda_vista": [
-        "Vista al parque lineal",
-        "Vista al parque central"
+      "central_fuerte": false,
+      "color_por": "vista",
+      "layout": "al_lado",
+      "orden_filas": "categoria",
+      "_orden_nota": "El ESQUINERO va antes que el medianero aunque sea mas caro: el 2do piso del documento va 144.420 · 153.700 · 132.500, que no es ascendente. Manda la categoria, no el precio.",
+      "orden_categorias": [
+        "E",
+        "M"
       ],
-      "central_fuerte": true,
-      "color_por": "vista"
+      "desde": {
+        "grupo": "ABC",
+        "rotulo": "DESDE",
+        "parqueos": 2,
+        "_nota": "La union de dos oficinas contiguas. Cierra cada piso, en verde oscuro."
+      },
+      "union_fuerte": true,
+      "pie2": "EDIFICIO A - B - C",
+      "sin_vigencia": false
     },
     "1793": {
       "forma": "precio",

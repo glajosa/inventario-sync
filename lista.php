@@ -93,8 +93,18 @@ $hoy = new DateTimeImmutable('now');
      misma altura, como en los documentos de Oficinas y Departamentos. */
   /* La celda del logo dentro de la tabla: sin bordes internos que la partan y con
      aire alrededor, como en el documento. */
-  td.celda-logo{border:1px solid #000;padding:10px 16px;text-align:center;vertical-align:middle;background:#fff}
-  td.celda-logo .logo{height:52px;width:auto;display:inline-block}
+  /* Layout 'al_lado': el logo a la izquierda y el recuadro del titulo a su derecha,
+     los dos ARRIBA de la tabla. La tabla empieza debajo, alineada con el logo. */
+  .cab-lado{align-items:center;margin-bottom:0}
+  .cab-lado .logo{height:62px}
+  .cab-lado .tit{flex:1}
+  .cab-lado .tit table{border-collapse:collapse}
+  /* Banda lateral DERECHA, dentro de la tabla: la nota de consultorios de Oficinas
+     abarca todas las filas y va en vertical, como en el documento. */
+  td.lat-cel{background:#3b5323;color:#fff;font-size:10.5px;font-weight:700;
+             text-align:center;vertical-align:middle;padding:6px 3px;width:26px}
+  td.lat-cel span{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap}
+  td.lat-cel em{font-style:italic}
   /* Notas al pie del documento: van en negrita la primera parte, como en el PDF. */
   .notas{margin-top:10px;font-size:10.5px;line-height:1.7;color:#1a1a18}
   .notas p{margin:0}
@@ -121,7 +131,11 @@ $hoy = new DateTimeImmutable('now');
   .niv span{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap}
   /* La banda del bloque es OCRE en el documento de la direccion, no verde: el verde
      ya lo usa la vista al parque central y repetirlo confundia las dos cosas. */
-  .niv2{background:#b8860b}.niv3{background:#a8780a}.niv4{background:#986c09}
+  /* Tres colores para las bandas de piso, como en el documento de Oficinas: el 2do
+     verde oscuro, el 3ro verde medio y el 4to ocre. Tenerlas todas del mismo color
+     hacia imposible ver de un golpe donde empieza cada piso. */
+  .niv2{background:#3b5323}.niv3{background:#6b8e3d}.niv4{background:#b8860b}
+  .niv5{background:#4a5d6b}.niv6{background:#7a4b00}
   .niv5{background:#4a5d6b}.niv6{background:#7a4b00}
   /* Codigo de color de la VISTA, calcado del PDF de la direccion: el parque lineal va
      en un verde muy palido y el CENTRAL en verde OSCURO con texto blanco. No son dos

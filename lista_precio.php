@@ -57,6 +57,7 @@ foreach ($unidades as $u => $d) {
     if (!isset($grupos[$key])) {
         $t = $TIPOS[round($pvp) . '|' . rtrim(rtrim(number_format($m2, 2, '.', ''), '0'), '.')] ?? [];
         $grupos[$key] = ['bloque' => $blq, 'precio' => $pvp, 'm2' => $m2,
+                         'catKey' => (string)($t['cat'] ?? ''),
                          'nombre' => (string)($t['nombre'] ?? ''), 'sing' => (string)($t['singular'] ?? ''),
                          'zona' => (string)($t['zona'] ?? ''), 'parq' => $t['parqueos'] ?? null,
                          'union' => !empty($t['union']), 'cods' => []];
@@ -129,6 +130,30 @@ if ($DER) {
         }
         $grupos[$k]['zona']   = $cara;
         if ($grupos[$k]['sing'] === '') $grupos[$k]['sing'] = (string)($DER['singular'] ?? '');
+    }
+}
+
+// ── fila DESDE del bloque, para los proyectos que la declaran en `combos` ───
+// Oficinas la lleva en cada piso: 100 m2, 2 parqueos, y el precio de la tabla de
+// combos. Es la union de dos oficinas contiguas y cierra el bloque.
+if (!empty($L['desde'])) {
+    foreach (array_keys($porBloque ?? []) as $_ignora) {}
+    foreach ($BLOQUES as $b) {
+        $bid = (string)$b['id'];
+        $cb  = lst_combo($cfg, (string)($L['desde']['grupo'] ?? ''), $bid);
+        if (!$cb) continue;
+        // Solo si el bloque tiene alguna fila: no se ofrece una union en un piso
+        // donde no queda nada que unir.
+        $hay = false;
+        foreach ($grupos as $g) if ($g['bloque'] === $bid) { $hay = true; break; }
+        if (!$hay) continue;
+        $grupos['DESDE|' . $bid] = [
+            'bloque' => $bid, 'precio' => $cb['precio'],
+            'm2' => $cb['m2'] !== null ? (float)$cb['m2'] : 0.0,
+            'nombre' => (string)($L['desde']['rotulo'] ?? 'DESDE'), 'sing' => '',
+            'zona' => '', 'catKey' => '', 'parq' => (int)($L['desde']['parqueos'] ?? 2),
+            'union' => true, 'calculada' => true, 'cods' => ['', ''],
+        ];
     }
 }
 
@@ -212,6 +237,8 @@ if ($UN) {
 // recién ahí 101.900 · 111.000 · 136.500 · 237.767 (central). No es precio ascendente
 // a secas: la zona manda primero.
 $ordenBloque = array_flip(array_map(fn($b) => (string)$b['id'], $BLOQUES));
+$ORDEN = (string)($L['orden_filas'] ?? 'precio');
+$PRIO  = array_flip(array_map('strval', (array)($L['orden_categorias'] ?? [])));
 uasort($grupos, function ($a, $b) use ($ordenBloque) {
     $ba = $ordenBloque[$a['bloque']] ?? 99;
     $bb = $ordenBloque[$b['bloque']] ?? 99;
@@ -223,9 +250,19 @@ uasort($grupos, function ($a, $b) use ($ordenBloque) {
     $ua = !empty($a['calculada']) ? 1 : 0;
     $ub = !empty($b['calculada']) ? 1 : 0;
     if ($ua !== $ub) return $ua <=> $ub;
-    $za = $a['zona'] === 'LINEAL' ? 0 : 1;
-    $zb = $b['zona'] === 'LINEAL' ? 0 : 1;
+    $za = strpos($a['zona'], 'LINEAL') !== false ? 0 : 1;
+    $zb = strpos($b['zona'], 'LINEAL') !== false ? 0 : 1;
     if ($za !== $zb) return $za <=> $zb;
+    // Dentro de la zona, DOS ordenes posibles y cada documento usa el suyo:
+    //   'precio'    ascendente (Locales, Departamentos)
+    //   'categoria' el ESQUINERO antes que el medianero, aunque sea mas caro. Es el
+    //               de Oficinas: 2do piso va 144.420 · 153.700 · 132.500, que no es
+    //               ascendente ni por casualidad — manda la categoria.
+    if ($ORDEN === 'categoria') {
+        $pa = $PRIO[$a['catKey']] ?? 99;
+        $pb = $PRIO[$b['catKey']] ?? 99;
+        if ($pa !== $pb) return $pa <=> $pb;
+    }
     return $a['precio'] <=> $b['precio'];
 });
 
@@ -270,38 +307,32 @@ $layout = (string)($L['layout'] ?? 'arriba');
 $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
 ?>
 <section class="hoja">
-  <?php if ($layout !== 'al_lado'): ?>
-  <div class="cab">
+  <?php /* En los DOS documentos el logo va FUERA de la tabla, arriba a la izquierda,
+           y la tabla empieza debajo alineada con el. La diferencia entre layouts es
+           donde vive el TITULO: en 'al_lado' va en su propio recuadro a la derecha del
+           logo (Oficinas, Departamentos); en 'arriba', como banda a todo el ancho de
+           la tabla (Locales). */ ?>
+  <div class="cab<?= $layout === 'al_lado' ? ' cab-lado' : '' ?>">
     <?php if ($lg): ?>
       <img class="logo" src="<?= lh($lg[0]) ?>"
            alt="<?= lh($lg[1] !== '' ? $lg[1] : $proyecto) ?>" onerror="this.style.display='none'">
     <?php else: ?><span></span><?php endif; ?>
-    <?php if (!empty($L['leyenda_vista'])): ?>
+    <?php if ($layout === 'al_lado'): ?>
+      <div class="tit">
+        <table><tr><th class="titulo"><?= lh($titulo) ?></th></tr>
+               <tr><th class="sub"><?= lh($sub) ?></th></tr></table>
+      </div>
+    <?php elseif (!empty($L['leyenda_vista'])): ?>
       <div class="leyenda">
         <span><i class="lin"></i><?= lh((string)$L['leyenda_vista'][0]) ?></span>
         <span><i class="cen"></i><?= lh((string)$L['leyenda_vista'][1]) ?></span>
       </div>
     <?php endif; ?>
   </div>
-  <?php endif; ?>
   <div class="wrap">
     <table>
       <thead>
-      <?php if ($layout === 'al_lado'): ?>
-        <?php /* El logo va DENTRO de la tabla, en una celda que ocupa las dos primeras
-                 columnas y las dos primeras filas, con la banda del titulo a su
-                 derecha. Asi el logo y la tabla forman UN bloque continuo, con los
-                 mismos bordes — que es como se ve el documento. Estando fuera quedaba
-                 un hueco y parecian dos cosas pegadas. */ ?>
-        <tr>
-          <td class="celda-logo" colspan="2" rowspan="2"><?php if ($lg): ?>
-            <img class="logo" src="<?= lh($lg[0]) ?>"
-                 alt="<?= lh($lg[1] !== '' ? $lg[1] : $proyecto) ?>" onerror="this.style.display='none'">
-          <?php endif; ?></td>
-          <th class="titulo" colspan="<?= $nCols + 2 ?>"><?= lh($titulo) ?></th>
-        </tr>
-        <tr><th class="sub" colspan="<?= $nCols + 2 ?>"><?= lh($sub) ?></th></tr>
-      <?php else: ?>
+      <?php if ($layout !== 'al_lado'): ?>
         <tr><th class="titulo" colspan="<?= $nCols + 4 ?>"><?= lh($titulo) ?></th></tr>
         <tr><th class="sub" colspan="<?= $nCols + 4 ?>"><?= lh($sub) ?></th></tr>
       <?php endif; ?>
@@ -344,6 +375,7 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
             <?php if ($primera): $primera = false; ?>
               <td class="niv <?= $clsNiv ?>" rowspan="<?= count($filas) ?>"><span><?= lh(strtoupper($etBloque[$blq] ?? $blq)) ?></span></td>
             <?php endif; ?>
+
             <?php
               /* El COLOR no significa lo mismo en los dos documentos, y hay que
                  respetar cada uno:
@@ -387,7 +419,11 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
       <?php endif; ?>
       </tbody>
     </table>
+    <?php /* La nota lateral es HERMANA de la tabla dentro de `.wrap`, que es flex: asi
+             cubre toda su altura sin ser una columna, que descuadraba los colspan de
+             la cabecera. */ ?>
     <?php if (!empty($L['lat'])): ?><div class="lat"><?= $L['lat'] ?></div><?php endif; ?>
+
   </div>
   <?php if (!empty($L['pie2'])): ?>
     <?php /* Cierre de dos bloques: el rotulo y el rango de metros. El rango se calcula
