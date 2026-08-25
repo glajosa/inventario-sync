@@ -35,6 +35,17 @@ $conPatio = !empty($L['columna_patio']);
 $pl0 = $filas ? $filas[0]['plan'] : lst_plan_hipo(0.0, $fin);
 ?>
 <section class="hoja"<?= !empty($L['tema']) ? ' data-tema="' . lh((string)$L['tema']) . '"' : '' ?>>
+  <?php /* La LEYENDA de color arriba a la derecha. En Torre C el color es el metraje
+             (azul 70 m2, durazno 75) y en Suites el nivel (durazno planta baja con patio,
+             azul plantas altas). En los dos casos el color explica el precio: sin leyenda
+             el cliente ve filas de colores y no sabe que le dicen. */ ?>
+  <?php if (!empty($L['leyenda'])): ?>
+    <div class="leyenda leyenda-arriba">
+    <?php foreach ((array)$L['leyenda'] as $cl => $tx): ?>
+        <span><i class="<?= lh((string)$cl) ?>"></i><?= lh((string)$tx) ?></span>
+    <?php endforeach; ?>
+  </div>
+  <?php endif; ?>
   <div class="cab">
     <?php /* El logo del PROYECTO, solo. En los documentos de la direccion la lista de
              precios lleva la marca del proyecto —Galero, Sun Bay, Noral— y NO la de
@@ -46,17 +57,6 @@ $pl0 = $filas ? $filas[0]['plan'] : lst_plan_hipo(0.0, $fin);
     <?php else: ?>
       <img class="logo" src="assets/logo_galjosa_transparente.png"
            alt="Galjosa" onerror="this.style.display='none'">
-    <?php endif; ?>
-    <?php /* La LEYENDA de color arriba a la derecha. En Torre C el color es el metraje
-             (azul 70 m2, durazno 75) y en Suites el nivel (durazno planta baja con patio,
-             azul plantas altas). En los dos casos el color explica el precio: sin leyenda
-             el cliente ve filas de colores y no sabe que le dicen. */ ?>
-    <?php if (!empty($L['leyenda'])): ?>
-      <div class="leyenda leyenda-top">
-        <?php foreach ((array)$L['leyenda'] as $cl => $tx): ?>
-          <span><i class="<?= lh((string)$cl) ?>"></i><?= lh((string)$tx) ?></span>
-        <?php endforeach; ?>
-      </div>
     <?php endif; ?>
     <div class="tit">
       <table><tr><th class="titulo"><?= lh((string)($L['titulo'] ?? strtoupper($proyecto))) ?></th></tr>
@@ -145,6 +145,7 @@ $pl0 = $filas ? $filas[0]['plan'] : lst_plan_hipo(0.0, $fin);
   <div class="vig"><?= $L['nota_amarilla'] ?? 'ESTA COTIZACI&Oacute;N TIENE UNA VIGENCIA DE '
       . (int)($fin['vigencia_horas'] ?? 48) . ' HRS NATURALES' ?>
     La cuota del préstamo es <b>tentativa</b>: la aprueba y la fija el banco.</div>
-  <div class="meta">Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo ·
-    <?= count($filas) ?> disponibles</div>
+  <?php /* F-05: la linea de generacion es informacion INTERNA. Sobra en la version que
+           va al cliente, asi que viaja en un title y no impresa. */ ?>
+  <div class="meta" title="Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo · <?= count($filas) ?> disponibles"></div>
 </section>

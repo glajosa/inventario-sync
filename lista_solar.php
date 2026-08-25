@@ -108,7 +108,8 @@ foreach ($GRUPOS_HOJA as $GRUPO):
   <div class="nota"><?= str_replace(['{horas}', '{meses}'],
         [(string)(int)($fin['vigencia_horas'] ?? 48), (string)$meses],
         (string)($L['nota'] ?? '')) ?></div>
-  <div class="meta">Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo ·
-    <?= count($filas) ?> solares disponibles</div>
+  <?php /* F-05: la linea de generacion es informacion INTERNA. Sobra en la version que
+           va al cliente, asi que viaja en un title y no impresa. */ ?>
+  <div class="meta" title="Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo · <?= count($filas) ?> solares disponibles"></div>
 </section>
 <?php endforeach; $filas = $TODAS; ?>

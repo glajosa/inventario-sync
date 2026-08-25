@@ -118,6 +118,7 @@ $COL = (array)($L['colores_manzana'] ?? []);
                             [$MES[(int)$fe->format('n')] . ' de ' . $fe->format('Y'), (string)$mesesFin], $nota);
     } ?>
   <?php if ($nota !== ''): ?><div class="nota"><?= $nota ?></div><?php endif; ?>
-  <div class="meta">Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo ·
-    <?= count($solares) ?> solares disponibles</div>
+  <?php /* F-05: la linea de generacion es informacion INTERNA. Sobra en la version que
+           va al cliente, asi que viaja en un title y no impresa. */ ?>
+  <div class="meta" title="Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo · <?= count($solares) ?> solares disponibles"></div>
 </section>

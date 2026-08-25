@@ -128,8 +128,9 @@ $hoy = new DateTimeImmutable('now');
   td.cat.chip-durazno{background:#fbe2d5;color:#5a2c10}
   .leyenda i.chip-azul{background:#dceaf7;border-color:#8fb4d6}
   .leyenda i.chip-durazno{background:#fbe2d5;border-color:#d8a184}
-  .leyenda-top{position:absolute;top:0;right:0}
-  .cab{position:relative}
+  /* La leyenda va ARRIBA del todo y a la derecha, sobre blanco. Flotando encima de la
+     cabecera caia sobre la banda naranja del titulo y no se leia. */
+  .leyenda-arriba{justify-content:flex-end;margin-bottom:8px}
   .pieh.destacado{background:#1f3864;color:#fff;padding:5px 14px;border-color:#1f3864}
   .cab .tit-galero{flex:1}
   .tit-galero h1{font-size:22px;font-weight:700;letter-spacing:.01em;line-height:1.15}
