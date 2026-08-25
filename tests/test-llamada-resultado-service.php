@@ -717,22 +717,18 @@ try {
         'callRequestId' => '22222222-2222-4222-8222-222222222222',
         'outcome' => 'answered',
         'selectedPhone' => '+593 99-123-4567',
-        'nextActivityAt' => '2026-08-25T15:15:00Z',
+        'nextActivityAt' => null,
         'comment' => '  Pide información del proyecto  ',
     ]);
     $result = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
 
     test_same('processed', $result['status'], 'answered processed');
     $updates = llamada_calls($fake, 'crm.activity.update');
-    test_same('App móvil · Sí contestó', $updates[0][1]['fields']['SUBJECT'], 'answered closes technical call as history');
-    $adds = llamada_calls($fake, 'crm.activity.add');
-    test_same('1234', $adds[0][1]['fields']['SUBJECT'], 'answered keeps dashboard marker');
-    test_same('N', $adds[0][1]['fields']['COMPLETED'], 'answered future activity remains pending');
-    test_same('2026-08-25T10:15:00-05:00', $adds[0][1]['fields']['START_TIME'], 'answered uses requested future date');
-    test_same('2026-08-25T10:15:00-05:00', $result['nextActivityAt'], 'answered response normalizes date to Guayaquil');
+    test_same('App móvil · 1234 · Sí contestó', $updates[0][1]['fields']['SUBJECT'], 'answered closes technical call with the contacted marker');
+    test_same([], llamada_calls($fake, 'crm.activity.add'), 'answered creates no future activity');
+    test_same(null, $result['nextActivityAt'], 'answered reports no future activity');
     test_same(false, $result['stageChanged'], 'answered reports unchanged stage');
     test_same(true, $result['commentCreated'], 'answered reports created comment');
-    test_same('+593991234567', $adds[0][1]['fields']['COMMUNICATIONS'][0]['VALUE'], 'answered normalizes selected phone');
     test_same([], llamada_calls($fake, 'crm.deal.update'), 'answered preserves stage');
     $comments = llamada_calls($fake, 'crm.timeline.comment.add');
     test_same([ 'fields' => [
@@ -740,7 +736,7 @@ try {
         'ENTITY_TYPE' => 'deal',
         'COMMENT' => 'Pide información del proyecto',
     ]], $comments[0][1], 'answered adds trimmed optional comment after activity');
-    test_same(['crm.activity.update', 'crm.activity.add', 'crm.timeline.comment.add'], array_values(array_map(
+    test_same(['crm.activity.update', 'crm.timeline.comment.add'], array_values(array_map(
         fn(array $call): string => $call[0],
         array_filter($fake->calls, fn(array $call): bool => in_array($call[0], ['crm.activity.update', 'crm.activity.add', 'crm.timeline.comment.add'], true))
     )), 'comment is written after activity');
@@ -964,16 +960,13 @@ try {
 [$store, $directory] = llamada_test_store();
 try {
     $fake = new FakeBitrix();
-    test_throws(
-        fn() => llamada_procesar_resultado(llamada_test_input([
-            'callRequestId' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-            'outcome' => 'answered',
-            'nextActivityAt' => null,
-        ]), $fake, $store, $now, $noInterestStage),
-        LlamadaValidationError::class,
-        'answered requires next activity date'
-    );
-    test_same([], $fake->calls, 'invalid answered request performs no external reads or writes');
+    $legacy = llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'outcome' => 'answered',
+        'nextActivityAt' => '2026-08-25T10:15:00-05:00',
+    ]), $fake, $store, $now, $noInterestStage);
+    test_same(null, $legacy['nextActivityAt'], 'legacy answered date is ignored during PWA rollout');
+    test_same([], llamada_calls($fake, 'crm.activity.add'), 'legacy answered date creates no future activity');
 } finally {
     llamada_test_cleanup($directory);
 }

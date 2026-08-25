@@ -661,6 +661,19 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
   var ctxCargando = false;
   var ctxCola = [];        // lo que quedó esperando la precarga
 
+  function actividadParaProtocolo(actividad) {
+    var subject = String(actividad.SUBJECT || '');
+    var tecnicaMovil = subject.indexOf('App móvil ·') === 0;
+    if (tecnicaMovil && subject.indexOf('1234') < 0) return null;
+    return {
+      ts: String(actividad.CREATED || '').substr(0,19),
+      iso: String(actividad.CREATED || ''),
+      resp: parseInt(actividad.RESPONSIBLE_ID || 0, 10),
+      nuestra: subject.indexOf(PREFIJO_NUESTRO) === 0,
+      contesto: subject.indexOf('1234') >= 0
+    };
+  }
+
   /**
    * TODO lo que hace falta, en UN SOLO viaje.
    *
@@ -707,16 +720,10 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
       llamadas = [];
       try {
         var d = (r.hist && !r.hist.error()) ? (r.hist.data() || []) : [];
-        for (var i = 0; i < d.length; i++)
-          llamadas.push({ ts: String(d[i].CREATED || '').substr(0,19),
-                          // 'iso' conserva el desfase (+03:00) para poder medir
-                          // tiempo transcurrido de verdad. 'ts' va cortado a 19
-                          // porque las comparaciones de ciclo son de cadena.
-                          iso: String(d[i].CREATED || ''),
-                          resp: parseInt(d[i].RESPONSIBLE_ID || 0, 10),
-                          // nuestra o nativa: se distingue por el asunto
-                          nuestra: String(d[i].SUBJECT || '').indexOf(PREFIJO_NUESTRO) === 0,
-                          contesto: String(d[i].SUBJECT || '').indexOf('1234') >= 0 });
+        for (var i = 0; i < d.length; i++) {
+          var item = actividadParaProtocolo(d[i]);
+          if (item) llamadas.push(item);
+        }
       } catch (e) {}
 
       // ── deal + contacto → responsable y teléfono

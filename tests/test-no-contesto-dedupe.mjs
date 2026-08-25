@@ -26,7 +26,8 @@ browserScript = browserScript.slice(0, close) + `
       ctx = { resp: responsibleId };
       llamadas = activities;
     },
-    latest: ultimaDelAsesor
+    latest: ultimaDelAsesor,
+    protocolItem: actividadParaProtocolo
   };
 ` + browserScript.slice(close);
 
@@ -45,7 +46,7 @@ context.__dedupeTest.setState(111820, [{
   iso: recent,
   resp: 111820,
   contesto: false,
-  origen: '',
+  nuestra: false,
 }]);
 assert.equal(
   context.__dedupeTest.latest(),
@@ -57,12 +58,33 @@ context.__dedupeTest.setState(111820, [{
   iso: recent,
   resp: 111820,
   contesto: false,
-  origen: 'galjosa-no-contesto',
+  nuestra: true,
 }]);
 assert.notEqual(
   context.__dedupeTest.latest(),
   null,
   'un registro reciente creado por el panel sí debe impedir el duplicado'
+);
+
+assert.equal(
+  context.__dedupeTest.protocolItem({
+    ID: '90',
+    CREATED: recent,
+    RESPONSIBLE_ID: '111820',
+    SUBJECT: 'App móvil · No contestó',
+  }),
+  null,
+  'el registro técnico móvil no debe duplicar el No contestó visible'
+);
+assert.equal(
+  context.__dedupeTest.protocolItem({
+    ID: '91',
+    CREATED: recent,
+    RESPONSIBLE_ID: '111820',
+    SUBJECT: 'App móvil · 1234 · Sí contestó',
+  }).contesto,
+  true,
+  'el registro técnico móvil contestado sí reinicia el protocolo'
 );
 
 console.log('OK no-contesto dedupe');

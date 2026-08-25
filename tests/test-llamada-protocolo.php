@@ -20,6 +20,15 @@ test_same(
     llamada_calcular_protocolo($historyWithTechnicalCalls, null),
     'technical external call history does not double count the visible planned activity'
 );
+$historyWithAnsweredMobileCall = [
+    fake_activity(41, 'Llamada saliente Ana Pérez', '2026-08-20T13:00:00-05:00'),
+    fake_activity(42, 'App móvil · 1234 · Sí contestó', '2026-08-20T14:00:00-05:00') + ['ORIGIN_ID' => 'VI_externalCall.def'],
+];
+test_same(
+    ['estado' => 'CONTACTADO', 'sinContestar' => 0, 'viejas' => 0],
+    llamada_calcular_protocolo($historyWithAnsweredMobileCall, null),
+    'answered mobile call resets the unanswered protocol without a future activity'
+);
 
 $historyBeforeReentry = [
     fake_activity(20, 'Llamada saliente Ana', '2026-08-10T09:00:00-05:00'),

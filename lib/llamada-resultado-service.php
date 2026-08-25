@@ -115,23 +115,23 @@ function llamada_procesar_resultado(
     $plannedFields = null;
     if ($request['outcome'] === 'not_interested') {
         $technicalFields = llamada_campos_registro_tecnico('not_interested');
+    } elseif ($request['outcome'] === 'answered') {
+        $technicalFields = llamada_campos_registro_tecnico('answered');
     } else {
         if (is_string($progress['nextActivityAt']) && $progress['nextActivityAt'] !== '') {
             $nextAt = new DateTimeImmutable($progress['nextActivityAt']);
         } else {
-            $nextAt = $request['outcome'] === 'answered'
-                ? new DateTimeImmutable($request['nextActivityAt'])
-                : llamada_proxima_no_contesto(
-                    $protocol,
-                    $now->setTimezone(new DateTimeZone('America/Guayaquil'))
-                )['at'];
+            $nextAt = llamada_proxima_no_contesto(
+                $protocol,
+                $now->setTimezone(new DateTimeZone('America/Guayaquil'))
+            )['at'];
         }
         $nextAt = $nextAt->setTimezone(new DateTimeZone('America/Guayaquil'));
         $technicalFields = llamada_campos_registro_tecnico($request['outcome']);
         $plannedFields = llamada_campos_actividad([
             'nextAt' => $nextAt,
             'dealId' => $dealId,
-            'subject' => $request['outcome'] === 'answered' ? '1234' : 'Llamada saliente ' . $contactName,
+            'subject' => 'Llamada saliente ' . $contactName,
             'completed' => 'N',
             'responsibleId' => $bitrixUserId,
             'contactId' => $contactId,
@@ -338,11 +338,9 @@ function llamada_validar_resultado(array $input, DateTimeImmutable $now, string 
     $comment = llamada_validar_comentario($commentValue);
 
     $nextActivityAt = null;
-    if ($outcome === 'answered') {
-        $nextValue = $input['nextActivityAt'] ?? null;
-        if (!is_string($nextValue) || trim($nextValue) === '') {
-            throw new LlamadaValidationError('nextActivityAt is required for answered');
-        }
+    $nextValue = $input['nextActivityAt'] ?? null;
+    if ($outcome === 'answered' && $nextValue !== null && $nextValue !== '') {
+        if (!is_string($nextValue)) throw new LlamadaValidationError('nextActivityAt must be a string or null');
         if (!preg_match(
             '/^(?<date>\d{4}-\d{2}-\d{2})T(?<time>\d{2}:\d{2}:\d{2})(?:\.\d+)?(?<zone>Z|[+-]\d{2}:\d{2})$/D',
             $nextValue,
@@ -364,8 +362,8 @@ function llamada_validar_resultado(array $input, DateTimeImmutable $now, string 
             || $parsedNextActivityAt->format('P') !== $expectedOffset) {
             throw new LlamadaValidationError('invalid nextActivityAt');
         }
-        $nextActivityAt = $parsedNextActivityAt->setTimezone(new DateTimeZone('America/Guayaquil'));
-        if ($nextActivityAt <= $now) {
+        $legacyNextActivityAt = $parsedNextActivityAt->setTimezone(new DateTimeZone('America/Guayaquil'));
+        if ($legacyNextActivityAt <= $now) {
             throw new LlamadaValidationError('nextActivityAt must be in the future');
         }
     }
@@ -606,7 +604,7 @@ function llamada_ultimo_reingreso(callable $bx, array $deal, int $dealId): ?stri
 function llamada_campos_registro_tecnico(string $outcome): array {
     $label = match ($outcome) {
         'no_answer' => 'No contestó',
-        'answered' => 'Sí contestó',
+        'answered' => '1234 · Sí contestó',
         'not_interested' => 'No le interesa',
         default => throw new InvalidArgumentException('invalid technical call outcome'),
     };

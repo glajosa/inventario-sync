@@ -31,7 +31,9 @@ function llamada_calcular_protocolo(
         if ((int)$actividad['TYPE_ID'] !== 2 || (int)$actividad['DIRECTION'] !== 2) continue;
         $originId = (string)($actividad['ORIGIN_ID'] ?? '');
         $subject = (string)($actividad['SUBJECT'] ?? '');
-        if (str_starts_with($originId, 'VI_externalCall') || str_starts_with($subject, 'App móvil ·')) continue;
+        $technicalMobileCall = str_starts_with($originId, 'VI_externalCall')
+            || str_starts_with($subject, 'App móvil ·');
+        if ($technicalMobileCall && stripos($subject, '1234') === false) continue;
         $creada = substr((string)($actividad['CREATED'] ?? ''), 0, 19);
         if ($reingreso !== '' && $creada !== '' && $creada < $reingreso) {
             $viejas++;
