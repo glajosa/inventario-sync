@@ -296,8 +296,12 @@ $titulo = (string)($L['titulo'] ?? strtoupper($proyecto));
         <tr><th class="titulo" colspan="<?= $nCols + 4 ?>"><?= lh($titulo) ?></th></tr>
         <tr><th class="sub" colspan="<?= $nCols + 4 ?>"><?= lh($sub) ?></th></tr>
       <?php endif; ?>
-        <tr class="g"><?php if ($layout === 'al_lado'): ?><th colspan="<?= $nCols - $colLogo ?>">CARACTER&Iacute;STICAS</th><?php
-                      else: ?><th colspan="<?= $nCols ?>">CARACTER&Iacute;STICAS</th><?php endif; ?>
+        <?php /* El logo vive FUERA de la tabla en los dos layouts, asi que esta fila
+                 siempre cubre las mismas columnas: banda + nombre + metros +
+                 [parqueos] + precio. Habia quedado una version con $colLogo, que ya
+                 no existe: el Warning se imprimia DENTRO de la celda y el colspan
+                 salia mal, con lo que los porcentajes volvian a quedar corridos. */ ?>
+        <tr class="g"><th colspan="<?= $nCols ?>">CARACTER&Iacute;STICAS</th>
           <th colspan="2" class="it"><?= (int)($fin['reserva_pct'] ?? 10) ?>% DE RESERVA</th>
           <th><?= (int)($fin['cuotas_pct'] ?? 20) ?>%</th>
           <th><?= (int)($fin['extra_pct'] ?? 10) ?>%</th></tr>
