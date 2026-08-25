@@ -1580,7 +1580,8 @@
       "pie2_medidas": "31m2 hasta 94.5m2",
       "sin_meta": true,
       "_pie_nota": "El rango del pie es del edificio (31 a 94,5 m2), no de las filas: si hoy no hay una unida de 3, el calculo daria 93 y el documento dice 94.5.",
-      "alineacion_nombre": "izquierda"
+      "alineacion_nombre": "izquierda",
+      "union_fuerte": true
     },
     "1791": {
       "forma": "precio",
