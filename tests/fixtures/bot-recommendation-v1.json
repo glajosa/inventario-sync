@@ -1,0 +1,92 @@
+{
+  "schema_version": "bot-recommendation-v1",
+  "request_id": "11111111-1111-4111-8111-111111111111",
+  "status": "verified",
+  "project": {
+    "name": "Noral Apartments",
+    "category_id": 39
+  },
+  "source": {
+    "catalog_generated_at": "2026-08-25T14:00:00+00:00",
+    "catalog_age_seconds": 48,
+    "live_verified_at": "2026-08-25T14:00:48+00:00"
+  },
+  "options": [
+    {
+      "number": 1,
+      "code": "C1.2",
+      "project": "Noral Apartments",
+      "category_id": 39,
+      "segment": "residencial",
+      "asset_type": "departamento",
+      "square_meters": 75.0,
+      "pvp": 135000.0,
+      "currency": "USD",
+      "delivery": {"mode": "fixed", "date": "2030-04", "months": null},
+      "standard_payment": {
+        "available": true,
+        "separation": 1000.0,
+        "signing": 12500.0,
+        "monthly": 675.0,
+        "installment_months": 40,
+        "extraordinary": 3375.0,
+        "extraordinary_count": 4,
+        "delivery_balance": 81000.0,
+        "currency": "USD",
+        "disclaimer": "Plan referencial sujeto a validación comercial"
+      },
+      "fit": {
+        "score": 92,
+        "reason_codes": ["origin_project", "asset_type", "comfortable_flow"]
+      },
+      "verified_at": "2026-08-25T14:00:48+00:00",
+      "visual": {"page": 3, "coordinate_key": "C1.2"}
+    },
+    {
+      "number": 2,
+      "code": "C2.1",
+      "project": "Noral Apartments",
+      "category_id": 39,
+      "segment": "residencial",
+      "asset_type": "departamento",
+      "square_meters": 82.0,
+      "pvp": 142000.0,
+      "currency": "USD",
+      "delivery": {"mode": "fixed", "date": "2030-04", "months": null},
+      "standard_payment": {
+        "available": true,
+        "separation": 1000.0,
+        "signing": 13200.0,
+        "monthly": 710.0,
+        "installment_months": 40,
+        "extraordinary": 3550.0,
+        "extraordinary_count": 4,
+        "delivery_balance": 85200.0,
+        "currency": "USD",
+        "disclaimer": "Plan referencial sujeto a validación comercial"
+      },
+      "fit": {
+        "score": 86,
+        "reason_codes": ["origin_project", "asset_type", "more_area"]
+      },
+      "verified_at": "2026-08-25T14:00:48+00:00",
+      "visual": {"page": 3, "coordinate_key": "C2.1"}
+    }
+  ],
+  "render": {
+    "project": "Noral Apartments",
+    "snapshot_id": "11111111-1111-4111-8111-111111111111",
+    "expires_at": "2026-08-25T14:05:48+00:00",
+    "pages": [
+      {
+        "page": 3,
+        "unavailable_codes": ["C1.1"],
+        "recommendations": [
+          {"number": 1, "code": "C1.2"},
+          {"number": 2, "code": "C2.1"}
+        ]
+      }
+    ]
+  },
+  "expires_at": "2026-08-25T14:05:48+00:00"
+}

@@ -1,0 +1,130 @@
+{
+  "Noral Plaza": {
+    "category_id": 33,
+    "aliases": [
+      "Noral Plaza Suites",
+      "Noral Plaza - Suites",
+      "Noral Plaza Locales",
+      "Noral Plaza - Locales Comerciales",
+      "Noral Plaza Oficinas",
+      "Noral Plaza - Oficinas y Consultorios",
+      "Noral Plaza Parqueos",
+      "Noral Plaza - Parqueos"
+    ],
+    "project_enum_values": ["1753", "1743", "162", "1625"],
+    "segments": ["residencial", "comercial"],
+    "delivery": {"mode": "fixed", "date": "2031-02", "months": null},
+    "standard_payment": {
+      "separation": 1000,
+      "initial_percent": 40,
+      "signing_percent": 10,
+      "installment_percent": 20,
+      "installment_months": null,
+      "extraordinary_percent": 10,
+      "extraordinary_count": null,
+      "delivery_percent": 60
+    }
+  },
+  "Noral Apartments": {
+    "category_id": 39,
+    "aliases": ["Noral Apartment", "Noral Apartments Guayaquil"],
+    "project_enum_values": ["516"],
+    "segments": ["residencial"],
+    "delivery": {"mode": "fixed", "date": "2030-04", "months": null},
+    "standard_payment": {
+      "separation": 1000,
+      "initial_percent": 40,
+      "signing_percent": 10,
+      "installment_percent": 20,
+      "installment_months": null,
+      "extraordinary_percent": 10,
+      "extraordinary_count": null,
+      "delivery_percent": 60
+    }
+  },
+  "Galero Torre C": {
+    "category_id": 47,
+    "aliases": ["Galero C", "Torre C Galero"],
+    "project_enum_values": [],
+    "segments": ["residencial"],
+    "delivery": {"mode": "immediate", "date": null, "months": null},
+    "standard_payment": {
+      "separation": 1000,
+      "initial_percent": 30,
+      "signing_percent": null,
+      "installment_percent": null,
+      "installment_months": 240,
+      "extraordinary_percent": null,
+      "extraordinary_count": null,
+      "delivery_percent": 70
+    }
+  },
+  "Sun Bay Engabao": {
+    "category_id": 49,
+    "aliases": ["Sun Bay", "SunBay", "Sun Bay Engabao"],
+    "project_enum_values": ["200"],
+    "segments": ["residencial"],
+    "delivery": {"mode": "fixed", "date": "2030-09", "months": null},
+    "standard_payment": {
+      "separation": 1000,
+      "initial_percent": 70,
+      "signing_percent": 20,
+      "installment_percent": 30,
+      "installment_months": null,
+      "extraordinary_percent": 20,
+      "extraordinary_count": 5,
+      "delivery_percent": 30
+    }
+  },
+  "Galero Torre D": {
+    "category_id": 51,
+    "aliases": ["Galero D", "Torre D Galero"],
+    "project_enum_values": [],
+    "segments": ["residencial"],
+    "delivery": {"mode": null, "date": null, "months": null},
+    "standard_payment": {
+      "separation": 1000,
+      "initial_percent": 30,
+      "signing_percent": 10,
+      "installment_percent": 15,
+      "installment_months": 9,
+      "extraordinary_percent": 5,
+      "extraordinary_count": 1,
+      "delivery_percent": 70
+    }
+  },
+  "Galero Suites": {
+    "category_id": 53,
+    "aliases": ["Galero Suite"],
+    "project_enum_values": ["150"],
+    "segments": ["residencial"],
+    "delivery": {"mode": "immediate", "date": null, "months": null},
+    "standard_payment": {
+      "separation": 1000,
+      "initial_percent": 30,
+      "signing_percent": null,
+      "installment_percent": null,
+      "installment_months": 240,
+      "extraordinary_percent": null,
+      "extraordinary_count": null,
+      "delivery_percent": 70
+    }
+  },
+  "Galero Casas": {
+    "category_id": 55,
+    "aliases": ["Galero Casa", "Galero - Casas"],
+    "project_enum_values": ["115"],
+    "segments": ["residencial"],
+    "delivery": {"mode": "relative", "date": null, "months": 36},
+    "standard_payment": {
+      "separation": 1000,
+      "initial_percent": 40,
+      "signing_percent": 10,
+      "installment_percent": 20,
+      "installment_months": 24,
+      "extraordinary_percent": 10,
+      "extraordinary_count": 3,
+      "delivery_percent": 60
+    }
+  }
+}
