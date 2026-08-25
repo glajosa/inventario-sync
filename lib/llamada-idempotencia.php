@@ -144,33 +144,13 @@ final class LlamadaIdempotenciaStore {
         $this->pdo->exec('BEGIN IMMEDIATE');
         $transactionOpen = true;
         try {
-            $record = null;
-            if ($pendingActivityId !== null) {
-                $statement = $this->pdo->prepare('SELECT operation_key, source, outcome
-                    FROM result_cycles WHERE pending_activity_id = :pending_activity_id LIMIT 1');
-                $statement->execute([':pending_activity_id' => $pendingActivityId]);
-                $found = $statement->fetch();
-                if ($found !== false) $record = $found;
-            }
-
-            if ($record === null) {
-                $statement = $this->pdo->prepare('SELECT operation_key, source, outcome
-                    FROM result_cycles
-                    WHERE deal_id = :deal_id
-                      AND bitrix_user_id = :bitrix_user_id
-                      AND created_at >= :created_after
-                      AND (source = \'panel\' OR :request_source = \'panel\')
-                    ORDER BY created_at DESC, operation_key DESC
-                    LIMIT 1');
-                $statement->execute([
-                    ':deal_id' => $dealId,
-                    ':bitrix_user_id' => $bitrixUserId,
-                    ':created_after' => $now - 1_800,
-                    ':request_source' => $source,
-                ]);
-                $found = $statement->fetch();
-                if ($found !== false) $record = $found;
-            }
+            $record = $this->findCycleRecord(
+                $dealId,
+                $bitrixUserId,
+                $pendingActivityId,
+                $source,
+                $now
+            );
 
             $isNew = false;
             if ($record === null) {
@@ -202,6 +182,56 @@ final class LlamadaIdempotenciaStore {
             if ($transactionOpen) $this->pdo->exec('ROLLBACK');
             throw $error;
         }
+    }
+
+    public function findCycle(
+        int $dealId,
+        int $bitrixUserId,
+        ?int $pendingActivityId,
+        string $source,
+        int $now
+    ): ?array {
+        if ($dealId <= 0 || $bitrixUserId <= 0
+            || ($pendingActivityId !== null && $pendingActivityId <= 0)) {
+            throw new InvalidArgumentException('invalid call cycle identity');
+        }
+        if (!in_array($source, ['mobile', 'panel'], true)) {
+            throw new InvalidArgumentException('invalid call cycle source');
+        }
+        return $this->findCycleRecord($dealId, $bitrixUserId, $pendingActivityId, $source, $now);
+    }
+
+    private function findCycleRecord(
+        int $dealId,
+        int $bitrixUserId,
+        ?int $pendingActivityId,
+        string $source,
+        int $now
+    ): ?array {
+        if ($pendingActivityId !== null) {
+            $statement = $this->pdo->prepare('SELECT operation_key, source, outcome
+                FROM result_cycles WHERE pending_activity_id = :pending_activity_id LIMIT 1');
+            $statement->execute([':pending_activity_id' => $pendingActivityId]);
+            $found = $statement->fetch();
+            if ($found !== false) return $found;
+        }
+
+        $statement = $this->pdo->prepare('SELECT operation_key, source, outcome
+            FROM result_cycles
+            WHERE deal_id = :deal_id
+              AND bitrix_user_id = :bitrix_user_id
+              AND created_at >= :created_after
+              AND (source = \'panel\' OR :request_source = \'panel\')
+            ORDER BY created_at DESC, operation_key DESC
+            LIMIT 1');
+        $statement->execute([
+            ':deal_id' => $dealId,
+            ':bitrix_user_id' => $bitrixUserId,
+            ':created_after' => $now - 1_800,
+            ':request_source' => $source,
+        ]);
+        $found = $statement->fetch();
+        return $found === false ? null : $found;
     }
 
     public function complete(

@@ -39,7 +39,15 @@ final class FakeBitrix {
         ]],
     ];
     public array $historyPages = [];
-    public array $pendingActivities = [];
+    public array $pendingActivities = [[
+        'ID' => '630',
+        'SUBJECT' => 'Llamada pendiente',
+        'DEADLINE' => '2026-08-20T10:00:00-05:00',
+        'COMMUNICATIONS' => [[
+            'VALUE' => '+593991234567',
+            'TYPE' => 'PHONE',
+        ]],
+    ]];
     public array $reentryHistory = [];
     public array $errors = [];
     public array $responseQueues = [];
@@ -121,6 +129,14 @@ function llamada_calls(FakeBitrix $fake, string $method): array {
     return array_values(array_filter($fake->calls, fn(array $call): bool => $call[0] === $method));
 }
 
+function llamada_write_calls(FakeBitrix $fake): array {
+    $writes = ['crm.activity.update', 'crm.activity.add', 'crm.timeline.comment.add', 'crm.deal.update'];
+    return array_values(array_filter(
+        $fake->calls,
+        fn(array $call): bool => in_array($call[0], $writes, true)
+    ));
+}
+
 $now = new DateTimeImmutable('2026-08-20T16:30:00-05:00');
 $noInterestStage = 'C28:NO_INTERESADO';
 
@@ -159,6 +175,128 @@ try {
 [$store, $directory] = llamada_test_store();
 try {
     $fake = new FakeBitrix();
+    $fake->pendingActivities = [[
+        'ID' => '630',
+        'SUBJECT' => 'Llamada pendiente',
+        'DEADLINE' => '2026-08-20T10:00:00-05:00',
+        'COMMUNICATIONS' => [['VALUE' => '+593991234567', 'TYPE' => 'PHONE']],
+    ]];
+    $mobile = llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '81818181-8181-4181-8181-818181818181',
+    ]), $fake, $store, $now, $noInterestStage, 'mobile');
+    $writesAfterMobile = llamada_write_calls($fake);
+    $panel = llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '82828282-8282-4282-8282-828282828282',
+        'memberId' => 'panel-42',
+        'bitrixActivityId' => null,
+    ]), $fake, $store, $now, $noInterestStage, 'panel');
+
+    test_same('processed', $mobile['status'], 'mobile owns first shared result');
+    test_same('already_processed', $panel['status'], 'panel sees the completed mobile result');
+    test_same(null, $panel['bitrixActivityId'], 'panel duplicate does not borrow a mobile technical activity');
+    test_same($writesAfterMobile, llamada_write_calls($fake), 'mobile then panel repeats no Bitrix write');
+    test_same(1, count(llamada_calls($fake, 'crm.activity.add')), 'mobile then panel creates one future activity');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->pendingActivities = [[
+        'ID' => '630',
+        'SUBJECT' => 'Llamada pendiente',
+        'DEADLINE' => '2026-08-20T10:00:00-05:00',
+        'COMMUNICATIONS' => [['VALUE' => '+593991234567', 'TYPE' => 'PHONE']],
+    ]];
+    $panel = llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '83838383-8383-4383-8383-838383838383',
+        'memberId' => 'panel-42',
+        'bitrixActivityId' => null,
+    ]), $fake, $store, $now, $noInterestStage, 'panel');
+    $writesAfterPanel = llamada_write_calls($fake);
+    $mobile = llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '84848484-8484-4484-8484-848484848484',
+    ]), $fake, $store, $now, $noInterestStage, 'mobile');
+
+    test_same('processed', $panel['status'], 'panel may own the shared result');
+    test_same(null, $panel['bitrixActivityId'], 'panel creates no technical activity');
+    test_same('already_processed', $mobile['status'], 'mobile observes the completed panel result');
+    test_same(731, $mobile['bitrixActivityId'], 'mobile duplicate keeps its own technical activity correlation');
+    test_same($writesAfterPanel, llamada_write_calls($fake), 'panel then mobile repeats no inventory Bitrix write');
+    test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'panel completes only the pending activity');
+    test_same(1, count(llamada_calls($fake, 'crm.activity.add')), 'panel then mobile creates one future activity');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->pendingActivities = [[
+        'ID' => '630',
+        'SUBJECT' => 'Llamada pendiente',
+        'DEADLINE' => '2026-08-20T10:00:00-05:00',
+        'COMMUNICATIONS' => [['VALUE' => '+593991234567', 'TYPE' => 'PHONE']],
+    ]];
+    $answered = llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '85858585-8585-4585-8585-858585858585',
+        'outcome' => 'answered',
+    ]), $fake, $store, $now, $noInterestStage, 'mobile');
+    test_same('processed', $answered['status'], 'answered owns its shared cycle');
+    test_throws(
+        fn() => llamada_procesar_resultado(llamada_test_input([
+            'callRequestId' => '86868686-8686-4686-8686-868686868686',
+            'memberId' => 'panel-42',
+            'bitrixActivityId' => null,
+        ]), $fake, $store, $now, $noInterestStage, 'panel'),
+        LlamadaIdempotenciaConflict::class,
+        'no answer cannot replace answered for the same call'
+    );
+    test_same([], llamada_calls($fake, 'crm.activity.add'), 'conflicting no answer creates no future activity');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->pendingActivities = [];
+    $manual = llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '87878787-8787-4787-8787-878787878787',
+    ]), $fake, $store, $now, $noInterestStage, 'mobile');
+    test_same([
+        'status' => 'manual_review',
+        'callRequestId' => '87878787-8787-4787-8787-878787878787',
+        'reason' => 'pending_activity_not_found',
+    ], $manual, 'missing pending activity stops result automation');
+    test_same([], llamada_calls($fake, 'crm.activity.update'), 'missing pending activity performs no write');
+    test_same([], llamada_calls($fake, 'crm.activity.add'), 'missing pending activity creates no future activity');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->pendingActivities = [
+        ['ID' => '640', 'SUBJECT' => 'Pendiente A', 'DEADLINE' => '2026-08-19T10:00:00-05:00'],
+        ['ID' => '641', 'SUBJECT' => 'Pendiente B', 'DEADLINE' => '2026-08-20T10:00:00-05:00'],
+    ];
+    $manual = llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '88888888-8888-4888-8888-888888888887',
+    ]), $fake, $store, $now, $noInterestStage, 'mobile');
+    test_same('manual_review', $manual['status'], 'ambiguous pending activity stops result automation');
+    test_same('pending_activity_not_found', $manual['reason'], 'ambiguous pending result explains the reason');
+    test_same([], llamada_calls($fake, 'crm.activity.update'), 'ambiguous pending activity performs no write');
+    test_same([], llamada_calls($fake, 'crm.activity.add'), 'ambiguous pending activity creates no future activity');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
     $fake->historyPages = [0 => [fake_activity(731, 'Llamada saliente Ana Pérez', '2026-08-20T16:00:00-05:00')]];
     $result = llamada_procesar_resultado(llamada_test_input(), $fake, $store, $now, $noInterestStage);
 
@@ -172,12 +310,14 @@ try {
         'nextActivityAt' => '2026-08-21T19:00:00-05:00',
     ], $result, 'no answer returns exact result contract and calculated date');
     $updates = llamada_calls($fake, 'crm.activity.update');
-    test_same(1, count($updates), 'no answer closes one technical call activity');
+    test_same(2, count($updates), 'no answer closes the technical and pending call activities');
     test_same(731, $updates[0][1]['id'], 'no answer closes requested technical activity id');
     test_same([
         'SUBJECT' => 'App móvil · No contestó',
         'COMPLETED' => 'Y',
     ], $updates[0][1]['fields'], 'no answer leaves the external call only as completed history');
+    test_same(630, $updates[1][1]['id'], 'no answer closes the matching pending activity');
+    test_same(['COMPLETED' => 'Y'], $updates[1][1]['fields'], 'pending call is completed without rewriting its details');
     $adds = llamada_calls($fake, 'crm.activity.add');
     test_same(1, count($adds), 'no answer creates one separate planned activity');
     test_same([
@@ -312,10 +452,10 @@ try {
         'outcome' => 'answered',
     ]), $fake, $store, $now, $noInterestStage);
 
-    test_same([731], array_map(
+    test_same([], array_map(
         fn(array $call): int => (int)$call[1]['id'],
         llamada_calls($fake, 'crm.activity.update')
-    ), 'ambiguous pending calls are left untouched');
+    ), 'ambiguous pending calls stop before any activity update');
 } finally {
     llamada_test_cleanup($directory);
 }
@@ -342,7 +482,10 @@ try {
     $retried = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
     test_same('processed', $retried['status'], 'uncertain planned activity is recovered from its marker');
     test_same(1, count(llamada_calls($fake, 'crm.activity.add')), 'recovery never adds the marked activity twice');
-    test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'recovery never closes the technical call twice');
+    test_same(1, count(array_filter(
+        llamada_calls($fake, 'crm.activity.update'),
+        fn(array $call): bool => (int)$call[1]['id'] === 731
+    )), 'recovery never closes the technical call twice');
 } finally {
     llamada_test_cleanup($directory);
 }
@@ -381,7 +524,15 @@ foreach ($invalidUpdateResults as [$callRequestId, $invalidResponse, $label]) {
         $store = new LlamadaIdempotenciaStore($directory);
         $retried = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
         test_same('processed', $retried['status'], 'activity update ' . $label . ' retries successfully');
-        test_same(2, count(llamada_calls($fake, 'crm.activity.update')), 'activity update ' . $label . ' retries only the failed write');
+        $updates = llamada_calls($fake, 'crm.activity.update');
+        test_same(2, count(array_filter(
+            $updates,
+            fn(array $call): bool => (int)$call[1]['id'] === 731
+        )), 'activity update ' . $label . ' retries only the failed technical write');
+        test_same(1, count(array_filter(
+            $updates,
+            fn(array $call): bool => (int)$call[1]['id'] === 630
+        )), 'activity update ' . $label . ' completes the pending call once');
         test_same(1, count(llamada_calls($fake, 'crm.timeline.comment.add')), 'activity update ' . $label . ' creates one comment after retry');
         test_same(1, count(llamada_calls($fake, 'crm.deal.update')), 'activity update ' . $label . ' changes stage once after retry');
     } finally {
@@ -413,7 +564,7 @@ foreach ($invalidStageResults as [$callRequestId, $invalidResponse, $label]) {
             LlamadaBitrixError::class,
             'deal update ' . $label . ' is not success'
         );
-        test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'deal update ' . $label . ' checkpoints activity once');
+        test_same(2, count(llamada_calls($fake, 'crm.activity.update')), 'deal update ' . $label . ' checkpoints technical and pending activities once');
         test_same(1, count(llamada_calls($fake, 'crm.timeline.comment.add')), 'deal update ' . $label . ' checkpoints comment once');
         $record = $store->get('member-1:' . $callRequestId);
         test_same('retryable', $record['state'] ?? null, 'deal update ' . $label . ' keeps retryable checkpoint');
@@ -422,7 +573,7 @@ foreach ($invalidStageResults as [$callRequestId, $invalidResponse, $label]) {
         $store = new LlamadaIdempotenciaStore($directory);
         $retried = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
         test_same('processed', $retried['status'], 'deal update ' . $label . ' retries successfully');
-        test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'deal update ' . $label . ' never duplicates activity');
+        test_same(2, count(llamada_calls($fake, 'crm.activity.update')), 'deal update ' . $label . ' never duplicates activity');
         test_same(1, count(llamada_calls($fake, 'crm.timeline.comment.add')), 'deal update ' . $label . ' never duplicates comment');
         test_same(2, count(llamada_calls($fake, 'crm.deal.update')), 'deal update ' . $label . ' retries only stage');
     } finally {
@@ -542,7 +693,7 @@ try {
         'owner expiring during comment cannot checkpoint its response'
     );
     test_same('manual_review', $nestedResult['status'] ?? null, 'overlapping retry cannot reclaim uncertain comment');
-    test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'lease race emits one activity update');
+    test_same(2, count(llamada_calls($fake, 'crm.activity.update')), 'lease race emits one technical and one pending activity update');
     test_same(1, count(llamada_calls($fake, 'crm.timeline.comment.add')), 'lease race emits one non-repeatable comment');
     test_same(0, count(llamada_calls($fake, 'crm.deal.update')), 'lease race does not change stage after uncertain comment');
 
@@ -597,7 +748,7 @@ try {
         LlamadaBitrixError::class,
         'partial stage failure is surfaced'
     );
-    test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'partial failure checkpoints successful activity update');
+    test_same(2, count(llamada_calls($fake, 'crm.activity.update')), 'partial failure checkpoints technical and pending activity updates');
     test_same(1, count(llamada_calls($fake, 'crm.deal.update')), 'partial failure attempts stage once');
     test_same('retryable', $store->get('member-1:12121212-1212-4121-8121-121212121212')['state'], 'partial failure releases operation for retry');
 
@@ -605,7 +756,7 @@ try {
     $retried = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
     test_same('processed', $retried['status'], 'partial stage failure resumes successfully');
     test_same(true, $retried['stageChanged'], 'resumed stage update is reported');
-    test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'resumed stage update does not duplicate activity update');
+    test_same(2, count(llamada_calls($fake, 'crm.activity.update')), 'resumed stage update does not duplicate activity update');
     test_same(2, count(llamada_calls($fake, 'crm.deal.update')), 'resumed operation retries only missing stage update');
 } finally {
     llamada_test_cleanup($directory);
@@ -627,6 +778,7 @@ try {
         'selectedPhone' => '+593991234567',
         'nextActivityAt' => null,
         'comment' => '',
+        'source' => 'mobile',
     ];
     $requestHash = hash('sha256', json_encode([
         'request' => $normalized,
@@ -662,6 +814,7 @@ try {
     ));
     test_same([
         'crm.activity.update',
+        'crm.activity.update',
         'crm.timeline.comment.add',
         'crm.deal.update',
     ], $writeOrder, 'not interested writes comment before stage');
@@ -694,7 +847,7 @@ try {
 
     $retried = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
     test_same('processed', $retried['status'], 'known comment failure is safely retryable');
-    test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'known comment retry does not duplicate activity update');
+    test_same(2, count(llamada_calls($fake, 'crm.activity.update')), 'known comment retry does not duplicate technical or pending updates');
     test_same(2, count(llamada_calls($fake, 'crm.timeline.comment.add')), 'known comment retry repeats only failed comment');
     test_same(1, count(llamada_calls($fake, 'crm.deal.update')), 'stage changes after retried comment succeeds');
 } finally {
@@ -741,6 +894,7 @@ try {
         'VALUE' => '+593 99 000 0000',
         'VALUE_TYPE' => 'MOBILE',
     ]];
+    $fake->pendingActivities[0]['COMMUNICATIONS'][0]['VALUE'] = '+593 99 765 4321';
     $result = llamada_procesar_resultado(llamada_test_input([
         'callRequestId' => '71717171-7171-4171-8171-717171717171',
         'selectedPhone' => '+593 99-765-4321',
@@ -776,6 +930,7 @@ try {
         ['ID' => '501', 'VALUE' => '099 111 1111', 'VALUE_TYPE' => 'MOBILE'],
         ['ID' => '502', 'VALUE' => '099 765 4321', 'VALUE_TYPE' => 'WORK'],
     ];
+    $fake->pendingActivities[0]['COMMUNICATIONS'][0]['VALUE'] = '099 765 4321';
     $result = llamada_procesar_resultado(llamada_test_input([
         'callRequestId' => '72727272-7272-4272-8272-727272727272',
         'selectedPhone' => '099-765-4321',
@@ -847,7 +1002,7 @@ try {
         'ENTITY_TYPE' => 'deal',
         'COMMENT' => 'Pide información del proyecto',
     ]], $comments[0][1], 'answered adds trimmed optional comment after activity');
-    test_same(['crm.activity.update', 'crm.timeline.comment.add'], array_values(array_map(
+    test_same(['crm.activity.update', 'crm.activity.update', 'crm.timeline.comment.add'], array_values(array_map(
         fn(array $call): string => $call[0],
         array_filter($fake->calls, fn(array $call): bool => in_array($call[0], ['crm.activity.update', 'crm.activity.add', 'crm.timeline.comment.add'], true))
     )), 'comment is written after activity');
@@ -1028,7 +1183,7 @@ try {
     $record = $store->get('member-1:' . $input['callRequestId']);
     test_same('forbidden', $record['state'] ?? null, 'comment access denied is stored as terminal forbidden');
     test_same('pending', $record['comment_state'] ?? null, 'known comment denial is not delivery uncertain');
-    test_same(1, count(llamada_calls($fake, 'crm.activity.update')), 'activity is updated once before comment denial');
+    test_same(2, count(llamada_calls($fake, 'crm.activity.update')), 'technical and pending activities are updated once before comment denial');
     test_same(1, count(llamada_calls($fake, 'crm.timeline.comment.add')), 'denied comment is attempted once');
 
     unset($store);

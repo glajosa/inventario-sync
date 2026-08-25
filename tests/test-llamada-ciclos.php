@@ -21,6 +21,9 @@ try {
     test_same(false, $crossChannel['is_new'], 'recent mobile then panel is one result');
     test_same('member:a', $crossChannel['operation_key'], 'cross-channel duplicate points to first operation');
 
+    $recentWithoutPending = $store->findCycle(77, 42, null, 'panel', 1_002);
+    test_same('member:a', $recentWithoutPending['operation_key'], 'panel finds a recent mobile result without claiming a new cycle');
+
     $otherMobileCall = $store->claimCycle('member:d', 77, 42, 631, 'mobile', 'no_answer', 1_003);
     test_same(true, $otherMobileCall['is_new'], 'different mobile calls remain independently registrable');
 
@@ -29,6 +32,9 @@ try {
 
     $afterWindow = $store->claimCycle('panel:f', 77, 42, 632, 'panel', 'no_answer', 2_804);
     test_same(true, $afterWindow['is_new'], 'panel may register a later call after the duplicate window');
+
+    $nothingRecent = $store->findCycle(79, 42, null, 'panel', 2_804);
+    test_same(null, $nothingRecent, 'cycle lookup does not create a record when none exists');
 
     test_throws(
         fn() => $store->claimCycle('bad-source', 77, 42, 633, 'browser', 'no_answer', 3_000),
