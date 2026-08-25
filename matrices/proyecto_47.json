@@ -270,8 +270,8 @@
       "parqueos_por_unidad": 1,
       "pies": [
         [
-          "TORRE C",
-          "70 - 75m2"
+          "EDIFICIO C",
+          "70m2 - 75m2"
         ],
         [
           "ENTREGA",
@@ -287,7 +287,20 @@
         "_nota": "Entrega inmediata: no hay cuotas del constructor. La cuota del prestamo es amortizacion francesa a 20 anios y 7,35%, y es tentativa hasta que el banco la fije."
       },
       "codigo_formato": "guion",
-      "tema": "naranja"
+      "tema": "naranja",
+      "leyenda": {
+        "chip-azul": "70 m²",
+        "chip-durazno": "75 m²"
+      },
+      "colores_metraje": {
+        "chip-azul": [
+          70
+        ],
+        "chip-durazno": [
+          75
+        ]
+      },
+      "nota_amarilla": "NOTA: LOS PRECIOS ESTAN SUJETOS A DISPONIBILIDAD Y TIEMPO LIMITADO CON BASE A LAS VENTAS EFECTUADAS DE LAS UNIDADES HABITACIONALES."
     }
   }
 }

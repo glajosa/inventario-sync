@@ -47,6 +47,17 @@ $pl0 = $filas ? $filas[0]['plan'] : lst_plan_hipo(0.0, $fin);
       <img class="logo" src="assets/logo_galjosa_transparente.png"
            alt="Galjosa" onerror="this.style.display='none'">
     <?php endif; ?>
+    <?php /* La LEYENDA de color arriba a la derecha. En Torre C el color es el metraje
+             (azul 70 m2, durazno 75) y en Suites el nivel (durazno planta baja con patio,
+             azul plantas altas). En los dos casos el color explica el precio: sin leyenda
+             el cliente ve filas de colores y no sabe que le dicen. */ ?>
+    <?php if (!empty($L['leyenda'])): ?>
+      <div class="leyenda leyenda-top">
+        <?php foreach ((array)$L['leyenda'] as $cl => $tx): ?>
+          <span><i class="<?= lh((string)$cl) ?>"></i><?= lh((string)$tx) ?></span>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
     <div class="tit">
       <table><tr><th class="titulo"><?= lh((string)($L['titulo'] ?? strtoupper($proyecto))) ?></th></tr>
              <tr><th class="sub"><?= lh((string)($L['subtitulo'] ?? '')) ?></th></tr></table>
@@ -73,11 +84,29 @@ $pl0 = $filas ? $filas[0]['plan'] : lst_plan_hipo(0.0, $fin);
                  guarda Bitrix: la torre pone "C-1-1" donde el SPA tiene "C1-1", y las
                  suites se nombran "SUITE 1-5 (Planta Baja)". Es el nombre que el
                  cliente ya vio en su cotizacion en papel. */ ?>
-        <td class="cat"><?php
-            $et = (string)($cfg['niveles'][mz_nivel_de_piso($cfg, $r['piso']) ?? '']['etiqueta'] ?? '');
+        <?php
+          /* El COLOR de la fila: por metraje en Torre C, por nivel en Suites. */
+          $nivR = (string)(mz_nivel_de_piso($cfg, $r['piso']) ?? '');
+          $clsR = '';
+          foreach ((array)($L['colores_metraje'] ?? []) as $cl => $vals)
+              if (in_array((float)$r['m2'], array_map('floatval', (array)$vals), true)) { $clsR = (string)$cl; break; }
+          if ($clsR === '') foreach ((array)($L['colores_nivel'] ?? []) as $cl => $vals)
+              if (in_array($nivR, (array)$vals, true)) { $clsR = (string)$cl; break; }
+        ?>
+        <td class="cat <?= lh($clsR) ?>"><?php
+            $et = (string)($cfg['niveles'][$nivR]['etiqueta'] ?? '');
+            /* La etiqueta del nivel solo se imprime donde su documento la imprime: en
+               Suites "SUITE 1-5 (Planta Baja)" lleva parentesis y "SUITE 2-2" no. */
+            $soloEn = (array)($L['etiqueta_nivel_solo'] ?? []);
+            if ($soloEn && !in_array($nivR, $soloEn, true)) $et = '';
+            /* Sufijo por unidad: la 3-8 es esquinera y esa esquina justifica los $5.000
+               que la separan de la 2-2. Decir "(Piso 3)" en su lugar borra el motivo. */
+            $suf = (string)(($L['excepciones'][$r['cod']]['sufijo'] ?? '') ?: '');
             $fmt = (string)($L['codigo_formato'] ?? '');
             if ($fmt === 'suite' && preg_match('/^[A-Z](\d+)-(\d+)$/', $r['cod'], $mm)) {
-                echo lh("SUITE {$mm[1]}-{$mm[2]}") . ($et !== '' ? ' ' . lh("($et)") : '');
+                echo lh("SUITE {$mm[1]}-{$mm[2]}")
+                   . ($et !== '' ? ' ' . lh("($et)") : '')
+                   . ($suf !== '' ? ' ' . lh($suf) : '');
             } else {
                 $cod = $fmt === 'guion'
                     ? preg_replace('/^([A-Z])(\d+)-/', '$1-$2-', $r['cod'])
@@ -105,10 +134,17 @@ $pl0 = $filas ? $filas[0]['plan'] : lst_plan_hipo(0.0, $fin);
     <?php foreach ((array)($L['pies'] ?? []) as $q): ?>
       <div class="pieh"><b><?= lh((string)($q[0] ?? '')) ?></b><span><?= lh((string)($q[1] ?? '')) ?></span></div>
     <?php endforeach; ?>
+    <?php /* El gancho comercial del producto. En Suites es "PREVENTA DE SUITES CON
+             SALIDA DIRECTA AL MAR": es el argumento de venta, no un adorno. */ ?>
+    <?php foreach ((array)($L['pies_destacados'] ?? []) as $q): ?>
+      <div class="pieh destacado"><?= lh((string)$q) ?></div>
+    <?php endforeach; ?>
   </div>
-  <div class="vig">ESTA COTIZACI&Oacute;N TIENE UNA VIGENCIA DE
-    <?= (int)($fin['vigencia_horas'] ?? 48) ?> HRS NATURALES. La cuota del préstamo es
-    <b>tentativa</b>: la aprueba y la fija el banco.</div>
+  <?php /* Su documento cierra con esta NOTA, no con la banda de vigencia. La frase de
+           la cuota tentativa se queda: la direccion la marco como mejora sobre su PDF. */ ?>
+  <div class="vig"><?= $L['nota_amarilla'] ?? 'ESTA COTIZACI&Oacute;N TIENE UNA VIGENCIA DE '
+      . (int)($fin['vigencia_horas'] ?? 48) . ' HRS NATURALES' ?>
+    La cuota del préstamo es <b>tentativa</b>: la aprueba y la fija el banco.</div>
   <div class="meta">Generada el <?= lh($hoy->format('d/m/Y H:i')) ?> desde el inventario en vivo ·
     <?= count($filas) ?> disponibles</div>
 </section>

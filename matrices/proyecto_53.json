@@ -152,7 +152,7 @@
       "piso_con_patio": 1,
       "pies": [
         [
-          "SUITES GALERO",
+          "CONDOMINIO G-8",
           "30m2"
         ],
         [
@@ -170,7 +170,33 @@
       },
       "codigo_formato": "suite",
       "patio_si": "1",
-      "tema": "naranja"
+      "tema": "naranja",
+      "leyenda": {
+        "chip-durazno": "Planta baja, con patio",
+        "chip-azul": "Plantas altas"
+      },
+      "colores_nivel": {
+        "chip-durazno": [
+          "P1"
+        ],
+        "chip-azul": [
+          "P2",
+          "P3"
+        ]
+      },
+      "etiqueta_nivel_solo": [
+        "P1"
+      ],
+      "excepciones": {
+        "G3-8": {
+          "sufijo": "(esq)"
+        }
+      },
+      "_esq_nota": "GS-01: la 3-8 es esquinera y esa esquina justifica los $5.000 que la separan de la 2-2. La app decia '(Piso 3)', que no explica nada.",
+      "pies_destacados": [
+        "PREVENTA DE SUITES CON SALIDA DIRECTA AL MAR"
+      ],
+      "nota_amarilla": "NOTA: LOS PRECIOS ESTAN SUJETOS A DISPONIBILIDAD Y TIEMPO LIMITADO CON BASE A LAS VENTAS EFECTUADAS DE LAS UNIDADES HABITACIONALES."
     }
   }
 }
