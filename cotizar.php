@@ -456,7 +456,11 @@ $hoy  = new DateTimeImmutable('now');
          font-weight:700;font-size:14px}
   .legal + p{font-size:12px;color:var(--gris);font-style:italic;margin:6px 0 18px}
   .resumen{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0 20px}
-  .resumen div{border:1px solid var(--linea);border-radius:9px;padding:11px 13px}
+  /* Los cuadros se estiran todos al alto del mas alto —lo hace la rejilla— asi que el
+     contenido va CENTRADO en vertical. Pegado arriba, los tres de la derecha dejaban un
+     hueco abajo y se veian desalineados contra el primero, que lleva dos renglones. */
+  .resumen div{border:1px solid var(--linea);border-radius:9px;padding:11px 13px;
+       display:flex;flex-direction:column;justify-content:center}
   .resumen span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--gris);margin-bottom:3px}
   .resumen b{font-size:16px}
   .resumen b small{font-size:11.5px;font-weight:600;color:var(--gris);margin-left:5px;
@@ -468,7 +472,6 @@ $hoy  = new DateTimeImmutable('now');
      igual que un rotulo sobre una cifra. Por eso no lleva encabezado propio y las dos
      lineas van ajustadas — si crece, empuja toda la tabla hacia abajo y la fila de
      cuadros deja de cuadrar de lado. */
-  .resumen div.partido{display:flex;flex-direction:column;justify-content:center}
   /* `min-width:0` en la fila y en el rotulo: sin eso el flex NO deja encoger a un hijo
      con `nowrap` y la cifra se sale del cuadro por la derecha, tapada por el borde.
      La cifra manda —es el dato— asi que el que cede es el rotulo. */
