@@ -267,7 +267,32 @@ function llamada_procesar_resultado(
             'contactId' => $contactId,
             'selectedPhone' => $request['selectedPhone'],
         ]);
-        $plannedFields['DESCRIPTION'] = llamada_marca_actividad($request['callRequestId']);
+        $plannedFields['DESCRIPTION'] = $source === 'mobile'
+            ? LLAMADA_NOTA                                        // se actualiza: no hace falta el uuid
+            : llamada_marca_actividad($request['callRequestId']);  // se crea: el uuid evita duplicarla
+    }
+
+    // UNA SOLA ACTIVIDAD POR PULSACION, igual que el boton del panel.
+    //
+    // El movil dejaba DOS: el sello ('App movil · No contesto', cerrada) y una
+    // planificada nueva. Pero en este portal UNA actividad hace las dos cosas —
+    // registra la llamada que acaba de ocurrir Y agenda la proxima — y asi
+    // trabaja el panel desde el primer dia. El sello era una tercera tarjeta en
+    // la ficha que no aportaba ningun dato: el motor ya lo saltaba al contar.
+    //
+    // Entonces la actividad que la app ya creo al abrir el marcador SE
+    // CONVIERTE en la planificada: se le pone el asunto, la fecha de la
+    // escalera y queda abierta. No se agrega nada.
+    //
+    // Solo para 'no_answer'. En 'answered' y 'not_interested' no hay proxima
+    // llamada que agendar, asi que ahi el sello sigue siendo el unico registro.
+    if ($source === 'mobile' && $plannedFields !== null) {
+        $technicalFields = $plannedFields;
+        unset($technicalFields['OWNER_TYPE_ID'], $technicalFields['OWNER_ID'],
+              $technicalFields['TYPE_ID'], $technicalFields['DIRECTION'],
+              $technicalFields['PROVIDER_ID'], $technicalFields['PROVIDER_TYPE_ID']);
+        $plannedFields = null;                      // nada que crear
+        $progress['plannedActivityId'] = $activityId;
     }
 
     $progress['nextActivityAt'] = $nextAt?->format(DateTimeInterface::ATOM);
@@ -726,8 +751,22 @@ function llamada_historial_actividades(callable $bx, int $dealId): array {
     return $history;
 }
 
+const LLAMADA_NOTA = 'Registrada desde la app de llamadas Galjosa';
+
+/**
+ * La nota de la actividad.
+ *
+ * ⚠ EL UUID SOLO VA CUANDO SE CREA. Sirve para reconocer la actividad si el
+ * `add` prospero pero no alcanzo a guardarse el progreso — sin el, un reintento
+ * crearia una planificada duplicada. Cuando la actividad se ACTUALIZA (el flujo
+ * del movil, que reusa la que creo la app) no hace falta: aplicar los mismos
+ * campos dos veces no duplica nada, y el uuid en la ficha es ruido que el
+ * vendedor lee cada vez.
+ */
 function llamada_marca_actividad(string $callRequestId): string {
-    return 'Registrada desde la app de llamadas Galjosa. Referencia: ' . $callRequestId;
+    return $callRequestId === ''
+        ? LLAMADA_NOTA
+        : LLAMADA_NOTA . '. Referencia: ' . $callRequestId;
 }
 
 function llamada_buscar_actividad_por_marca(array $history, string $marker): ?int {

@@ -1,6 +1,23 @@
 <?php
 declare(strict_types=1);
 
+/**
+ * Los campos de la planificada, sin importar de donde salieron.
+ *
+ * El panel la CREA (crm.activity.add). El movil REUSA la actividad que creo la
+ * app (crm.activity.update con DEADLINE). Las pruebas que solo miran la fecha de
+ * la escalera no tienen por que saber cual de los dos caminos se uso.
+ */
+function llamada_campos_planificada(FakeBitrix $fake): array {
+    $adds = llamada_calls($fake, 'crm.activity.add');
+    if ($adds !== []) return $adds[0][1]['fields'];
+    foreach (llamada_calls($fake, 'crm.activity.update') as $call) {
+        if (isset($call[1]['fields']['DEADLINE'])) return $call[1]['fields'];
+    }
+    return [];
+}
+
+
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/../lib/llamada-idempotencia.php';
 $servicePath = __DIR__ . '/../lib/llamada-resultado-service.php';
@@ -195,7 +212,16 @@ try {
     test_same('already_processed', $panel['status'], 'panel sees the completed mobile result');
     test_same(null, $panel['bitrixActivityId'], 'panel duplicate does not borrow a mobile technical activity');
     test_same($writesAfterMobile, llamada_write_calls($fake), 'mobile then panel repeats no Bitrix write');
-    test_same(1, count(llamada_calls($fake, 'crm.activity.add')), 'mobile then panel creates one future activity');
+    // El movil ya no AGREGA: reusa la actividad que creo la app y la convierte
+    // en la planificada. Lo que se afirma sigue siendo lo mismo — que entre los
+    // dos quede UNA sola llamada futura, no dos.
+    test_same(0, count(llamada_calls($fake, 'crm.activity.add')),
+        'mobile reuses the app activity instead of creating a second one');
+    $upd = llamada_calls($fake, 'crm.activity.update');
+    $reuso = array_values(array_filter($upd,
+        fn(array $c): bool => (int)$c[1]["id"] === 731 && isset($c[1]['fields']['DEADLINE'])));
+    test_same(1, count($reuso), 'the app activity is turned into the planned call, exactly once');
+    test_same('N', $reuso[0][1]['fields']['COMPLETED'], 'and it stays OPEN: it is the next call');
 } finally {
     llamada_test_cleanup($directory);
 }
@@ -309,42 +335,34 @@ try {
         'commentCreated' => false,
         'nextActivityAt' => '2026-08-21T19:00:00-05:00',
     ], $result, 'no answer returns exact result contract and calculated date');
+    // ⭐ UNA SOLA ACTIVIDAD POR PULSACION, igual que el boton del panel.
+    //
+    // Antes quedaban DOS: el sello ('App movil · No contesto', cerrada) y una
+    // planificada nueva. En este portal una misma actividad registra la llamada
+    // que ocurrio Y agenda la proxima, y el sello era una tercera tarjeta en la
+    // ficha sin ningun dato propio: el motor ya lo saltaba al contar.
+    //
+    // Ahora la actividad que creo la app SE CONVIERTE en la planificada.
     $updates = llamada_calls($fake, 'crm.activity.update');
-    test_same(2, count($updates), 'no answer closes the technical and pending call activities');
-    test_same(731, $updates[0][1]['id'], 'no answer closes requested technical activity id');
-    test_same([
-        'SUBJECT' => 'App móvil · No contestó',
-        'COMPLETED' => 'Y',
-    ], $updates[0][1]['fields'], 'no answer leaves the external call only as completed history');
+    test_same(2, count($updates), 'no answer touches the app activity and the pending call');
+    test_same(731, $updates[0][1]['id'], 'the app activity is the one reused');
+    test_same([], llamada_calls($fake, 'crm.activity.add'),
+        'nothing is created: there is no separate stamp and no separate planned call');
+
+    $reuso = $updates[0][1]['fields'];
+    test_same('Llamada saliente Ana Pérez', $reuso['SUBJECT'], 'it gets the planned call subject');
+    test_same('N', $reuso['COMPLETED'], 'and stays OPEN: it IS the next call');
+    test_same('2026-08-21T19:00:00-05:00', $reuso['DEADLINE'], 'with the ladder date');
+    // la nota, sin el uuid: se ACTUALIZA, y actualizar dos veces no duplica nada.
+    // El uuid solo hace falta cuando se CREA (el panel), para no duplicar la
+    // planificada si el add prospero y el progreso no se alcanzo a guardar.
+    test_same('Registrada desde la app de llamadas Galjosa', $reuso['DESCRIPTION'],
+        'the note is one clean sentence: the uuid was noise the seller read every time');
+    test_same(false, isset($reuso['OWNER_ID']),
+        'an update does not resend the fields that identify the activity');
+
     test_same(630, $updates[1][1]['id'], 'no answer closes the matching pending activity');
     test_same(['COMPLETED' => 'Y'], $updates[1][1]['fields'], 'pending call is completed without rewriting its details');
-    $adds = llamada_calls($fake, 'crm.activity.add');
-    test_same(1, count($adds), 'no answer creates one separate planned activity');
-    test_same([
-        'OWNER_TYPE_ID' => 2,
-        'OWNER_ID' => 77,
-        'TYPE_ID' => 2,
-        'DIRECTION' => 2,
-        'PROVIDER_ID' => 'VOXIMPLANT_CALL',
-        'PROVIDER_TYPE_ID' => 'CALL',
-        'SUBJECT' => 'Llamada saliente Ana Pérez',
-        'COMPLETED' => 'N',
-        'RESPONSIBLE_ID' => 42,
-        'START_TIME' => '2026-08-21T19:00:00-05:00',
-        'END_TIME' => '2026-08-21T20:00:00-05:00',
-        'DEADLINE' => '2026-08-21T19:00:00-05:00',
-        'PRIORITY' => 2,
-        'NOTIFY_TYPE' => 1,
-        'NOTIFY_VALUE' => 15,
-        'DESCRIPTION_TYPE' => 1,
-        'COMMUNICATIONS' => [[
-            'VALUE' => '+593991234567',
-            'ENTITY_ID' => 91,
-            'ENTITY_TYPE_ID' => 3,
-            'TYPE' => 'PHONE',
-        ]],
-        'DESCRIPTION' => 'Registrada desde la app de llamadas Galjosa. Referencia: 11111111-1111-4111-8111-111111111111',
-    ], $adds[0][1]['fields'], 'no answer writes a normal visible pending activity');
     test_same([], llamada_calls($fake, 'crm.deal.update'), 'no answer preserves stage');
     test_same([], llamada_calls($fake, 'crm.timeline.comment.add'), 'empty comment creates no timeline entry');
     $stored = $store->get('member-1:11111111-1111-4111-8111-111111111111');
@@ -440,10 +458,12 @@ try {
         $fake->calls,
         fn(array $call): bool => in_array($call[0], ['crm.activity.update', 'crm.activity.add'], true)
     ));
-    test_same(['crm.activity.update', 'crm.activity.update', 'crm.activity.add'], array_map(
+    // Ya no hay 'add': la actividad de la app se convierte en la planificada.
+    // Lo que se sigue afirmando es el ORDEN — primero se resuelve lo viejo.
+    test_same(['crm.activity.update', 'crm.activity.update'], array_map(
         fn(array $call): string => $call[0],
         $writes
-    ), 'previous pending call is completed before the next activity is created');
+    ), 'the app activity becomes the planned call and the previous pending is closed');
 } finally {
     llamada_test_cleanup($directory);
 }
@@ -477,10 +497,18 @@ try {
         'ok' => false,
         'error' => 'bad-json',
     ]];
-    $input = llamada_test_input(['callRequestId' => $callRequestId]);
+    // ⚠ EN PANEL, no en movil. El movil ya no AGREGA: reusa la actividad que
+    // creo la app. El unico camino que todavia crea una planificada —y que por
+    // eso necesita el uuid para reconocerla si el add prospero sin que se
+    // guardara el progreso— es el del panel.
+    $input = llamada_test_input([
+        'callRequestId' => $callRequestId,
+        'memberId' => 'panel-42',
+        'bitrixActivityId' => null,
+    ]);
 
     test_throws(
-        fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage),
+        fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage, 'panel'),
         LlamadaBitrixError::class,
         'uncertain planned activity response is surfaced'
     );
@@ -488,13 +516,14 @@ try {
     $created['DESCRIPTION'] = llamada_marca_actividad($callRequestId);
     $fake->historyPages = [0 => [$created]];
 
-    $retried = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
+    $retried = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage, 'panel');
     test_same('processed', $retried['status'], 'uncertain planned activity is recovered from its marker');
     test_same(1, count(llamada_calls($fake, 'crm.activity.add')), 'recovery never adds the marked activity twice');
-    test_same(1, count(array_filter(
+    // En panel no hay actividad tecnica que cerrar: la pulsacion ES la accion.
+    test_same(0, count(array_filter(
         llamada_calls($fake, 'crm.activity.update'),
         fn(array $call): bool => (int)$call[1]['id'] === 731
-    )), 'recovery never closes the technical call twice');
+    )), 'the panel path touches no technical activity: there is none');
 } finally {
     llamada_test_cleanup($directory);
 }
@@ -611,7 +640,7 @@ try {
 
     test_same(
         '2026-08-21T19:00:00-05:00',
-        llamada_calls($fake, 'crm.activity.add')[0][1]['fields']['START_TIME'],
+        llamada_campos_planificada($fake)['START_TIME'],
         'three old attempts plus real reentry restart no-answer at one day'
     );
 } finally {
@@ -634,7 +663,7 @@ try {
 
     test_same(
         '2026-11-27T19:00:00-05:00',
-        llamada_calls($fake, 'crm.activity.add')[0][1]['fields']['START_TIME'],
+        llamada_campos_planificada($fake)['START_TIME'],
         'same three attempts without real reentry keep maintenance schedule'
     );
     test_same([], llamada_calls($fake, 'crm.stagehistory.list'), 'no reentry counter avoids stage-history lookup');
@@ -1095,9 +1124,9 @@ try {
         'callRequestId' => '55555555-5555-4555-8555-555555555555',
     ]), $fake, $store, $now, $noInterestStage);
     test_same('processed', $result['status'], 'quien no es dueno del deal tambien registra');
-    $agendada = llamada_calls($fake, 'crm.activity.add');
-    test_same(1, count($agendada), 'registrar sin ser dueno agenda la proxima');
-    test_same(42, (int)$agendada[0][1]['fields']['RESPONSIBLE_ID'], 'la actividad queda a nombre de quien llamo');
+    $agendada = llamada_campos_planificada($fake);
+    test_same(false, $agendada === [], 'registrar sin ser dueno agenda la proxima');
+    test_same(42, (int)$agendada['RESPONSIBLE_ID'], 'la actividad queda a nombre de quien llamo');
 } finally {
     llamada_test_cleanup($directory);
 }
@@ -1230,7 +1259,7 @@ try {
     ));
     test_same(2, count($historyCalls), 'activity history is paginated by id');
     test_same(50, $historyCalls[1][1]['filter']['>ID'], 'next history page starts after last id');
-    test_same('2026-08-21T19:00:00-05:00', llamada_calls($fake, 'crm.activity.add')[0][1]['fields']['START_TIME'], 'current activity is excluded after paginated answered marker');
+    test_same('2026-08-21T19:00:00-05:00', llamada_campos_planificada($fake)['START_TIME'], 'current activity is excluded after paginated answered marker');
 } finally {
     llamada_test_cleanup($directory);
 }
