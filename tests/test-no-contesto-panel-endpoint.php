@@ -197,12 +197,15 @@ foreach ($invalidCases as [$method, $body, $userResolver, $expectedStatus]) {
 $directory = panel_endpoint_dir();
 try {
     $fake = new PanelEndpointFakeBitrix();
+    // Regla NUEVA (negocio, 25-ago-2026): "cada uno sabe que a su deal le tiene
+    // que dar gestion, asi que no importa quien presione el boton de no contesto".
+    // Antes esto devolvia 403 y se perdia el registro de una llamada real.
     $fake->deal['ASSIGNED_BY_ID'] = '99';
     $response = llamada_no_contesto_panel_http(
         'POST', panel_endpoint_body(), panel_endpoint_env($directory), $currentUser, $fake, $now
     );
-    test_same(403, $response['status'], 'seller cannot process another owner deal');
-    test_same([], panel_endpoint_writes($fake), 'foreign deal request performs no write');
+    test_same(200, $response['status'], 'quien no es dueno del deal tambien registra');
+    test_same(true, panel_endpoint_writes($fake) !== [], 'registrar un deal ajeno SI escribe');
 } finally {
     panel_endpoint_cleanup($directory);
 }

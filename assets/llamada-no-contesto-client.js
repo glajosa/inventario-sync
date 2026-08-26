@@ -20,7 +20,12 @@
     if (status === 409) return 'conflict';
     if (status === 422) return 'manual_review';
     if (status === 503 || status === 502 || status === 504 || status === 429) return 'retryable';
-    if (status === 401 || status === 403) return 'authentication';
+    // 401 y 403 NO son lo mismo, y confundirlos costó una tarde: el panel
+    // mostraba "recarga la página e intenta nuevamente" —el mensaje de sesión
+    // vencida— cuando el servidor en realidad estaba RECHAZANDO la operación.
+    // El vendedor recargaba, volvía a fallar, y nadie sabía por qué.
+    if (status === 401) return 'authentication';
+    if (status === 403) return 'rejected';
     if (status >= 500) return 'retryable';
     return (body && body.status === 'manual_review') ? 'manual_review' : 'invalid_request';
   }

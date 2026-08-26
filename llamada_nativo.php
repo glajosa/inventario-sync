@@ -847,6 +847,8 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
         aviso = '';
       } else if (e && e.code === 'authentication') {
         aviso = 'No se pudo validar tu sesión de Bitrix. Recarga la página e intenta nuevamente.';
+      } else if (e && e.code === 'rejected') {
+        aviso = 'Bitrix rechazó el registro de esta llamada. Avisa a sistemas.';
       } else {
         aviso = 'No se pudo registrar. Intenta nuevamente.';
       }
