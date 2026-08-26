@@ -69,9 +69,12 @@ function llamada_procesar_resultado(
     if ((int)($deal['ID'] ?? 0) !== $dealId) {
         throw new LlamadaForbidden('deal id mismatch');
     }
-    if ((int)($deal['ASSIGNED_BY_ID'] ?? 0) !== $bitrixUserId) {
-        throw new LlamadaForbidden('deal owner mismatch');
-    }
+    // ⚠ NO se exige ser el responsable del deal. Decision del negocio, 25-ago-2026:
+    // "cada uno sabe que a su deal le tiene que dar gestion, asi que no importa
+    // quien presione el boton de no contesto". Bloquear al que llamo no protegia
+    // nada: solo perdia el registro de una llamada que SI ocurrio.
+    // Quien la registra queda igual como RESPONSIBLE_ID de la actividad, que es
+    // el dato con el que el motor califica a cada asesor (recalcular.php 'resp').
 
     $activity = [];
     if ($source === 'mobile') {
@@ -160,7 +163,26 @@ function llamada_procesar_resultado(
         );
         return $response;
     }
-    if ($progress['pendingActivityId'] === null) {
+    // El movil y el panel llegan aca por caminos distintos, y el `source` ya los
+    // distingue desde el 17:36 del 25-ago:
+    //
+    //   MOVIL  la app crea la llamada ANTES de llamar al servicio. Si ademas no
+    //          aparece la pendiente que le corresponde, algo no cuadra: se para
+    //          y lo mira una persona.
+    //
+    //   PANEL  abrir la pestana ES la accion. Nadie crea nada antes. Que no haya
+    //          una pendiente es lo NORMAL —el vendedor puede estar llamando a un
+    //          deal sin llamada agendada— y no es motivo para rechazarlo.
+    //          El registro de esta llamada es la actividad planificada que se
+    //          crea mas abajo: en este portal UNA actividad hace las dos cosas
+    //          (registra la que acaba de ocurrir y agenda la proxima), tal como
+    //          lo documenta rc_digerir en el motor. Por eso NO se crea un sello
+    //          aparte: serian dos actividades y el deal contaria dos llamadas no
+    //          contestadas por un solo boton.
+    //
+    // Sin esta distincion el panel quedo mudo: 7 intentos de 3 vendedores
+    // terminaron en 'pending_activity_not_found' sin registrar nada.
+    if ($progress['pendingActivityId'] === null && $source !== 'panel') {
         $response = [
             'status' => 'manual_review',
             'callRequestId' => $request['callRequestId'],
