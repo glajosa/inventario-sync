@@ -438,6 +438,10 @@
     ],
     "1799": {
       "forma": "casa",
+      "bot_catalog": {
+        "default_bedrooms": 3,
+        "floors": 2
+      },
       "titulo": "URB. GALERO - CASAS",
       "subtitulo": "LISTA DE PRECIOS - Financiamiento del 40% de la casa, hasta 36 meses",
       "orden": [

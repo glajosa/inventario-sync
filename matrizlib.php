@@ -312,6 +312,10 @@ function mz_unidades_cache(array $cfg, int $ttl = 0, ?array &$info = null): arra
     $out = [];
     foreach ($j['units'] as $u) {
         if ((int)($u['cat'] ?? 0) !== $cat) continue;
+        // Una ficha puede conservar temporalmente la etapa DISPONIBLE aunque ya esté
+        // ligada a un negocio. El selector ya la trata como ocupada; la lista de
+        // precios y el catálogo del bot deben aplicar la misma regla.
+        if ((int)($u['dealId'] ?? 0) > 0) continue;
         $cod = strtoupper(trim((string)($u['codigo'] ?? '')));
         // (\d+) y no (\d): con un solo digito A-2-10 colapsaba sobre A-2-1 y una
         // unidad se comia a la otra. En Apartments no se veia porque ningun edificio

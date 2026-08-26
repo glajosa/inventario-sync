@@ -148,6 +148,10 @@
       "titulo": "CONDOMINIO G-8",
       "subtitulo": "30% de Entrada  ||  Entrega INMEDIATA",
       "parqueos_por_unidad": 1,
+      "bot_catalog": {
+        "default_bedrooms": 0,
+        "delivery": "INMEDIATA"
+      },
       "columna_patio": true,
       "piso_con_patio": 1,
       "pies": [

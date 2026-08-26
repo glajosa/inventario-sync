@@ -543,6 +543,9 @@
     ],
     "1795": {
       "forma": "solar",
+      "bot_catalog": {
+        "default_bedrooms": null
+      },
       "subtitulo": "LISTA DE PRECIOS  -  Financiamiento del terreno hasta 49 meses plazo",
       "nota": "NOTA: ESTA COTIZACIÓN TIENE UNA VIGENCIA DE <em>{horas} HRS NATURALES</em> &nbsp;||&nbsp; La fachada de cada casa deberá respetarse.<br>El financiamiento del Terreno es hasta {meses} meses plazo mediante crédito directo SIN INTERESES",
       "financiamiento": {

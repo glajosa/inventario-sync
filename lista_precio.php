@@ -268,6 +268,7 @@ if ($UN) {
         $libres[$ed][(int)$piso][(int)$pos] = [
             'pvp' => $pvp,
             'm2'  => (float)str_replace(',', '.', (string)($d['m2'] ?? 0)),
+            'code' => (string)($d['cod'] ?? $u),
         ];
     }
     $caraDeU = function (int $pos) use ($UN): ?string {
@@ -288,14 +289,14 @@ if ($UN) {
         foreach ($libres as $ed => $porPiso) {
             foreach ($porPiso as $piso => $m) {
                 foreach (array_keys($m) as $pos) {
-                    $ok = true; $suma = 0.0; $m2 = 0.0; $cara = $caraDeU($pos);
+                    $ok = true; $suma = 0.0; $m2 = 0.0; $codes = []; $cara = $caraDeU($pos);
                     if ($cara === null || in_array($pos, $excl, true)) continue;
                     for ($i = 0; $i < $n; $i++) {
                         $q = $pos + $i;
                         if (!isset($m[$q]) || in_array($q, $excl, true)
                             || $caraDeU($q) !== $cara
                             || ($i > 0 && $prohibido($q - 1, $q))) { $ok = false; break; }
-                        $suma += $m[$q]['pvp']; $m2 += $m[$q]['m2'];
+                        $suma += $m[$q]['pvp']; $m2 += $m[$q]['m2']; $codes[] = $m[$q]['code'];
                     }
                     if (!$ok) continue;
                     $precio = $suma - (float)($UN['descuento'] ?? 20000);
@@ -303,6 +304,7 @@ if ($UN) {
                     if (!isset($mejores[$k]) || $precio < $mejores[$k]['precio'])
                         $mejores[$k] = ['precio' => $precio, 'm2' => $m2, 'n' => $n,
                                         'cara' => $cara, 'parq' => (int)($t['parqueos'] ?? 1),
+                                        'component_codes' => $codes,
                                         'nombre' => str_replace('{cara}', $cara, (string)($t['nombre'] ?? ''))];
                 }
             }
@@ -317,7 +319,8 @@ if ($UN) {
             'parq' => $mj['parq'], 'union' => true, 'calculada' => true,
             // Sin codigos: una union no es una unidad, es una combinacion. Asi
             // tampoco recibe etiqueta de escasez, que no tendria sentido.
-            'cods' => ['', ''],
+            'cods' => ['', ''], 'component_codes' => $mj['component_codes'],
+            'bedrooms' => $mj['n'],
         ];
     }
 }
@@ -405,6 +408,7 @@ if (!empty($L['combo_por_edificio'])) {
                 'nombre' => (string)($etCombo[$bid] ?? 'DESDE'), 'sing' => '',
                 'zona' => '', 'catKey' => '', 'parq' => $parqCb,
                 'union' => true, 'calculada' => true, 'cods' => ['', ''],
+                'component_codes' => [$par['a'], $par['b']],
             ];
             /* El patio de la fila unida es el de las DOS unidades: 32,5 donde cada una
                tiene 16,25. */
@@ -457,6 +461,18 @@ if (($L['paginar_por'] ?? '') === 'posiciones') {
     foreach ($porEd as $ed => $gs) $PAGINAS[] = ['ed' => (string)$ed, 'grupos' => $gs];
 } else {
     $PAGINAS[] = ['ed' => '', 'grupos' => $grupos];
+}
+
+// El catálogo privado del bot consume exactamente las mismas filas que la lista
+// visual. En este modo no se renderiza HTML: se devuelve la estructura ya armada.
+if (!empty($LISTA_PRECIO_DATA_ONLY)) {
+    $LISTA_PRECIO_RESULT = [
+        'groups' => $grupos,
+        'pages' => $PAGINAS,
+        'blocks' => $BLOQUES,
+        'financing' => $fin,
+    ];
+    return;
 }
 
 $etBloque = [];

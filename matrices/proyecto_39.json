@@ -706,6 +706,14 @@
       "bloque_patio": "PB",
       "encabezado_metros": "METROS",
       "combo_por_edificio": true,
+      "bot_catalog": {
+        "default_bedrooms": 2,
+        "bedrooms_by_building": {
+          "G": 3,
+          "H": 3
+        },
+        "composite_bedrooms": 3
+      },
       "union_fuerte": true,
       "codigo_sin_prefijo": true,
       "decimal_metros": ",",
