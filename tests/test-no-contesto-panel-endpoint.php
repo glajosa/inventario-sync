@@ -197,12 +197,15 @@ foreach ($invalidCases as [$method, $body, $userResolver, $expectedStatus]) {
 $directory = panel_endpoint_dir();
 try {
     $fake = new PanelEndpointFakeBitrix();
+    // Regla NUEVA (negocio, 25-ago-2026): "cada uno sabe que a su deal le tiene
+    // que dar gestion, asi que no importa quien presione el boton de no contesto".
+    // Antes esto devolvia 403 y se perdia el registro de una llamada real.
     $fake->deal['ASSIGNED_BY_ID'] = '99';
     $response = llamada_no_contesto_panel_http(
         'POST', panel_endpoint_body(), panel_endpoint_env($directory), $currentUser, $fake, $now
     );
-    test_same(403, $response['status'], 'seller cannot process another owner deal');
-    test_same([], panel_endpoint_writes($fake), 'foreign deal request performs no write');
+    test_same(200, $response['status'], 'quien no es dueno del deal tambien registra');
+    test_same(true, panel_endpoint_writes($fake) !== [], 'registrar un deal ajeno SI escribe');
 } finally {
     panel_endpoint_cleanup($directory);
 }
@@ -245,9 +248,18 @@ try {
     $response = llamada_no_contesto_panel_http(
         'POST', panel_endpoint_body(), panel_endpoint_env($directory), $currentUser, $fake, $now
     );
-    test_same(422, $response['status'], 'ambiguous pending activity requires manual review');
-    test_same('pending_activity_not_found', $response['body']['reason'], 'manual review reports its reason');
-    test_same([], panel_endpoint_writes($fake), 'ambiguous pending activity performs no write');
+    // Pendiente AMBIGUA (dos abiertas y ninguna calza con el telefono marcado).
+    //
+    // La mitad segura se conserva: NO se cierra una al azar. La otra mitad
+    // cambia — antes se rechazaba el registro entero, y eso costaba lo unico
+    // que no se puede recuperar: la llamada que el vendedor si hizo. La
+    // actividad que se crea es el registro de esa llamada; las dos viejas
+    // quedan abiertas, igual que estaban, para que alguien las ordene.
+    test_same(200, $response['status'], 'pendiente ambigua NO impide registrar la llamada');
+    $escrituras = panel_endpoint_writes($fake);
+    test_same(1, count($escrituras), 'pendiente ambigua escribe una sola vez');
+    test_same('crm.activity.add', $escrituras[0][0], 'y esa escritura es la llamada nueva, no cerrar una vieja');
+    test_same(0, count(array_filter($fake->calls, fn(array $call): bool => $call[0] === 'crm.activity.update')), 'no cierra ninguna pendiente al azar');
 } finally {
     panel_endpoint_cleanup($directory);
 }

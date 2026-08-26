@@ -36,4 +36,3 @@ $conflict = bot_quote_finalize($preview, $changed, [
     'PUBLIC_BASE_URL'=>'https://inventario.example.test','OUTBOUND_TOKEN'=>'quote-outbound-test-secret',
 ], $now);
 test_same('conflict', $conflict['status'], 'price change blocks finalization');
-

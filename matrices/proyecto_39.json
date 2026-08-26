@@ -708,7 +708,8 @@
       "combo_por_edificio": true,
       "union_fuerte": true,
       "codigo_sin_prefijo": true,
-      "decimal_metros": ","
+      "decimal_metros": ",",
+      "precio_pegado": true
     }
   }
 }

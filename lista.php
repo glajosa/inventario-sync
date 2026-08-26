@@ -86,13 +86,34 @@ $hoy = new DateTimeImmutable('now');
 <style>
   /* El CSS es el de la lista de la direccion. No se "moderniza": el equipo comercial
      reconoce este documento y el cliente ya lo vio asi. */
-  @page { size: A4 landscape; margin: 12mm; }
+  <?php /* La ORIENTACION es de cada documento, y se nota al imprimir. Medida en los
+           MediaBox de sus PDF: Casas y Sun Bay son A4 VERTICAL (594x841) y las de Noral,
+           Torre C, Torre D y Suites son horizontales (841x594). Con la hoja horizontal
+           forzada, las dos verticales salian con la tabla estirada y desperdiciando
+           media pagina. */
+    $orient = ($L['orientacion'] ?? 'horizontal') === 'vertical' ? 'portrait' : 'landscape'; ?>
+  @page { size: A4 <?= $orient ?>; margin: <?= $orient === 'portrait' ? '10mm' : '12mm' ?>; }
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Calibri,'Segoe UI',Arial,sans-serif;background:#e9e9e6;color:#000;padding:18px}
   /* TEMA POR PROYECTO. El director lo puso como hallazgo critico (F-00): "una sola
      plantilla verde para siete proyectos". El color no es decoracion — en cada lista
      codifica un atributo que explica el precio, y el cliente compra Noral Plaza, Galero
      o Sun Bay, no GALJOSA. Las variables se pisan por tema en `.hoja[data-tema]`. */
+  /* En vertical la hoja es mas angosta y la letra baja para que las 8 o 9 columnas
+     entren sin cortarse. Es el mismo documento, no otro diseno. */
+  /* 754 = 718 px de area imprimible de un A4 vertical con margen de 10 mm, mas los
+     18 px de padding de cada lado. Con 790 la tabla medía 754 y se salia 36 px: al
+     imprimir al 100% se cortaba la ultima columna. */
+  body.vertical .hoja{max-width:754px;padding:16px 18px 20px}
+  body.vertical table{font-size:9.5px}
+  body.vertical th,body.vertical td{padding:4px 4px}
+  body.vertical .titulo{font-size:14px}
+  body.vertical .sub{font-size:10.5px}
+  body.vertical .c th{font-size:8.5px}
+  body.vertical td.cat{font-size:9.5px}
+  body.vertical .cab .logo{height:50px}
+  body.vertical .nota,body.vertical .notas{font-size:9.5px}
+  body.vertical .vig{font-size:9.5px}
   .hoja{background:#fff;padding:20px 26px 26px;margin:0 auto;max-width:1120px;
         box-shadow:0 1px 5px rgba(0,0,0,.16);
         --banda:#4a6329; --banda-txt:#fff;
@@ -138,6 +159,18 @@ $hoy = new DateTimeImmutable('now');
      cabecera caia sobre la banda naranja del titulo y no se leia. */
   .leyenda-arriba{justify-content:flex-end;margin-bottom:8px}
   .pieh.destacado{background:#1f3864;color:#fff;padding:5px 14px;border-color:#1f3864}
+  /* Cabecera de las listas con credito hipotecario (Torre C, Suites): tres bloques a la
+     misma altura — logo, nombre del producto en naranja, y el financiamiento al lado. */
+  .tit-prod{background:var(--banda);color:var(--banda-txt);font-size:19px;font-weight:700;
+       letter-spacing:.22em;display:flex;align-items:center;justify-content:center;
+       padding:10px 26px;border:1px solid #000;align-self:stretch;min-width:270px}
+  .tit-fin{flex:1;align-self:stretch}
+  .tit-fin table{width:100%;height:100%;border-collapse:collapse}
+  .tit-fin th{border:1px solid #000;padding:7px;font-size:11.5px;font-weight:700;background:#fff}
+  .tit-fin .fin-a,.tit-fin .fin-b{font-style:italic}
+  th.h-sep{background:#1F4E79;color:#fff}
+  th.h-ent{background:#FDF2EC}
+  th.h-pre{background:#DDEBF7}
   .cab .tit-galero{flex:1}
   .tit-galero h1{font-size:22px;font-weight:700;letter-spacing:.01em;line-height:1.15}
   .tit-galero p{font-size:11.5px;color:#4a4a45;margin-top:2px}
@@ -192,6 +225,7 @@ $hoy = new DateTimeImmutable('now');
        background:var(--sub);color:var(--sub-txt)}
   .g th{font-weight:700;text-align:center;font-size:11px}
   .g .it{font-style:italic}
+  .g th em{font-style:italic;font-weight:700}
   .c th{font-weight:700;text-align:center;font-size:9.5px;line-height:1.25;padding:6px 4px}
   .niv{color:#fff;font-weight:700;font-size:10px;text-align:center;width:34px;padding:2px}
   .niv span{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap}
@@ -268,9 +302,21 @@ $hoy = new DateTimeImmutable('now');
   .pieh{display:inline-flex;font-size:10.5px;font-weight:700;border:1px solid #000}
   .pieh b{background:#DDEBF7;padding:5px 14px;border-right:1px solid #000}
   .pieh span{background:#FCE4D6;padding:5px 14px}
-  @media print{body{background:#fff;padding:0}.hoja{box-shadow:none}.barra,.aviso{display:none}}
+  @media print{
+    body{background:#fff;padding:0}
+    .hoja{box-shadow:none;margin:0;max-width:none}
+    .barra,.aviso{display:none}
+    /* Cada hoja arranca en su propia pagina: Sun Bay son 4, Apartments 9 y Torre D 2.
+       Sin esto la segunda empezaba a media pagina de la primera. */
+    .hoja + .hoja{break-before:page;page-break-before:always}
+    /* Y una tabla no se parte por la mitad: en Casas cada tabla es un modelo de casa,
+       y un Pelicano cortado entre dos paginas no se puede leer. */
+    table{break-inside:avoid;page-break-inside:avoid}
+    tr{break-inside:avoid;page-break-inside:avoid}
+    thead{display:table-header-group}
+  }
 </style>
-</head><body>
+</head><body<?= ($L['orientacion'] ?? '') === 'vertical' ? ' class="vertical"' : '' ?>>
 
 <div class="barra">
   <?php foreach ($familias as $t => $f): ?>

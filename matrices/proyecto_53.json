@@ -146,7 +146,7 @@
     "1797": {
       "forma": "hipotecario",
       "titulo": "CONDOMINIO G-8",
-      "subtitulo": "30% de Entrada  ·  Entrega INMEDIATA",
+      "subtitulo": "30% de Entrada  ||  Entrega INMEDIATA",
       "parqueos_por_unidad": 1,
       "columna_patio": true,
       "piso_con_patio": 1,
@@ -196,7 +196,9 @@
       "pies_destacados": [
         "PREVENTA DE SUITES CON SALIDA DIRECTA AL MAR"
       ],
-      "nota_amarilla": "NOTA: LOS PRECIOS ESTAN SUJETOS A DISPONIBILIDAD Y TIEMPO LIMITADO CON BASE A LAS VENTAS EFECTUADAS DE LAS UNIDADES HABITACIONALES."
+      "nota_amarilla": "NOTA: LOS PRECIOS ESTAN SUJETOS A DISPONIBILIDAD Y TIEMPO LIMITADO CON BASE A LAS VENTAS EFECTUADAS DE LAS UNIDADES HABITACIONALES.",
+      "separador_codigo": "&nbsp;&nbsp;||&nbsp;&nbsp;",
+      "alineacion_nombre": "izquierda"
     }
   }
 }

@@ -29,4 +29,3 @@ bot_quote_validate_response($fixture);
 $bad = $fixture;
 $bad['plan']['monthly'] = INF;
 test_throws(fn()=>bot_quote_validate_response($bad), InvalidArgumentException::class, 'non finite response is rejected');
-

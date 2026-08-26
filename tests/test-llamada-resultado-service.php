@@ -1078,17 +1078,17 @@ try {
 [$store, $directory] = llamada_test_store();
 try {
     $fake = new FakeBitrix();
+    // Regla NUEVA (negocio, 25-ago-2026): quien llamo puede registrar la llamada
+    // aunque el deal este a nombre de otro. Antes esto se rechazaba y se perdia
+    // el registro de una llamada real.
     $fake->deal['ASSIGNED_BY_ID'] = '99';
-    test_throws_message(
-        fn() => llamada_procesar_resultado(llamada_test_input([
-            'callRequestId' => '55555555-5555-4555-8555-555555555555',
-        ]), $fake, $store, $now, $noInterestStage),
-        LlamadaForbidden::class,
-        'deal owner mismatch',
-        'different deal owner is rejected'
-    );
-    test_same([], llamada_calls($fake, 'crm.activity.update'), 'deal owner mismatch performs no activity write');
-    test_same([], llamada_calls($fake, 'crm.deal.update'), 'deal owner mismatch performs no deal write');
+    $result = llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '55555555-5555-4555-8555-555555555555',
+    ]), $fake, $store, $now, $noInterestStage);
+    test_same('processed', $result['status'], 'quien no es dueno del deal tambien registra');
+    $agendada = llamada_calls($fake, 'crm.activity.add');
+    test_same(1, count($agendada), 'registrar sin ser dueno agenda la proxima');
+    test_same(42, (int)$agendada[0][1]['fields']['RESPONSIBLE_ID'], 'la actividad queda a nombre de quien llamo');
 } finally {
     llamada_test_cleanup($directory);
 }
@@ -1259,6 +1259,59 @@ try {
     $retry = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
     test_same('manual_review', $retry['status'], 'uncertain comment retry requires manual review');
     test_same($callsAfterFailure, $fake->calls, 'manual review retry does not duplicate external calls');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+// ---------------------------------------------------------------------------
+// EL PANEL DE BITRIX NO TIENE POR QUE TENER UNA LLAMADA PENDIENTE.
+//
+// El 25-ago-2026 a las 17:36 el panel quedo mudo: 7 intentos de 3 vendedores
+// (Adriana x3, Nicolas x2, Jesua x2) devolvieron 'pending_activity_not_found'
+// sin registrar nada. El servicio solo sabia RESOLVER una llamada que ya
+// existiera —la que crea la app del movil— y el panel no crea ninguna.
+//
+// Abrir la pestana ES la accion. Que no haya pendiente es normal.
+// El registro de la llamada es la actividad planificada que se crea aca: en
+// este portal UNA actividad registra la llamada que ocurrio y agenda la
+// proxima. Por eso se exige EXACTAMENTE UNA: dos serian dos no-contestadas
+// contadas por un solo boton.
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->pendingActivities = [];                       // el panel no crea nada antes
+    $result = llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '77777777-7777-4777-8777-777777777777',
+        'bitrixActivityId' => null,
+    ]), $fake, $store, $now, $noInterestStage, 'panel');
+
+    test_same('processed', $result['status'], 'panel sin pendiente SI registra');
+    $agendada = llamada_calls($fake, 'crm.activity.add');
+    test_same(1, count($agendada), 'panel sin pendiente crea UNA sola actividad');
+    test_same('N', $agendada[0][1]['fields']['COMPLETED'], 'la actividad creada agenda la proxima');
+    test_same(42, (int)$agendada[0][1]['fields']['RESPONSIBLE_ID'], 'queda a nombre de quien llamo');
+    test_same(false, str_contains($agendada[0][1]['fields']['SUBJECT'], '1234'), 'sin 1234: el motor la cuenta como NO contestada');
+    test_same([], llamada_calls($fake, 'crm.activity.update'), 'panel sin pendiente no toca ninguna actividad vieja');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+// Y con pendiente el panel se comporta igual que antes: la cierra y agenda la
+// proxima. Una sola actividad nueva, sin sello aparte.
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $result = llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '88888888-8888-4888-8888-888888888888',
+        'bitrixActivityId' => null,
+    ]), $fake, $store, $now, $noInterestStage, 'panel');
+
+    test_same('processed', $result['status'], 'panel con pendiente registra');
+    test_same(1, count(llamada_calls($fake, 'crm.activity.add')), 'panel con pendiente crea UNA sola actividad');
+    $cerrada = llamada_calls($fake, 'crm.activity.update');
+    test_same(1, count($cerrada), 'panel con pendiente cierra la pendiente');
+    test_same(630, (int)$cerrada[0][1]['id'], 'cierra exactamente la pendiente que encontro');
+    test_same(['COMPLETED' => 'Y'], $cerrada[0][1]['fields'], 'la cierra sin sello: el sello duplicaria el conteo');
 } finally {
     llamada_test_cleanup($directory);
 }
