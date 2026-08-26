@@ -469,15 +469,19 @@ $hoy  = new DateTimeImmutable('now');
      lineas van ajustadas — si crece, empuja toda la tabla hacia abajo y la fila de
      cuadros deja de cuadrar de lado. */
   .resumen div.partido{display:flex;flex-direction:column;justify-content:center}
-  .resumen div.partido b{font-size:14.5px;display:flex;justify-content:space-between;
-       align-items:baseline;gap:10px;font-weight:700;line-height:1.35}
+  /* `min-width:0` en la fila y en el rotulo: sin eso el flex NO deja encoger a un hijo
+     con `nowrap` y la cifra se sale del cuadro por la derecha, tapada por el borde.
+     La cifra manda —es el dato— asi que el que cede es el rotulo. */
+  .resumen div.partido b{font-size:14px;display:flex;justify-content:space-between;
+       align-items:baseline;gap:8px;font-weight:700;line-height:1.35;min-width:0}
   .resumen div.partido b + b{margin-top:3px;padding-top:3px;border-top:1px solid var(--linea)}
-  .resumen div.partido b i{font-style:normal;font-size:10.5px;font-weight:600;
-       text-transform:uppercase;letter-spacing:.5px;color:var(--gris);white-space:nowrap}
+  .resumen div.partido b i{font-style:normal;font-size:10px;font-weight:600;
+       text-transform:uppercase;letter-spacing:.4px;color:var(--gris);white-space:nowrap;
+       min-width:0;overflow:hidden;text-overflow:ellipsis}
   /* `.resumen span` es display:block —es el rotulo del cuadro—; dentro de la fila
      partida tiene que volver a ser inline o el monto se va a su propio renglon. */
-  .resumen div.partido b span{display:inline;font-size:14.5px;text-transform:none;
-       letter-spacing:0;color:inherit;margin:0;white-space:nowrap}
+  .resumen div.partido b span{display:inline;font-size:14px;text-transform:none;
+       letter-spacing:0;color:inherit;margin:0;white-space:nowrap;flex:0 0 auto}
   .resumen div.destacado{background:#eef4fb;border-color:#bcd3ea}
   .resumen div.destacado span{color:#3f6a99}
   .resumen div.destacado b{color:#1c4e80}
@@ -1091,7 +1095,7 @@ $hoy  = new DateTimeImmutable('now');
     <?php if ($plan['firma'] > 0): ?>
       <div class="partido">
         <b><i>Reserva</i><span><?= h(cot_money($plan['separacion'])) ?></span></b>
-        <b><i>A la firma <?= h($pc($plan['reservaPct'])) ?></i><span><?= h(cot_money($plan['firma'])) ?></span></b>
+        <b><i>Firma <?= h($pc($plan['reservaPct'])) ?></i><span><?= h(cot_money($plan['firma'])) ?></span></b>
       </div>
     <?php else: ?>
       <div><span>Reserva</span><b><?= h(cot_money($plan['reserva'])) ?></b></div>
