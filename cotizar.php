@@ -1060,12 +1060,14 @@ $hoy  = new DateTimeImmutable('now');
   <p>Pago directo para el notario. Se da al momento de la firma del contrato.</p>
 
   <div class="resumen">
-    <?php /* La reserva NO lleva porcentaje. Es un monto FIJO de separacion —$1.000 en
-             todos los proyectos— y sacarle el porcentaje contra el precio da un numero
-             distinto en cada cotizacion (1,2% aca, 0,9% en otra) que no significa nada:
-             no es una condicion del plan, es el resultado de dividir. Los otros tres
-             cuadros si son porcentajes de verdad del modelo de pago. */ ?>
-    <div><span>Reserva</span><b><?= h(cot_money($plan['reserva'])) ?></b></div>
+    <?php /* El cuadro suma la separacion y lo que va A LA FIRMA, asi que lo dice: con
+             solo "Reserva" el cliente ve $11.100 donde reservar cuesta $1.000 y no
+             entiende de donde sale el resto.
+             Y va condicional: cuando no hay nada a la firma el cuadro son los $1.000
+             pelados, y ahi "y firma" seria mentira.
+             Sin porcentaje: el que salia era el monto dividido para el precio, un
+             numero que cambia en cada cotizacion y no es condicion del plan. */ ?>
+    <div><span>Reserva<?= $plan['firma'] > 0 ? ' y firma' : '' ?></span><b><?= h(cot_money($plan['reserva'])) ?></b></div>
     <?php /* El credito directo va ANTES de la contraentrega porque ese es el orden en
              que se paga, y es la cifra que el cliente compara contra lo que le pide el
              banco. Se resalta: de los cinco cuadros, es el que define si la compra le
