@@ -86,13 +86,31 @@ $hoy = new DateTimeImmutable('now');
 <style>
   /* El CSS es el de la lista de la direccion. No se "moderniza": el equipo comercial
      reconoce este documento y el cliente ya lo vio asi. */
-  @page { size: A4 landscape; margin: 12mm; }
+  <?php /* La ORIENTACION es de cada documento, y se nota al imprimir. Medida en los
+           MediaBox de sus PDF: Casas y Sun Bay son A4 VERTICAL (594x841) y las de Noral,
+           Torre C, Torre D y Suites son horizontales (841x594). Con la hoja horizontal
+           forzada, las dos verticales salian con la tabla estirada y desperdiciando
+           media pagina. */
+    $orient = ($L['orientacion'] ?? 'horizontal') === 'vertical' ? 'portrait' : 'landscape'; ?>
+  @page { size: A4 <?= $orient ?>; margin: <?= $orient === 'portrait' ? '10mm' : '12mm' ?>; }
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Calibri,'Segoe UI',Arial,sans-serif;background:#e9e9e6;color:#000;padding:18px}
   /* TEMA POR PROYECTO. El director lo puso como hallazgo critico (F-00): "una sola
      plantilla verde para siete proyectos". El color no es decoracion — en cada lista
      codifica un atributo que explica el precio, y el cliente compra Noral Plaza, Galero
      o Sun Bay, no GALJOSA. Las variables se pisan por tema en `.hoja[data-tema]`. */
+  /* En vertical la hoja es mas angosta y la letra baja para que las 8 o 9 columnas
+     entren sin cortarse. Es el mismo documento, no otro diseno. */
+  body.vertical .hoja{max-width:790px;padding:16px 18px 20px}
+  body.vertical table{font-size:9.5px}
+  body.vertical th,body.vertical td{padding:4px 4px}
+  body.vertical .titulo{font-size:14px}
+  body.vertical .sub{font-size:10.5px}
+  body.vertical .c th{font-size:8.5px}
+  body.vertical td.cat{font-size:9.5px}
+  body.vertical .cab .logo{height:50px}
+  body.vertical .nota,body.vertical .notas{font-size:9.5px}
+  body.vertical .vig{font-size:9.5px}
   .hoja{background:#fff;padding:20px 26px 26px;margin:0 auto;max-width:1120px;
         box-shadow:0 1px 5px rgba(0,0,0,.16);
         --banda:#4a6329; --banda-txt:#fff;
@@ -283,7 +301,7 @@ $hoy = new DateTimeImmutable('now');
   .pieh span{background:#FCE4D6;padding:5px 14px}
   @media print{body{background:#fff;padding:0}.hoja{box-shadow:none}.barra,.aviso{display:none}}
 </style>
-</head><body>
+</head><body<?= ($L['orientacion'] ?? '') === 'vertical' ? ' class="vertical"' : '' ?>>
 
 <div class="barra">
   <?php foreach ($familias as $t => $f): ?>

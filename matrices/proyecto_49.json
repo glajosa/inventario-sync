@@ -600,7 +600,9 @@
           "L"
         ]
       ],
-      "_hojas_nota": "S-03: su lista aprobada va una hoja por grupo de manzanas (B·D·F / H / J / L). La app entregaba una tabla continua de 63 filas."
+      "_hojas_nota": "S-03: su lista aprobada va una hoja por grupo de manzanas (B·D·F / H / J / L). La app entregaba una tabla continua de 63 filas.",
+      "orientacion": "vertical",
+      "_orientacion_nota": "Su PDF es A4 VERTICAL (MediaBox 594x841). Torre C, Torre D, Suites y las de Noral son horizontales (841x594)."
     }
   }
 }
