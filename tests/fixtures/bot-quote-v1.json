@@ -1,0 +1,15 @@
+{
+  "schema_version": "bot-quote-v1",
+  "request_id": "22222222-2222-4222-8222-222222222222",
+  "quote_id": "33333333-3333-4333-8333-333333333333",
+  "status": "preview",
+  "project": {"name": "Noral Apartments", "category_id": 39},
+  "unit": {"id": 1, "code": "A-1-1", "square_meters": 75, "pvp": 135000, "currency": "USD"},
+  "rules_version": "rules-2026-08-25",
+  "editable_fields": ["installments", "modality", "monthly_comfort", "financing_percent", "start_month"],
+  "payment_input": {"installments": 44, "modality": "estandar", "monthly_comfort": null, "financing_percent": 40, "start_month": "2026-09"},
+  "plan": {"separation": 1000, "signing": 12500, "monthly": 613.64, "installments": 44, "delivery_balance": 81000, "total": 135000, "currency": "USD"},
+  "source": {"catalog_pvp": 135000, "verified_at": "2026-08-25T14:00:48+00:00"},
+  "expires_at": "2026-08-25T14:10:48+00:00",
+  "document": null
+}

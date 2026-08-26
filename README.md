@@ -34,6 +34,32 @@ en `tests/fixtures/bot-recommendation-v1.json`. Un catálogo parcial o con más 
 una hora devuelve `503 inventory_unavailable`; entre 15 y 60 minutos se admite
 solo como preselección y la lectura final de Bitrix sigue siendo obligatoria.
 
+## API privada de cotizaciones del bot
+
+El cotizador formal reutiliza `cotizarlib.php` y las reglas comerciales vigentes;
+el bot no copia fórmulas ni precios. Las rutas son:
+
+- `POST /api/private/bot/v1/quotes-preview.php`: revalida la unidad y prepara el cálculo.
+- `POST /api/private/bot/v1/quotes-finalize.php`: vuelve a comprobar precio,
+  disponibilidad y versión de reglas antes de congelar el documento.
+- `POST /api/private/bot/v1/quotes-status.php`: consulta el estado técnico persistido.
+
+Variables protegidas en EasyPanel:
+
+- `BOT_QUOTE_API_ENABLED=1` habilita estas rutas.
+- `BOT_QUOTE_SHARED_SECRET` es un secreto dedicado de 32 caracteres o más.
+- `PUBLIC_BASE_URL` es la URL HTTPS pública de este servicio.
+- `OUTBOUND_TOKEN` firma el enlace temporal del documento existente.
+- `DATA_DIR=/data` conserva borradores y protección contra repetición en el volumen
+  persistente ya montado.
+
+Cada solicitud usa `X-Galjosa-Timestamp`, un `X-Galjosa-Nonce` UUID v4 nuevo y
+`X-Galjosa-Signature`. La firma cubre exactamente
+`<timestamp>\n<nonce>\n<cuerpo>`; un nonce repetido se rechaza. La previsualización
+no crea documentos ni envía mensajes. Finalizar devuelve conflicto si la unidad, el
+PVP o las reglas cambiaron. El envío por WhatsApp ocurre únicamente desde el panel
+del bot después de una aprobación humana independiente.
+
 ## API privada de resultados de llamada
 
 `POST /api/private/llamadas/v1/resultado` recibe un objeto JSON de hasta
