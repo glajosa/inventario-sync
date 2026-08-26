@@ -299,7 +299,19 @@ $hoy = new DateTimeImmutable('now');
   .pieh{display:inline-flex;font-size:10.5px;font-weight:700;border:1px solid #000}
   .pieh b{background:#DDEBF7;padding:5px 14px;border-right:1px solid #000}
   .pieh span{background:#FCE4D6;padding:5px 14px}
-  @media print{body{background:#fff;padding:0}.hoja{box-shadow:none}.barra,.aviso{display:none}}
+  @media print{
+    body{background:#fff;padding:0}
+    .hoja{box-shadow:none;margin:0;max-width:none}
+    .barra,.aviso{display:none}
+    /* Cada hoja arranca en su propia pagina: Sun Bay son 4, Apartments 9 y Torre D 2.
+       Sin esto la segunda empezaba a media pagina de la primera. */
+    .hoja + .hoja{break-before:page;page-break-before:always}
+    /* Y una tabla no se parte por la mitad: en Casas cada tabla es un modelo de casa,
+       y un Pelicano cortado entre dos paginas no se puede leer. */
+    table{break-inside:avoid;page-break-inside:avoid}
+    tr{break-inside:avoid;page-break-inside:avoid}
+    thead{display:table-header-group}
+  }
 </style>
 </head><body<?= ($L['orientacion'] ?? '') === 'vertical' ? ' class="vertical"' : '' ?>>
 
