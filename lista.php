@@ -101,7 +101,10 @@ $hoy = new DateTimeImmutable('now');
      o Sun Bay, no GALJOSA. Las variables se pisan por tema en `.hoja[data-tema]`. */
   /* En vertical la hoja es mas angosta y la letra baja para que las 8 o 9 columnas
      entren sin cortarse. Es el mismo documento, no otro diseno. */
-  body.vertical .hoja{max-width:790px;padding:16px 18px 20px}
+  /* 754 = 718 px de area imprimible de un A4 vertical con margen de 10 mm, mas los
+     18 px de padding de cada lado. Con 790 la tabla medía 754 y se salia 36 px: al
+     imprimir al 100% se cortaba la ultima columna. */
+  body.vertical .hoja{max-width:754px;padding:16px 18px 20px}
   body.vertical table{font-size:9.5px}
   body.vertical th,body.vertical td{padding:4px 4px}
   body.vertical .titulo{font-size:14px}
