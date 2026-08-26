@@ -287,17 +287,22 @@ try {
 [$store, $directory] = llamada_test_store();
 try {
     $fake = new FakeBitrix();
+    // ⭐ SIN PENDIENTE TAMBIEN SE REGISTRA. Regla del 26-ago-2026.
+    //
+    // Antes el movil cortaba con 'pending_activity_not_found'. Medido en el deal
+    // 401877: cero planificadas abiertas, el vendedor apreto desde el celular y
+    // no se escribio NADA. La pendiente es algo que se CIERRA, no un requisito —
+    // llamar a un deal sin llamada agendada pasa todos los dias.
     $fake->pendingActivities = [];
-    $manual = llamada_procesar_resultado(llamada_test_input([
+    $sinPendiente = llamada_procesar_resultado(llamada_test_input([
         'callRequestId' => '87878787-8787-4787-8787-878787878787',
     ]), $fake, $store, $now, $noInterestStage, 'mobile');
-    test_same([
-        'status' => 'manual_review',
-        'callRequestId' => '87878787-8787-4787-8787-878787878787',
-        'reason' => 'pending_activity_not_found',
-    ], $manual, 'missing pending activity stops result automation');
-    test_same([], llamada_calls($fake, 'crm.activity.update'), 'missing pending activity performs no write');
-    test_same([], llamada_calls($fake, 'crm.activity.add'), 'missing pending activity creates no future activity');
+    test_same('processed', $sinPendiente['status'],
+        'a press on a deal with no scheduled call is registered, not thrown away');
+    $agendada = llamada_campos_planificada($fake);
+    test_same(false, $agendada === [], 'and the next call gets scheduled');
+    test_same('N', $agendada['COMPLETED'], 'left open: it IS the next call');
+    test_same('2026-08-21T19:00:00-05:00', $agendada['DEADLINE'], 'with the ladder date');
 } finally {
     llamada_test_cleanup($directory);
 }
@@ -312,10 +317,15 @@ try {
     $manual = llamada_procesar_resultado(llamada_test_input([
         'callRequestId' => '88888888-8888-4888-8888-888888888887',
     ]), $fake, $store, $now, $noInterestStage, 'mobile');
-    test_same('manual_review', $manual['status'], 'ambiguous pending activity stops result automation');
-    test_same('pending_activity_not_found', $manual['reason'], 'ambiguous pending result explains the reason');
-    test_same([], llamada_calls($fake, 'crm.activity.update'), 'ambiguous pending activity performs no write');
-    test_same([], llamada_calls($fake, 'crm.activity.add'), 'ambiguous pending activity creates no future activity');
+    // Pendiente AMBIGUA (dos abiertas y ninguna calza): se conserva la mitad
+    // prudente —no se cierra ninguna al azar— pero la llamada SI se registra.
+    // No registrar era la mitad cara: es trabajo real del vendedor.
+    test_same('processed', $manual['status'], 'an ambiguous pending does not throw the call away');
+    $cerradas = array_map(fn(array $c): int => (int)$c[1]['id'], llamada_calls($fake, 'crm.activity.update'));
+    test_same(false, in_array(640, $cerradas, true), 'neither ambiguous pending is closed at random');
+    test_same(false, in_array(641, $cerradas, true), 'neither ambiguous pending is closed at random');
+    $agendada = llamada_campos_planificada($fake);
+    test_same(false, $agendada === [], 'and the next call still gets scheduled');
 } finally {
     llamada_test_cleanup($directory);
 }
@@ -481,10 +491,11 @@ try {
         'outcome' => 'answered',
     ]), $fake, $store, $now, $noInterestStage);
 
-    test_same([], array_map(
-        fn(array $call): int => (int)$call[1]['id'],
-        llamada_calls($fake, 'crm.activity.update')
-    ), 'ambiguous pending calls stop before any activity update');
+    // 'answered' con pendiente ambigua: se sella la llamada que la app creo
+    // —ese es el registro del contacto efectivo, no se puede perder— y NO se
+    // cierra ninguna de las ambiguas.
+    $tocadas = array_map(fn(array $c): int => (int)$c[1]['id'], llamada_calls($fake, 'crm.activity.update'));
+    test_same([731], $tocadas, 'only the app activity is stamped; no ambiguous pending is closed');
 } finally {
     llamada_test_cleanup($directory);
 }

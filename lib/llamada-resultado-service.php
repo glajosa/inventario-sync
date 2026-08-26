@@ -200,41 +200,23 @@ function llamada_procesar_resultado(
         );
         return $response;
     }
-    // El movil y el panel llegan aca por caminos distintos, y el `source` ya los
-    // distingue desde el 17:36 del 25-ago:
+    // QUE NO HAYA PENDIENTE NO ES MOTIVO PARA PERDER LA LLAMADA.
     //
-    //   MOVIL  la app crea la llamada ANTES de llamar al servicio. Si ademas no
-    //          aparece la pendiente que le corresponde, algo no cuadra: se para
-    //          y lo mira una persona.
+    // La pendiente es algo que se CIERRA, no un requisito. El vendedor puede
+    // llamar a un deal que no tenia ninguna llamada agendada —pasa todos los
+    // dias— y esa llamada hay que registrarla igual.
     //
-    //   PANEL  abrir la pestana ES la accion. Nadie crea nada antes. Que no haya
-    //          una pendiente es lo NORMAL —el vendedor puede estar llamando a un
-    //          deal sin llamada agendada— y no es motivo para rechazarlo.
-    //          El registro de esta llamada es la actividad planificada que se
-    //          crea mas abajo: en este portal UNA actividad hace las dos cosas
-    //          (registra la que acaba de ocurrir y agenda la proxima), tal como
-    //          lo documenta rc_digerir en el motor. Por eso NO se crea un sello
-    //          aparte: serian dos actividades y el deal contaria dos llamadas no
-    //          contestadas por un solo boton.
+    // El panel ya trabajaba asi desde el 25-ago. El movil seguia cortando con
+    // 'pending_activity_not_found', con el razonamiento de que si la app creo la
+    // llamada y no aparece la pendiente "algo no cuadra". Medido el 26-ago-2026
+    // en el deal 401877: cero planificadas abiertas, el vendedor apreto desde el
+    // celular y no se escribio NADA. El mismo agujero que dejo muda la pestaña
+    // el 25-ago, por la otra puerta.
     //
-    // Sin esta distincion el panel quedo mudo: 7 intentos de 3 vendedores
-    // terminaron en 'pending_activity_not_found' sin registrar nada.
-    if ($progress['pendingActivityId'] === null && $source !== 'panel') {
-        $response = [
-            'status' => 'manual_review',
-            'callRequestId' => $request['callRequestId'],
-            'reason' => 'pending_activity_not_found',
-        ];
-        $store->complete(
-            $idempotencyKey,
-            json_encode($response, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'skipped',
-            null,
-            $store->now(),
-            $leaseToken
-        );
-        return $response;
-    }
+    // En este portal UNA actividad hace las dos cosas —registra la llamada que
+    // acaba de ocurrir y agenda la proxima—, asi que el registro no depende de
+    // que exista una pendiente previa. Si hay, se cierra; si no hay, no pasa
+    // nada.
     $contactName = trim(implode(' ', array_filter([
         trim((string)($contact['NAME'] ?? '')),
         trim((string)($contact['LAST_NAME'] ?? '')),
