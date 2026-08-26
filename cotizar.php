@@ -1095,10 +1095,22 @@ $hoy  = new DateTimeImmutable('now');
              del precio son los $11.100 de las dos juntas. Ponerselo a la firma sola
              estaria diciendo que $10.100 es el 10% de $111.000, y es el 9,1%.
              Cuando no hay nada a la firma el cuadro vuelve a ser una sola cifra. */ ?>
-    <?php if ($plan['firma'] > 0): ?>
+    <?php
+      /* Se usa firmaBase y NO firma: cuando el asesor difiere la firma en cuotas, el
+         motor pone `firma` en cero —ya no se paga al firmar— y el cuadro perdia el
+         dato. Pero el dinero sigue siendo de la firma: se cobra igual, repartido en
+         esas primeras cuotas (van marcadas FIRMA en la tabla y el aviso azul lo
+         explica). Con firmaBase la fila aparece en los dos casos.
+         El PORCENTAJE tambien se rompia por lo mismo: `reservaPct` sale de
+         (separacion + firma), asi que al diferir marcaba 1,2% en vez del 10%. Se
+         calcula con firmaBase, que es la entrada de verdad. */
+      $firmaTot  = (float)($plan['firmaBase'] ?? $plan['firma']);
+      $pctEntrada = $plan['valor'] > 0 ? ($plan['separacion'] + $firmaTot) / $plan['valor'] : 0.0;
+    ?>
+    <?php if ($firmaTot > 0.01): ?>
       <div class="partido">
         <b><i>Reserva</i><span><?= h(cot_money($plan['separacion'])) ?></span></b>
-        <b><i>Firma <?= h($pc($plan['reservaPct'])) ?></i><span><?= h(cot_money($plan['firma'])) ?></span></b>
+        <b><i>Firma <?= h($pc($pctEntrada)) ?></i><span><?= h(cot_money($firmaTot)) ?></span></b>
       </div>
     <?php else: ?>
       <div><span>Reserva</span><b><?= h(cot_money($plan['reserva'])) ?></b></div>
