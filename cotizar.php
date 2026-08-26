@@ -461,6 +461,18 @@ $hoy  = new DateTimeImmutable('now');
   .resumen b{font-size:16px}
   .resumen b small{font-size:11.5px;font-weight:600;color:var(--gris);margin-left:5px;
                    white-space:nowrap}
+  /* El cuadro de la entrada no lleva UN monto sino dos —la separacion y lo que va a
+     la firma— y se leen por separado. Con la suma sola el cliente ve $11.100 donde
+     reservar cuesta $1.000 y no entiende de donde sale el resto. */
+  .resumen div.partido b{font-size:15px;display:flex;justify-content:space-between;
+       align-items:baseline;gap:10px;font-weight:700}
+  .resumen div.partido b + b{margin-top:4px;padding-top:4px;border-top:1px solid var(--linea)}
+  .resumen div.partido b i{font-style:normal;font-size:10.5px;font-weight:600;
+       text-transform:uppercase;letter-spacing:.5px;color:var(--gris)}
+  /* `.resumen span` es display:block —es el rotulo del cuadro—; dentro de la fila
+     partida tiene que volver a ser inline o el monto se va a su propio renglon. */
+  .resumen div.partido b span{display:inline;font-size:15px;text-transform:none;
+       letter-spacing:0;color:inherit;margin:0}
   .resumen div.destacado{background:#eef4fb;border-color:#bcd3ea}
   .resumen div.destacado span{color:#3f6a99}
   .resumen div.destacado b{color:#1c4e80}
@@ -1067,7 +1079,18 @@ $hoy  = new DateTimeImmutable('now');
              pelados, y ahi "y firma" seria mentira.
              Sin porcentaje: el que salia era el monto dividido para el precio, un
              numero que cambia en cada cotizacion y no es condicion del plan. */ ?>
-    <div><span>Reserva<?= $plan['firma'] > 0 ? ' y firma' : '' ?></span><b><?= h(cot_money($plan['reserva'])) ?></b></div>
+    <?php /* El 10% va en el ENCABEZADO del cuadro y no en la linea de la firma: el 10%
+             del precio son los $11.100 de las dos juntas. Ponerselo a la firma sola
+             estaria diciendo que $10.100 es el 10% de $111.000, y es el 9,1%.
+             Cuando no hay nada a la firma el cuadro vuelve a ser una sola cifra. */ ?>
+    <?php if ($plan['firma'] > 0): ?>
+      <div class="partido"><span>Reserva y firma <?= h($pc($plan['reservaPct'])) ?></span>
+        <b><i>Separación</i><span><?= h(cot_money($plan['separacion'])) ?></span></b>
+        <b><i>A la firma</i><span><?= h(cot_money($plan['firma'])) ?></span></b>
+      </div>
+    <?php else: ?>
+      <div><span>Reserva</span><b><?= h(cot_money($plan['reserva'])) ?></b></div>
+    <?php endif; ?>
     <?php /* El credito directo va ANTES de la contraentrega porque ese es el orden en
              que se paga, y es la cifra que el cliente compara contra lo que le pide el
              banco. Se resalta: de los cinco cuadros, es el que define si la compra le
