@@ -112,6 +112,43 @@ function llamada_procesar_resultado(
         : null;
     $history = llamada_historial_actividades($bx, $dealId);
     $protocol = llamada_calcular_protocolo($history, $activityId, $reentry);
+    // UN DEAL, UNA PROXIMA LLAMADA.
+    //
+    // Se cerraba SOLO la pendiente elegida, asi que las planificadas que crea
+    // este mismo servicio se apilaban. Dos consecuencias, medidas en el deal
+    // 401173 el 26-ago-2026:
+    //
+    //   1. El deal quedaba con dos planificadas abiertas a la vez (limite 2-Dic
+    //      y 3-Dic) y el vendedor sin saber cual fecha valia.
+    //   2. Peor: llamada_buscar_actividad_pendiente() devuelve null cuando hay
+    //      MAS DE UNA candidata sin telefono, y para 'mobile' un null termina
+    //      en manual_review. O sea que a partir de la segunda apilada, la
+    //      pulsacion desde el celular se PERDIA.
+    //
+    // Por eso la limpieza va ANTES de buscar: deja una sola nuestra —la mas
+    // nueva, que es la que esta llamada resuelve— y el resto del flujo trabaja
+    // sobre un deal limpio, igual que antes.
+    //
+    // No borra: cierra. La actividad sigue en el historial y el conteo del deal
+    // no se mueve (el motor cuenta toda llamada saliente, abierta o cerrada).
+    if (!($progress['stalePendingsClosed'] ?? false)) {
+        $nuestras = llamada_planificadas_propias_abiertas($bx, $dealId, $bitrixUserId, [$activityId]);
+        array_pop($nuestras);                       // la mas nueva se conserva
+        foreach ($nuestras as $sobra) {
+            try {
+                llamada_bx_true($bx, 'crm.activity.update', [
+                    'id' => $sobra,
+                    'fields' => ['COMPLETED' => 'Y'],
+                ]);
+            } catch (LlamadaForbidden $error) {
+                throw $error;
+            } catch (Throwable $error) {
+                break;   // es limpieza: no debe tumbar el registro de la llamada
+            }
+        }
+        $progress['stalePendingsClosed'] = true;
+    }
+
     if (!$progress['pendingActivityResolved']) {
         $progress['pendingActivityId'] = llamada_buscar_actividad_pendiente(
             $bx,
@@ -700,6 +737,62 @@ function llamada_buscar_actividad_por_marca(array $history, string $marker): ?in
         if ($activityId > 0) return $activityId;
     }
     return null;
+}
+
+/**
+ * Las planificadas abiertas que ESTE FLUJO creo en el deal, de la mas vieja a la
+ * mas nueva.
+ *
+ * ⚠ SOLO las nuestras, reconocidas por la marca que les pone
+ * llamada_marca_actividad() en la DESCRIPTION. Nada mas se toca: ni las
+ * pendientes que un vendedor agendo a mano, ni las de otro contacto del deal,
+ * ni las que creo la IA, ni las de otro asesor. Esas son llamadas que todavia
+ * hay que hacer y cerrarlas seria borrar trabajo real.
+ *
+ * ⚠ POR QUE NO SE COMPARA EL TELEFONO. Fue el primer intento y NO habria hecho
+ * nada: verificado el 26-ago-2026 sobre las planificadas reales del deal 401173
+ * (#2513883, #2513909, #2513745), ninguna trae COMMUNICATIONS. La marca si esta
+ * siempre, porque la escribe este mismo servicio al crearlas.
+ *
+ * @param int[] $conservar
+ * @return int[]
+ */
+function llamada_planificadas_propias_abiertas(
+    callable $bx,
+    int $dealId,
+    int $bitrixUserId,
+    array $conservar
+): array {
+    $result = llamada_bx_array($bx, 'crm.activity.list', [
+        'filter' => [
+            'OWNER_TYPE_ID' => 2,
+            'OWNER_ID' => $dealId,
+            'TYPE_ID' => 2,
+            'DIRECTION' => 2,
+            'RESPONSIBLE_ID' => $bitrixUserId,
+            'COMPLETED' => 'N',
+        ],
+        'select' => ['ID', 'SUBJECT', 'RESPONSIBLE_ID', 'COMPLETED', 'DESCRIPTION'],
+        'order' => ['ID' => 'ASC'],
+        'start' => -1,
+    ]);
+    if (isset($result['items']) && is_array($result['items'])) $result = $result['items'];
+
+    $conservar = array_map('intval', $conservar);
+    $nuestra = llamada_marca_actividad('');          // el prefijo, sin el uuid
+    $sobrantes = [];
+    foreach ($result as $activity) {
+        if (!is_array($activity)) continue;
+        $id = (int)($activity['ID'] ?? 0);
+        if ($id <= 0 || in_array($id, $conservar, true)) continue;
+        if ((string)($activity['COMPLETED'] ?? 'N') === 'Y') continue;
+        if (isset($activity['RESPONSIBLE_ID'])
+            && (int)$activity['RESPONSIBLE_ID'] !== $bitrixUserId) continue;
+        if (str_starts_with((string)($activity['SUBJECT'] ?? ''), 'App móvil ·')) continue;
+        if (!str_starts_with(trim((string)($activity['DESCRIPTION'] ?? '')), $nuestra)) continue;
+        $sobrantes[] = $id;
+    }
+    return $sobrantes;
 }
 
 function llamada_buscar_actividad_pendiente(

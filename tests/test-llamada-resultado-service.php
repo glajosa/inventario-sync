@@ -422,10 +422,19 @@ try {
     ]), $fake, $store, $now, $noInterestStage);
 
     $updates = llamada_calls($fake, 'crm.activity.update');
-    test_same([731, 610], array_map(
-        fn(array $call): int => (int)$call[1]['id'],
-        $updates
-    ), 'result closes the technical call and the oldest pending call for the selected number');
+    // Un deal, una proxima llamada POR PERSONA. Se cierran las pendientes del
+    // numero que se acaba de llamar (610 y 611) y se conserva 612, que es de
+    // otro numero: esa llamada todavia hay que hacerla.
+    //
+    // Antes se cerraba solo la elegida (610). Con dos o mas pendientes del mismo
+    // numero, cada pulsacion cerraba una y creaba otra: el sobrante nunca se iba
+    // — medido en el deal 401173 el 26-ago-2026, dos planificadas abiertas al
+    // mismo tiempo y el vendedor sin saber cual fecha valia.
+    $cerradas = array_map(fn(array $call): int => (int)$call[1]['id'], $updates);
+    test_same([731, 610], $cerradas,
+        'result closes the technical call and the oldest pending call for the selected number');
+    test_same(false, in_array(612, $cerradas, true),
+        'a pending call for a DIFFERENT number is left open: that call still has to be made');
     test_same(['COMPLETED' => 'Y'], $updates[1][1]['fields'], 'previous pending call is completed without rewriting its details');
     $writes = array_values(array_filter(
         $fake->calls,
@@ -1312,6 +1321,53 @@ try {
     test_same(1, count($cerrada), 'panel con pendiente cierra la pendiente');
     test_same(630, (int)$cerrada[0][1]['id'], 'cierra exactamente la pendiente que encontro');
     test_same(['COMPLETED' => 'Y'], $cerrada[0][1]['fields'], 'la cierra sin sello: el sello duplicaria el conteo');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+// ── EL SOBRANTE QUE NUNCA SE IBA (deal 401173, 26-ago-2026) ─────────────────
+// Se cerraba SOLO la pendiente elegida, asi que las planificadas de este mismo
+// servicio se apilaban: el deal quedaba con dos abiertas a la vez y —peor— el
+// buscador devuelve null con mas de una candidata sin telefono, asi que desde
+// la segunda la pulsacion del celular terminaba en manual_review y se perdia.
+//
+// Calcado de las reales: las planificadas que crea este servicio NO traen
+// COMMUNICATIONS, solo la marca en DESCRIPTION. Por eso el criterio es la marca
+// y no el telefono — comparar telefonos no habria hecho nada.
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $marca = 'Registrada desde la app de llamadas Galjosa. Referencia: ';
+    $fake->pendingActivities = [
+        ['ID' => '2513745', 'SUBJECT' => 'Llamada saliente Martín Lead',
+         'DEADLINE' => '2026-12-02T17:30:00-05:00',
+         'DESCRIPTION' => $marca . 'b2cceba5-a640-468d-ada8-613fe979d7ee'],
+        ['ID' => '2513883', 'SUBJECT' => 'Llamada saliente Martín Lead',
+         'DEADLINE' => '2026-12-03T20:30:00-05:00',
+         'DESCRIPTION' => $marca . '5ad29af3-5f4d-441f-b190-4d43dfc5387c'],
+        ['ID' => '2513759', 'SUBJECT' => 'llamar a deal nuevo',
+         'DEADLINE' => '2026-08-26T06:25:00-05:00'],
+    ];
+
+    $salida = llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '20202020-2020-4020-8020-202020202020',
+    ]), $fake, $store, $now, $noInterestStage);
+
+    $cerradas = array_map(
+        fn(array $call): int => (int)$call[1]['id'],
+        llamada_calls($fake, 'crm.activity.update')
+    );
+    test_same(true, in_array(2513745, $cerradas, true),
+        'the OLDER leftover created by this service is closed');
+    test_same(false, in_array(2513759, $cerradas, true),
+        'a pending call the seller scheduled by hand is NOT touched');
+    // ⚠ NO se afirma 'processed' aqui: con una pendiente MANUAL tambien sin
+    // telefono el buscador sigue sin poder decidir, y para 'mobile' eso termina
+    // en manual_review por diseño de este servicio. Lo que este cambio garantiza
+    // es que las nuestras no se apilen — la ambiguedad con pendientes ajenas es
+    // otra decision, y no se toca aqui.
+    test_same(1, count(array_filter($cerradas, fn(int $id): bool => $id === 2513745)),
+        'the leftover is closed exactly once');
 } finally {
     llamada_test_cleanup($directory);
 }
