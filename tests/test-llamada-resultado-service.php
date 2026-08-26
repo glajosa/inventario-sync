@@ -212,16 +212,7 @@ try {
     test_same('already_processed', $panel['status'], 'panel sees the completed mobile result');
     test_same(null, $panel['bitrixActivityId'], 'panel duplicate does not borrow a mobile technical activity');
     test_same($writesAfterMobile, llamada_write_calls($fake), 'mobile then panel repeats no Bitrix write');
-    // El movil ya no AGREGA: reusa la actividad que creo la app y la convierte
-    // en la planificada. Lo que se afirma sigue siendo lo mismo — que entre los
-    // dos quede UNA sola llamada futura, no dos.
-    test_same(0, count(llamada_calls($fake, 'crm.activity.add')),
-        'mobile reuses the app activity instead of creating a second one');
-    $upd = llamada_calls($fake, 'crm.activity.update');
-    $reuso = array_values(array_filter($upd,
-        fn(array $c): bool => (int)$c[1]["id"] === 731 && isset($c[1]['fields']['DEADLINE'])));
-    test_same(1, count($reuso), 'the app activity is turned into the planned call, exactly once');
-    test_same('N', $reuso[0][1]['fields']['COMPLETED'], 'and it stays OPEN: it is the next call');
+    test_same(1, count(llamada_calls($fake, 'crm.activity.add')), 'mobile then panel creates one future activity');
 } finally {
     llamada_test_cleanup($directory);
 }
@@ -345,34 +336,31 @@ try {
         'commentCreated' => false,
         'nextActivityAt' => '2026-08-21T19:00:00-05:00',
     ], $result, 'no answer returns exact result contract and calculated date');
-    // ⭐ UNA SOLA ACTIVIDAD POR PULSACION, igual que el boton del panel.
+    // ⚠ LA PLANIFICADA SE CREA, NO SE REUSA LA DE LA APP.
     //
-    // Antes quedaban DOS: el sello ('App movil · No contesto', cerrada) y una
-    // planificada nueva. En este portal una misma actividad registra la llamada
-    // que ocurrio Y agenda la proxima, y el sello era una tercera tarjeta en la
-    // ficha sin ningun dato propio: el motor ya lo saltaba al contar.
-    //
-    // Ahora la actividad que creo la app SE CONVIERTE en la planificada.
+    // Reusar la actividad que crea la app parecia mejor —una sola tarjeta— pero
+    // Bitrix la sigue pintando como llamada FINALIZADA con la X roja, porque por
+    // debajo es un registro de telefonia. La tarjeta de llamada planificada, con
+    // 'Fecha limite' y 'Tema', solo sale si la actividad la creamos nosotros.
+    // Probado en el deal 401877 el 26-ago-2026: #2514191 quedaba abierta y con
+    // la fecha correcta, y en la ficha se veia como una llamada fallida.
     $updates = llamada_calls($fake, 'crm.activity.update');
-    test_same(2, count($updates), 'no answer touches the app activity and the pending call');
-    test_same(731, $updates[0][1]['id'], 'the app activity is the one reused');
-    test_same([], llamada_calls($fake, 'crm.activity.add'),
-        'nothing is created: there is no separate stamp and no separate planned call');
-
-    $reuso = $updates[0][1]['fields'];
-    test_same('Llamada saliente Ana Pérez', $reuso['SUBJECT'], 'it gets the planned call subject');
-    test_same('N', $reuso['COMPLETED'], 'and stays OPEN: it IS the next call');
-    test_same('2026-08-21T19:00:00-05:00', $reuso['DEADLINE'], 'with the ladder date');
-    // la nota, sin el uuid: se ACTUALIZA, y actualizar dos veces no duplica nada.
-    // El uuid solo hace falta cuando se CREA (el panel), para no duplicar la
-    // planificada si el add prospero y el progreso no se alcanzo a guardar.
-    test_same('Registrada desde la app de llamadas Galjosa', $reuso['DESCRIPTION'],
-        'the note is one clean sentence: the uuid was noise the seller read every time');
-    test_same(false, isset($reuso['OWNER_ID']),
-        'an update does not resend the fields that identify the activity');
-
+    test_same(2, count($updates), 'no answer closes the technical and pending call activities');
+    test_same(731, $updates[0][1]['id'], 'no answer closes requested technical activity id');
+    test_same([
+        'SUBJECT' => 'App móvil · No contestó',
+        'COMPLETED' => 'Y',
+    ], $updates[0][1]['fields'], 'no answer leaves the external call only as completed history');
     test_same(630, $updates[1][1]['id'], 'no answer closes the matching pending activity');
     test_same(['COMPLETED' => 'Y'], $updates[1][1]['fields'], 'pending call is completed without rewriting its details');
+    $adds = llamada_calls($fake, 'crm.activity.add');
+    test_same(1, count($adds), 'no answer creates one separate planned activity');
+    // la nota, en una frase. El uuid se leia en la ficha cada vez y era ruido:
+    // la planificada se reconoce por su firma (nota + abierta + deadline exacto).
+    test_same('Registrada desde la app de llamadas Galjosa', $adds[0][1]['fields']['DESCRIPTION'],
+        'the note is one clean sentence, no uuid for the seller to read');
+    test_same('N', $adds[0][1]['fields']['COMPLETED'], 'and it is the open next call');
+    test_same('2026-08-21T19:00:00-05:00', $adds[0][1]['fields']['DEADLINE'], 'with the ladder date');
     test_same([], llamada_calls($fake, 'crm.deal.update'), 'no answer preserves stage');
     test_same([], llamada_calls($fake, 'crm.timeline.comment.add'), 'empty comment creates no timeline entry');
     $stored = $store->get('member-1:11111111-1111-4111-8111-111111111111');
@@ -468,12 +456,10 @@ try {
         $fake->calls,
         fn(array $call): bool => in_array($call[0], ['crm.activity.update', 'crm.activity.add'], true)
     ));
-    // Ya no hay 'add': la actividad de la app se convierte en la planificada.
-    // Lo que se sigue afirmando es el ORDEN — primero se resuelve lo viejo.
-    test_same(['crm.activity.update', 'crm.activity.update'], array_map(
+    test_same(['crm.activity.update', 'crm.activity.update', 'crm.activity.add'], array_map(
         fn(array $call): string => $call[0],
         $writes
-    ), 'the app activity becomes the planned call and the previous pending is closed');
+    ), 'previous pending call is completed before the next activity is created');
 } finally {
     llamada_test_cleanup($directory);
 }
@@ -508,33 +494,29 @@ try {
         'ok' => false,
         'error' => 'bad-json',
     ]];
-    // ⚠ EN PANEL, no en movil. El movil ya no AGREGA: reusa la actividad que
-    // creo la app. El unico camino que todavia crea una planificada —y que por
-    // eso necesita el uuid para reconocerla si el add prospero sin que se
-    // guardara el progreso— es el del panel.
-    $input = llamada_test_input([
-        'callRequestId' => $callRequestId,
-        'memberId' => 'panel-42',
-        'bitrixActivityId' => null,
-    ]);
+    $input = llamada_test_input(['callRequestId' => $callRequestId]);
 
     test_throws(
-        fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage, 'panel'),
+        fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage),
         LlamadaBitrixError::class,
         'uncertain planned activity response is surfaced'
     );
+    // La planificada quedo creada en Bitrix pero no lo supimos. Se reconoce por
+    // su FIRMA —nuestra nota + abierta + el deadline exacto—, no por un uuid en
+    // la nota que el vendedor tenia que leer en la ficha.
     $created = fake_activity(901, 'Llamada saliente Ana Pérez', '2026-08-20T16:31:00-05:00');
-    $created['DESCRIPTION'] = llamada_marca_actividad($callRequestId);
+    $created['DESCRIPTION'] = 'Registrada desde la app de llamadas Galjosa';
+    $created['COMPLETED'] = 'N';
+    $created['DEADLINE'] = '2026-08-21T19:00:00-05:00';   // el deadline calculado: es la firma
     $fake->historyPages = [0 => [$created]];
 
-    $retried = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage, 'panel');
+    $retried = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
     test_same('processed', $retried['status'], 'uncertain planned activity is recovered from its marker');
     test_same(1, count(llamada_calls($fake, 'crm.activity.add')), 'recovery never adds the marked activity twice');
-    // En panel no hay actividad tecnica que cerrar: la pulsacion ES la accion.
-    test_same(0, count(array_filter(
+    test_same(1, count(array_filter(
         llamada_calls($fake, 'crm.activity.update'),
         fn(array $call): bool => (int)$call[1]['id'] === 731
-    )), 'the panel path touches no technical activity: there is none');
+    )), 'recovery never closes the technical call twice');
 } finally {
     llamada_test_cleanup($directory);
 }

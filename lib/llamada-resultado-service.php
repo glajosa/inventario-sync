@@ -249,32 +249,7 @@ function llamada_procesar_resultado(
             'contactId' => $contactId,
             'selectedPhone' => $request['selectedPhone'],
         ]);
-        $plannedFields['DESCRIPTION'] = $source === 'mobile'
-            ? LLAMADA_NOTA                                        // se actualiza: no hace falta el uuid
-            : llamada_marca_actividad($request['callRequestId']);  // se crea: el uuid evita duplicarla
-    }
-
-    // UNA SOLA ACTIVIDAD POR PULSACION, igual que el boton del panel.
-    //
-    // El movil dejaba DOS: el sello ('App movil · No contesto', cerrada) y una
-    // planificada nueva. Pero en este portal UNA actividad hace las dos cosas —
-    // registra la llamada que acaba de ocurrir Y agenda la proxima — y asi
-    // trabaja el panel desde el primer dia. El sello era una tercera tarjeta en
-    // la ficha que no aportaba ningun dato: el motor ya lo saltaba al contar.
-    //
-    // Entonces la actividad que la app ya creo al abrir el marcador SE
-    // CONVIERTE en la planificada: se le pone el asunto, la fecha de la
-    // escalera y queda abierta. No se agrega nada.
-    //
-    // Solo para 'no_answer'. En 'answered' y 'not_interested' no hay proxima
-    // llamada que agendar, asi que ahi el sello sigue siendo el unico registro.
-    if ($source === 'mobile' && $plannedFields !== null) {
-        $technicalFields = $plannedFields;
-        unset($technicalFields['OWNER_TYPE_ID'], $technicalFields['OWNER_ID'],
-              $technicalFields['TYPE_ID'], $technicalFields['DIRECTION'],
-              $technicalFields['PROVIDER_ID'], $technicalFields['PROVIDER_TYPE_ID']);
-        $plannedFields = null;                      // nada que crear
-        $progress['plannedActivityId'] = $activityId;
+        $plannedFields['DESCRIPTION'] = LLAMADA_NOTA;
     }
 
     $progress['nextActivityAt'] = $nextAt?->format(DateTimeInterface::ATOM);
@@ -315,9 +290,20 @@ function llamada_procesar_resultado(
     }
 
     if ($plannedFields !== null && $progress['plannedActivityId'] === null) {
-        $plannedActivityId = llamada_buscar_actividad_por_marca(
+        // ⚠ RECUPERACION SIN UUID EN LA NOTA.
+        //
+        // El uuid estaba en la nota para reconocer la planificada si el `add`
+        // prospero pero no se alcanzo a guardar el progreso —sin eso, un
+        // reintento crearia una segunda y el deal contaria dos llamadas. Pero el
+        // vendedor lee esa referencia en la ficha cada vez y es ruido.
+        //
+        // La firma alcanza y es unica: nuestra nota + ABIERTA + el deadline
+        // exacto que acabamos de calcular. Unica porque las planificadas propias
+        // que habia se cierran ANTES de llegar aca (ver llamada_planificadas_
+        // propias_abiertas), asi que no puede quedar otra abierta con esa firma.
+        $plannedActivityId = llamada_buscar_planificada_propia(
             $history,
-            llamada_marca_actividad($request['callRequestId'])
+            $nextAt->format(DateTimeInterface::ATOM)
         );
         if ($plannedActivityId === null) {
             try {
@@ -749,6 +735,25 @@ function llamada_marca_actividad(string $callRequestId): string {
     return $callRequestId === ''
         ? LLAMADA_NOTA
         : LLAMADA_NOTA . '. Referencia: ' . $callRequestId;
+}
+
+/**
+ * La planificada que acabamos de crear, si el `add` prospero y no lo supimos.
+ *
+ * Firma: nuestra nota exacta + abierta + el deadline calculado. No usa uuid: ese
+ * se leia en la ficha y era ruido para el vendedor.
+ */
+function llamada_buscar_planificada_propia(array $history, string $deadline): ?int {
+    $reloj = static fn(string $v): string => substr($v, 0, 19);
+    foreach ($history as $activity) {
+        if (!is_array($activity)) continue;
+        if (trim((string)($activity['DESCRIPTION'] ?? '')) !== LLAMADA_NOTA) continue;
+        if ((string)($activity['COMPLETED'] ?? 'N') === 'Y') continue;
+        if ($reloj((string)($activity['DEADLINE'] ?? '')) !== $reloj($deadline)) continue;
+        $activityId = (int)($activity['ID'] ?? 0);
+        if ($activityId > 0) return $activityId;
+    }
+    return null;
 }
 
 function llamada_buscar_actividad_por_marca(array $history, string $marker): ?int {
