@@ -32,6 +32,13 @@ $input = ['request_id'=>'22222222-2222-4222-8222-222222222222','project'=>'Noral
     'unit_code'=>'A-1-1','deal_id'=>10,'payment'=>['installments'=>44,'modality'=>'estandar','start_month'=>'2026-09']];
 $body = json_encode($input, JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
 test_same(401, bot_quote_preview_http('POST',$body,['content-type'=>'application/json'],$env,$fake,$now)['status'], 'unsigned preview rejected');
+$compatSecret = 'existing-inventory-secret-at-least-32-bytes';
+$compatNonce = '33333333-3333-4333-8333-333333333333';
+$compatEnv = ['BOT_INVENTORY_API_ENABLED'=>'1','BOT_INVENTORY_SHARED_SECRET'=>$compatSecret,'DATA_DIR'=>$dir];
+$compatHeaders = ['content-type'=>'application/json','x-galjosa-timestamp'=>(string)$now,
+    'x-galjosa-nonce'=>$compatNonce,
+    'x-galjosa-signature'=>hash_hmac('sha256',$now."\n".$compatNonce."\n".$body,$compatSecret)];
+test_same(null, bot_quote_http_auth('POST',$body,$compatHeaders,$compatEnv,$now), 'quote API reuses inventory channel when dedicated settings are absent');
 $previewHeaders = $headers($body);
 $preview = bot_quote_preview_http('POST',$body,$previewHeaders,$env,$fake,$now);
 test_same(200, $preview['status'], 'signed preview succeeds');

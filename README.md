@@ -46,8 +46,12 @@ el bot no copia fórmulas ni precios. Las rutas son:
 
 Variables protegidas en EasyPanel:
 
-- `BOT_QUOTE_API_ENABLED=1` habilita estas rutas.
-- `BOT_QUOTE_SHARED_SECRET` es un secreto dedicado de 32 caracteres o más.
+- `BOT_QUOTE_API_ENABLED=1` habilita estas rutas. Si no está definido, las rutas
+  siguen el estado de `BOT_INVENTORY_API_ENABLED` para un despliegue compatible
+  con la conexión privada ya activa.
+- `BOT_QUOTE_SHARED_SECRET` es un secreto dedicado de 32 caracteres o más. Si
+  falta, se reutiliza `BOT_INVENTORY_SHARED_SECRET`; un secreto exclusivo sigue
+  siendo compatible para una separación futura.
 - `PUBLIC_BASE_URL` es la URL HTTPS pública de este servicio.
 - `OUTBOUND_TOKEN` firma el enlace temporal del documento existente.
 - `DATA_DIR=/data` conserva borradores y protección contra repetición en el volumen

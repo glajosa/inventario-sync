@@ -21,10 +21,13 @@ function bot_quote_http_auth(string $method, string $body, array $headers,
     if (!preg_match('/^application\/json(?:\s*;.*)?$/iD', (string)($headers['content-type'] ?? ''))) {
         return bot_quote_http_error(400, 'invalid_request');
     }
-    if (!in_array(strtolower((string)($env['BOT_QUOTE_API_ENABLED'] ?? '0')), ['1','true','yes','on'], true)) {
+    $enabled = (string)($env['BOT_QUOTE_API_ENABLED'] ?? '');
+    if ($enabled === '') $enabled = (string)($env['BOT_INVENTORY_API_ENABLED'] ?? '0');
+    if (!in_array(strtolower($enabled), ['1','true','yes','on'], true)) {
         return bot_quote_http_error(503, 'quotes_disabled');
     }
     $secret = (string)($env['BOT_QUOTE_SHARED_SECRET'] ?? '');
+    if ($secret === '') $secret = (string)($env['BOT_INVENTORY_SHARED_SECRET'] ?? '');
     if (strlen($secret) < 32) return bot_quote_http_error(503, 'quotes_unavailable');
     $timestampText = (string)($headers['x-galjosa-timestamp'] ?? '');
     $timestamp = filter_var($timestampText, FILTER_VALIDATE_INT);
