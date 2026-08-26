@@ -1060,7 +1060,12 @@ $hoy  = new DateTimeImmutable('now');
   <p>Pago directo para el notario. Se da al momento de la firma del contrato.</p>
 
   <div class="resumen">
-    <div><span>Reserva <?= h($pc($plan['reservaPct'])) ?></span><b><?= h(cot_money($plan['reserva'])) ?></b></div>
+    <?php /* La reserva NO lleva porcentaje. Es un monto FIJO de separacion —$1.000 en
+             todos los proyectos— y sacarle el porcentaje contra el precio da un numero
+             distinto en cada cotizacion (1,2% aca, 0,9% en otra) que no significa nada:
+             no es una condicion del plan, es el resultado de dividir. Los otros tres
+             cuadros si son porcentajes de verdad del modelo de pago. */ ?>
+    <div><span>Reserva</span><b><?= h(cot_money($plan['reserva'])) ?></b></div>
     <?php /* El credito directo va ANTES de la contraentrega porque ese es el orden en
              que se paga, y es la cifra que el cliente compara contra lo que le pide el
              banco. Se resalta: de los cinco cuadros, es el que define si la compra le
@@ -1199,8 +1204,11 @@ $hoy  = new DateTimeImmutable('now');
   <?php endif; ?>
 
   <p class="pie">
-    Plan: <?= h($pc($plan['reservaPct'])) ?> de reserva (separación <?= h(cot_money($plan['separacion'])) ?>
-    <?= $plan['firma'] > 0 ? '+ ' . h(cot_money($plan['firma'])) . ' a la firma' : '· nada a la firma' ?>),
+    <?php /* Aca decia "1.2% de reserva", el mismo porcentaje derivado que se quito del
+             cuadro: sale de dividir la separacion entre el precio, cambia en cada
+             cotizacion y no es una condicion del plan. Se dicen los montos. */ ?>
+    Plan: separación <?= h(cot_money($plan['separacion'])) ?>
+    <?= $plan['firma'] > 0 ? '+ ' . h(cot_money($plan['firma'])) . ' a la firma' : '· nada a la firma' ?>,
     <?= h($pc($plan['cuotasPct'])) ?> en cuotas mensuales<?= $plan['extraTotal'] > 0 ? ' + ' . h($pc($plan['extraPct'])) . ' en cuotas extraordinarias' : '' ?>
     y <?= h($pc($plan['contraPct'])) ?> contraentrega. Las cuotas vencen el 16 de cada mes
     y la última es en <?= h($plan['hastaTxt']) ?>.
