@@ -328,6 +328,38 @@ function llamada_procesar_resultado(
         llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken);
     }
 
+    // UNA SOLA TARJETA POR PULSACION: se borra el sello.
+    //
+    // El sello ('App movil · No contesto') es la actividad que la app crea al
+    // abrir el marcador, renombrada y cerrada. No aporta ningun dato: el motor
+    // ya lo salta al contar, la fecha de la escalera vive en la planificada, y
+    // en la ficha era una segunda tarjeta que el vendedor lee como ruido.
+    //
+    // ⚠ EL ORDEN NO SE PUEDE INVERTIR. Primero se CREA la planificada, y solo
+    // cuando existe se borra el sello. Al revés, un fallo en el add dejaria la
+    // llamada sin ningun registro — y perder trabajo del vendedor es
+    // exactamente lo que este servicio existe para evitar.
+    //
+    // ⚠ SOLO CUANDO HAY PLANIFICADA. En 'answered' y 'not_interested' no se
+    // agenda nada, asi que ahi el sello es el UNICO registro de la llamada:
+    // borrarlo seria borrar el contacto efectivo.
+    if ($source === 'mobile'
+        && $plannedFields !== null
+        && $progress['plannedActivityId'] !== null
+        && !($progress['technicalDeleted'] ?? false)) {
+        try {
+            llamada_bx_true($bx, 'crm.activity.delete', ['id' => $activityId]);
+            $progress['technicalDeleted'] = true;
+        } catch (LlamadaForbidden $error) {
+            throw $error;
+        } catch (Throwable $error) {
+            // El registro ya quedo hecho. Que sobre una tarjeta es molesto; que
+            // se caiga la operacion por limpiar, no. Se deja y sigue.
+            $progress['technicalDeleted'] = true;
+        }
+        llamada_guardar_progreso($store, $idempotencyKey, $progress, $commentState, $commentId, $leaseToken);
+    }
+
     if (!$progress['commentProcessed']) {
         if ($request['comment'] === '') {
             $commentState = 'skipped';

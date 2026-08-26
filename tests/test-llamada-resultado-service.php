@@ -86,6 +86,7 @@ final class FakeBitrix {
             'crm.activity.list' => ['ok' => true, 'result' => $this->historyPage($params)],
             'crm.stagehistory.list' => ['ok' => true, 'result' => $this->reentryHistory],
             'crm.activity.update' => ['ok' => true, 'result' => true],
+            'crm.activity.delete' => ['ok' => true, 'result' => true],
             'crm.activity.add' => ['ok' => true, 'result' => 901],
             'crm.timeline.comment.add' => $this->commentResult(),
             'crm.deal.update' => ['ok' => true, 'result' => true],
@@ -1392,4 +1393,52 @@ try {
         'the leftover is closed exactly once');
 } finally {
     llamada_test_cleanup($directory);
+}
+
+// ── EL SELLO SE BORRA (26-ago-2026) ─────────────────────────────────────────
+// La app crea una actividad al abrir el marcador; el servicio la renombraba a
+// 'App movil · No contesto' y la dejaba cerrada. Eran DOS tarjetas por
+// pulsacion y el sello no aporta ningun dato: el motor ya lo salta al contar y
+// la fecha de la escalera vive en la planificada.
+//
+// Se borra, pero SOLO despues de que la planificada exista. Al reves, un fallo
+// en el add dejaria la llamada sin ningun registro.
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '31313131-3131-4131-8131-313131313131',
+    ]), $fake, $store, $now, $noInterestStage, 'mobile');
+
+    $borradas = array_map(fn(array $c): int => (int)$c[1]['id'], llamada_calls($fake, 'crm.activity.delete'));
+    test_same([731], $borradas, 'the stamp is deleted: one card per press');
+
+    $orden = array_values(array_filter(
+        array_map(fn(array $c): string => $c[0], $fake->calls),
+        fn(string $m): bool => in_array($m, ['crm.activity.add', 'crm.activity.delete'], true)
+    ));
+    test_same(['crm.activity.add', 'crm.activity.delete'], $orden,
+        'the planned call is CREATED first; only then is the stamp deleted');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+// ⚠ En 'answered' y 'not_interested' NO se borra: no se agenda nada, asi que el
+// sello es el UNICO registro de esa llamada. Borrarlo seria borrar el contacto
+// efectivo del deal.
+foreach (['answered', 'not_interested'] as $desenlace) {
+    [$store, $directory] = llamada_test_store();
+    try {
+        $fake = new FakeBitrix();
+        llamada_procesar_resultado(llamada_test_input([
+            'callRequestId' => $desenlace === 'answered'
+                ? '32323232-3232-4232-8232-323232323232'
+                : '33333333-3333-4333-8333-333333333333',
+            'outcome' => $desenlace,
+        ]), $fake, $store, $now, $noInterestStage, 'mobile');
+        test_same([], llamada_calls($fake, 'crm.activity.delete'),
+            "$desenlace keeps its stamp: it is the only record of that call");
+    } finally {
+        llamada_test_cleanup($directory);
+    }
 }
