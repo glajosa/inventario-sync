@@ -202,9 +202,22 @@ function hist_al_reservar(string $dealId, ?array $deal = null, bool $forzar = fa
         $celda = (string)($r['etiqueta'] ?? $u['cod']);
         if (isset($vistas[$celda])) continue;
         $vistas[$celda] = true;
-        $urls[] = ['cod' => $celda, 'url' => $r['url_abs']];
+        $urls[] = ['cod' => $celda, 'url' => $r['url_abs'],
+                   'video' => basename((string)($r['video'] ?? ''))];
     }
     if (!$urls) return ['ok' => false, 'motivo' => 'el generador no devolvio ninguna imagen'];
+
+    // ── publicar en Instagram ────────────────────────────────────────────────
+    /* Se le pide al GENERADOR que publique, no se publica desde aca. Tres razones:
+       la llave de Vista Social vive alla y no tiene por que viajar; la lista blanca
+       del perfil tambien; y el interruptor lo maneja el equipo desde el buzon, que es
+       la misma pantalla donde ve las historias.
+       `auto=1` hace que el generador respete ese interruptor: si esta apagado
+       responde `skip` y no pasa nada. Aca no se decide nada de eso. */
+    foreach ($urls as $u) {
+        if (($u['video'] ?? '') === '') continue;   // sin video no hay historia que subir
+        hist_publicar($u['video'], $u['cod']);
+    }
 
     // A quien avisar: al dueño del aviso configurado, no al responsable del deal —
     // la historia es material de marketing, no del vendedor.
@@ -222,4 +235,35 @@ function hist_al_reservar(string $dealId, ?array $deal = null, bool $forzar = fa
     hist_libreta_guardar($lib);
     logline("HISTORIA deal {$dealId} · {$codigos} · " . count($urls) . ' imagen(es)');
     return ['ok' => true, 'motivo' => 'generada', 'unidades' => $codigos, 'urls' => $urls];
+}
+
+/**
+ * Le pide al generador que suba la historia a Instagram. Fire-and-forget.
+ *
+ * Timeout corto y errores tragados A PROPOSITO: si el generador esta caido o Vista
+ * Social no contesta, la RESERVA en Bitrix no se puede caer por eso. La historia
+ * queda en el buzon y alguien la sube a mano; el negocio sigue.
+ *
+ * El interruptor NO se consulta aca: lo aplica el generador (`auto=1`). Tener la
+ * decision en dos sitios es tener dos verdades.
+ */
+function hist_publicar(string $archivo, string $unidad): void {
+    $base = rtrim((string)getenv('NORAL_URL'), '/');
+    $tok  = (string)getenv('NORAL_SYNC_TOKEN');
+    if ($base === '' || $tok === '') return;        // sin config, no se intenta
+
+    $url = $base . '/publicar.php?auto=1&modo=publicar'
+         . '&a=' . rawurlencode($archivo) . '&token=' . rawurlencode($tok);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20,
+                            CURLOPT_CONNECTTIMEOUT => 5]);
+    $raw = (string)curl_exec($ch);
+    $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $j = json_decode($raw, true);
+    if (isset($j['skip']))      logline("HISTORIA $unidad no se publico: {$j['skip']}");
+    elseif (!empty($j['ok']))   logline("HISTORIA $unidad publicada en {$j['perfil']} ({$j['modo']})");
+    else                        logline("HISTORIA $unidad fallo al publicar: http=$http "
+                                      . (string)($j['error'] ?? substr($raw, 0, 120)));
 }
