@@ -58,6 +58,46 @@ final class LlamadaIdempotenciaStore {
             WHERE pending_activity_id IS NOT NULL');
     }
 
+    /**
+     * Las operaciones TRABADAS: quedaron en 'processing', su permiso vencio, y
+     * ya avanzaron algo (updated_at != created_at).
+     *
+     * 🔴 POR QUE HAY QUE PODER VERLAS. Una operacion en 'processing' bloquea el
+     * deal: toda pulsacion nueva del vendedor devuelve 'processing' y el ve
+     * "No se pudo registrar" sin salida. Las que NUNCA avanzaron se dan por
+     * muertas solas (ver llamada-resultado-service.php). Estas NO se pueden
+     * desbloquear automaticamente —escribieron algo a medias y reintentar podria
+     * duplicar—, asi que la unica defensa es que se VEAN.
+     *
+     * Hasta el 27-ago-2026 la unica forma de saber cuantas habia era abrir la
+     * base a mano. Si son cero, perfecto. Si aparecen, es un vendedor trabado
+     * que nadie va a reportar, porque el error se ve como un problema de red.
+     *
+     * @return array<int, array{clave:string, creada:int, actualizada:int, lease:int}>
+     */
+    public function trabadas(int $ahora): array {
+        $q = $this->pdo->prepare(
+            "SELECT idempotency_key, created_at, updated_at, lease_until
+               FROM result_operations
+              WHERE state = 'processing'
+                AND lease_until > 0
+                AND lease_until < :ahora
+                AND updated_at != created_at
+              ORDER BY created_at ASC"
+        );
+        $q->execute([':ahora' => $ahora]);
+        $out = [];
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[] = [
+                'clave'       => (string)$r['idempotency_key'],
+                'creada'      => (int)$r['created_at'],
+                'actualizada' => (int)$r['updated_at'],
+                'lease'       => (int)$r['lease_until'],
+            ];
+        }
+        return $out;
+    }
+
     public function now(): int {
         return ($this->clock)();
     }

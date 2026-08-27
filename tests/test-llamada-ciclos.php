@@ -54,3 +54,39 @@ try {
 }
 
 echo "OK\n";
+
+// ── LAS TRABADAS TIENEN QUE VERSE (27-ago-2026) ─────────────────────────────
+// Una operacion en 'processing' bloquea el deal: toda pulsacion nueva devuelve
+// 'processing' y el vendedor ve "No se pudo registrar" sin salida.
+//
+// Son DOS clases distintas y no se tratan igual:
+//   nunca avanzo (updated_at == created_at)  -> no escribio nada, se da por
+//                                               muerta sola y se puede reintentar
+//   avanzo algo  (updated_at != created_at)  -> escribio a medias; desbloquearla
+//                                               podria duplicar. Solo se MUESTRA.
+$dirT = sys_get_temp_dir() . '/inventario-sync-trabadas-' . bin2hex(random_bytes(8));
+mkdir($dirT, 0700, true);
+try {
+    $ahora = 1_000_000;
+    $store = new LlamadaIdempotenciaStore($dirT, static fn(): int => $GLOBALS['ahoraT'] ?? 1_000);
+    $pdo = (function () { return $this->pdo; })->call($store);
+    $meter = function (string $clave, int $creada, int $actualizada, int $lease) use ($pdo) {
+        $pdo->prepare("INSERT INTO result_operations
+            (idempotency_key, request_hash, state, created_at, updated_at, lease_until)
+            VALUES (?, 'h', 'processing', ?, ?, ?)")
+            ->execute([$clave, $creada, $actualizada, $lease]);
+    };
+    $meter('viva',          $ahora - 10,  $ahora - 5,   $ahora + 60);   // lease vigente
+    $meter('nunca-avanzo',  $ahora - 500, $ahora - 500, $ahora - 100);  // muerta, se cura sola
+    $meter('trabada',       $ahora - 500, $ahora - 400, $ahora - 100);  // TRABADA de verdad
+
+    $t = $store->trabadas($ahora);
+    test_same(1, count($t), 'solo la que avanzo y murio cuenta como trabada');
+    test_same('trabada', $t[0]['clave'], 'y es esa, no las otras dos');
+
+    test_same(0, count($store->trabadas($ahora - 1000)),
+        'con el lease todavia vigente ninguna esta trabada');
+} finally {
+    array_map('unlink', glob($dirT . '/*') ?: []);
+    @rmdir($dirT);
+}

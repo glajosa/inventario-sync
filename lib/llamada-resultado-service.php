@@ -178,8 +178,29 @@ function llamada_procesar_resultado(
             throw new LlamadaIdempotenciaConflict('call already has another result');
         }
         $previousOperation = $store->get((string)$cycle['operation_key']);
-        if ($previousOperation === null
-            || in_array((string)$previousOperation['state'], ['processing', 'retryable'], true)) {
+        // 🔴 UNA OPERACION MUERTA NO PUEDE BLOQUEAR EL DEAL PARA SIEMPRE.
+        //
+        // Si la anterior quedo en 'processing', toda pulsacion nueva sobre ese
+        // deal devolvia 'processing' y el vendedor veia "No se pudo registrar"
+        // sin salida: no hay reintento que lo saque.
+        //
+        // Paso el 26-ago-2026: un barrido masivo saturo este contenedor con el
+        // abanico de ONCRMDEALUPDATE (12 hooks/segundo), 8 peticiones del panel
+        // se cortaron a la mitad y esos 8 deals quedaron bloqueados. Hubo que
+        // borrarlas a mano de la libreta.
+        //
+        // Se da por muerta cuando se cumplen las DOS cosas: el lease vencio Y
+        // updated_at == created_at, o sea que nunca paso del primer paso. Con
+        // esas dos, se sabe que NO escribio nada y reintentar no puede duplicar.
+        // Si avanzo algo, se respeta el 'processing' como antes.
+        $muerta = $previousOperation !== null
+            && (string)$previousOperation['state'] === 'processing'
+            && (int)($previousOperation['lease_until'] ?? 0) > 0
+            && (int)$previousOperation['lease_until'] < $store->now()
+            && (int)($previousOperation['updated_at'] ?? 0) === (int)($previousOperation['created_at'] ?? -1);
+
+        if (!$muerta && ($previousOperation === null
+            || in_array((string)$previousOperation['state'], ['processing', 'retryable'], true))) {
             return [
                 'status' => 'processing',
                 'callRequestId' => $request['callRequestId'],
