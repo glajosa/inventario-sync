@@ -74,6 +74,26 @@ function bot_matrix_position_category(array $matrix, array $parts): ?string {
     return is_string($nested) && trim($nested) !== '' ? trim($nested) : null;
 }
 
+function bot_matrix_catalog_rules(array $matrix, array $candidate): array {
+    $type = $candidate['type_id'] ?? $candidate['tipo'] ?? null;
+    if (!is_int($type) && !ctype_digit(trim((string)$type))) return [];
+    $rules = $matrix['listas'][(string)((int)$type)]['bot_catalog'] ?? [];
+    return is_array($rules) ? $rules : [];
+}
+
+function bot_matrix_bedrooms(array $matrix, array $candidate, array $parts): ?int {
+    $rules = bot_matrix_catalog_rules($matrix, $candidate);
+    $tower = (string)($parts['tower'] ?? '');
+    $position = (string)((int)($parts['position'] ?? 0));
+    if ($tower !== '' && isset($rules['bedrooms_by_building'][$tower])) {
+        return (int)$rules['bedrooms_by_building'][$tower];
+    }
+    if ($position !== '0' && isset($rules['bedrooms_by_position'][$position])) {
+        return (int)$rules['bedrooms_by_position'][$position];
+    }
+    return isset($rules['default_bedrooms']) ? (int)$rules['default_bedrooms'] : null;
+}
+
 function bot_unit_commercial_attributes(array $candidate, array $profile): array {
     $parts = bot_unit_parts((string)($candidate['code'] ?? ''));
     if ($parts === null) return [];
@@ -85,11 +105,13 @@ function bot_unit_commercial_attributes(array $candidate, array $profile): array
         'tower'=>(string)($candidate['tower'] ?? $parts['tower']),
         'floor'=>(string)($candidate['floor'] ?? $parts['floor']),
     ];
+    $bedrooms = bot_matrix_bedrooms($matrix, $candidate, $parts);
+    if ($bedrooms !== null) $attributes['bedrooms'] = $bedrooms;
     if (is_array($category)) {
         $label = trim(strip_tags((string)($category['etiqueta'] ?? '')));
         if ($label !== '') $attributes['position'] = $label;
         $note = bot_contract_plain(strip_tags((string)($category['nota'] ?? '')));
-        if (preg_match('/(?:^| )(\d{1,2}) dormitorios?(?: |$)/D', $note, $m)) {
+        if ($bedrooms === null && preg_match('/(?:^| )(\d{1,2}) dormitorios?(?: |$)/D', $note, $m)) {
             $attributes['bedrooms'] = (int)$m[1];
         }
     }
@@ -112,7 +134,7 @@ function bot_unit_is_commercially_released(array $unit, array $profile): bool {
 
 function bot_asset_type_name(mixed $value): string {
     $ids = [
-        1791=>'local', 1793=>'departamento', 1797=>'suite', 1801=>'parqueo',
+        1791=>'local', 1793=>'departamento', 1795=>'terreno', 1797=>'suite', 1801=>'parqueo',
         1951=>'oficina', 1799=>'casa', 1947=>'casa', 1945=>'casa',
         1943=>'terreno', 1949=>'terreno',
     ];
@@ -147,6 +169,15 @@ function bot_unit_passes_hard_filters(array $unit, array $request, array $profil
     if ((int)($unit['id'] ?? 0) <= 0) return false;
     if (!bot_unit_is_commercially_released($unit, $profile)) return false;
     if (!bot_asset_type_matches($unit['tipo'] ?? null, $request['asset_type'] ?? null)) return false;
+    if (($request['bedrooms'] ?? null) !== null) {
+        $attributes = bot_unit_commercial_attributes([
+            'code'=>(string)($unit['codigo'] ?? ''),
+            'tower'=>(string)($unit['torre'] ?? ''),
+            'floor'=>(string)($unit['piso'] ?? ''),
+            'type_id'=>is_numeric($unit['tipo'] ?? null) ? (int)$unit['tipo'] : null,
+        ], $profile);
+        if (($attributes['bedrooms'] ?? null) !== (int)$request['bedrooms']) return false;
+    }
     $m2 = bot_catalog_money($unit['m2'] ?? null);
     $pvp = bot_catalog_money($unit['pvp'] ?? null);
     if ($m2 === null || $pvp === null) return false;

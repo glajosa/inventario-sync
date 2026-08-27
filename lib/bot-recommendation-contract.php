@@ -57,7 +57,8 @@ function bot_nullable_string(mixed $value, int $maxLength = 120): ?string {
     if ($value === null) return null;
     $text = trim((string)$value);
     if ($text === '') return null;
-    if (mb_strlen($text) > $maxLength || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', $text)) {
+    $length = function_exists('mb_strlen') ? mb_strlen($text) : strlen($text);
+    if ($length > $maxLength || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', $text)) {
         throw new InvalidArgumentException('invalid_string');
     }
     return $text;

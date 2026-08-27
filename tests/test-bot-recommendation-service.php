@@ -75,3 +75,31 @@ $galeroAttributes = bot_unit_commercial_attributes($galeroCandidate, $galeroD);
 test_same('Pos. 2 · Medianero', $galeroAttributes['position'] ?? null, 'position label is read from the project matrix');
 test_same(3, $galeroAttributes['bedrooms'] ?? null, 'explicit bedroom count is read from the official matrix');
 
+$apartmentsCatalog = ['built'=>$now - 60, 'units'=>[
+    ['id'=>21,'codigo'=>'A-1-1','cat'=>'39','stage'=>'DISPONIBLE','dealId'=>0,
+        'm2'=>'75','pvp'=>'162375|USD','tipo'=>1793,'torre'=>'A','piso'=>'1'],
+    ['id'=>22,'codigo'=>'G-1-1','cat'=>'39','stage'=>'DISPONIBLE','dealId'=>0,
+        'm2'=>'106','pvp'=>'221785|USD','tipo'=>1793,'torre'=>'G','piso'=>'1'],
+    ['id'=>23,'codigo'=>'H-3-2','cat'=>'39','stage'=>'DISPONIBLE','dealId'=>0,
+        'm2'=>'106','pvp'=>'193330|USD','tipo'=>1793,'torre'=>'H','piso'=>'3'],
+]];
+$threeBedrooms = $request;
+$threeBedrooms['bedrooms'] = 3;
+$threeBedroomResult = bot_recommendation_rank($threeBedrooms, $apartmentsCatalog, $profile, $now);
+test_same(['G-1-1', 'H-3-2'], array_column($threeBedroomResult['candidates'], 'code'),
+    'Apartments three-bedroom filter only returns buildings G and H');
+test_same(3, bot_unit_commercial_attributes($threeBedroomResult['candidates'][0], $profile)['bedrooms'] ?? null,
+    'Apartments G and H are explicitly classified as three bedrooms');
+
+$twoBedrooms = $request;
+$twoBedrooms['bedrooms'] = 2;
+test_same(['A-1-1'], array_column(bot_recommendation_rank($twoBedrooms, $apartmentsCatalog, $profile, $now)['candidates'], 'code'),
+    'Apartments buildings outside G and H remain two bedrooms');
+
+$houses = bot_commercial_profile('Galero Casas');
+$houseCandidate = ['code'=>'H-14', 'tower'=>'H', 'floor'=>'1', 'position'=>14, 'type_id'=>1799];
+test_same(3, bot_unit_commercial_attributes($houseCandidate, $houses)['bedrooms'] ?? null,
+    'every Galero house is classified as three bedrooms');
+
+test_same('terreno', bot_asset_type_name(1795), 'Sun Bay SPA solar type is recognized as terrain');
+
