@@ -23,5 +23,20 @@
 declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('solo cli'); }
 
+/* ── EL LATIDO ────────────────────────────────────────────────────────────────
+   Se escribe ANTES de hacer nada, y por eso sirve: separa "el cron no corre" de
+   "el cron corre y falla". Sin esto los dos se ven igual desde afuera —nada pasa—
+   y se puede perder una tarde arreglando lo que no estaba roto.
+   Se lee con historia.php?latido=1. Vive en /data, que es volumen: sobrevive al
+   despliegue, asi que tambien dice hace cuanto que no corre. */
+$latido = ['ultima' => date('c'), 'sapi' => PHP_SAPI];
+@file_put_contents(rtrim((string)(getenv('DATA_DIR') ?: '/data'), '/') . '/conciliar-latido.json',
+                   json_encode($latido));
+
 $_GET = ['token' => (string)getenv('OUTBOUND_TOKEN'), 'conciliar' => 1];
 require __DIR__ . '/historia.php';
+
+// se vuelve a escribir al terminar: si 'fin' falta, la corrida murio en el medio
+$latido['fin'] = date('c');
+@file_put_contents(rtrim((string)(getenv('DATA_DIR') ?: '/data'), '/') . '/conciliar-latido.json',
+                   json_encode($latido));

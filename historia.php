@@ -20,6 +20,22 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
     http_response_code(403); exit(json_encode(['ok' => false, 'error' => 'forbidden']));
 }
 
+/* ?latido=1 — ¿el cron esta vivo? Lo escribe conciliar-cron.php antes de trabajar.
+   Sin esta señal, "el cron no corre" y "el cron corre y falla" se ven identicos
+   desde afuera: en los dos casos no pasa nada. */
+if (isset($_GET['latido'])) {
+    $f = rtrim((string)(getenv('DATA_DIR') ?: '/data'), '/') . '/conciliar-latido.json';
+    $j = json_decode((string)@file_get_contents($f), true);
+    if (!is_array($j)) exit(json_encode(['ok' => false,
+        'latido' => null,
+        'dice' => 'el cron NUNCA corrio desde que existe esta señal'], JSON_PRETTY_PRINT));
+    $seg = time() - (int)strtotime((string)($j['ultima'] ?? ''));
+    exit(json_encode(['ok' => true, 'latido' => $j, 'hace_seg' => $seg,
+        'dice' => $seg < 420 ? 'el cron corre' : 'el cron NO corre desde hace '
+                  . round($seg / 60) . ' min (deberia ser cada 5)',
+        'termino_bien' => isset($j['fin'])], JSON_PRETTY_PRINT));
+}
+
 if (isset($_GET['libreta'])) {
     exit(json_encode(['ok' => true, 'libreta' => hist_libreta()],
                      JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
