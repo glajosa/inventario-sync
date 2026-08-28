@@ -34,6 +34,11 @@ RUN test ! -e /var/www/html/.git \
 #  - rebuild cada 6 h (~27 llamadas): conserje de la allowlist. Poco frecuente a
 #    propósito: el evento ONCRMDEALADD la mantiene fresca en vivo; esto solo limpia
 #    deals borrados. Espaciado para NO saturar el API de Bitrix.
+# 🔴 El `sed` de pam_loginuid es el arreglo del motivo clasico de que cron este vivo,
+# el crontab correcto, y los trabajos NO corran igual: dentro de un contenedor
+# pam_loginuid.so no puede fijar el uid de sesion, cron rechaza el trabajo, y lo
+# escribe en un syslog que no existe. Desde afuera se ve identico a que no pase nada.
+# Solo afecta a la sesion de cron.
 RUN apt-get update && apt-get install -y --no-install-recommends cron && rm -rf /var/lib/apt/lists/* \
  && printf '%s\n%s\n%s\n%s\n%s\n' \
     '*/15 * * * * root . /data/env.sh; php /var/www/html/reconcile.php >> /data/cron.log 2>&1' \
@@ -42,7 +47,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends cron && rm -rf 
     '20 */6 * * * root . /data/env.sh; php /var/www/html/mapa48.php >> /data/cron.log 2>&1' \
     '*/5 * * * * root . /data/env.sh; php /var/www/html/conciliar-cron.php >> /data/cron.log 2>&1' \
     > /etc/cron.d/inv-cron \
- && chmod 0644 /etc/cron.d/inv-cron
+ && chmod 0644 /etc/cron.d/inv-cron \
+ && sed -i '/pam_loginuid\.so/d' /etc/pam.d/cron
 
 # arrancar cron + apache
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
