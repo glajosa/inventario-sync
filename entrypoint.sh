@@ -17,7 +17,25 @@ EOF
 chmod 600 /data/env.sh
 
 # arrancar cron en background
-cron
+# 🔴 Y dejar dicho si arranco. `cron` falla en silencio dentro de un contenedor por
+# media docena de motivos —no esta instalado, el archivo de /etc/cron.d tiene el modo
+# o el dueño mal, el demonio muere al no encontrar syslog— y desde afuera todos se
+# ven igual: los trabajos simplemente no pasan. Sin este diagnostico se buscan las
+# causas de a una, adivinando.
+cron; CRON_RC=$?
+sleep 1
+{
+  echo "{"
+  echo "  \"arranque\": \"$(date -Iseconds)\","
+  echo "  \"cron_binario\": \"$(command -v cron || echo NO_INSTALADO)\","
+  echo "  \"cron_salida\": $CRON_RC,"
+  echo "  \"cron_vivo\": $(pgrep -c cron 2>/dev/null || echo 0),"
+  echo "  \"crond_archivo\": \"$(ls -l /etc/cron.d/inv-cron 2>&1 | tr -d '\"')\","
+  echo "  \"crond_lineas\": $(grep -c . /etc/cron.d/inv-cron 2>/dev/null || echo 0),"
+  echo "  \"conciliar_en_crond\": $(grep -c conciliar /etc/cron.d/inv-cron 2>/dev/null || echo 0),"
+  echo "  \"env_sh_vars\": $(grep -c '^export' /data/env.sh 2>/dev/null || echo 0)"
+  echo "}"
+} > /data/arranque.json 2>&1
 
 # AL ARRANCAR (cubre el hueco del deploy/reinicio, sin esperar los crons):
 #   1. rebuild  -> allowlist lista de una (no esperar 6h)

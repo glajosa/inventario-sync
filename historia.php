@@ -26,14 +26,20 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
 if (isset($_GET['latido'])) {
     $f = rtrim((string)(getenv('DATA_DIR') ?: '/data'), '/') . '/conciliar-latido.json';
     $j = json_decode((string)@file_get_contents($f), true);
+    $arr0 = json_decode((string)@file_get_contents(
+        rtrim((string)(getenv('DATA_DIR') ?: '/data'), '/') . '/arranque.json'), true);
     if (!is_array($j)) exit(json_encode(['ok' => false,
         'latido' => null,
-        'dice' => 'el cron NUNCA corrio desde que existe esta señal'], JSON_PRETTY_PRINT));
+        'dice' => 'el cron NUNCA corrio desde que existe esta señal',
+        'arranque' => $arr0], JSON_PRETTY_PRINT));
     $seg = time() - (int)strtotime((string)($j['ultima'] ?? ''));
+    $arr = json_decode((string)@file_get_contents(
+        rtrim((string)(getenv('DATA_DIR') ?: '/data'), '/') . '/arranque.json'), true);
     exit(json_encode(['ok' => true, 'latido' => $j, 'hace_seg' => $seg,
         'dice' => $seg < 420 ? 'el cron corre' : 'el cron NO corre desde hace '
                   . round($seg / 60) . ' min (deberia ser cada 5)',
-        'termino_bien' => isset($j['fin'])], JSON_PRETTY_PRINT));
+        'termino_bien' => isset($j['fin']),
+        'arranque' => $arr], JSON_PRETTY_PRINT));
 }
 
 if (isset($_GET['libreta'])) {
