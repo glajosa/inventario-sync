@@ -203,7 +203,11 @@ function hist_al_reservar(string $dealId, ?array $deal = null, bool $forzar = fa
         if (isset($vistas[$celda])) continue;
         $vistas[$celda] = true;
         $urls[] = ['cod' => $celda, 'url' => $r['url_abs'],
-                   'video' => basename((string)($r['video'] ?? ''))];
+                   // 🔴 El generador devuelve `video_X.mp4?t=1787946132` — la coletilla
+                   // anti-cache sirve para el navegador, NO es parte del nombre del
+                   // archivo. basename() no la quita, asi que el encolado buscaba un
+                   // archivo llamado "video_X.mp4?t=..." y daba 404. Paso con E2-18.
+                   'video' => hist_solo_archivo((string)($r['video'] ?? ''))];
     }
     if (!$urls) return ['ok' => false, 'motivo' => 'el generador no devolvio ninguna imagen'];
 
@@ -249,7 +253,17 @@ function hist_al_reservar(string $dealId, ?array $deal = null, bool $forzar = fa
  * El interruptor NO se consulta aca: lo aplica el generador (`auto=1`). Tener la
  * decision en dos sitios es tener dos verdades.
  */
+/** Deja solo el nombre del archivo: sin ruta y sin `?t=...`. */
+function hist_solo_archivo(string $v): string {
+    $v = explode('?', $v, 2)[0];
+    $v = explode('#', $v, 2)[0];
+    return basename(rawurldecode($v));
+}
+
 function hist_encolar(string $archivo, string $unidad): void {
+    // Red de seguridad: aunque el llamador ya lo limpie, aca se vuelve a limpiar.
+    // Es el unico punto por el que pasan todos los caminos hacia la cola.
+    $archivo = hist_solo_archivo($archivo);
     $base = rtrim((string)getenv('NORAL_URL'), '/');
     $tok  = (string)getenv('NORAL_SYNC_TOKEN');
     if ($base === '' || $tok === '') return;        // sin config, no se intenta
