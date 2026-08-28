@@ -267,3 +267,60 @@ function hist_publicar(string $archivo, string $unidad): void {
     else                        logline("HISTORIA $unidad fallo al publicar: http=$http "
                                       . (string)($j['error'] ?? substr($raw, 0, 120)));
 }
+
+/**
+ * Los CODIGOS de unidad que hoy tienen una reserva viva en CLIENTES(44).
+ *
+ * ── POR QUE ASI Y NO DE OTRA FORMA ────────────────────────────────────────
+ * Cuesta UNA llamada, y no crece con el numero de historias. La tentacion es
+ * preguntar por cada historia "¿sigue valida?": son 68 llamadas hoy y 300 en un mes,
+ * y el portal ya vive cerca de su techo. Aca se hace UNA pregunta —"¿que deals estan
+ * en RESERVA?"— pidiendo de paso el campo Inventario en el mismo `select`, y el mapa
+ * de id a codigo sale del catalogo compartido, que no cuesta nada.
+ *
+ * 🔴 El disparador NO puede ser el campo. Bitrix manda `desmarcar` y `marcar` seguidos
+ * al editar un deal, y reaccionar a eso se llevaba historias de reservas vivas. Lo que
+ * manda es la ETAPA del deal, que es lo que se pregunta aca.
+ *
+ * Devuelve null si la lectura FALLA: null significa "no se pudo saber", y quien llame
+ * tiene que frenar. Una lista vacia significaria "no hay ninguna reserva" y retiraria
+ * todas las historias del buzon.
+ */
+function hist_codigos_en_reserva(): ?array {
+    // CAMPO_NUEVO vive en campolib.php. No se duplica el id del campo aca: ya hay 8
+    // copias sueltas en el repo y cada una es una oportunidad de que se desincronicen.
+    // Depender de campolib no agrega nada: esta funcion ya necesita bx(), que esta ahi.
+    $ids = [];
+    $start = 0;
+    do {
+        $r = bx('crm.deal.list', [
+            'filter' => ['CATEGORY_ID' => HIST_CAT_CLIENTES, 'STAGE_ID' => HIST_ETAPA_RESERVA],
+            'select' => ['ID', CAMPO_NUEVO, 'PARENT_ID_1072'],
+            'order'  => ['ID' => 'DESC'],
+            'start'  => $start,
+        ]);
+        if (!($r['ok'] ?? false)) return null;          // no se pudo saber: frenar
+        foreach (($r['result'] ?? []) as $d) {
+            foreach (preg_split('/[,;\s]+/', (string)($d[CAMPO_NUEVO] ?? '')) as $x)
+                if (ctype_digit(trim($x)) && (int)$x > 0) $ids[(int)$x] = true;
+            $p = (int)($d['PARENT_ID_1072'] ?? 0);
+            if ($p > 0) $ids[$p] = true;
+        }
+        $start = (int)($r['next'] ?? 0);
+    } while ($start > 0 && count($ids) < 2000);
+
+    // id -> codigo con el catalogo compartido: CERO llamadas
+    $f = (getenv('DATA_DIR') ?: '/data') . '/selector_cache.json';
+    $j = json_decode((string)@file_get_contents($f), true);
+    if (!is_array($j) || empty($j['units'])) return null;   // sin catalogo tampoco se sabe
+
+    $cods = [];
+    foreach ($j['units'] as $u) {
+        $id = (int)($u['id'] ?? 0);
+        if ($id > 0 && isset($ids[$id])) {
+            $c = strtoupper(trim((string)($u['codigo'] ?? '')));
+            if ($c !== '') $cods[$c] = true;
+        }
+    }
+    return array_keys($cods);
+}

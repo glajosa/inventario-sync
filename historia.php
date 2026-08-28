@@ -43,6 +43,39 @@ if (isset($_GET['libreta'])) {
  * Se compara MOVED_TIME, que es cuando el deal ENTRO a la etapa -- DATE_MODIFY
  * cambia por cualquier edicion y traeria deals que entraron hace semanas.
  */
+/* Conciliar el buzon con la realidad: retira las historias de unidades que ya no
+   tienen reserva viva. Una llamada a Bitrix, y el cruce se hace en el generador.
+   `seco=1` dice que haria sin mover nada — asi se mira antes de confiar. */
+if (!empty($_GET['conciliar'])) {
+    $cods = hist_codigos_en_reserva();
+    // null = no se pudo saber. Con la lista vacia el generador retiraria TODO, asi
+    // que se frena aca y se dice por que.
+    if ($cods === null)
+        exit(json_encode(['ok' => false, 'error' => 'no se pudo leer el estado en Bitrix',
+                          'accion' => 'no se toco nada'], JSON_PRETTY_PRINT));
+
+    $base = rtrim((string)getenv('NORAL_URL'), '/');
+    $tok  = (string)getenv('NORAL_SYNC_TOKEN');
+    if ($base === '' || $tok === '')
+        exit(json_encode(['ok' => false, 'error' => 'falta NORAL_URL o NORAL_SYNC_TOKEN']));
+
+    $url = $base . '/conciliar.php';
+    $post = http_build_query(['token' => $tok, 'vivos' => implode(',', $cods)]
+                             + (!empty($_GET['seco']) ? ['seco' => 1] : []));
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $post,
+                            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 60,
+                            CURLOPT_CONNECTTIMEOUT => 8]);
+    $raw = (string)curl_exec($ch);
+    $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $j = json_decode($raw, true);
+    exit(json_encode(['ok' => $http === 200 && !empty($j['ok']),
+                      'codigos_en_reserva' => count($cods),
+                      'generador' => $j ?: substr($raw, 0, 300)],
+                     JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+}
+
 if (!empty($_GET['pendientes'])) {
     $TZ    = new DateTimeZone('America/Guayaquil');
     $dias  = max(0, min(30, (int)($_GET['dias'] ?? 0)));
