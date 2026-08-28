@@ -29,14 +29,22 @@ if (PHP_SAPI !== 'cli') { http_response_code(403); exit('solo cli'); }
    y se puede perder una tarde arreglando lo que no estaba roto.
    Se lee con historia.php?latido=1. Vive en /data, que es volumen: sobrevive al
    despliegue, asi que tambien dice hace cuanto que no corre. */
+$ruta   = rtrim((string)(getenv('DATA_DIR') ?: '/data'), '/') . '/conciliar-latido.json';
 $latido = ['ultima' => date('c'), 'sapi' => PHP_SAPI];
-@file_put_contents(rtrim((string)(getenv('DATA_DIR') ?: '/data'), '/') . '/conciliar-latido.json',
-                   json_encode($latido));
+@file_put_contents($ruta, json_encode($latido));
+
+/* 🔴 El sello de "termine" va en un register_shutdown_function y NO despues del
+   require: historia.php cierra con `exit`, asi que cualquier linea escrita despues
+   del require no se ejecuta NUNCA. Tal como estaba, el latido decia "murio en el
+   medio" siempre — un diagnostico que miente es peor que no tenerlo, porque manda
+   a buscar una falla que no existe. */
+register_shutdown_function(function () use ($ruta, $latido) {
+    $latido['fin'] = date('c');
+    $e = error_get_last();
+    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true))
+        $latido['murio'] = $e['message'];      // ahora "no termino" significa algo
+    @file_put_contents($ruta, json_encode($latido));
+});
 
 $_GET = ['token' => (string)getenv('OUTBOUND_TOKEN'), 'conciliar' => 1];
 require __DIR__ . '/historia.php';
-
-// se vuelve a escribir al terminar: si 'fin' falta, la corrida murio en el medio
-$latido['fin'] = date('c');
-@file_put_contents(rtrim((string)(getenv('DATA_DIR') ?: '/data'), '/') . '/conciliar-latido.json',
-                   json_encode($latido));
