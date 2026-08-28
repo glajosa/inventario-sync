@@ -23,35 +23,58 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
 /* ?latido=1 — ¿el cron esta vivo? Lo escribe conciliar-cron.php antes de trabajar.
    Sin esta señal, "el cron no corre" y "el cron corre y falla" se ven identicos
    desde afuera: en los dos casos no pasa nada. */
-/* ?tareas=1 — ¿corren las OTRAS cuatro tareas programadas?
-   No tienen señal propia, asi que su silencio se ve igual que "no habia nada que
-   hacer". Lo unico que hablan es el archivo que dejan: si la fecha del archivo es
-   mas vieja que su intervalo, la tarea no corrio. Es la misma pregunta que el
-   latido, contestada con la huella en vez de con un sello. */
+/* ?tareas=1 — ¿corren de verdad las tareas programadas?
+   ---------------------------------------------------------------------------
+   🔴 PRIMERA VERSION EQUIVOCADA, Y CASI DA UN "TODO BIEN" FALSO. Miraba la FECHA
+   del archivo que deja cada tarea. Pero `web.log`, `sync.log`, `allowlist.json` y
+   `selector_cache.json` los escribe TAMBIEN el camino web (campolib, field, hook,
+   app), asi que "reconcile corrio hace 0 minutos" era mi propia consulta tocando
+   el archivo. La huella era compartida: no probaba nada.
+
+   Ahora se lee el CONTENIDO del log del cron y se busca la FIRMA de cada tarea con
+   su hora. Eso si distingue quien escribio.
+
+   Ojo con lo que significa: una corrida tambien ocurre al ARRANCAR el contenedor
+   (el entrypoint dispara rebuild, reconcile y mapa48). Por eso se reporta el
+   intervalo entre corridas: si coincide con los despliegues y no con el horario
+   programado, el cron no esta corriendo aunque haya lineas. */
 if (isset($_GET['tareas'])) {
-    $D = rtrim((string)(getenv('DATA_DIR') ?: '/data'), '/');
-    $TAREAS = [
-        'reconcile   (cada 15 min)' => [$D . '/web.log',           15 * 60],
-        'warm-catalogo (cada 30 m)' => [$D . '/selector_cache.json', 30 * 60],
-        'rebuild       (cada 6 h)'  => [$D . '/allowlist.json',     6 * 3600],
-        'mapa48        (cada 6 h)'  => [$D . '/stages.json',        6 * 3600],
-        'conciliar    (cada 5 min)' => [$D . '/conciliar-latido.json',  5 * 60],
-    ];
-    $out = []; $mudas = 0;
-    foreach ($TAREAS as $nombre => [$f, $cada]) {
-        $t = @filemtime($f);
-        if ($t === false) { $out[$nombre] = ['archivo' => basename($f), 'estado' => 'NUNCA: el archivo no existe']; $mudas++; continue; }
-        $seg = time() - $t;
-        // 2.5x el intervalo antes de acusar: un pico de carga puede atrasar una vuelta
-        $viva = $seg < $cada * 2.5;
-        if (!$viva) $mudas++;
-        $out[$nombre] = ['archivo' => basename($f), 'hace_min' => (int)round($seg / 60),
-                         'estado' => $viva ? 'corre' : 'MUDA hace ' . (int)round($seg / 3600) . ' h'];
+    $D   = rtrim((string)(getenv('DATA_DIR') ?: '/data'), '/');
+    $log = @file($D . '/sync.log', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    if (!$log) exit(json_encode(['ok' => false,
+        'error' => 'no se pudo leer sync.log', 'accion' => 'no se concluye nada'],
+        JSON_PRETTY_PRINT));
+
+    $FIRMAS = ['reconcile (cada 15 min)' => ['RECONCILE ok', 15],
+               'rebuild     (cada 6 h)'  => ['REBUILD ok',  360]];
+    $out = [];
+    foreach ($FIRMAS as $nombre => [$firma, $min]) {
+        $horas = [];
+        foreach ($log as $l)
+            if (strpos($l, $firma) !== false && preg_match('/^(\S+Z)/', $l, $m))
+                $horas[] = strtotime($m[1]);
+        if (!$horas) { $out[$nombre] = ['estado' => 'NUNCA aparece en el log']; continue; }
+        sort($horas);
+        $ult = end($horas);
+        // el hueco MAS GRANDE entre corridas: es lo que delata al cron dormido
+        $hueco = 0;
+        for ($i = 1, $n = count($horas); $i < $n; $i++)
+            $hueco = max($hueco, $horas[$i] - $horas[$i - 1]);
+        $out[$nombre] = [
+            'corridas_en_el_log' => count($horas),
+            'ultima'             => gmdate('c', $ult),
+            'hace_min'           => (int)round((time() - $ult) / 60),
+            'hueco_mayor_min'    => (int)round($hueco / 60),
+            'deberia_ser_cada'   => $min . ' min',
+            'veredicto'          => $hueco > $min * 60 * 2.5
+                ? 'EL CRON NO CORRE: hubo un hueco de ' . (int)round($hueco / 3600)
+                  . ' h, muy por encima de su intervalo'
+                : 'los intervalos cuadran con lo programado',
+        ];
     }
-    exit(json_encode(['ok' => $mudas === 0, 'mudas' => $mudas, 'tareas' => $out,
-        'nota' => 'la fecha del archivo es la unica huella: no prueba que la tarea '
-                . 'hiciera algo, solo que ESCRIBIO. Una tarea que corre y no tiene '
-                . 'nada que escribir puede verse muda.'],
+    exit(json_encode(['ok' => true, 'tareas' => $out,
+        'nota' => 'las corridas al arrancar el contenedor tambien aparecen aca; por '
+                . 'eso manda el HUECO MAYOR y no la ultima hora.'],
         JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 }
 
