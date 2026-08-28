@@ -35,7 +35,7 @@ RUN test ! -e /var/www/html/.git \
 #    propósito: el evento ONCRMDEALADD la mantiene fresca en vivo; esto solo limpia
 #    deals borrados. Espaciado para NO saturar el API de Bitrix.
 RUN apt-get update && apt-get install -y --no-install-recommends cron && rm -rf /var/lib/apt/lists/* \
- && printf '%s\n%s\n%s\n%s\n' \
+ && printf '%s\n%s\n%s\n%s\n%s\n' \
     '*/15 * * * * root . /data/env.sh; php /var/www/html/reconcile.php >> /data/cron.log 2>&1' \
     '0 */6 * * * root . /data/env.sh; php /var/www/html/rebuild.php >> /data/cron.log 2>&1' \
     '*/30 * * * * root . /data/env.sh; php /var/www/html/warm-catalogo.php >> /data/cron.log 2>&1' \
