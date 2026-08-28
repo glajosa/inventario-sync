@@ -29,14 +29,14 @@ sleep 1
   echo "  \"arranque\": \"$(date -Iseconds)\","
   echo "  \"cron_binario\": \"$(command -v cron || echo NO_INSTALADO)\","
   echo "  \"cron_salida\": $CRON_RC,"
-  echo "  \"cron_vivo\": $(pgrep -c cron 2>/dev/null || echo 0),"
+  echo "  \"cron_vivo\": $( { pgrep -c cron 2>/dev/null || echo 0; } | head -1 ),"
   echo "  \"crond_archivo\": \"$(ls -l /etc/cron.d/inv-cron 2>&1 | tr -d '\"')\","
-  echo "  \"crond_lineas\": $(grep -c . /etc/cron.d/inv-cron 2>/dev/null || echo 0),"
-  echo "  \"conciliar_en_crond\": $(grep -c conciliar /etc/cron.d/inv-cron 2>/dev/null || echo 0),"
-  echo "  \"env_sh_vars\": $(grep -c '^export' /data/env.sh 2>/dev/null || echo 0),"
+  echo "  \"crond_lineas\": $( { grep -c . /etc/cron.d/inv-cron 2>/dev/null || echo 0; } | head -1 ),"
+  echo "  \"conciliar_en_crond\": $( { grep -c conciliar /etc/cron.d/inv-cron 2>/dev/null || echo 0; } | head -1 ),"
+  echo "  \"env_sh_vars\": $( { grep -c '^export' /data/env.sh 2>/dev/null || echo 0; } | head -1 ),"
   # Si esto NO es 0, el sed del Dockerfile no corrio y cron sigue rechazando los
   # trabajos: es la comprobacion de que la causa era esa y no otra.
-  echo "  \"pam_loginuid_presente\": $(grep -c pam_loginuid /etc/pam.d/cron 2>/dev/null || echo 0)"
+  echo "  \"pam_loginuid_presente\": $( { grep -c pam_loginuid /etc/pam.d/cron 2>/dev/null || echo 0; } | head -1 )"
   echo "}"
 } > /data/arranque.json 2>&1
 
