@@ -23,6 +23,38 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
 /* ?latido=1 — ¿el cron esta vivo? Lo escribe conciliar-cron.php antes de trabajar.
    Sin esta señal, "el cron no corre" y "el cron corre y falla" se ven identicos
    desde afuera: en los dos casos no pasa nada. */
+/* ?tareas=1 — ¿corren las OTRAS cuatro tareas programadas?
+   No tienen señal propia, asi que su silencio se ve igual que "no habia nada que
+   hacer". Lo unico que hablan es el archivo que dejan: si la fecha del archivo es
+   mas vieja que su intervalo, la tarea no corrio. Es la misma pregunta que el
+   latido, contestada con la huella en vez de con un sello. */
+if (isset($_GET['tareas'])) {
+    $D = rtrim((string)(getenv('DATA_DIR') ?: '/data'), '/');
+    $TAREAS = [
+        'reconcile   (cada 15 min)' => [$D . '/web.log',           15 * 60],
+        'warm-catalogo (cada 30 m)' => [$D . '/selector_cache.json', 30 * 60],
+        'rebuild       (cada 6 h)'  => [$D . '/allowlist.json',     6 * 3600],
+        'mapa48        (cada 6 h)'  => [$D . '/stages.json',        6 * 3600],
+        'conciliar    (cada 5 min)' => [$D . '/conciliar-latido.json',  5 * 60],
+    ];
+    $out = []; $mudas = 0;
+    foreach ($TAREAS as $nombre => [$f, $cada]) {
+        $t = @filemtime($f);
+        if ($t === false) { $out[$nombre] = ['archivo' => basename($f), 'estado' => 'NUNCA: el archivo no existe']; $mudas++; continue; }
+        $seg = time() - $t;
+        // 2.5x el intervalo antes de acusar: un pico de carga puede atrasar una vuelta
+        $viva = $seg < $cada * 2.5;
+        if (!$viva) $mudas++;
+        $out[$nombre] = ['archivo' => basename($f), 'hace_min' => (int)round($seg / 60),
+                         'estado' => $viva ? 'corre' : 'MUDA hace ' . (int)round($seg / 3600) . ' h'];
+    }
+    exit(json_encode(['ok' => $mudas === 0, 'mudas' => $mudas, 'tareas' => $out,
+        'nota' => 'la fecha del archivo es la unica huella: no prueba que la tarea '
+                . 'hiciera algo, solo que ESCRIBIO. Una tarea que corre y no tiene '
+                . 'nada que escribir puede verse muda.'],
+        JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+}
+
 if (isset($_GET['latido'])) {
     $f = rtrim((string)(getenv('DATA_DIR') ?: '/data'), '/') . '/conciliar-latido.json';
     $j = json_decode((string)@file_get_contents($f), true);
