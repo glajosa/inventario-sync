@@ -3,10 +3,16 @@ set -e
 
 # El cron NO hereda las env vars del contenedor. Las volcamos a un archivo
 # que los jobs de cron cargan antes de correr.
+# 🔴 Toda variable que necesite un job de cron tiene que estar ACA. Apache si hereda
+# el entorno del contenedor, asi que una ruta probada por HTTP funciona igual aunque
+# falte: el fallo aparece solo por cron, y en silencio. Paso exactamente eso con
+# conciliar-cron.php — sin NORAL_URL salia por un `exit` y no hacia nada cada 5 min.
 cat > /data/env.sh <<EOF
 export DATA_DIR="/data"
 export BITRIX_WEBHOOK="${BITRIX_WEBHOOK}"
 export OUTBOUND_TOKEN="${OUTBOUND_TOKEN}"
+export NORAL_URL="${NORAL_URL}"
+export NORAL_SYNC_TOKEN="${NORAL_SYNC_TOKEN}"
 EOF
 chmod 600 /data/env.sh
 
