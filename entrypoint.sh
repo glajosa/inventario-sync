@@ -54,4 +54,26 @@ sleep 1
   php /var/www/html/mapa48.php    >> /data/cron.log 2>&1
 ) &
 
+# ── EL RELOJ PROPIO ─────────────────────────────────────────────────────────
+# El portero de la casa (cron) esta despierto y la nota esta bien escrita, pero no
+# arranca: medido, 12 minutos con tres turnos vencidos y cero papelitos. Ya se
+# descartaron el archivo, los permisos, las variables de entorno y el tramite de
+# fichaje (PAM). Antes de seguir adivinando causas de a una, se pone un despertador
+# propio: un bucle que hace la tarea cada 5 minutos sin depender de nadie.
+#
+# 🔴 Es ADITIVO: no se toca cron ni las otras cuatro tareas. Si cron reviviera, la
+# tarea correria dos veces — y eso ya es seguro: conciliar.php tiene su candado y
+# "ya se envio" impide que una historia salga repetida. Correr de mas no rompe.
+#
+# `|| true` para que un fallo de una vuelta no mate el contenedor (arriba hay
+# `set -e`), y `sleep` DESPUES del trabajo para no depender de cuanto tarde.
+(
+  sleep 45                       # dejar que apache y el arranque terminen
+  while true; do
+    . /data/env.sh 2>/dev/null || true
+    php /var/www/html/conciliar-cron.php >> /data/cron.log 2>&1 || true
+    sleep 300
+  done
+) &
+
 exec "$@"
