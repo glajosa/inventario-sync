@@ -212,11 +212,13 @@ function hist_al_reservar(string $dealId, ?array $deal = null, bool $forzar = fa
        la llave de Vista Social vive alla y no tiene por que viajar; la lista blanca
        del perfil tambien; y el interruptor lo maneja el equipo desde el buzon, que es
        la misma pantalla donde ve las historias.
-       `auto=1` hace que el generador respete ese interruptor: si esta apagado
-       responde `skip` y no pasa nada. Aca no se decide nada de eso. */
+       🔴 Y NO se publica en el acto: se ENCOLA. Una reserva se cae en minutos —alguien
+       ata la unidad equivocada y la suelta— y una historia publicada ya no se baja
+       (Instagram no deja borrarlas por nuestra via; caducan solas a las 24 h). Ver
+       colalib.php en el generador. */
     foreach ($urls as $u) {
         if (($u['video'] ?? '') === '') continue;   // sin video no hay historia que subir
-        hist_publicar($u['video'], $u['cod']);
+        hist_encolar($u['video'], $u['cod']);
     }
 
     // A quien avisar: al dueño del aviso configurado, no al responsable del deal —
@@ -247,13 +249,14 @@ function hist_al_reservar(string $dealId, ?array $deal = null, bool $forzar = fa
  * El interruptor NO se consulta aca: lo aplica el generador (`auto=1`). Tener la
  * decision en dos sitios es tener dos verdades.
  */
-function hist_publicar(string $archivo, string $unidad): void {
+function hist_encolar(string $archivo, string $unidad): void {
     $base = rtrim((string)getenv('NORAL_URL'), '/');
     $tok  = (string)getenv('NORAL_SYNC_TOKEN');
     if ($base === '' || $tok === '') return;        // sin config, no se intenta
 
-    $url = $base . '/publicar.php?auto=1&modo=publicar'
-         . '&a=' . rawurlencode($archivo) . '&token=' . rawurlencode($tok);
+    $url = $base . '/publicar.php?encolar=1'
+         . '&a=' . rawurlencode($archivo) . '&u=' . rawurlencode($unidad)
+         . '&token=' . rawurlencode($tok);
     $ch = curl_init($url);
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20,
                             CURLOPT_CONNECTTIMEOUT => 5]);
@@ -262,10 +265,11 @@ function hist_publicar(string $archivo, string $unidad): void {
     curl_close($ch);
 
     $j = json_decode($raw, true);
-    if (isset($j['skip']))      logline("HISTORIA $unidad no se publico: {$j['skip']}");
-    elseif (!empty($j['ok']))   logline("HISTORIA $unidad publicada en {$j['perfil']} ({$j['modo']})");
-    else                        logline("HISTORIA $unidad fallo al publicar: http=$http "
-                                      . (string)($j['error'] ?? substr($raw, 0, 120)));
+    if (!empty($j['ok']))  logline("HISTORIA $unidad en cola, sale en "
+                                 . (int)(($j['espera_seg'] ?? 300) / 60) . " min"
+                                 . (!empty($j['ya_estaba']) ? ' (ya estaba encolada)' : ''));
+    else                   logline("HISTORIA $unidad no se pudo encolar: http=$http "
+                                 . (string)($j['error'] ?? substr($raw, 0, 120)));
 }
 
 /**

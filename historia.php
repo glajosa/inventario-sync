@@ -64,8 +64,8 @@ if (!empty($_GET['conciliar'])) {
                              + (!empty($_GET['seco']) ? ['seco' => 1] : []));
     $ch = curl_init($url);
     curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $post,
-                            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 60,
-                            CURLOPT_CONNECTTIMEOUT => 8]);
+                            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 180,
+                            CURLOPT_CONNECTTIMEOUT => 8]);   // sube hasta 5 videos
     $raw = (string)curl_exec($ch);
     $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
