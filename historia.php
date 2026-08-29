@@ -163,12 +163,19 @@ if (isset($_GET['libreta'])) {
    tienen reserva viva. Una llamada a Bitrix, y el cruce se hace en el generador.
    `seco=1` dice que haria sin mover nada — asi se mira antes de confiar. */
 if (!empty($_GET['conciliar'])) {
-    $cods = hist_codigos_en_reserva();
-    // null = no se pudo saber. Con la lista vacia el generador retiraria TODO, asi
-    // que se frena aca y se dice por que.
-    if ($cods === null)
+    /* 🔴 Se pregunta quien se LIBERO, no quien esta en RESERVA. Retirar por
+       ausencia se llevaba historias validas: un deal que AVANZA a elaboracion de
+       promesa deja de estar en RESERVA pero la unidad sigue vendida. Paso con
+       B-1-10. Ahora se retira por un hecho -esta en una etapa de caida-, no por
+       una falta de dato. */
+    $libres = hist_codigos_liberados();
+    if ($libres === null)
         exit(json_encode(['ok' => false, 'error' => 'no se pudo leer el estado en Bitrix',
                           'accion' => 'no se toco nada'], JSON_PRETTY_PRINT));
+    // Los vivos se siguen mandando: la COLA los usa para no publicar una reserva
+    // que se cayo dentro de la ventana de espera.
+    $cods = hist_codigos_en_reserva();
+    if ($cods === null) $cods = [];
 
     $base = rtrim((string)getenv('NORAL_URL'), '/');
     $tok  = (string)getenv('NORAL_SYNC_TOKEN');
@@ -176,7 +183,9 @@ if (!empty($_GET['conciliar'])) {
         exit(json_encode(['ok' => false, 'error' => 'falta NORAL_URL o NORAL_SYNC_TOKEN']));
 
     $url = $base . '/conciliar.php';
-    $post = http_build_query(['token' => $tok, 'vivos' => implode(',', $cods)]
+    $post = http_build_query(['token' => $tok,
+                              'vivos'     => implode(',', $cods),
+                              'liberados' => implode(',', $libres)]
                              + (!empty($_GET['seco']) ? ['seco' => 1] : []));
     $ch = curl_init($url);
     curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $post,
@@ -187,6 +196,7 @@ if (!empty($_GET['conciliar'])) {
     curl_close($ch);
     $j = json_decode($raw, true);
     exit(json_encode(['ok' => $http === 200 && !empty($j['ok']),
+                      'codigos_liberados'  => count($libres),
                       'codigos_en_reserva' => count($cods),
                       'generador' => $j ?: substr($raw, 0, 300)],
                      JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));

@@ -20,6 +20,19 @@
 declare(strict_types=1);
 
 const HIST_ETAPA_RESERVA = 'C44:NEW';        // en el pipeline 44, RESERVA
+
+/* Las DOS unicas etapas del 44 que significan "la unidad se libero". Leidas del
+   portal el 28-ago-2026 con historia.php?etapas=1, no supuestas:
+     C44:NEW RESERVA · UC_Z3GY5H ELABORACION PROMESA · UC_4R587H LISTO PARA FIRMA
+     UC_2CE2UE PROMESA FIRMADA · UC_N637MD REVENTAS-RESERVA · PREPARATION CANJE
+     WON CIERRE DE PROMESA · UC_W4OOQY REVENTAS-CESIONES   -> todas SIGUEN vendidas
+     LOSE RESERVAS CAIDAS · APOLOGY FIRMADOS-CAIDOS        -> se libero
+
+   🔴 Se enumeran las CAIDAS y no las vivas a proposito. Si mañana alguien agrega
+   una etapa al pipeline, con esta lista la historia SE QUEDA (a lo sumo sobra una);
+   con la lista al reves se retiraria sola una historia valida. Ante lo desconocido,
+   el lado que no destruye. */
+const HIST_ETAPAS_LIBERADA = ['C44:LOSE', 'C44:APOLOGY'];
 const HIST_CAT_CLIENTES  = 44;
 
 /** Libreta de lo ya generado: deal => huella de sus unidades. */
@@ -304,6 +317,65 @@ function hist_encolar(string $archivo, string $unidad): void {
  * tiene que frenar. Una lista vacia significaria "no hay ninguna reserva" y retiraria
  * todas las historias del buzon.
  */
+/**
+ * Los codigos de unidad que se LIBERARON hace poco.
+ * ---------------------------------------------------------------------------
+ * 🔴 POR QUE ESTA Y NO LA DE "EN RESERVA". Antes se retiraba una historia por
+ * AUSENCIA: si la unidad no aparecia en la lista de RESERVA, fuera. Pero la
+ * ausencia tiene causas inocentes — el deal AVANZO a elaboracion de promesa (paso
+ * con B-1-10 y su historia desaparecio aunque la unidad sigue vendida), la lectura
+ * fallo, o la consulta se quedo corta. Ahora se retira solo por PRESENCIA en una
+ * etapa de caida, que es un hecho, no una falta de dato.
+ *
+ * Solo se miran las movidas en los ultimos $dias: una liberada hace un mes ya se
+ * retiro en su momento, y pedir el historico entero costaria decenas de paginas
+ * cada 5 minutos. Las etapas de caida acumulan cientos de deals viejos.
+ *
+ * 🔴 `>MOVED_TIME` y no `>=`: el `=` parte el par en el POST y Bitrix devuelve TODO
+ * ignorando el filtro. Ya costo caro antes.
+ *
+ * Devuelve null si NO se pudo saber. Con null quien llame no debe tocar nada: una
+ * lista vacia significa "no se libero ninguna", que es lo normal.
+ */
+function hist_codigos_liberados(int $dias = 7): ?array {
+    $desde = (new DateTime("-{$dias} days", new DateTimeZone('UTC')))->format('c');
+    $ids = []; $start = 0;
+    do {
+        $r = bx('crm.deal.list', [
+            'filter' => ['CATEGORY_ID' => HIST_CAT_CLIENTES,
+                         'STAGE_ID'    => HIST_ETAPAS_LIBERADA,
+                         '>MOVED_TIME' => $desde],
+            'select' => ['ID', CAMPO_NUEVO, 'PARENT_ID_1072'],
+            'order'  => ['ID' => 'DESC'],
+            'start'  => $start,
+        ]);
+        if (!($r['ok'] ?? false)) return null;          // no se pudo saber: frenar
+        foreach (($r['result'] ?? []) as $d) {
+            foreach (preg_split('/[,;\s]+/', (string)($d[CAMPO_NUEVO] ?? '')) as $x)
+                if (ctype_digit(trim($x)) && (int)$x > 0) $ids[(int)$x] = true;
+            $p = (int)($d['PARENT_ID_1072'] ?? 0);
+            if ($p > 0) $ids[$p] = true;
+        }
+        $start = (int)($r['next'] ?? 0);
+    } while ($start > 0 && count($ids) < 2000);
+
+    if (!$ids) return [];        // ninguna liberada: es un resultado valido
+
+    $f = (getenv('DATA_DIR') ?: '/data') . '/selector_cache.json';
+    $j = json_decode((string)@file_get_contents($f), true);
+    if (!is_array($j) || empty($j['units'])) return null;   // sin catalogo no se sabe
+
+    $cods = [];
+    foreach ($j['units'] as $u) {
+        $id = (int)($u['id'] ?? 0);
+        if ($id > 0 && isset($ids[$id])) {
+            $c = strtoupper(trim((string)($u['codigo'] ?? '')));
+            if ($c !== '') $cods[$c] = true;
+        }
+    }
+    return array_keys($cods);
+}
+
 function hist_codigos_en_reserva(): ?array {
     // CAMPO_NUEVO vive en campolib.php. No se duplica el id del campo aca: ya hay 8
     // copias sueltas en el repo y cada una es una oportunidad de que se desincronicen.
