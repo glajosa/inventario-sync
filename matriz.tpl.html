@@ -311,6 +311,69 @@
    .simo .sv.up{color:#4ddba4}
    .simo .sv.dn{color:#ff8b76}
  }
+
+/* ══ PASADA DE INTERFAZ ══════════════════════════════════════════════════════
+   Todo esto es CSS y va al FINAL del bloque: no puede partir ningun selector ni
+   tocar el motor. No mueve nada de sitio ni cambia un solo valor — cambia el peso
+   visual, la respuesta al mouse y el foco de teclado.
+   Los nombres de clase se sacaron del archivo, no se supusieron. */
+
+/* ── LOS TRES PANELES ────────────────────────────────────────────────────────
+   DISPONIBLES / RESERVADAS-VENDIDAS / FUERA DE MATRIZ compartian el tamaño con su
+   propio rotulo. El numero es lo que se viene a mirar. */
+ .iv{font-size:26px;font-weight:600;letter-spacing:-.03em;line-height:1.05;
+     font-variant-numeric:tabular-nums}
+ .il{font-size:10px;text-transform:uppercase;letter-spacing:.08em;opacity:.85}
+ .ii{transition:border-color .18s cubic-bezier(.2,.7,.3,1),transform .18s cubic-bezier(.2,.7,.3,1)}
+ .ii:hover{border-color:var(--bds);transform:translateY(-1px)}
+
+/* ── LA FICHA DEL EDIFICIO ───────────────────────────────────────────────────
+   "33 de 125" iba en 14px, mas chico que su etiqueta en algunos casos. */
+ .dv{font-size:16px;font-weight:600;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+ .dl{letter-spacing:.07em}
+
+/* ── PESTAÑAS DE EDIFICIO ────────────────────────────────────────────────────
+   Cambiar de edificio es lo que mas se hace en esta pantalla: tiene que
+   responder. Sube al pasar el mouse y la activa se asienta. */
+ .btab{transition:transform .16s cubic-bezier(.2,.7,.3,1),
+                  background .16s,border-color .16s,box-shadow .16s}
+ .btab:hover{transform:translateY(-2px)}
+ .btab.on{transform:none;box-shadow:0 2px 10px -4px rgba(0,0,0,.45)}
+ .btab:active{transform:translateY(0)}
+
+/* ── LAS CELDAS ──────────────────────────────────────────────────────────────
+   🔴 NO se mueven ni crecen: la grilla es densa a proposito y quien la usa esta
+   comparando precios entre pisos. Solo un aro nitido para no perder cual se esta
+   mirando cuando se recorre con el mouse. */
+ .unit{transition:box-shadow .12s cubic-bezier(.2,.7,.3,1),filter .12s}
+ .unit:hover{box-shadow:0 0 0 2px var(--pri);position:relative;z-index:5;filter:brightness(1.06)}
+
+/* ── FILTROS ─────────────────────────────────────────────────────────────── */
+ .cfilter > *{transition:transform .14s cubic-bezier(.2,.7,.3,1),filter .14s}
+ .cfilter > *:hover{transform:translateY(-1px);filter:brightness(1.08)}
+
+/* ── TECLADO ─────────────────────────────────────────────────────────────────
+   No habia foco visible: quien navega con Tab quedaba a ciegas en una pantalla
+   que aplica precios. */
+ .btab:focus-visible,.simbtn:focus-visible,.unit:focus-visible,
+ .cfilter > *:focus-visible,.legwrap summary:focus-visible{
+   outline:2px solid var(--pri);outline-offset:2px;border-radius:6px}
+ select:focus-visible,input:focus-visible{outline:2px solid var(--pri);outline-offset:1px}
+
+/* ── CAMBIO DE EDIFICIO ──────────────────────────────────────────────────────
+   Al elegir otro edificio la grilla se repinta de golpe y no se nota que cambio.
+   Una entrada de 180ms lo dice sin hacer esperar a nadie. */
+ @keyframes pisosEntran{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+ .floors .frow{animation:pisosEntran .18s cubic-bezier(.2,.7,.3,1) both}
+ .floors .frow:nth-child(2){animation-delay:.03s}
+ .floors .frow:nth-child(3){animation-delay:.06s}
+ .floors .frow:nth-child(4){animation-delay:.09s}
+ .floors .frow:nth-child(n+5){animation-delay:.12s}
+
+ @media(prefers-reduced-motion:reduce){
+   .btab,.unit,.cfilter > *,.floors .frow,.ii{animation:none!important;transition:none!important;
+                                              transform:none!important}
+ }
 </style>
 </head>
 <body>
