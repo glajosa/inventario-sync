@@ -38,6 +38,25 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
    (el entrypoint dispara rebuild, reconcile y mapa48). Por eso se reporta el
    intervalo entre corridas: si coincide con los despliegues y no con el horario
    programado, el cron no esta corriendo aunque haya lineas. */
+/* ?etapas=1 — las etapas del pipeline CLIENTES(44), en orden.
+   Solo lectura. Hace falta para decidir cuales significan "la unidad SIGUE vendida":
+   hoy solo se mira RESERVA, y un deal que AVANZA a promesa deja de contar aunque la
+   unidad siga vendida — con eso se retiraba su historia. */
+if (isset($_GET['etapas'])) {
+    $r = bx('crm.status.list', ['filter' => ['ENTITY_ID' => 'DEAL_STAGE_' . HIST_CAT_CLIENTES],
+                                'order'  => ['SORT' => 'ASC']]);
+    if (!($r['ok'] ?? false))
+        exit(json_encode(['ok' => false, 'error' => 'no se pudo leer las etapas'], JSON_PRETTY_PRINT));
+    $out = [];
+    foreach (($r['result'] ?? []) as $st)
+        $out[] = ['id' => $st['STATUS_ID'] ?? '', 'nombre' => $st['NAME'] ?? '',
+                  'orden' => (int)($st['SORT'] ?? 0),
+                  'es_la_que_miro_hoy' => ($st['STATUS_ID'] ?? '') === HIST_ETAPA_RESERVA];
+    exit(json_encode(['ok' => true, 'pipeline' => HIST_CAT_CLIENTES,
+                      'etapa_actual' => HIST_ETAPA_RESERVA, 'etapas' => $out],
+                     JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+}
+
 if (isset($_GET['tareas'])) {
     $D   = rtrim((string)(getenv('DATA_DIR') ?: '/data'), '/');
     $log = @file($D . '/sync.log', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
