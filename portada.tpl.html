@@ -1,0 +1,298 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GALJOSA — Sistemas de precios</title>
+<!--
+  portada.tpl.html — la portada de "Precios del proyecto".
+  ---------------------------------------------------------------------------
+  Se pinta desde un unico objeto DATA que arma preciomadre.php, igual que el
+  explorador con matriz.tpl.html.
+
+  🔴 POR QUE ES UN ARCHIVO APARTE. Antes esta pantalla se construia concatenando
+  HTML dentro de cadenas PHP. Editarla significaba pelear con comillas anidadas, y
+  eso rompio el archivo dos veces seguidas — en una pantalla que APLICA PRECIOS en
+  Bitrix. Aca el HTML es HTML: no hay nada que escapar y no se puede romper el PHP
+  tocando la vista.
+
+  Esta plantilla NO calcula ni escribe nada. Solo muestra.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── PALETA ────────────────────────────────────────────────────────────────
+   La misma del resto del producto. Se retira el azul #4ea1ff que quedaba suelto
+   aca y no coincidia con ninguna otra pantalla. */
+:root{
+  --bg:#0f1113; --sf:#1c1e20; --sf2:#23262a; --sf3:#2a2e32;
+  --bd:#131517; --bd2:#33383c;
+  --t1:#f7f7f8; --t2:#898a8b; --t3:#6a6c6e;
+  --ac:#d4f531; --ac-t:#101401;
+  --ac-10:rgba(212,245,49,.10); --ac-24:rgba(212,245,49,.24);
+  --poco:#e0a83a; --cero:#ce4b3c; --ok:#5fd08a;
+  --r:14px; --r2:9px; --ease:cubic-bezier(.2,.7,.3,1);
+}
+@media(prefers-color-scheme:light){
+  :root{--bg:#ebedea; --sf:#fff; --sf2:#f5f6f3; --sf3:#eceee9;
+        --bd:#dcdfd8; --bd2:#c6cbc1; --t1:#101413; --t2:#5c625d; --t3:#7b817c;
+        --ac:#6f9412; --ac-t:#fff; --ac-10:rgba(111,148,18,.10); --ac-24:rgba(111,148,18,.22);
+        --poco:#8a6100; --cero:#b3402a; --ok:#1a7f37;
+        --sh:0 1px 2px rgba(16,24,40,.04),0 6px 20px rgba(16,24,40,.06)}
+  .pc{box-shadow:var(--sh)}
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{overflow-x:clip}
+body{background:var(--bg);color:var(--t1);margin:0;letter-spacing:-.011em;
+     font:16px/1.55 Inter,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+[hidden]{display:none!important}
+.w{max-width:1240px;margin:0 auto;padding:40px 24px 90px}
+
+/* ── CABECERA ────────────────────────────────────────────────────────────── */
+h1{font-size:30px;margin:0 0 6px;letter-spacing:-.03em;font-weight:600;overflow-wrap:anywhere}
+.sb{color:var(--t2);margin:0 0 10px;font-size:14.5px;max-width:78ch;line-height:1.6}
+.sb b{color:var(--t1);font-weight:500}
+/* La explicacion de las tres columnas iba repetida bajo CADA proyecto: 21 bloques
+   del mismo parrafo. Va una vez, plegada, y las tarjetas quedan con lo suyo. */
+.ayuda{margin:0 0 26px;font-size:13.5px;color:var(--t2)}
+.ayuda summary{cursor:pointer;color:var(--t3);list-style:none;width:max-content;
+  text-decoration:underline;text-decoration-color:var(--bd2);text-underline-offset:3px}
+.ayuda summary::-webkit-details-marker{display:none}
+.ayuda summary:hover{color:var(--ac);text-decoration-color:var(--ac)}
+.ayuda dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:12px 0 0;
+  padding:14px 16px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r2)}
+.ayuda dt{color:var(--t1);font-weight:600;white-space:nowrap}
+.ayuda dd{margin:0;color:var(--t2);line-height:1.55}
+
+/* ── TARJETA DE PROYECTO ─────────────────────────────────────────────────── */
+.pc{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);
+    overflow:hidden;margin-bottom:18px;position:relative;
+    animation:entra .5s var(--ease) both;animation-delay:calc(var(--i,0) * 70ms)}
+@keyframes entra{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+/* El brillo sigue al cursor. Es lo que hace que la tarjeta se sienta viva sin
+   agregarle un solo elemento a la pantalla. */
+.pc::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:0;
+  transition:opacity .3s var(--ease);z-index:0;
+  background:radial-gradient(520px circle at var(--mx,50%) var(--my,0%),
+             var(--ac-10),transparent 60%)}
+.pc:hover::before{opacity:1}
+.pc>*{position:relative;z-index:1}
+
+.ph{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 22px 16px}
+.bdg{font-size:11px;font-weight:700;letter-spacing:.09em;padding:5px 11px;border-radius:6px;
+     color:#fff;background:var(--c,#555);white-space:nowrap}
+/* El numero manda: es lo que se viene a mirar. Sube contando al cargar. */
+.cifra{display:flex;align-items:baseline;gap:8px}
+.cifra b{font-size:30px;font-weight:600;letter-spacing:-.04em;line-height:1;
+         font-variant-numeric:tabular-nums;color:var(--t1)}
+.cifra.poco b{color:var(--poco)} .cifra.cero b{color:var(--cero)}
+.cifra i{font-style:normal;font-size:12.5px;color:var(--t3)}
+.meta{color:var(--t3);font-size:12.5px;margin-left:auto}
+/* Una sola barra por proyecto, fina: cuanto se lleva vendido */
+.cap{flex:1 1 160px;min-width:120px;height:4px;border-radius:999px;background:var(--sf3);overflow:hidden}
+.cap span{display:block;height:100%;border-radius:999px;background:var(--ac);
+  width:0;transition:width 1.1s var(--ease)}
+
+/* ── LAS BARRAS POR EDIFICIO ──────────────────────────────────────────────────
+   Esto es el corazon de la pantalla. Cada columna es UN EDIFICIO y su altura es
+   el porcentaje disponible, sacado del mismo catalogo que ya se leyo. De un golpe
+   se ve cual se esta agotando y cual recien arranca — algo que la lista de numeros
+   no dejaba ver. Se inclinan levemente hacia el cursor: se siente un objeto, no
+   una imagen. */
+.edb{display:flex;align-items:flex-end;gap:5px;padding:4px 22px 18px;min-height:96px;
+     perspective:800px}
+.eb{flex:1 1 0;min-width:14px;max-width:56px;display:flex;flex-direction:column;
+    align-items:center;gap:6px;cursor:default;
+    transform-style:preserve-3d;transition:transform .25s var(--ease)}
+.eb i{display:block;width:100%;height:var(--h,10%);min-height:3px;border-radius:5px 5px 2px 2px;
+      background:linear-gradient(to top,var(--ac-24),var(--ac));
+      transform-origin:bottom;transform:scaleY(0);
+      transition:transform .8s var(--ease),filter .2s var(--ease),background .2s var(--ease);
+      transition-delay:calc(var(--j,0) * 45ms)}
+.edb.lista .eb i{transform:scaleY(1)}
+.eb.poco i{background:linear-gradient(to top,rgba(224,168,58,.28),var(--poco))}
+.eb.cero i{background:linear-gradient(to top,rgba(206,75,60,.28),var(--cero))}
+.eb em{font-style:normal;font-size:10.5px;font-weight:600;color:var(--t3);letter-spacing:.04em}
+.eb:hover i{filter:brightness(1.25)}
+.eb:hover em{color:var(--t1)}
+/* El rotulo con el dato exacto aparece al acercarse, sin mover nada de sitio */
+.eb b{position:absolute;transform:translateY(-100%);margin-top:-8px;
+  background:var(--sf3);border:1px solid var(--bd2);border-radius:7px;
+  padding:5px 9px;font-size:11.5px;font-weight:500;color:var(--t1);white-space:nowrap;
+  opacity:0;pointer-events:none;transition:opacity .16s var(--ease)}
+.eb:hover b{opacity:1}
+.ebw{position:relative;display:flex;align-items:flex-end;flex:1 1 0}
+
+/* ── LAS TRES COLUMNAS ────────────────────────────────────────────────────────
+   No pesan lo mismo: el explorador se usa a diario, la lista seguido, y la
+   configuracion casi nunca. La jerarquia lo dice. */
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));
+      border-top:1px solid var(--bd)}
+.col{padding:16px 22px 18px;border-right:1px solid var(--bd);min-width:0}
+.col:last-child{border-right:0}
+.ct{font-size:13px;font-weight:600;margin-bottom:11px;color:var(--t2);
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tag{font-size:9.5px;letter-spacing:.09em;font-weight:600;color:var(--t3);
+     border:1px solid var(--bd2);border-radius:5px;padding:2px 6px}
+.tag.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
+.acts{display:flex;gap:7px;flex-wrap:wrap}
+.b{display:inline-flex;align-items:center;gap:7px;background:var(--sf2);
+   border:1px solid transparent;border-radius:var(--r2);padding:8px 15px;
+   font-size:13px;font-weight:500;color:var(--t2);text-decoration:none;white-space:nowrap;
+   transition:all .16s var(--ease);font-family:inherit;cursor:pointer}
+.b:hover{background:var(--ac-10);border-color:var(--ac-24);color:var(--ac);transform:translateY(-1px)}
+.b.pri{background:var(--ac);color:var(--ac-t);font-weight:600}
+.b.pri:hover{background:var(--ac);color:var(--ac-t);filter:brightness(1.06)}
+.b .n{background:rgba(255,255,255,.12);border-radius:6px;padding:1px 6px;
+      font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
+.b:not(.pri) .n{background:var(--sf3)}
+.nada{color:var(--t3);font-size:13px}
+.err{color:var(--poco);font-size:13px}
+.pie{color:var(--t3);font-size:12.5px;border-top:1px solid var(--bd);padding-top:16px;margin-top:30px}
+
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+  .edb .eb i{transform:scaleY(1)}
+}
+@media(max-width:620px){
+  .w{padding:24px 15px 60px} h1{font-size:23px}
+  .ph{padding:16px 16px 12px;gap:12px} .cifra b{font-size:25px}
+  .meta{margin-left:0} .cap{flex-basis:100%}
+  .edb{padding:4px 16px 16px;min-height:78px}
+  .col{border-right:0;border-bottom:1px solid var(--bd);padding:14px 16px 16px}
+  .col:last-child{border-bottom:0}
+}
+</style>
+
+<div class="w">
+  <h1>GALJOSA — Sistemas de precios</h1>
+  <p class="sb">Elegí el proyecto para ver su inventario y subir precios por bloque.
+     <b>Ver no cambia nada</b>: aplicar una subida pide clave y sólo toca unidades
+     disponibles de edificios lanzados.</p>
+
+  <details class="ayuda">
+    <summary>Qué hay en cada proyecto</summary>
+    <dl>
+      <dt>Explorador de precios</dt>
+      <dd>Uso interno. Los edificios con sus pisos y unidades, el precio de hoy contra
+          el de la matriz, y el simulador para subir por bloque.</dd>
+      <dt>Lista de precios</dt>
+      <dd>Lo que ve el cliente. Una lista por familia, con separación, firma, cuota y
+          saldo contra entrega. Se arma del inventario en vivo: lo vendido no aparece.</dd>
+      <dt>Configuración</dt>
+      <dd>La fuente de verdad. Matriz, mapa de posiciones y overrides. De acá sale
+          cada precio.</dd>
+    </dl>
+  </details>
+
+  <div id="lista"></div>
+  <p class="pie" id="pie"></p>
+</div>
+
+<script>
+/* DATA lo inyecta preciomadre.php. Esta plantilla no calcula nada. */
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const qs  = o => Object.entries(o).map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&');
+
+/* Cuanto queda decide el color. Mismo idioma que "Ver disponibilidad": neutro
+   cuando no pasa nada, ambar bajo el 20%, rojo en cero. Colorear todo seria lo
+   mismo que no colorear nada. */
+function nivel(d, t){ return d === 0 ? 'cero' : (t > 0 && d / t < 0.2 ? 'poco' : ''); }
+
+function tarjeta(p, i){
+  const ocupado = p.tot > 0 ? Math.round((p.tot - p.dis) / p.tot * 100) : 0;
+  const barras = (p.edificios || []).map((e, j) =>
+    `<div class="ebw"><span class="eb ${nivel(e.d, e.t)}" style="--h:${Math.max(4, e.t ? Math.round(e.d / e.t * 100) : 0)}%;--j:${j}">
+       <b>Edificio ${esc(e.e)} · ${e.d} de ${e.t} disponibles</b><i></i><em>${esc(e.e)}</em>
+     </span></div>`).join('');
+
+  const fams = (p.familias || []).length
+    ? p.familias.map(f => `<a class="b" target="_blank" href="lista.php?${qs({token: DATA.token, cat: p.cat, fam: f.tipo})}">
+         ${esc(f.nombre)} <span class="n">${f.n}</span></a>`).join('')
+    : '<span class="nada">Todavía no hay unidades disponibles con precio.</span>';
+
+  return `<section class="pc" style="--i:${i}">
+    <header class="ph">
+      <span class="bdg" style="--c:${esc(p.color)}">${esc(p.nombre)}</span>
+      ${p.err
+        ? `<span class="err">${esc(p.err)}</span>`
+        : `<span class="cifra ${nivel(p.dis, p.tot)}"><b data-n="${p.dis}">0</b><i>disponibles de ${p.tot}</i></span>
+           <span class="cap" title="${ocupado}% ocupado"><span data-w="${ocupado}"></span></span>
+           <span class="meta">${p.eds === 1 ? '1 edificio' : p.eds + ' edificios'} · ${ocupado}% ocupado</span>`}
+    </header>
+    ${barras ? `<div class="edb">${barras}</div>` : ''}
+    <div class="cols">
+      <div class="col">
+        <div class="ct">Explorador <span class="tag">INTERNO</span></div>
+        <div class="acts"><a class="b pri" href="?${qs({token: DATA.token, cat: p.cat})}">Abrir explorador</a></div>
+      </div>
+      <div class="col">
+        <div class="ct">Lista de precios <span class="tag ok">PARA EL CLIENTE</span></div>
+        <div class="acts">${fams}</div>
+      </div>
+      <div class="col">
+        <div class="ct">Configuración <span class="tag">FUENTE DE VERDAD</span></div>
+        <div class="acts"><a class="b" href="?${qs({token: DATA.token, cat: p.cat, accion: 'matriz'})}">↓ JSON</a></div>
+        <div class="nada" style="margin-top:8px">${p.cats} categorías · ${esc(p.niveles)}</div>
+      </div>
+    </div>
+  </section>`;
+}
+
+document.getElementById('lista').innerHTML = (DATA.proyectos || []).map(tarjeta).join('');
+document.getElementById('pie').textContent = DATA.pie || '';
+
+/* ── LO QUE SE MUEVE ────────────────────────────────────────────────────────
+   Todo arranca DESPUES de pintar, para que la animacion se vea aunque la pagina
+   ya estuviera cargada. Nada de esto cambia un dato: si el JS no corriera, los
+   numeros ya estan en el HTML. */
+const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// el numero sube contando: da la sensacion de que el inventario esta vivo
+function contar(el){
+  const fin = +el.dataset.n || 0;
+  if (quieto || fin === 0){ el.textContent = fin; return; }
+  const t0 = performance.now(), dur = 900;
+  (function paso(t){
+    const k = Math.min(1, (t - t0) / dur);
+    el.textContent = Math.round(fin * (1 - Math.pow(1 - k, 3)));   // frena al final
+    if (k < 1) requestAnimationFrame(paso);
+  })(t0);
+}
+
+// las barras crecen cuando la tarjeta entra en pantalla, no todas de golpe
+const obs = new IntersectionObserver(es => {
+  for (const e of es){
+    if (!e.isIntersecting) continue;
+    e.target.querySelectorAll('.cifra b').forEach(contar);
+    e.target.querySelectorAll('.cap span').forEach(s => s.style.width = (s.dataset.w || 0) + '%');
+    e.target.querySelectorAll('.edb').forEach(d => d.classList.add('lista'));
+    obs.unobserve(e.target);
+  }
+}, {threshold: .25});
+document.querySelectorAll('.pc').forEach(c => obs.observe(c));
+
+/* El brillo sigue al cursor y los edificios se inclinan un grado hacia el. Un solo
+   listener por tarjeta y todo agrupado con rAF: mover el mouse dispara cientos de
+   eventos por segundo y escribir estilo en cada uno traba el scroll. */
+if (!quieto) document.querySelectorAll('.pc').forEach(card => {
+  let pend = null;
+  card.addEventListener('mousemove', ev => {
+    if (pend) return;
+    pend = requestAnimationFrame(() => {
+      pend = null;
+      const r = card.getBoundingClientRect();
+      const px = (ev.clientX - r.left) / r.width, py = (ev.clientY - r.top) / r.height;
+      card.style.setProperty('--mx', (px * 100).toFixed(1) + '%');
+      card.style.setProperty('--my', (py * 100).toFixed(1) + '%');
+      card.querySelectorAll('.eb').forEach(b => {
+        const br = b.getBoundingClientRect();
+        const d = (ev.clientX - (br.left + br.width / 2)) / r.width;   // -1 .. 1
+        b.style.transform = `rotateY(${(-d * 9).toFixed(2)}deg) translateZ(0)`;
+      });
+    });
+  }, {passive: true});
+  card.addEventListener('mouseleave', () => {
+    card.querySelectorAll('.eb').forEach(b => b.style.transform = '');
+  });
+});
+</script>

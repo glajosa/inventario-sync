@@ -59,7 +59,7 @@ if (($_REQUEST['accion'] ?? 'ver') === 'ver' && ($_REQUEST['cat'] ?? '') === '')
     header('Content-Type: text/html; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     $COLOR = ['#2f6df6', '#5aa02c', '#12a594', '#b0871f', '#9b59b6'];
-    $tarjetas = ''; $i = 0; $totProy = 0;
+    $PROY = []; $i = 0; $totProy = 0;
     foreach ($proyectos as $c => $j) {
         $nom = strtoupper((string)($j['proyecto'] ?? "Proyecto $c"));
         $col = $COLOR[$i++ % count($COLOR)];
@@ -71,99 +71,54 @@ if (($_REQUEST['accion'] ?? 'ver') === 'ver' && ($_REQUEST['cat'] ?? '') === '')
             // fichas disponibles, asi que una familia agotada deja de ofrecer lista sola.
             $fams = lst_familias($uu, $c);
         } catch (Throwable $e) { $err = 'el catálogo todavía se está armando'; }
+        /* Ocupacion edificio por edificio. La clave de cada unidad empieza por su
+           letra ("F-3-12"), asi que sale del catalogo que YA se leyo: cero llamadas
+           extra. Es lo que dibuja las barras de la tarjeta — dato, no adorno. */
+        $porEd = [];
+        if ($err === '') {
+            foreach ($uu as $k => $d) {
+                $e = strtoupper((string)strtok((string)$k, '-'));
+                if ($e === '') continue;
+                if (!isset($porEd[$e])) $porEd[$e] = ['e' => $e, 't' => 0, 'd' => 0];
+                $porEd[$e]['t']++;
+                if ($d['etapa'] === 'DISPONIBLE') $porEd[$e]['d']++;
+            }
+            ksort($porEd);
+        }
         $eds  = mz_edificios($j);
         $ne   = count($eds);
         $meta = $err ?: "$tot unidades · $dis disponibles · " . ($ne === 1 ? '1 edificio' : "$ne edificios");
         $nivs = implode(', ', array_values(array_map(fn($n) => $n['etiqueta'] ?? '', $j['niveles'] ?? [])));
         $cats = count($j['categorias'] ?? []);
         $totProy++;
-        $tarjetas .= '<section class="pc">
-          <header class="ph">
-            <span class="bdg" style="background:' . $col . '">' . htmlspecialchars($nom, ENT_QUOTES) . '</span>
-            <span class="meta">' . htmlspecialchars($meta, ENT_QUOTES) . '</span>
-          </header>
-          <div class="cols">
-            <div class="col">
-              <div class="ct">Explorador de precios <span class="tag">INTERNO</span></div>
-              <p>Los edificios con sus pisos y unidades. Categorías, precio de hoy contra
-                 el de la matriz, y el simulador para subir por bloque.</p>
-              <div class="acts"><a class="b pri" href="?token=' . urlencode($tok) . '&cat=' . $c . '">Abrir</a></div>
-            </div>
-            <div class="col">
-              <div class="ct">Lista de precios <span class="tag ok">PARA EL CLIENTE</span></div>
-              <p>' . ($fams
-                  ? 'Una lista por familia, con separación, firma, cuota y saldo contra
-                     entrega. Se arma del inventario en vivo: lo vendido no aparece.'
-                  : 'Todavía no hay unidades disponibles con precio para armar una lista.') . '</p>
-              <div class="acts">' . implode('', array_map(
-                  fn($f) => '<a class="b" target="_blank" href="lista.php?token=' . urlencode($tok)
-                          . '&cat=' . $c . '&fam=' . (int)$f['tipo'] . '">'
-                          . htmlspecialchars($f['nombre'], ENT_QUOTES)
-                          . ' <span class="n">' . (int)$f['n'] . '</span></a>',
-                  $fams)) . '</div>
-            </div>
-            <div class="col">
-              <div class="ct">Configuración <span class="tag">FUENTE DE VERDAD</span></div>
-              <p>' . $cats . ' categorías · ' . htmlspecialchars($nivs, ENT_QUOTES) . '.
-                 Matriz, mapa de posiciones y overrides. De acá sale cada precio.</p>
-              <div class="acts"><a class="b" href="?token=' . urlencode($tok) . '&cat=' . $c . '&accion=matriz">↓ JSON</a></div>
-            </div>
-          </div>
-        </section>';
+        $PROY[] = [
+            'cat' => $c, 'nombre' => $nom, 'color' => $col,
+            'tot' => $tot, 'dis' => $dis, 'eds' => $ne, 'err' => $err,
+            'edificios' => array_values($porEd),
+            'familias'  => array_map(
+                fn($f) => ['tipo' => (int)$f['tipo'], 'nombre' => (string)$f['nombre'], 'n' => (int)$f['n']],
+                $fams),
+            'cats' => $cats, 'niveles' => $nivs,
+        ];
     }
-    echo '<!doctype html><meta charset="utf-8"><title>GALJOSA — Sistemas de precios</title>
-<style>
- :root{--bg:#0d1014;--sf:#151a20;--sf2:#1b222a;--bd:#252d37;--t1:#e9edf2;--t2:#98a2b0;--t3:#6b7683;--ac:#4ea1ff}
- /* Tema CLARO. El anterior era casi ilegible: tarjetas blancas sobre un fondo casi
-    blanco y un borde de #e2e7ec que no se veia, asi que nada separaba a nada y la
-    pantalla se leia como una sola mancha. Lo que cambia:
-      - el FONDO baja a #e8ecf1, para que la tarjeta blanca se levante
-      - el BORDE sube a #d0d7de, que se ve sin ser duro
-      - la CABECERA de cada tarjeta lleva relleno propio, no queda flotando
-      - una sombra suave: en claro es lo que da la sensacion de tarjeta */
- @media(prefers-color-scheme:light){
-   :root{--bg:#e8ecf1;--sf:#fff;--sf2:#f2f5f8;--bd:#d0d7de;--t1:#0f1419;--t2:#57606a;--t3:#6e7781;--ac:#0969da;
-         --sh:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05)}
-   .pc{box-shadow:var(--sh)}
-   .ph{background:var(--sf2)}
-   .b{box-shadow:0 1px 1px rgba(16,24,40,.04)}
-   .b:hover{background:#fff}
- }
- html,body{overflow-x:clip}
- body{background:var(--bg);color:var(--t1);margin:0;font:16px/1.55 -apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
- .w{max-width:1180px;margin:0 auto;padding:46px 24px 80px}
- h1{font-size:31px;margin:0 0 5px;letter-spacing:-.025em;overflow-wrap:anywhere;min-width:0}
- .sb{color:var(--t2);margin:0 0 34px;font-size:15px}
- .pc{background:var(--sf);border:1px solid var(--bd);border-radius:16px;overflow:hidden;margin-bottom:20px}
- .ph{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:16px 22px;border-bottom:1px solid var(--bd)}
- .bdg{color:#fff;font-size:11.5px;font-weight:700;letter-spacing:.07em;padding:4px 11px;border-radius:6px}
- .meta{color:var(--t2);font-size:14px}
- .tag.ok{background:#14532d;color:#a7f3d0;border-color:#166534}
- @media(prefers-color-scheme:light){.tag.ok{background:#dcfce7;color:#14532d;border-color:#bbf7d0}}
- .n{display:inline-block;min-width:18px;padding:0 5px;margin-left:5px;border-radius:9px;
-    background:var(--bd);color:var(--t1);font-size:11.5px;font-weight:700;text-align:center}
- .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
- .col{padding:20px 22px 22px;border-right:1px solid var(--bd)}
- .col:last-child{border-right:0}
- .ct{font-size:17px;font-weight:600;margin-bottom:7px}
- .tag{font-size:10px;letter-spacing:.08em;font-weight:600;color:var(--t3);
-      border:1px solid var(--bd);border-radius:5px;padding:2px 6px;vertical-align:2px;margin-left:5px}
- .col p{color:var(--t2);font-size:14px;margin:0 0 15px;max-width:46ch}
- .acts{display:flex;gap:8px;flex-wrap:wrap}
- .b{display:inline-block;background:var(--sf2);border:1px solid var(--bd);border-radius:9px;
-    padding:8px 17px;font-size:14px;font-weight:600;color:var(--t1);text-decoration:none;white-space:nowrap}
- .b:hover{border-color:var(--ac);color:var(--ac)}
- .b.pri{background:var(--t1);color:var(--bg);border-color:var(--t1)}
- .b.pri:hover{opacity:.88;color:var(--bg)}
- .pie{color:var(--t3);font-size:13px;border-top:1px solid var(--bd);padding-top:16px;margin-top:30px}
- @media(max-width:620px){h1{font-size:24px}.w{padding:28px 15px 60px}.col{border-right:0;border-bottom:1px solid var(--bd)}}
-</style>
-<div class="w"><h1>GALJOSA — Sistemas de precios</h1>
-<p class="sb">Elegí el proyecto para ver su inventario y subir precios por bloque.</p>'
-    . $tarjetas
-    . '<p class="pie">' . $totProy . ' proyecto(s) con matriz. Los precios se leen del catálogo
-       compartido, sin llamadas al API. Ver no escribe nada: aplicar exige clave y solo toca
-       unidades disponibles.</p></div>';
+    /* La vista vive en portada.tpl.html. Aca solo se le pasa el dato.
+       🔴 Se separo porque esta pantalla se construia concatenando HTML dentro de
+       cadenas PHP: editarla era pelear con comillas anidadas, y eso rompio el
+       archivo dos veces — en la pantalla que APLICA PRECIOS. Ahora tocar la vista
+       no puede romper el PHP. */
+    $tpl = @file_get_contents(__DIR__ . '/portada.tpl.html');
+    if ($tpl === false) { http_response_code(500); exit('falta portada.tpl.html'); }
+    $datos = [
+        'token'     => $tok,
+        'proyectos' => $PROY,
+        'pie'       => $totProy . ' proyecto(s) con matriz. Los precios se leen del catálogo '
+                     . 'compartido, sin llamadas al API. Ver no escribe nada: aplicar exige '
+                     . 'clave y sólo toca unidades disponibles.',
+    ];
+    echo str_replace('const esc =',
+        'const DATA = ' . json_encode($datos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+                                            | JSON_HEX_TAG | JSON_HEX_AMP) . ";\nconst esc =",
+        $tpl);
     exit;
 }
 
