@@ -47,9 +47,11 @@ if (isset($_GET['cuantos'])) {
     $out = []; $tot = 0;
     foreach (($r['result'] ?? []) as $st) {
         $id = (string)($st['STATUS_ID'] ?? '');
+        // 🔴 `start => -1` NO devuelve el total: lo suprime. Se vio porque RESERVA
+        // daba 0 sabiendo que tiene ~44 — el control positivo delato la consulta.
         $c = bx('crm.deal.list', ['filter' => ['CATEGORY_ID' => HIST_CAT_CLIENTES, 'STAGE_ID' => $id],
-                                  'select' => ['ID'], 'start' => -1]);
-        $n = (int)($c['total'] ?? 0); $tot += $n;
+                                  'select' => ['ID']]);
+        $n = (int)($c['total'] ?? count($c['result'] ?? [])); $tot += $n;
         $out[] = ['id' => $id, 'nombre' => $st['NAME'] ?? '', 'deals' => $n];
     }
     exit(json_encode(['ok' => true, 'total' => $tot, 'etapas' => $out],
