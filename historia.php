@@ -38,6 +38,24 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
    (el entrypoint dispara rebuild, reconcile y mapa48). Por eso se reporta el
    intervalo entre corridas: si coincide con los despliegues y no con el horario
    programado, el cron no esta corriendo aunque haya lineas. */
+/* ?cuantos=1 — cuantos deals hay en cada etapa del 44. Solo lectura, y hace falta
+   para saber cuanto costaria ampliar el filtro: pedir TODO el pipeline serian ~29
+   paginas cada 5 minutos, y eso no se hace sin medirlo antes. */
+if (isset($_GET['cuantos'])) {
+    $r = bx('crm.status.list', ['filter' => ['ENTITY_ID' => 'DEAL_STAGE_' . HIST_CAT_CLIENTES],
+                                'order' => ['SORT' => 'ASC']]);
+    $out = []; $tot = 0;
+    foreach (($r['result'] ?? []) as $st) {
+        $id = (string)($st['STATUS_ID'] ?? '');
+        $c = bx('crm.deal.list', ['filter' => ['CATEGORY_ID' => HIST_CAT_CLIENTES, 'STAGE_ID' => $id],
+                                  'select' => ['ID'], 'start' => -1]);
+        $n = (int)($c['total'] ?? 0); $tot += $n;
+        $out[] = ['id' => $id, 'nombre' => $st['NAME'] ?? '', 'deals' => $n];
+    }
+    exit(json_encode(['ok' => true, 'total' => $tot, 'etapas' => $out],
+                     JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+}
+
 /* ?etapas=1 — las etapas del pipeline CLIENTES(44), en orden.
    Solo lectura. Hace falta para decidir cuales significan "la unidad SIGUE vendida":
    hoy solo se mira RESERVA, y un deal que AVANZA a promesa deja de contar aunque la
