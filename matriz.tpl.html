@@ -284,7 +284,34 @@
       .ubox{height:40px}
       .um2{display:none}
     }
-  </style>
+  
+ /* ── JERARQUIA DEL IMPACTO ─────────────────────────────────────────────────
+    Agregado al FINAL del bloque a proposito: aca no puede partir ningun selector
+    existente. Ya me paso insertar en medio de una regla en este mismo archivo.
+
+    Los cuatro numeros del simulador pesaban lo mismo, y no lo son: la cartera son
+    19,5 millones y se leia igual que un rotulo. En REPOSO todo queda como estaba
+    -- la pantalla no grita cuando no pasa nada. Con una simulacion activa el
+    EFECTO y el DESPUES crecen y toman color, y el ANTES se apaga porque pasa a ser
+    la referencia y no el dato.
+
+    Nada se mueve de sitio ni cambia de valor: solo el peso visual. */
+ .sv{transition:font-size .25s cubic-bezier(.2,.7,.3,1),color .25s,opacity .25s}
+ .simout.activo .simo:nth-child(2) .sv,
+ .simout.activo .simo:nth-child(4) .sv{font-size:38px;letter-spacing:-.03em}
+ .simout.activo .simo:nth-child(4) .sv{color:var(--t1)}
+ .simout.activo .simo:nth-child(3) .sv{opacity:.5;font-size:22px}
+ /* Un punto marca cual es el numero encendido. Toda la señal que hace falta. */
+ .simout.activo .simo:nth-child(2) .sl::before,
+ .simout.activo .simo:nth-child(4) .sl::before{content:'';display:inline-block;
+   width:5px;height:5px;border-radius:50%;background:currentColor;
+   margin-right:6px;vertical-align:1px}
+ /* Los colores del delta son para fondo blanco: en oscuro casi no se ven. */
+ @media(prefers-color-scheme:dark){
+   .simo .sv.up{color:#4ddba4}
+   .simo .sv.dn{color:#ff8b76}
+ }
+</style>
 </head>
 <body>
 
@@ -918,6 +945,9 @@ function renderSim() {
     }
   }
   const sg = d > 0 ? 'up' : d < 0 ? 'dn' : '';
+  /* Solo una clase de estado: la pantalla queda quieta en reposo y se enciende
+     cuando hay algo en juego. No toca posiciones ni valores. */
+  document.getElementById('sim-out').className = d ? 'simout activo' : 'simout';
   document.getElementById('sim-out').innerHTML = `
     <div class="simo"><div class="sl">Unidades que cambian</div>
       <div class="sv ${e.n ? sg : ''}">${e.n}</div></div>
