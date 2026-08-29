@@ -98,12 +98,18 @@ h1{font-size:30px;margin:0 0 6px;letter-spacing:-.03em;font-weight:600;overflow-
    se ve cual se esta agotando y cual recien arranca — algo que la lista de numeros
    no dejaba ver. Se inclinan levemente hacia el cursor: se siente un objeto, no
    una imagen. */
-.edb{display:flex;align-items:flex-end;gap:5px;padding:4px 22px 18px;min-height:96px;
-     perspective:800px}
+.edb{display:flex;align-items:flex-end;gap:6px;padding:2px 22px 18px;perspective:900px}
 .eb{flex:1 1 0;min-width:14px;max-width:56px;display:flex;flex-direction:column;
     align-items:center;gap:6px;cursor:default;
     transform-style:preserve-3d;transition:transform .25s var(--ease)}
-.eb i{display:block;width:100%;height:var(--h,10%);min-height:3px;border-radius:5px 5px 2px 2px;
+/* 🔴 EL CARRIL TIENE ALTURA PROPIA. Una altura en % se apoya en el padre, y si el
+   padre se dimensiona con su contenido no se apoya en nada: medido, la barra pedia
+   46% y media 3 pixeles. Con el carril de alto fijo y la barra anclada abajo, el
+   porcentaje vuelve a significar algo. */
+.trk{position:relative;width:100%;height:64px;border-radius:6px;
+     background:var(--sf3);overflow:hidden}
+.eb i{position:absolute;left:0;right:0;bottom:0;height:var(--h,10%);min-height:3px;
+      border-radius:5px 5px 0 0;
       background:linear-gradient(to top,var(--ac-24),var(--ac));
       transform-origin:bottom;transform:scaleY(0);
       transition:transform .8s var(--ease),filter .2s var(--ease),background .2s var(--ease);
@@ -202,7 +208,8 @@ function tarjeta(p, i){
   const ocupado = p.tot > 0 ? Math.round((p.tot - p.dis) / p.tot * 100) : 0;
   const barras = (p.edificios || []).map((e, j) =>
     `<div class="ebw"><span class="eb ${nivel(e.d, e.t)}" style="--h:${Math.max(4, e.t ? Math.round(e.d / e.t * 100) : 0)}%;--j:${j}">
-       <b>Edificio ${esc(e.e)} · ${e.d} de ${e.t} disponibles</b><i></i><em>${esc(e.e)}</em>
+       <b>Edificio ${esc(e.e)} · ${e.d} de ${e.t} disponibles</b>
+       <span class="trk"><i></i></span><em>${esc(e.e)}</em>
      </span></div>`).join('');
 
   const fams = (p.familias || []).length
