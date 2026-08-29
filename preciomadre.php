@@ -95,9 +95,14 @@ if (($_REQUEST['accion'] ?? 'ver') === 'ver' && ($_REQUEST['cat'] ?? '') === '')
             'cat' => $c, 'nombre' => $nom, 'color' => $col,
             'tot' => $tot, 'dis' => $dis, 'eds' => $ne, 'err' => $err,
             'edificios' => array_values($porEd),
-            'familias'  => array_map(
+            /* 🔴 array_values OBLIGATORIO: lst_familias() devuelve el arreglo con
+               CLAVE por tipo (1791, 1951...), y json_encode lo emite como objeto.
+               En JavaScript `.length` de un objeto es undefined, asi que la vista
+               lo leia como "no hay familias" y desaparecieron los botones de las
+               listas de precios. El dato siempre estuvo ahi. */
+            'familias'  => array_values(array_map(
                 fn($f) => ['tipo' => (int)$f['tipo'], 'nombre' => (string)$f['nombre'], 'n' => (int)$f['n']],
-                $fams),
+                $fams)),
             'cats' => $cats, 'niveles' => $nivs,
         ];
     }
