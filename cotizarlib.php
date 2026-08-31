@@ -36,11 +36,13 @@ function cot_notaria(float $v): int {
  * arranquen las cuotas, menos caben antes de entregar.
  *
  * 🔴 LA FECHA SALE DE LA MATRIZ DEL PROYECTO, no de una lista escrita aquí. Estuvo
- * escrita a mano y se separó de la realidad: `matrices/proyecto_33.json` decía que
- * Noral Plaza entrega en 2031-02 y esta función decía 2031-04. Dos meses. La lista
- * de precios (que lee la matriz) daba 54 meses y el cotizador daba 56 — al mismo
- * cliente, el mismo día. Un cronograma firmado quedó con dos cuotas cayendo DESPUÉS
- * de la entrega.
+ * escrita a mano en los dos sitios y se separaron: `matrices/proyecto_33.json` decía
+ * que Noral Plaza entrega en 2031-02 y esta función decía 2031-04. Dos meses. La
+ * lista de precios (que lee la matriz) daba 54 meses y el cotizador 56 — al mismo
+ * cliente, el mismo día.
+ *
+ * La dirección confirmó el 31-ago-2026 que la buena es **2031-04**: el cotizador
+ * tenía razón y la matriz estaba vieja. Se corrigió la matriz, no el cotizador.
  *
  * La matriz es del proyecto; esta función solo la lee. Para mover una entrega se
  * edita `fecha_entrega` en la matriz y se mueven los dos motores a la vez.

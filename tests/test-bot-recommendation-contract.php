@@ -46,8 +46,25 @@ test_throws(
 
 $profiles = bot_commercial_profiles();
 test_same(33, $profiles['Noral Plaza']['category_id'], 'Noral Plaza category is canonical');
-test_same('2031-02', $profiles['Noral Plaza']['delivery']['date'], 'Plaza delivery comes from the current matrix');
+test_same('2031-04', $profiles['Noral Plaza']['delivery']['date'], 'Plaza delivery comes from the current matrix');
 test_same(39, bot_commercial_profile('Noral Apartments')['category_id'], 'Apartment profile resolves');
+
+/* CANDADO: la fecha de entrega vive en la MATRIZ del proyecto. commercial-projects.json
+   la repite para el bot, y el 31-ago-2026 esas dos copias llevaban dos meses separadas
+   (2031-02 aqui, 2031-04 en el cotizador): la lista de precios decia 54 meses y el
+   cotizador 56, al mismo cliente el mismo dia. Esta prueba convierte esa divergencia
+   silenciosa en una prueba roja. */
+require_once dirname(__DIR__) . '/cotizarlib.php';
+foreach (bot_commercial_profiles() as $nombre => $perfil) {
+    $cat = (int)($perfil['category_id'] ?? 0);
+    $delBot = ($perfil['delivery']['date'] ?? null);
+    $e = cot_entrega($cat);
+    $delMatriz = $e ? sprintf('%04d-%02d', $e['y'], $e['m']) : null;
+    // Torre D no tiene matriz: su fecha vive en el codigo y el bot no la declara.
+    if ($cat === 51) continue;
+    test_same($delMatriz, $delBot,
+        "la entrega de $nombre debe salir de la matriz, no de una copia vieja");
+}
 
 $fixture = json_decode(
     (string)file_get_contents(__DIR__ . '/fixtures/bot-recommendation-v1.json'),

@@ -13,7 +13,7 @@
     ],
     "project_enum_values": ["1753", "1743", "162", "1625"],
     "segments": ["residencial", "comercial"],
-    "delivery": {"mode": "fixed", "date": "2031-02", "months": null},
+    "delivery": {"mode": "fixed", "date": "2031-04", "months": null},
     "standard_payment": {
       "separation": 1000,
       "initial_percent": 40,

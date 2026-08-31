@@ -130,6 +130,13 @@ function lst_plazo(array $fin): array {
  * $144.420 a 54 meses da firma $13.442,00 · mensual $534,89 · extraordinaria
  * $2.888,40, y las cuatro coinciden al centavo.
  *
+ * 🔴 ESA VERIFICACION ES DE UN PLAZO QUE YA NO ES EL VIGENTE. El 31-ago-2026 la
+ * direccion confirmo que Noral Plaza entrega en 2031-04 (no 2031-02), o sea 56
+ * meses y no 54: ese mismo precio da ahora mensual $515,79. La formula NO cambio
+ * -- cambio la fecha de entrega en matrices/proyecto_33.json. Si alguien compara
+ * contra el PDF viejo de la direccion va a ver diferencia en la mensual y en el
+ * encabezado, y NO es un error: el PDF es de cuando el plazo era 54.
+ *
  * OJO: los meses son de la FAMILIA, no del proyecto. En Noral Plaza los locales,
  * las oficinas y los monoambientes no comparten plazo, y el cotizador —que resuelve
  * por categoria de pipeline— no puede distinguirlos.

@@ -1161,8 +1161,10 @@
     "COMBOS: 62 m2 = 2 unidades unidas, 93 m2 = 3. Valen (N x base) - 20.000 por el",
     "parqueo que se pierde. No entran en la matriz.",
     "",
-    "Financiamiento: 40% de entrada, 10% de reserva, entrega 2031-02. El plazo NO se",
-    "escribe a mano: se deriva de la fecha de entrega (54 meses al 18-ago-2026)."
+    "Financiamiento: 40% de entrada, 10% de reserva, entrega 2031-04. El plazo NO se",
+    "escribe a mano: se deriva de la fecha de entrega (56 meses al 18-ago-2026).",
+    "La fecha decia 2031-02 y el cotizador 2031-04. La direccion confirmo 2031-04 el",
+    "31-ago-2026: manda 2031-04 y los dos motores la leen de aqui."
   ],
   "piso_sin_numero": 0,
   "overrides": {
@@ -1375,9 +1377,9 @@
         "cuotas_pct": 20,
         "extra_pct": 10,
         "contra_pct": 60,
-        "fecha_entrega": "2031-02",
+        "fecha_entrega": "2031-04",
         "vigencia_horas": 48,
-        "_nota": "Del archivo del director. El plazo NO se escribe: sale de fecha_entrega (2031-02) y las extraordinarias son ceil(meses/12)."
+        "_nota": "Del archivo del director. El plazo NO se escribe: sale de fecha_entrega (2031-04) y las extraordinarias son ceil(meses/12)."
       },
       "central_fuerte": false,
       "color_por": "vista",
@@ -1603,9 +1605,9 @@
         "cuotas_pct": 20,
         "extra_pct": 10,
         "contra_pct": 60,
-        "fecha_entrega": "2031-02",
+        "fecha_entrega": "2031-04",
         "vigencia_horas": 48,
-        "_nota": "Del archivo del director. Plazo derivado de fecha_entrega (2031-02)."
+        "_nota": "Del archivo del director. Plazo derivado de fecha_entrega (2031-04)."
       },
       "layout": "en_tabla",
       "encabezado_precio": "PRECIO<br>INCLUYENDO PARQUEO",
@@ -1739,9 +1741,9 @@
         "cuotas_pct": 20,
         "extra_pct": 10,
         "contra_pct": 60,
-        "fecha_entrega": "2031-02",
+        "fecha_entrega": "2031-04",
         "vigencia_horas": 48,
-        "_nota": "Del archivo del director. El plazo NO se escribe: sale de fecha_entrega (2031-02) y las extraordinarias son ceil(meses/12)."
+        "_nota": "Del archivo del director. El plazo NO se escribe: sale de fecha_entrega (2031-04) y las extraordinarias son ceil(meses/12)."
       },
       "leyenda_vista": [
         "Vista al parque lineal",
