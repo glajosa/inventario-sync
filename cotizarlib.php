@@ -31,17 +31,57 @@ function cot_notaria(float $v): int {
     return 1824;
 }
 
-/** Entrega por proyecto (pipeline del SPA). Manda el plazo: es fecha FIJA, así que
- *  mientras más tarde arranquen las cuotas, menos caben antes de entregar.
- *  Solo Noral está definido; para el resto se devuelve null y el plazo lo fija
- *  el asesor, avisando en pantalla que no hay fecha configurada. */
+/**
+ * Entrega por proyecto. Manda el plazo: es fecha FIJA, así que mientras más tarde
+ * arranquen las cuotas, menos caben antes de entregar.
+ *
+ * 🔴 LA FECHA SALE DE LA MATRIZ DEL PROYECTO, no de una lista escrita aquí. Estuvo
+ * escrita a mano y se separó de la realidad: `matrices/proyecto_33.json` decía que
+ * Noral Plaza entrega en 2031-02 y esta función decía 2031-04. Dos meses. La lista
+ * de precios (que lee la matriz) daba 54 meses y el cotizador daba 56 — al mismo
+ * cliente, el mismo día. Un cronograma firmado quedó con dos cuotas cayendo DESPUÉS
+ * de la entrega.
+ *
+ * La matriz es del proyecto; esta función solo la lee. Para mover una entrega se
+ * edita `fecha_entrega` en la matriz y se mueven los dos motores a la vez.
+ *
+ * Si la matriz declara varias (una por lista), manda la MÁS TEMPRANA — la misma
+ * regla que ya usa cotizar.php cuando la cotización junta unidades de dos torres.
+ */
 function cot_entrega(int $categoryId): ?array {
-    switch ($categoryId) {
-        case 39: return ['y' => 2030, 'm' => 4];   // Noral Apartments — abril 2030
-        case 33: return ['y' => 2031, 'm' => 4];   // Noral Plaza      — abril 2031
-        case 51: return ['y' => 2027, 'm' => 5];   // Galero Torre D   — financia hasta mayo 2027
+    static $cache = [];
+    if (array_key_exists($categoryId, $cache)) return $cache[$categoryId];
+
+    $f = __DIR__ . '/matrices/proyecto_' . $categoryId . '.json';
+    $j = is_file($f) ? json_decode((string)@file_get_contents($f), true) : null;
+
+    $mejor = null;
+    if (is_array($j)) {
+        foreach (cot_fechas_entrega($j) as $fe) {
+            if (!preg_match('/^(\d{4})-(\d{2})$/', $fe, $m)) continue;
+            $cand = ['y' => (int)$m[1], 'm' => (int)$m[2]];
+            if ($mejor === null || ($cand['y'] * 12 + $cand['m']) < ($mejor['y'] * 12 + $mejor['m']))
+                $mejor = $cand;
+        }
     }
-    return null;   // Torre C, Casas y Suites: sin fecha fija (ver cot_modelo)
+
+    // Galero Torre D no tiene matriz con financiamiento: su fecha vive en el contrato
+    // y sigue aquí hasta que alguien la ponga en la matriz.
+    if ($mejor === null && $categoryId === 51) $mejor = ['y' => 2027, 'm' => 5];
+
+    return $cache[$categoryId] = $mejor;   // null = sin fecha fija (ver cot_modelo)
+}
+
+/** Todas las `fecha_entrega` que declare una matriz, esté donde esté: hay proyectos
+ *  que la ponen arriba y otros dentro de cada lista. */
+function cot_fechas_entrega($nodo): array {
+    if (!is_array($nodo)) return [];
+    $out = [];
+    foreach ($nodo as $k => $v) {
+        if ($k === 'fecha_entrega' && is_string($v)) $out[] = $v;
+        elseif (is_array($v)) $out = array_merge($out, cot_fechas_entrega($v));
+    }
+    return $out;
 }
 
 /** MODELO DE PAGO por proyecto. Galjosa no vende igual en todos: Noral está en
@@ -66,8 +106,9 @@ function cot_modelo(int $categoryId): array {
         case 39: return array_merge($base, ['maxCuotas'=>46, 'maxExtra'=>4]);
 
         // Noral Plaza: 5 extraordinarias, no 4. El tope NO es una regla del cotizador,
-        // es cuántas cabe cobrar en cada proyecto: Plaza entrega en abril de 2031 y su
-        // plan cruza cinco años, Apartments entrega antes y cruza cuatro. Declararlo
+        // es cuántas cabe cobrar en cada proyecto: Plaza entrega en 2031 (la fecha
+        // exacta la dice su matriz, no este comentario) y su plan cruza cinco años,
+        // Apartments entrega antes y cruza cuatro. Declararlo
         // aquí (en vez de dejarlo en 0 = sin tope) es lo que habilita partir la
         // extraordinaria en 2 y personalizar los montos. El PLAZO no se toca: manda la
         // entrega de Plaza, no los 46 meses de Apartments.
