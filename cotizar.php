@@ -682,8 +682,14 @@ $hoy  = new DateTimeImmutable('now');
       <input type="date" name="ffirma" value="<?= h($fFirma) ?>"
              title="Cuando se paga la firma. La separación se calcula sola: <?= (int)$plan['diasFirma'] ?> días antes. Vacío = hoy + <?= (int)$plan['diasFirma'] ?> días."></div>
     <div><label>Primera cuota</label>
-      <input type="month" name="mes" value="<?= h($plan['inicio']) ?>" min="<?= $hoy->format('Y-m') ?>"
-             title="Si se deja como está, arranca el mes siguiente al de la firma."></div>
+      <?php /* 🔴 Se devuelve lo que ESCRIBIO el asesor, no el mes calculado. Antes se
+               reimprimia $plan['inicio'] -- el resultado del calculo -- y al recalcular
+               volvia como si el asesor lo hubiera elegido. Resultado: quedaba pegado y
+               la fecha de la firma no podia mover nunca la primera cuota.
+               Vacio = automatico (el mes siguiente al de la firma). */ ?>
+      <input type="month" name="mes" value="<?= h($mesIni) ?>" min="<?= $hoy->format('Y-m') ?>"
+             placeholder="automático"
+             title="Vacío = el mes siguiente al de la firma (hoy sería <?= h($plan['inicio']) ?>). Escribí un mes solo si querés forzar otro."></div>
     <!-- % a financiar antes de la entrega: 40 es lo común, piso de negocio 35
          (se topa DENTRO del motor, el min/max de aquí es solo guía visual). -->
     <div><label>Financia %</label>
