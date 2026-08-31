@@ -618,6 +618,11 @@ $hoy  = new DateTimeImmutable('now');
     thead th{background:var(--tinta) !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     tr.extra td,.precio,.legal{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   }
+
+ /* La fecha junto al rotulo de separacion y firma: presente pero sin competir
+    con el nombre del hito ni con el monto. */
+ .fhito{font-weight:400;font-size:.86em;opacity:.62;margin-left:.5em;
+        letter-spacing:0;white-space:nowrap}
 </style>
 </head><body>
 
@@ -1130,9 +1135,16 @@ $hoy  = new DateTimeImmutable('now');
   <table>
     <thead><tr><th style="width:64px">N°</th><th>Vencimiento</th><th>Valor cuota</th></tr></thead>
     <tbody>
-      <tr class="hito"><td></td><td>SEPARACIÓN</td><td><?= h(cot_money($plan['separacion'])) ?></td></tr>
+      <?php /* La separacion y la firma salian SIN fecha: se veia cuanto se paga pero
+               no cuando, y la primera cuota quedaba colgada sin referencia. La columna
+               ya se llama Vencimiento, asi que la fecha va donde corresponde. */ ?>
+      <tr class="hito"><td></td>
+        <td>SEPARACIÓN <span class="fhito"><?= h($plan['fechaReserva']) ?></span></td>
+        <td><?= h(cot_money($plan['separacion'])) ?></td></tr>
       <?php if ($plan['firma'] > 0): ?>
-      <tr class="hito"><td></td><td>A LA FIRMA</td><td><?= h(cot_money($plan['firma'])) ?></td></tr>
+      <tr class="hito"><td></td>
+        <td>A LA FIRMA <span class="fhito">hasta el <?= h($plan['fechaFirma']) ?></span></td>
+        <td><?= h(cot_money($plan['firma'])) ?></td></tr>
       <?php endif; ?>
       <?php /* La etiqueta FIRMA va SOLO en la primera cuota diferida. Repetirla en
                todas está mal legalmente: da a entender que hay varias firmas del
@@ -1259,7 +1271,14 @@ $hoy  = new DateTimeImmutable('now');
     Plan: separación <?= h(cot_money($plan['separacion'])) ?>
     <?= $plan['firma'] > 0 ? '+ ' . h(cot_money($plan['firma'])) . ' a la firma' : '· nada a la firma' ?>,
     <?= h($pc($plan['cuotasPct'])) ?> en cuotas mensuales<?= $plan['extraTotal'] > 0 ? ' + ' . h($pc($plan['extraPct'])) . ' en cuotas extraordinarias' : '' ?>
-    y <?= h($pc($plan['contraPct'])) ?> contraentrega. Las cuotas vencen el 16 de cada mes
+    y <?= h($pc($plan['contraPct'])) ?> contraentrega.
+    <?php /* Las tres fechas dichas en orden: sin esto el asesor tenia que explicar
+             de palabra cuando vence cada cosa, y el cliente se quedaba con un papel
+             que solo decia montos. */ ?>
+    La separación se paga el <?= h($plan['fechaReserva']) ?>, lo de la firma hasta el
+    <?= h($plan['fechaFirma']) ?> (<?= (int)$plan['diasFirma'] ?> días) y la primera
+    cuota vence el <?= h($plan['filas'][0]['fecha'] ?? '') ?>.
+    Las cuotas vencen el 16 de cada mes
     y la última es en <?= h($plan['hastaTxt']) ?>.
     <?php if ($plan['nExtra'] > 0): ?>
       Incluye <?= (int)$plan['nExtra'] ?> cuota<?= $plan['nExtra'] > 1 ? 's' : '' ?> extraordinaria<?= $plan['nExtra'] > 1 ? 's' : '' ?>

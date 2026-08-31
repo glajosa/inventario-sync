@@ -107,6 +107,9 @@ function cot_modelo(int $categoryId): array {
 
 const COT_PLAZO_REF = 60;     // plazo de referencia
 const COT_SEPARACION = 1000;  // la separación siempre es $1.000 (o el 10% si es menor)
+/* Plazo para pagar lo de la firma, en dias CORRIDOS desde la cotizacion. Se suman
+   dias y no meses a proposito: '+1 month' sobre el 31 de agosto da 1 de octubre. */
+const COT_DIAS_FIRMA = 10;
 const COT_PARQUEO = 20000;    // valor de un parqueo de Noral Plaza Suites
 /** El campo "Inventario" del deal. Se lee para saber si las unidades van en fusion o
  *  separadas, que es lo que decide el descuento del parqueo. Mismo codigo que
@@ -223,12 +226,27 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
 
     // --- primera cuota: el 16 del mes elegido; nunca un mes ya pasado ---
     $hoy = new DateTimeImmutable('now');
+    /* Las dos fechas que faltaban en el cronograma. Se suman DIAS, no meses: sumar
+       un mes al 31 de agosto da 1 de octubre porque septiembre no tiene 31, y eso
+       habria puesto una fecha equivocada en un documento de cliente. */
+    $reservaFecha = $hoy;
+    $firmaFecha   = $hoy->modify('+' . COT_DIAS_FIRMA . ' days');
     if (preg_match('/^(\d{4})-(\d{2})$/', $mesInicio, $m)) {
         $primera = new DateTimeImmutable(sprintf('%04d-%02d-16', (int)$m[1], (int)$m[2]));
     } else {
         // Paréntesis obligatorios: encadenar sobre `new` sin ellos es sintaxis de
         // PHP 8.4, y el contenedor corre 8.2 — revienta con parse error.
-        $primera = (new DateTimeImmutable($hoy->format('Y-m-16')))->modify('+1 month');
+        /* La primera cuota cae el 16 del mes SIGUIENTE al de la firma. Antes caia
+           el mes siguiente al de HOY, y eso la ponia en el mismo mes en que aun se
+           estaba firmando -- o incluso antes de la firma. Ahora el orden es
+           reserva -> firma -> primera cuota, que es como se cobra de verdad.
+
+           🔴 Cotizar pasado el ~21 corre la firma al mes siguiente y con ella la
+           primera cuota. Como el plazo lo fija la ENTREGA, eso deja una cuota
+           menos y sube el valor de cada una. Medido en E-3-18: 56 cuotas de
+           $516.54 pasan a 55 de $525.93. No es un error: si el cliente firma en
+           septiembre, su primera cuota es en octubre. */
+        $primera = (new DateTimeImmutable($firmaFecha->format('Y-m-16')))->modify('+1 month');
     }
     $piso = new DateTimeImmutable($hoy->format('Y-m-16'));
     if ($primera < $piso) $primera = $piso;
@@ -568,6 +586,11 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         'valor'         => $v,
         'legal'         => cot_notaria($v),
         'separacion'    => $separacion,
+        // Las fechas del cronograma completo: hasta ahora la reserva y la firma
+        // salian sin fecha y no se sabia cuando vencia cada cosa.
+        'fechaReserva'  => $reservaFecha->format('d/m/Y'),
+        'fechaFirma'    => $firmaFecha->format('d/m/Y'),
+        'diasFirma'     => COT_DIAS_FIRMA,
         'firma'         => $firma,
         // 'reserva' es lo que el cliente pone ANTES de las cuotas: separación + firma.
         // Ya no es siempre el 10% — con la firma en 0 puede ser solo los $1.000.
