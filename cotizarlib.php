@@ -229,8 +229,22 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     /* Las dos fechas que faltaban en el cronograma. Se suman DIAS, no meses: sumar
        un mes al 31 de agosto da 1 de octubre porque septiembre no tiene 31, y eso
        habria puesto una fecha equivocada en un documento de cliente. */
+    /* Si el asesor escribe cuando se paga la firma, esa manda y la separacion se
+       deduce hacia atras. Si no, se asume que se cotiza y se reserva hoy.
+       Se acepta fecha pasada a proposito: la reserva de un cliente que ya firmo
+       OCURRIO, y sin poder escribirla no se puede reproducir su tabla de pagos. */
     $reservaFecha = $hoy;
     $firmaFecha   = $hoy->modify('+' . COT_DIAS_FIRMA . ' days');
+    $ff = trim((string)($opts['fechaFirma'] ?? ''));
+    if ($ff !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $ff)) {
+        $cand = DateTimeImmutable::createFromFormat('!Y-m-d', $ff);
+        // createFromFormat NO falla con un 31 de febrero: lo corre al 3 de marzo. Se
+        // compara con lo escrito para descartar una fecha que no existe.
+        if ($cand instanceof DateTimeImmutable && $cand->format('Y-m-d') === $ff) {
+            $firmaFecha   = $cand;
+            $reservaFecha = $cand->modify('-' . COT_DIAS_FIRMA . ' days');
+        }
+    }
     if (preg_match('/^(\d{4})-(\d{2})$/', $mesInicio, $m)) {
         $primera = new DateTimeImmutable(sprintf('%04d-%02d-16', (int)$m[1], (int)$m[2]));
     } else {
@@ -248,8 +262,18 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
            septiembre, su primera cuota es en octubre. */
         $primera = (new DateTimeImmutable($firmaFecha->format('Y-m-16')))->modify('+1 month');
     }
-    $piso = new DateTimeImmutable($hoy->format('Y-m-16'));
-    if ($primera < $piso) $primera = $piso;
+    /* 🔴 EL PISO SOLO APLICA A LA COTIZACION AUTOMATICA. Existe para que una
+       cotizacion nueva no arranque en un mes ya pasado. Pero cuando el asesor ESCRIBE
+       la fecha de la firma o el mes de la primera cuota, esta describiendo un trato
+       real -- muchas veces uno que ya ocurrio, para reproducir la tabla de pagos que
+       el cliente ya acepto. Ahi el piso estaba pisando el dato: con la firma en enero
+       de 2025 la primera cuota saltaba a agosto de 2026 y la tabla salia mal.
+       Si lo escribieron, manda lo escrito. */
+    $loEscribieron = ($mesInicio !== '') || ($ff !== '' && $firmaFecha != $hoy->modify('+' . COT_DIAS_FIRMA . ' days'));
+    if (!$loEscribieron) {
+        $piso = new DateTimeImmutable($hoy->format('Y-m-16'));
+        if ($primera < $piso) $primera = $piso;
+    }
 
     // --- plazo máximo: cuántas cuotas caben antes de la entrega ---
     $plazoMax = null;

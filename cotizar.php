@@ -163,6 +163,13 @@ $cliente = mb_strtoupper((string)($_GET['cliente'] ?? $cliente), 'UTF-8');
 $modalidad = (($_GET['mod'] ?? '') === 'iguales') ? 'iguales' : 'estandar';
 $cuotas    = (int)($_GET['n'] ?? 0);
 $mesIni    = (string)($_GET['mes'] ?? '');
+/* Fecha en que se paga la firma. Si el asesor la escribe, la separacion se deduce
+   hacia atras (firma menos los dias de plazo) y las cuotas arrancan el mes
+   siguiente al de la firma. Hace falta por dos motivos reales:
+     - la reserva ya OCURRIO y no es hoy: sin esto no se puede reproducir la tabla
+       que el cliente ya acepto, y esta pantalla se esta usando como tabla de pagos;
+     - el cliente pide pagar la firma tal mes, y eso corre todo el cronograma. */
+$fFirma    = (string)($_GET['ffirma'] ?? '');
 $presu     = (float)str_replace([',', '$', ' '], '', (string)($_GET['presu'] ?? ''));
 // Variantes reales que pidió el negocio. Nada vacío = plan clásico, no se toca nada.
 $num = function (string $k): string {
@@ -207,7 +214,8 @@ $opts = ['extraPartes' => $extraPartes,
          'reservaPct'  => $modelo['reservaPct'],
          'contraPct'   => $modelo['contraPct'],
          'extra'       => $modelo['extra'],
-         'maxExtra'    => $modelo['maxExtra']];
+         'maxExtra'    => $modelo['maxExtra'],
+         'fechaFirma'  => $fFirma];
 
 // MONTOS PERSONALIZADOS de las extraordinarias. Se escriben las primeras; la última
 // la calcula el motor con el residuo, así que acá NO se lee ni se manda.
@@ -670,8 +678,12 @@ $hoy  = new DateTimeImmutable('now');
         <option value="estandar" <?= $modalidad === 'estandar' ? 'selected' : '' ?>>Con extraordinarias</option>
         <option value="iguales"  <?= $modalidad === 'iguales'  ? 'selected' : '' ?>>Cuotas iguales</option>
       </select></div>
+    <div><label>Fecha de la firma</label>
+      <input type="date" name="ffirma" value="<?= h($fFirma) ?>"
+             title="Cuando se paga la firma. La separación se calcula sola: <?= (int)$plan['diasFirma'] ?> días antes. Vacío = hoy + <?= (int)$plan['diasFirma'] ?> días."></div>
     <div><label>Primera cuota</label>
-      <input type="month" name="mes" value="<?= h($plan['inicio']) ?>" min="<?= $hoy->format('Y-m') ?>"></div>
+      <input type="month" name="mes" value="<?= h($plan['inicio']) ?>" min="<?= $hoy->format('Y-m') ?>"
+             title="Si se deja como está, arranca el mes siguiente al de la firma."></div>
     <!-- % a financiar antes de la entrega: 40 es lo común, piso de negocio 35
          (se topa DENTRO del motor, el min/max de aquí es solo guía visual). -->
     <div><label>Financia %</label>
