@@ -641,8 +641,20 @@ $hoy  = new DateTimeImmutable('now');
   }
 
  /* La fecha junto al rotulo de separacion y firma: presente pero sin competir
-    con el nombre del hito ni con el monto. */
- .fhito{font-weight:400;font-size:.86em;opacity:.62;margin-left:.5em;
+    con el nombre del hito ni con el monto.
+
+    🔴 NO USAR `opacity` AQUI. Era `opacity:.62` y rompia el TEXTO del PDF.
+    Un elemento con opacity<1 se pinta en su propia capa de transparencia, y al
+    exportar a PDF esa capa se escribe en un bloque aparte: las dos fechas salian
+    17 lineas despues de su rotulo, PEGADAS al monto de otra cuota
+    ("$403.6401/09/2026"). En pantalla se veia bien -- el usuario mando la captura
+    y tenia razon -- pero quien lee el documento despues (cobranza2.php, al importar
+    la tabla de pagos) recibia el monto de la cuota 17 contaminado, y las fechas de
+    separacion y firma solo se recuperaban leyendo la frase del pie.
+    `.fhito` era el UNICO texto del documento con opacity, y era el unico que se
+    desplazaba. #687c8b es el color que #0c2c44 al 62% produce sobre blanco, asi que
+    se ve igual. Medido el 01-sep-2026 sobre ADRIANA FORERO A-1-8. */
+ .fhito{font-weight:400;font-size:.86em;color:#687c8b;margin-left:.5em;
         letter-spacing:0;white-space:nowrap}
 </style>
 </head><body>
