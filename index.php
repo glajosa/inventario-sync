@@ -19,6 +19,23 @@ if (isset($_GET['log'])) {
     exit;
 }
 
+/* Huella del codigo que ESTE contenedor esta sirviendo: ?huella=1&token=...
+   Existe porque el disparo del despliegue devuelve HTTP 000 y no dice si funciono.
+   La pregunta buena no es "el disparo tuvo exito" sino "el codigo nuevo ya sirve",
+   y eso se le pregunta a la app. Ver el comentario largo en huella.php. */
+if (isset($_GET['huella'])) {
+    $expect = (string)getenv('OUTBOUND_TOKEN');
+    if ($expect === '' || !hash_equals($expect, (string)($_GET['token'] ?? ''))) { http_response_code(403); exit('forbidden'); }
+    require_once __DIR__ . '/huella.php';
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    $h = huella(__DIR__);
+    // ?huella=1 da solo el total (barato); ?huella=detalle lista archivo por archivo
+    if ($_GET['huella'] !== 'detalle') unset($h['archivos']);
+    echo json_encode($h + ['utc' => gmdate('Y-m-d\TH:i:s\Z')], JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
 header('Content-Type: application/json');
 $allow = @file_get_contents($DATA_DIR . '/allowlist.json');
 $arr   = json_decode($allow ?: '[]', true);

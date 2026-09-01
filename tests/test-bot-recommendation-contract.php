@@ -58,8 +58,14 @@ require_once dirname(__DIR__) . '/cotizarlib.php';
 foreach (bot_commercial_profiles() as $nombre => $perfil) {
     $cat = (int)($perfil['category_id'] ?? 0);
     $delBot = ($perfil['delivery']['date'] ?? null);
-    $e = cot_entrega($cat);
-    $delMatriz = $e ? sprintf('%04d-%02d', $e['y'], $e['m']) : null;
+    // Se compara contra la MATRIZ, no contra cot_entrega(): esa funcion devuelve el
+    // tope de plazo que aplica el COTIZADOR, y hay proyectos donde a proposito no
+    // aplica ninguno (Sun Bay). La fecha de entrega es un dato del proyecto y vive
+    // en la matriz; el tope es una decision comercial y vive en el codigo.
+    $f = dirname(__DIR__) . '/matrices/proyecto_' . $cat . '.json';
+    $j = is_file($f) ? json_decode((string)file_get_contents($f), true) : null;
+    $fechas = is_array($j) ? cot_fechas_entrega($j) : [];
+    $delMatriz = $fechas ? min($fechas) : null;
     // Torre D no tiene matriz: su fecha vive en el codigo y el bot no la declara.
     if ($cat === 51) continue;
     test_same($delMatriz, $delBot,

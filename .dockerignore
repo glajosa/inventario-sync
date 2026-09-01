@@ -5,6 +5,7 @@
 .worktrees
 .superpowers
 docs
+bin
 
 .env
 .env.*

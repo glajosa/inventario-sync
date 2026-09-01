@@ -71,6 +71,17 @@ function cot_entrega(int $categoryId): ?array {
     // y sigue aquí hasta que alguien la ponga en la matriz.
     if ($mejor === null && $categoryId === 51) $mejor = ['y' => 2027, 'm' => 5];
 
+    // 🔴 SUN BAY (49) NO LLEVA TOPE DE PLAZO EN EL COTIZADOR.
+    // Su matriz declara fecha_entrega 2030-09 y esa fecha SI manda en la lista de
+    // precios. Pero el cotizador no la usa para recortar cuotas: son solares, se
+    // venden con otro criterio, y el 31-ago-2026 el usuario lo pidio explicito
+    // ("yo solamente te hable de no dar el plazo... dejalo como estaba").
+    // Al hacer que esta funcion leyera la matriz, Sun Bay paso de ofrecer 60 cuotas
+    // a 49 sin que nadie lo pidiera. Esta linea lo devuelve a como estaba.
+    // Para quitar la excepcion: borrar esta linea y la constante COT_SIN_TOPE_DE_PLAZO
+    // — y hay que preguntarle a el antes, no deducirlo.
+    if ($categoryId === COT_SIN_TOPE_DE_PLAZO) $mejor = null;
+
     return $cache[$categoryId] = $mejor;   // null = sin fecha fija (ver cot_modelo)
 }
 
@@ -149,6 +160,9 @@ function cot_modelo(int $categoryId): array {
 }
 
 const COT_PLAZO_REF = 60;     // plazo de referencia
+/** Proyecto cuyo cotizador NO recorta cuotas por la fecha de entrega. Ver el
+ *  comentario dentro de cot_entrega(): es una decision de negocio, no un bug. */
+const COT_SIN_TOPE_DE_PLAZO = 49;   // Sun Bay Engabao (solares)
 const COT_SEPARACION = 1000;  // la separación siempre es $1.000 (o el 10% si es menor)
 /* Plazo para pagar lo de la firma, en dias CORRIDOS desde la cotizacion. Se suman
    dias y no meses a proposito: '+1 month' sobre el 31 de agosto da 1 de octubre. */
