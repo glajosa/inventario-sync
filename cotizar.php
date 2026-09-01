@@ -518,10 +518,15 @@ $hoy  = new DateTimeImmutable('now');
   .pct{font-weight:600;font-size:10.5px;color:#5a6472;margin-left:5px}
   tr.extra td{background:#fff8e6}
   tr.diferido td{background:#eef5ff}
+  /* 🔴 El espacio antes de <span class="etq"> en la fila de la tabla es OBLIGATORIO y no
+     es decorativo: sin el, el texto extraido del PDF sale "16/06/2027EXTRA" pegado y el
+     que lo lee (cobranza2.php) tiene que adivinar donde termina el anio. Reportado por el
+     usuario el 01-sep-2026. El margin-left bajo de 7px a 4px para compensar los ~3px que
+     aporta ese espacio, asi el PDF se ve igual que antes. */
   .etq{display:inline-block;background:#f0b429;color:#4a3200;font-size:9.5px;font-weight:700;
-       padding:2px 6px;border-radius:4px;margin-left:7px;letter-spacing:.6px}
+       padding:2px 6px;border-radius:4px;margin-left:4px;letter-spacing:.6px}
   .etq2{display:inline-block;background:#3b82c4;color:#fff;font-size:9.5px;font-weight:700;
-       padding:2px 6px;border-radius:4px;margin-left:7px;letter-spacing:.6px}
+       padding:2px 6px;border-radius:4px;margin-left:4px;letter-spacing:.6px}
   .aviso{background:#fff4e5;border:1px solid #ffd9a0;color:#7a5200;border-radius:8px;
          padding:10px 13px;font-size:13px;margin-bottom:16px}
   /* Variante ROJA del aviso: se usa cuando lo que escribió el asesor NO cuadra y
@@ -1179,8 +1184,8 @@ $hoy  = new DateTimeImmutable('now');
       <?php foreach ($plan['filas'] as $f): ?>
       <tr class="<?= $f['extra'] ? 'extra' : ($f['diferido'] ? 'diferido' : '') ?>">
         <td><?= (int)$f['n'] ?></td>
-        <td><?= h($f['fecha']) ?><?= $f['extra'] ? '<span class="etq">EXTRA</span>' : '' ?><?php
-            if (!empty($f['diferido']) && $primerDiferido) { echo '<span class="etq2">FIRMA</span>'; $primerDiferido = false; }
+        <td><?= h($f['fecha']) ?><?= $f['extra'] ? ' <span class="etq">EXTRA</span>' : '' ?><?php
+            if (!empty($f['diferido']) && $primerDiferido) { echo ' <span class="etq2">FIRMA</span>'; $primerDiferido = false; }
             /* La cuota que absorbe el redondeo NO se rotula. Se probo con una etiqueta
                AJUSTE y el usuario la saco: al cliente no le aporta y mete una palabra
                tecnica en un documento comercial. El pie sigue diciendo cual es y por
