@@ -1161,7 +1161,7 @@ $hoy  = new DateTimeImmutable('now');
         <td><?= h(cot_money($plan['separacion'])) ?></td></tr>
       <?php if ($plan['firma'] > 0): ?>
       <tr class="hito"><td></td>
-        <td>A LA FIRMA <span class="fhito">hasta el <?= h($plan['fechaFirma']) ?></span></td>
+        <td>A LA FIRMA <span class="fhito"><?= h($plan['fechaFirma']) ?></span></td>
         <td><?= h(cot_money($plan['firma'])) ?></td></tr>
       <?php endif; ?>
       <?php /* La etiqueta FIRMA va SOLO en la primera cuota diferida. Repetirla en
