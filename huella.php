@@ -28,10 +28,17 @@
  */
 declare(strict_types=1);
 
-/** Lo que el Dockerfile NO deja dentro de la imagen, mas lo que nunca es codigo. */
+/** Lo que el Dockerfile NO deja dentro de la raiz web, mas lo que nunca es codigo. */
 const HUELLA_FUERA = [
     'Dockerfile', 'README.md', 'apache-tests-deny.conf', 'app_auth.json',
+    // entrypoint.sh se copia a /usr/local/bin y se BORRA de la raiz web
+    // (Dockerfile: `rm -f /var/www/html/entrypoint.sh`). No se ignora: se busca
+    // en su sitio real, abajo. Ignorarlo dejaria un archivo que SI cambia el
+    // comportamiento -- es quien corre los crons -- fuera de la huella.
+    'entrypoint.sh',
 ];
+/** Donde vive el entrypoint DENTRO del contenedor. */
+const HUELLA_ENTRYPOINT = '/usr/local/bin/entrypoint.sh';
 const HUELLA_CARPETAS_FUERA = [
     '.git', '.github', '.worktrees', '.superpowers', 'docs', 'node_modules',
     'tmp', 'scratch', '.specify',
@@ -65,6 +72,14 @@ function huella_archivos(string $raiz): array {
 
 function huella(string $raiz): array {
     $a = huella_archivos($raiz);
+
+    // El entrypoint vive en la raiz del repo pero en /usr/local/bin del contenedor.
+    // Se guarda con la MISMA clave de los dos lados para que las huellas comparen.
+    foreach ([$raiz . '/entrypoint.sh', HUELLA_ENTRYPOINT] as $cand) {
+        if (is_file($cand)) { $a['entrypoint.sh'] = md5_file($cand) ?: ''; break; }
+    }
+    ksort($a);
+
     $lineas = [];
     foreach ($a as $rel => $md5) $lineas[] = "$md5  $rel";
     return [
