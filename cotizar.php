@@ -482,16 +482,24 @@ $hoy  = new DateTimeImmutable('now');
      cuadros deja de cuadrar de lado. */
   /* `min-width:0` en la fila y en el rotulo: sin eso el flex NO deja encoger a un hijo
      con `nowrap` y la cifra se sale del cuadro por la derecha, tapada por el borde.
-     La cifra manda —es el dato— asi que el que cede es el rotulo. */
+     La cifra manda —es el dato— asi que el que cede es el rotulo.
+
+     🔴 POR ESO ESTOS TRES VALORES SON MAS CHICOS QUE EN LOS OTROS CUADROS.
+     El rotulo lleva overflow:hidden + text-overflow:ellipsis y el monto
+     flex:0 0 auto, asi que cuando no cabe SIEMPRE cede el texto: "FIRMA 2.5%"
+     salia como "FIRMA 2...." en el PDF. La ficha partida es la mas estrecha de
+     las cuatro y se pasaba por ~8-10 px.
+     No subir estos tamaños "para igualarlos" con los otros cuadros: se vuelve a
+     cortar el rotulo. Reportado el 01-sep-2026 por un usuario que vio el PDF. */
   .resumen div.partido b{font-size:14px;display:flex;justify-content:space-between;
        align-items:baseline;gap:8px;font-weight:700;line-height:1.35;min-width:0}
   .resumen div.partido b + b{margin-top:3px;padding-top:3px;border-top:1px solid var(--linea)}
-  .resumen div.partido b i{font-style:normal;font-size:10px;font-weight:600;
-       text-transform:uppercase;letter-spacing:.4px;color:var(--gris);white-space:nowrap;
+  .resumen div.partido b i{font-style:normal;font-size:9px;font-weight:600;
+       text-transform:uppercase;letter-spacing:0;color:var(--gris);white-space:nowrap;
        min-width:0;overflow:hidden;text-overflow:ellipsis}
   /* `.resumen span` es display:block —es el rotulo del cuadro—; dentro de la fila
      partida tiene que volver a ser inline o el monto se va a su propio renglon. */
-  .resumen div.partido b span{display:inline;font-size:14px;text-transform:none;
+  .resumen div.partido b span{display:inline;font-size:13px;text-transform:none;
        letter-spacing:0;color:inherit;margin:0;white-space:nowrap;flex:0 0 auto}
   .resumen div.destacado{background:#eef4fb;border-color:#bcd3ea}
   .resumen div.destacado span{color:#3f6a99}
