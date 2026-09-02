@@ -29,7 +29,7 @@
       "edificios": [
         "D"
       ],
-      "nota": "SIN MATRIZ a proposito. El edificio esta BLOQUEADO por directiva y la matriz de _matriz_D.json es una PROPUESTA RECHAZADA: bajaba 67 de 73 unidades, y se decidio dejar los precios actuales. No cargarla."
+      "nota": "MEDIDO EN BITRIX EL 01-sep-2026: las 73 unidades del edificio D estan DISPONIBLES (etapa NEW) y sus precios YA coinciden con la matriz de lanzamiento del director, 0 desviaciones. Ya salen en la lista 1793. Esto DEROGA la nota anterior, que decia que D estaba bloqueado por directiva y que su matriz era una propuesta rechazada: eso fue cierto hasta el 19-ago-2026 (la propuesta bajaba 67 de 73 unidades y se rechazo), pero el 01-sep el director publico una matriz de lanzamiento distinta y la aplico. El LEEME que mando ese dia todavia arrastra la frase vieja -- no creerle a la frase, medir Bitrix."
     },
     "E": {
       "edificios": [
