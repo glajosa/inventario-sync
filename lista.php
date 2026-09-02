@@ -32,7 +32,18 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
 
 function lh(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
 /** Precio grande: la direccion lo escribe sin centavos ($ 144,420). */
-function lp(float $v): string { return '$ ' . number_format($v, 0); }
+/* 🔴 REDONDEO AL PAR (medio a par), no medio arriba.
+   El motor del director imprime con Python `{:,.0f}`, que redondea al PAR: 85.282,50
+   sale 85.282 y 87.537,50 sale 87.538. `number_format` de PHP redondea medio ARRIBA y
+   sacaba 85.283. Son 6 filas de la lista de monoambientes con un dolar de diferencia
+   contra el PDF oficial que firma el cliente -- y en un documento comercial que se
+   compara al lado, un dolar es un error.
+   El precio real de esa unidad es 85.282,50 en los dos casos: ninguno de los dos
+   redondeos es exacto, pero el que manda es el del documento oficial. */
+function lp(float $v): string {
+    $r = round($v, 0, PHP_ROUND_HALF_EVEN);
+    return '$ ' . number_format($r, 0);
+}
 /** Cifras del plan: con centavos ($1,000.00). */
 function ln(float $v): string { return '$' . number_format($v, 2); }
 

@@ -1414,7 +1414,7 @@
     },
     "1793": {
       "forma": "precio",
-      "titulo": "EDIFICIOS E & F",
+      "titulo": "EDIFICIOS D & E & F",
       "subtitulo": "40% de Entrada a {meses} Meses",
       "encabezado_cat": "VISTA HACIA EL PARQUE LINEAL<br>O AL PARQUE CENTRAL",
       "columna_parqueos": true,
@@ -1454,43 +1454,6 @@
         "singular": "",
         "mezcla": "VISTA {cara}",
         "categoria_por_defecto": "VISTA {cara}",
-        "categorias": {
-          "VISTA {cara} ESQ. 3": [
-            1,
-            13
-          ],
-          "VISTA {cara} ESQ. 2": [
-            12,
-            24
-          ],
-          "VISTA {cara} ESQ. 1": [
-            6,
-            7,
-            18,
-            19
-          ],
-          "VISTA {cara}": [
-            2,
-            3,
-            4,
-            5,
-            8,
-            9,
-            10,
-            11,
-            14,
-            15,
-            16,
-            17,
-            20,
-            21,
-            22,
-            23
-          ],
-          "VISTA {cara} CENTRAL DEL PISO": [
-            25
-          ]
-        },
         "caras": {
           "PARQUE CENTRAL": [
             [
@@ -1510,54 +1473,64 @@
           ]
         },
         "_nota": "Los nombres son los del documento: 'VISTA PARQUE CENTRAL ESQ. 1'. El {cara} se reemplaza por la cara real del grupo.",
-        "categorias_por_cara": {
-          "PARQUE CENTRAL": {
-            "VISTA {cara} ESQ. 3": [
-              1
-            ],
-            "VISTA {cara} ESQ. 2": [
-              12
-            ],
-            "VISTA {cara} ESQ. 1": [
-              6,
-              7
-            ],
-            "VISTA {cara} CENTRAL DEL PISO": [
-              25
-            ],
-            "VISTA {cara}": [
-              2,
-              3,
-              4,
-              5,
-              8,
-              9,
-              10,
-              11
-            ]
+        "posiciones_edificio": {
+          "D": {
+            "1": "E3",
+            "12": "E2",
+            "13": "E3",
+            "24": "E2",
+            "25": "U25",
+            "6": "E1",
+            "7": "E1",
+            "18": "E1",
+            "19": "E1"
           },
-          "PARQUE LINEAL": {
-            "VISTA {cara} ESQUINERO": [
-              13,
-              24
-            ],
-            "VISTA {cara} ESQ. 1": [
-              18,
-              19
-            ],
-            "VISTA {cara}": [
-              14,
-              15,
-              16,
-              17,
-              20,
-              21,
-              22,
-              23
-            ]
+          "E": {
+            "1": "E3",
+            "12": "E2",
+            "13": "E2",
+            "24": "E2",
+            "25": "U25",
+            "6": "E1",
+            "7": "E1",
+            "18": "E1",
+            "19": "E1"
+          },
+          "F": {
+            "1": "E3",
+            "12": "E2",
+            "13": "E2",
+            "24": "E2",
+            "25": "U25",
+            "6": "E1",
+            "7": "E1",
+            "18": "E1",
+            "19": "E1"
           }
         },
-        "_cara_nota": "M-06 de la direccion: en la cara CENTRAL los dos esquineros valen distinto (la 1 da a la garita con dos fachadas libres, la 12 colinda con el vecino). En la cara LINEAL los dos extremos colindan con un edificio: 13 y 24 son UNA categoria y valen igual. `categorias` queda como respaldo para familias que no distinguen cara."
+        "etiquetas_por_bloque": {
+          "P2": {
+            "M": "VISTA {cara}",
+            "E1": "VISTA {cara} ESQ. 1",
+            "E2": "VISTA {cara} ESQ. 2",
+            "E3": "VISTA {cara} ESQ. 3"
+          },
+          "P3": {
+            "M": "VISTA {cara}",
+            "E1": "VISTA {cara} ESQ. 1",
+            "E2": "VISTA {cara} ESQ. 2",
+            "E3": "VISTA {cara} ESQ. 3"
+          },
+          "P4": {
+            "M": "VISTA {cara}",
+            "E1": "VISTA {cara} ESQ. 1",
+            "E2": "VISTA {cara} ESQ. 2",
+            "E3": "VISTA {cara} ESQ. 3",
+            "U25": "VISTA {cara} — 35 m²"
+          }
+        },
+        "_dos_pasos_nota": "Modelo de DOS pasos porque la categoria NO es la misma en los tres edificios: en D la posicion 13 es el extremo libre (ESQ. 3) y en E y F colinda con un edificio vecino (ESQ. 2). El mapa plano `categorias_por_cara` que habia antes fusionaba 13 y 24 en un solo 'ESQUINERO' -- correcto mientras D estaba fuera, incorrecto ahora: el PDF oficial del lanzamiento saca ESQ. 2 y ESQ. 3 por separado en la cara lineal, a 85.282 y 88.282. Los rotulos son los del ETIQUETA de motor.py del director.",
+        "_u25_nota": "La posicion 25 va con vista al parque CENTRAL. La direccion lo dijo el 02-sep-2026: su matriz la tenia bajo 'lineal' y el PDF oficial la rotula 'VISTA PARQUE LINEAL - 35 m2'. Manda CENTRAL, que es lo que ya declaraba nuestro bloque `caras`."
       },
       "uniones": {
         "_nota": "Dos o tres contiguos = un departamento de 2 o 3 dormitorios. Precio = suma - 20.000, UNA sola vez: al unirse viene un parqueo menos, y con tres vienen dos parqueos, asi que tambien se resta una vez. Se muestra la combinacion MAS BARATA de cada tamaño y cara: es un 'desde'.",
@@ -1585,7 +1558,6 @@
         "excluir_posiciones": [
           25
         ],
-        "bloque": "P4",
         "tamanos": [
           {
             "n": 2,
@@ -1597,7 +1569,9 @@
             "nombre": "3 DORM. {cara}",
             "parqueos": 2
           }
-        ]
+        ],
+        "por_bloque": true,
+        "_por_bloque_nota": "El PDF oficial saca 2 DORM. y 3 DORM. DENTRO de cada piso y con el precio de ese piso (2 DORM. lineal: 143.980 en el 2do, 145.980 en el 3ro, 147.980 en el 4to). Antes se calculaba la union mas barata del proyecto entero y salia UNA vez, clavada en el bloque P4: mostraba el precio del 2do piso al pie de la tabla."
       },
       "financiamiento": {
         "separa": 1000,
@@ -1613,10 +1587,10 @@
       "encabezado_precio": "PRECIO<br>INCLUYENDO PARQUEO",
       "codigo_sin_prefijo": true,
       "sin_vigencia": true,
-      "pie2": "EDIFICIOS - E & F",
+      "pie2": "EDIFICIOS - D & E & F",
       "notas": [
-        "<b>Monoambientes de 31 m²</b> en los edificios E y F. Los esquineros de los extremos miden 32,50 m².",
-        "<b>Dos o tres unidades contiguas pueden unirse</b> en un departamento de dos o tres dormitorios. No todas las parejas se pueden unir: el ascensor separa algunas."
+        "Monoambientes de 31 m² en los edificios D y E y F. Los esquineros de los extremos miden 32,50 m².",
+        "Dos o tres unidades contiguas pueden unirse en un departamento de dos o tres dormitorios. No todas las parejas se pueden unir: el ascensor separa algunas."
       ],
       "color_por": "vista",
       "_color_nota": "Direccion 25-ago-2026: el color es la VISTA. Las posiciones 1 a 12 dan al parque CENTRAL (verde) y las 13 a 24 al parque LINEAL (amarillo). El E-4-25 esta solo en el 4to piso, en el medio del edificio, y da al CENTRAL. El orden dentro de cada piso es lineal primero y central despues.",
@@ -1631,7 +1605,13 @@
       "sin_meta": true,
       "_pie_nota": "El rango del pie es del edificio (31 a 94,5 m2), no de las filas: si hoy no hay una unida de 3, el calculo daria 93 y el documento dice 94.5.",
       "alineacion_nombre": "izquierda",
-      "union_fuerte": true
+      "union_fuerte": true,
+      "_lanzamiento_D_nota": "El edificio D se OFICIALIZO el 02-sep-2026 y entra a esta lista. Antes decia 'EDIFICIOS E & F' y D estaba fuera por directiva. Titulo, pie y notas copiados del PDF oficial 'Lista de Precios - Noral Plaza (Departamentos)' que mando la direccion ese dia -- no redactados por nosotros.",
+      "uniones_en_su_cara": true,
+      "escasez_por_tipo": true,
+      "_escasez_nota": "La escasez se cuenta por TIPO (cara + categoria) en TODO el proyecto, no por piso ni por edificio, y la leyenda sale una sola vez. Es la regla textual del documento del director: que en el 3er piso quede un solo medianero central no es escasez si hay trece en el proyecto. Medido el 02-sep-2026 contra Bitrix: de los 9 tipos, solo `unidad_25` tiene 2 o menos (tiene 2) -- por eso su PDF oficial lleva UNA sola leyenda y la nuestra llevaba 14.",
+      "nombre_si_una": true,
+      "_nombre_si_una_nota": "El PDF oficial rotula 'VISTA PARQUE LINEAL ESQ. 3' incluso cuando queda una sola unidad de ese tipo. Sin esta bandera la lista imprimia el CODIGO ('D-2-13'), que le dice al cliente exactamente que unidad es y de que edificio."
     },
     "1791": {
       "forma": "precio",

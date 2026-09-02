@@ -299,19 +299,34 @@ if ($UN) {
                     }
                     if (!$ok) continue;
                     $precio = $suma - (float)($UN['descuento'] ?? 20000);
-                    $k = $n . '|' . $cara;
+                    /* `por_bloque`: una fila de union POR PISO, con el precio de ese piso. Es lo
+                       que hace el documento oficial de los monoambientes -- 2 DORM. lineal vale
+                       143.980 en el 2do piso y 147.980 en el 4to, y cada uno va dentro de su
+                       bloque. Sin la bandera se conserva lo de antes: la union mas barata del
+                       proyecto, una sola vez, en el bloque que declare la familia. */
+                    $blqU = !empty($UN['por_bloque']) ? (string)$bloqueDe((int)$piso) : '';
+                    /* Piso sin bloque declarado: la union no tiene donde ir. Se salta en vez de
+                       caer en el bloque de la familia, que la pondria en un piso que no es. */
+                    if (!empty($UN['por_bloque']) && $blqU === '') continue;
+                    $k = $blqU . '|' . $n . '|' . $cara;
                     if (!isset($mejores[$k]) || $precio < $mejores[$k]['precio'])
                         $mejores[$k] = ['precio' => $precio, 'm2' => $m2, 'n' => $n,
                                         'cara' => $cara, 'parq' => (int)($t['parqueos'] ?? 1),
+                                        'blq' => $blqU,
                                         'nombre' => str_replace('{cara}', $cara, (string)($t['nombre'] ?? ''))];
                 }
             }
         }
     }
     // Van al final del bloque que declare la familia, como en la lista original.
-    $blqU = (string)($UN['bloque'] ?? array_key_first($porBloque ?: ['' => null]));
+    /* $porBloque todavia no existe en este punto del archivo: antes no se notaba porque
+       toda familia con uniones declaraba `bloque` y el `??` cortaba antes de evaluarlo.
+       Al quitarle el `bloque` a los monoambientes quedo al descubierto. Se resuelve con
+       el primer bloque declarado, que es lo que $porBloque habria dado. */
+    $blqFam = (string)($UN['bloque'] ?? ($BLOQUES[0]['id'] ?? ''));
     foreach ($mejores as $mj) {
-        $grupos['UNION|' . $mj['n'] . '|' . $mj['cara']] = [
+        $blqU = ($mj['blq'] ?? '') !== '' ? (string)$mj['blq'] : $blqFam;
+        $grupos['UNION|' . $blqU . '|' . $mj['n'] . '|' . $mj['cara']] = [
             'bloque' => $blqU, 'precio' => $mj['precio'], 'm2' => $mj['m2'],
             'nombre' => $mj['nombre'], 'sing' => '', 'zona' => $mj['cara'],
             'parq' => $mj['parq'], 'union' => true, 'calculada' => true,
@@ -331,7 +346,7 @@ $ORDEN = (string)($L['orden_filas'] ?? 'precio');
 $PRIO  = array_flip(array_map('strval', (array)($L['orden_categorias'] ?? [])));
 // $ORDEN y $PRIO tienen que entrar al `use`: sin ellos el closure los ve indefinidos,
 // imprime un Warning y el orden por categoria no se aplica nunca.
-uasort($grupos, function ($a, $b) use ($ordenBloque, $ORDEN, $PRIO) {
+uasort($grupos, function ($a, $b) use ($ordenBloque, $ORDEN, $PRIO, $L) {
     $ba = $ordenBloque[$a['bloque']] ?? 99;
     $bb = $ordenBloque[$b['bloque']] ?? 99;
     if ($ba !== $bb) return $ba <=> $bb;
@@ -341,7 +356,13 @@ uasort($grupos, function ($a, $b) use ($ordenBloque, $ORDEN, $PRIO) {
     // de los monoambientes) van al final, porque no son unidades del inventario.
     $ua = !empty($a['calculada']) ? 1 : 0;
     $ub = !empty($b['calculada']) ? 1 : 0;
-    if ($ua !== $ub) return $ua <=> $ub;
+    /* `uniones_en_su_cara`: la union va al final de SU CARA, no al final del piso. El
+       documento oficial de los monoambientes va LINEAL, sus tres esquineros, 2 DORM.
+       LINEAL, 3 DORM. LINEAL, y recien ahi arranca el bloque CENTRAL con sus dos
+       uniones. Con las cuatro uniones juntas al pie del piso, el cliente lee "2 DORM.
+       PARQUE LINEAL" debajo de una fila central y no sabe a que vista pertenece.
+       Sin la bandera se conserva lo de siempre: calculadas al final del bloque. */
+    if (empty($L['uniones_en_su_cara']) && $ua !== $ub) return $ua <=> $ub;
     /* Departamentos NO ordena por vista: su 4to piso pone primero las cuatro filas
        de ULTIMA DISPONIBLE (80.315 · 82.863 · 84.863 · 93.760) y despues las cuatro
        tipologias (85.445 · 85.445 · 89.338 · 92.338), cada grupo ascendente. Es el
@@ -366,6 +387,8 @@ uasort($grupos, function ($a, $b) use ($ordenBloque, $ORDEN, $PRIO) {
     $za = strpos($a['zona'], 'LINEAL') !== false ? 0 : 1;
     $zb = strpos($b['zona'], 'LINEAL') !== false ? 0 : 1;
     if ($za !== $zb) return $za <=> $zb;
+    // Ya dentro de la misma cara, la union se va al final de ESA cara.
+    if (!empty($L['uniones_en_su_cara']) && $ua !== $ub) return $ua <=> $ub;
     // Dentro de la zona, DOS ordenes posibles y cada documento usa el suyo:
     //   'precio'    ascendente (Locales, Departamentos)
     //   'categoria' el ESQUINERO antes que el medianero, aunque sea mas caro. Es el
@@ -598,7 +621,26 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
           <th>CUOTAS EXTRAORDINARIAS<br>(1 VEZ AL A&Ntilde;O)</th></tr>
       </thead>
       <tbody>
-      <?php $iB = 0; foreach ($porBloque as $blq => $filas): $iB++;
+      <?php
+      /* ESCASEZ POR TIPO, NO POR PISO. Regla del documento del director, textual: "que en
+         el 3er piso quede un solo medianero central no es escasez si hay trece en el
+         proyecto". Nuestro grupo lleva el PISO en la llave, asi que contaba por piso y
+         sacaba "ULTIMA DISPONIBLE" en 14 filas de 26 — quema la unica palanca de urgencia
+         que tiene el asesor, que es justo lo que su propio comentario advierte.
+         El tipo es (cara, categoria), y eso es exactamente lo que ya dice el NOMBRE
+         derivado de la fila ("VISTA PARQUE LINEAL ESQ. 2"). Se suma por nombre en toda la
+         familia y la leyenda sale UNA sola vez, en la primera fila de ese tipo: repetirla
+         en cada piso haria parecer que hay mas stock del que hay. */
+      $stockTipo = []; $tipoAvisado = [];
+      if (!empty($L['escasez_por_tipo'])) {
+          foreach ($grupos as $g) {
+              if (!empty($g['union']) || !empty($g['calculada'])) continue;
+              $nm = (string)$g['nombre'];
+              if ($nm === '') continue;
+              $stockTipo[$nm] = ($stockTipo[$nm] ?? 0) + count(array_filter($g['cods'], 'strlen'));
+          }
+      }
+      $iB = 0; foreach ($porBloque as $blq => $filas): $iB++;
             /* El color de la banda del piso lo fija el documento, no el numero de
                piso: en Locales los DOS bloques son ocres, en Oficinas van oscuro,
                medio y ocre. Si el JSON no lo dice, se cae al ciclo de siempre. */
@@ -622,16 +664,31 @@ $tituloBase = (string)($L['titulo'] ?? strtoupper($proyecto));
                   return empty($L['codigo_con_guion']) ? $c
                        : preg_replace('/^([A-Z])(\d)/', '$1-$2', $c);
               };
-              $texto = $n !== 1 ? $g['nombre']
+              /* Con una sola unidad en el grupo, por defecto se imprime su CODIGO: en Torre D
+                 cada fila ES una unidad y el codigo es el dato util. Pero en los monoambientes
+                 de Plaza el documento oficial rotula "VISTA PARQUE LINEAL ESQ. 3" aunque quede
+                 una sola, y el codigo le dice al cliente exactamente que unidad y que edificio
+                 es. `nombre_si_una` deja que la familia elija; el nombre solo gana si existe. */
+              $unaConNombre = !empty($L['nombre_si_una']) && $g['nombre'] !== '';
+              $texto = ($n !== 1 || $unaConNombre) ? $g['nombre']
                      : (($g['sing'] !== '' && empty($L['codigo_sin_prefijo']))
                           ? trim($g['sing'] . ' ' . $codTxt($g['cods'][array_key_first($g['cods'])]))
                           : $codTxt($g['cods'][array_key_first($g['cods'])]));
               /* Hay listas donde cada fila ES una unidad —Torre D tiene 13 filas y 13
                  unidades— y ahi la etiqueta de escasez se repite en todas y no dice
                  nada: quema la unica palanca de urgencia que tiene el asesor. */
+              /* $nBadge: cuantas quedan A EFECTOS DE LA LEYENDA. Con `escasez_por_tipo` es
+                 el stock del TIPO en toda la familia, y 99 si ese tipo ya se aviso arriba.
+                 Sin la bandera es el tamano del grupo, como siempre. */
+              $nBadge = $n;
+              if (!empty($L['escasez_por_tipo']) && $g['nombre'] !== '' && empty($g['union'])) {
+                  $nm = (string)$g['nombre'];
+                  $nBadge = isset($tipoAvisado[$nm]) ? 99 : (int)($stockTipo[$nm] ?? $n);
+                  $tipoAvisado[$nm] = true;
+              }
               $ult = (!empty($L['sin_badges']) || !empty($g['union'])) ? ''
-                   : ($n === 1 ? (string)($L['badge_uno'] ?? 'ÚLTIMA UNIDAD')
-                   : ($n === 2 ? (string)($L['badge_dos'] ?? '2 ÚLTIMAS DISPONIBLES') : '')); ?>
+                   : ($nBadge === 1 ? (string)($L['badge_uno'] ?? 'ÚLTIMA UNIDAD')
+                   : ($nBadge === 2 ? (string)($L['badge_dos'] ?? '2 ÚLTIMAS DISPONIBLES') : '')); ?>
           <tr>
             <?php if (!$sinBanda && $primera): $primera = false; ?>
               <td class="niv <?= $clsNiv ?>" rowspan="<?= count($filas) ?>"><span><?= lh(strtoupper($etBloque[$blq] ?? $blq)) ?></span></td>
