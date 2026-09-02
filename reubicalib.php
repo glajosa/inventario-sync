@@ -99,15 +99,42 @@ function unidad_por_codigo_contacto(string $codigo, int $contacto): ?array {
  * contacto. Si hay varios (reventas del mismo cliente), gana el que nombra la
  * unidad vieja; si ninguno la nombra, el más reciente.
  */
-function clientes_hermano(int $contacto, int $unidadVieja): ?array {
-    if ($contacto <= 0) return null;
-    $r = bx('crm.deal.list', [
-        'filter' => ['CONTACT_ID' => $contacto, 'CATEGORY_ID' => CLIENTES_CAT],
-        'order'  => ['ID' => 'DESC'],
-    ]);
-    if (!$r['ok']) return null;
+function clientes_hermano(int $contacto, int $unidadVieja, ?string &$motivo = null): ?array {
+    $motivo = null;
+    if ($contacto <= 0) { $motivo = 'el deal no tiene contacto'; return null; }
+
+    // 🔴 El `select` NO es opcional: sin él Bitrix devuelve el deal pero con los
+    //    userfields VACÍOS, así que la rama de abajo —la que elige el deal que
+    //    realmente nombra la unidad vieja— nunca podía acertar y siempre ganaba
+    //    el más reciente. En un cliente con varias compras eso escribe la
+    //    reubicación en el deal equivocado.
+    // La lista se pide UNA sola vez por contacto: reubicar() llama dos veces —
+    // primero sin saber la unidad vieja (la necesita para ubicarla) y después ya
+    // sabiéndola, para afinar la elección. Sin este caché la segunda llamada
+    // pagaría otra vez lo mismo.
+    static $cache = [];
+    if (isset($cache[$contacto])) {
+        $r = $cache[$contacto];
+    } else {
+        $r = bx('crm.deal.list', [
+            'filter' => ['CONTACT_ID' => $contacto, 'CATEGORY_ID' => CLIENTES_CAT],
+            'select' => ['ID', 'TITLE', 'STAGE_ID', 'ASSIGNED_BY_ID', 'CONTACT_ID', CAMPO_NUEVO],
+            'order'  => ['ID' => 'DESC'],
+        ]);
+        // Un fallo NO se cachea: se reintenta en la siguiente llamada.
+        if ($r['ok']) $cache[$contacto] = $r;
+    }
+
+    // 🔴 Fallar al preguntar NO es lo mismo que no tener hermano. Antes los dos
+    //    casos devolvían null y quien llamaba escribía "sin hermano en 44" —
+    //    medido el 2026-09-02 en el deal 9350, cuyo contacto SÍ tenía el deal
+    //    9348 en CLIENTES. Un diagnóstico que miente manda a buscar una falla
+    //    que no existe.
+    if (!$r['ok']) { $motivo = 'no pude consultar CLIENTES: ' . $r['error']; return null; }
+
     $lista = $r['result'] ?? [];
-    if (!$lista) return null;
+    if (!$lista) { $motivo = "el contacto $contacto no tiene ningún deal en CLIENTES"; return null; }
+
     if ($unidadVieja > 0) {
         foreach ($lista as $d) {
             if (in_array($unidadVieja, ids_de((string)($d[CAMPO_NUEVO] ?? '')), true)) return $d;
@@ -233,17 +260,24 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
 
     // 1) COBRANZAS(48) — SOLO ACTIVO COMPRADO, el trío de reubicación y el título.
     //
-    // Ni VALOR DEL ACTIVO ni Monto y moneda ni Proyectos 1: en Cobranzas esos los
-    // llenan sus propias automatizaciones (el valor sale de la tabla de pagos
-    // cuando se sube). Escribirlos desde aquí sería pisar el trabajo de otro
-    // sistema con un precio de lista. El proyecto sí se calcula, pero solo para
-    // armar el título.
+    // Ni VALOR DEL ACTIVO ni Monto y moneda: en Cobranzas esos los llenan sus
+    // propias automatizaciones (el valor sale de la tabla de pagos cuando se
+    // sube). Escribirlos desde aquí sería pisar el trabajo de otro sistema con
+    // un precio de lista.
+    //
+    // Proyectos 1 SÍ se escribe (antes se omitía junto con el precio). El
+    // argumento de "no pisar a Cobranzas" cubre el PRECIO, que sale de la tabla;
+    // el proyecto no sale de ninguna tabla, es un dato de la unidad. Omitirlo
+    // dejaba el deal contradiciéndose solo: medido el 2026-09-02 en el deal 9350,
+    // cuyo título decía "Noral Apartments" mientras Proyectos 1 seguía en
+    // "Barranca Apartments" — y la reubicación había cruzado de proyecto.
     $c48 = [
         D_ACTIVO          => $codNuevo,
         $trio['flag']     => 1,
         $trio['activo']   => $codViejo,
         $trio['precio']   => $precioViejo > 0 ? money_fmt($precioViejo) : '',
     ];
+    if ($proyId > 0) $c48[D_PROYECTO] = $proyId;
     $t48 = titulo_reubicado((string)($deal['TITLE'] ?? ''), $proyTxt, $codNuevo);
     if ($t48 !== null) $c48['TITLE'] = $t48;
 
@@ -253,7 +287,18 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
     logline("REUBICA deal=$dealId ocasion=$ocasion $codViejo -> $codNuevo (48 listo)");
 
     // 2) CLIENTES(44) — el que de verdad ata la unidad
-    if ($h === null) $h = clientes_hermano($contacto, $viejaId);
+    // Se vuelve a resolver AHORA que se conoce la unidad vieja. Arriba (línea ~176)
+    // se pidió con 0 porque hacía falta el deal para poder ubicarla, y con 0 la
+    // función no puede hacer otra cosa que devolver el más reciente. En un cliente
+    // con varias compras ese no tiene por qué ser el de esta unidad. Con la lista
+    // ya cacheada esto no cuesta ninguna llamada más.
+    $afinado = clientes_hermano($contacto, $viejaId, $porQueNoHay);
+    if ($afinado !== null) {
+        if ($h !== null && (int)$afinado['ID'] !== (int)$h['ID']) {
+            logline("REUBICA deal=$dealId hermano corregido: {$h['ID']} -> {$afinado['ID']} (el que tiene la unidad $viejaId)");
+        }
+        $h = $afinado;
+    }
     if ($h) {
         $hid  = (int)$h['ID'];
         $c44  = [
@@ -285,6 +330,13 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
                 // etapa sin regla: la unidad nueva hereda el estado de la vieja
                 $stageDestino = $vieja ? unit_stage_name($vieja) : null;
             }
+            // 🔴 ESTA es la escritura que de verdad importa: sin ella la unidad
+            //    nueva queda SIN parentId2 y en DISPONIBLE — o sea, vendida en el
+            //    papel y ofertable en el inventario al mismo tiempo. Medido el
+            //    2026-09-02: u=759 (B-4-3) y u=761 (B-4-4) quedaron así, y el
+            //    resumen igual devolvió clientes=ok porque nadie miraba el
+            //    resultado. Ahora se comprueba, se registra y se refleja.
+            $atadas = 0; $fallos = [];
             foreach ($nuevas as $uid) {
                 @touch(($GLOBALS['DATA_DIR'] ?? '/data') . '/self_u_' . (int)$uid);
                 // El contacto y el asesor van en la MISMA escritura que la
@@ -296,15 +348,37 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
                 if ($stageDestino !== null) {
                     $sid = stage_id((string)$catNueva, $stageDestino);
                     if ($sid !== null) $campos['stageId'] = $sid;
+                    else logline("REUBICA u=$uid SIN stage: no existe '$stageDestino' en la categoría $catNueva");
                 }
-                bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => (int)$uid, 'fields' => $campos]);
-                cache_unidad((int)$uid, $stageDestino, $hid);
+                $ua = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => (int)$uid, 'fields' => $campos]);
+                if ($ua['ok']) {
+                    $atadas++;
+                    cache_unidad((int)$uid, $stageDestino, $hid);
+                    logline("REUBICA u=$uid atada al deal $hid" . ($stageDestino !== null ? " ($stageDestino)" : ''));
+                } else {
+                    // No se cachea un atado que no ocurrió: el caché mentiría igual
+                    // que el resumen.
+                    $fallos[] = "u=$uid: {$ua['error']}";
+                    logline("REUBICA u=$uid NO SE ATÓ al deal $hid ERR: {$ua['error']}");
+                }
             }
-            $hecho['stage_nueva'] = $stageDestino ?? '-';
+            $hecho['stage_nueva']    = $stageDestino ?? '-';
+            $hecho['unidades_atadas'] = $atadas . '/' . count($nuevas);
+            if ($fallos) {
+                // Se avisa fuerte: el 48 y el 44 ya quedaron con la unidad nueva,
+                // pero sin dependencia el campo Inventario se vacía solo y la
+                // unidad sigue ofertable. Es media reubicación, no una completa.
+                $hecho['ERROR_ATAR'] = implode(' · ', $fallos);
+                $hecho['aviso'] = 'La unidad NO quedó atada: sigue apareciendo disponible en el inventario';
+            }
         }
     } else {
-        $hecho['clientes'] = 'no encontré deal de Clientes de este contacto';
-        logline("REUBICA deal=$dealId sin hermano en 44 (contacto $contacto)");
+        // El motivo real, no "no encontré": puede ser que el API falló, y eso se
+        // reintenta; que no haya deal en CLIENTES es otra cosa y se arregla a mano.
+        $razon = $porQueNoHay ?? 'motivo desconocido';
+        $hecho['clientes'] = 'NO se actualizó CLIENTES — ' . $razon;
+        $hecho['aviso'] = 'La reubicación quedó a medias: COBRANZAS cambió pero CLIENTES no';
+        logline("REUBICA deal=$dealId SIN TOCAR 44 (contacto $contacto): $razon");
     }
 
     // 3) la unidad VIEJA se suelta y vuelve a DISPONIBLE. Si no, quedarían dos
