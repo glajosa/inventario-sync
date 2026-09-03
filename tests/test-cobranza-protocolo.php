@@ -129,3 +129,49 @@ test_same('otro_embudo', cobranza_puede_llamar('', ['sinContestar'=>0], [])['mot
 test_same('etapa_sin_llamadas', cobranza_puede_llamar('C48:UC_X35FSA', ['sinContestar'=>0], [])['motivo'],
     'C48 sigue evaluandose por etapa');
 test_same(true, cobranza_puede_llamar('C79:PREPARATION', ['sinContestar'=>0], [])['puede'] === false, 'C79 entra al mapa (tope 0)');
+
+// ── ABOGADO: agotados los 6, se reabre SOLO el mes siguiente ──
+// Es la pregunta del usuario: "cuando pasan esos 6 intentos y nunca contesto,
+// se puede aplastar nuevamente, ya que el ciclo se repite ahi".
+// El deal entro a ABOGADO el 3-sep y nunca contesto: 6 intentos en septiembre.
+$entradaAbogado = '2026-09-03T18:40:00+03:00';
+$seis = [];
+foreach ([4,8,10,15,17,21] as $i => $dia) {
+    $seis[] = fake_activity(600+$i, 'Llamada saliente Ana',
+        sprintf('2026-09-%02dT10:00:00-05:00', $dia));
+}
+
+// (a) el 25 de septiembre: los 6 estan dentro del ciclo -> topado
+$sep = new DateTimeImmutable('2026-09-25T10:00:00-05:00');
+$iniSep = cobranza_inicio_ciclo('C48:FINAL_INVOICE', $entradaAbogado, $sep);
+$pSep = cobranza_calcular_protocolo($seis, null, $iniSep);
+test_same(6, $pSep['sinContestar'], 'en septiembre lleva los 6');
+test_same(false, cobranza_puede_llamar('C48:FINAL_INVOICE', $pSep, [])['puede'],
+    'con los 6 hechos NO se puede apretar mas en el mes');
+test_same('tope_de_etapa', cobranza_puede_llamar('C48:FINAL_INVOICE', $pSep, [])['motivo'],
+    'y el motivo es el tope, no otra cosa');
+
+// (b) el 1 de OCTUBRE: el corte pasa a ser el 1-oct (la entrada es mas vieja)
+//     -> los 6 de septiembre quedan fuera y la escalera arranca limpia
+$oct = new DateTimeImmutable('2026-10-01T09:00:00-05:00');
+$iniOct = cobranza_inicio_ciclo('C48:FINAL_INVOICE', $entradaAbogado, $oct);
+test_same('2026-10-01T00:00:00-05:00', $iniOct, 'en octubre gana el inicio de mes');
+$pOct = cobranza_calcular_protocolo($seis, null, $iniOct);
+test_same(0, $pOct['sinContestar'], 'los 6 de septiembre ya no cuentan');
+test_same(6, $pOct['fueraDelCiclo'], 'quedan reportados como del ciclo anterior, no borrados');
+$permOct = cobranza_puede_llamar('C48:FINAL_INVOICE', $pOct, []);
+test_same(true, $permOct['puede'], 'el 1 de octubre se puede apretar de nuevo');
+test_same(6, $permOct['restantes'], 'y vuelve a tener los 6 completos');
+
+// (c) el contraste: en 2 MESES VENCIDOS agotar el tope NO se reabre en el mes
+//     siguiente, porque ahi el ciclo va con la ETAPA, no con el mes.
+$tresEnEtapa = [
+    fake_activity(700,'Llamada saliente Ana','2026-09-04T10:00:00-05:00'),
+    fake_activity(701,'Llamada saliente Ana','2026-09-08T10:00:00-05:00'),
+    fake_activity(702,'Llamada saliente Ana','2026-09-10T10:00:00-05:00'),
+];
+$iniEtapaOct = cobranza_inicio_ciclo('C48:UC_LLUGGI', $entradaAbogado, $oct);
+$pEtapa = cobranza_calcular_protocolo($tresEnEtapa, null, $iniEtapaOct);
+test_same(3, $pEtapa['sinContestar'], '2 MESES sigue contando desde la etapa, aunque cambie el mes');
+test_same(false, cobranza_puede_llamar('C48:UC_LLUGGI', $pEtapa, [])['puede'],
+    'y sigue topado: para reabrirlo el deal tiene que MOVERSE de etapa');
