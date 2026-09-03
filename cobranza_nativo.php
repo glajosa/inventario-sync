@@ -11,6 +11,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/lib/cobranza-protocolo.php';
 $CFG_JS = json_encode(cobranza_config(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 ?>
+<!-- <?= COBRANZA_VER ?> -->
 <!doctype html>
 <html><head><meta charset="utf-8"><title>No contestó</title>
 <script src="//api.bitrix24.com/api/v1/"></script></head><body>

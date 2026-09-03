@@ -5,6 +5,14 @@
  */
 declare(strict_types=1);
 require_once __DIR__ . '/lib/cobranza-appauth.php';
+require_once __DIR__ . '/lib/cobranza-protocolo.php';
+
+// ?ver -> que version esta desplegada. Sin secreto: no revela nada.
+if (isset($_GET['ver'])) {
+    header('Content-Type: text/plain; charset=utf-8');
+    header('Cache-Control: no-store');
+    echo COBRANZA_VER, "\n"; exit;
+}
 
 @file_put_contents((getenv('DATA_DIR') ?: '/data') . '/sync.log',
     gmdate('Y-m-d\TH:i:s\Z') . '  COBRANZA_APP method=' . ($_SERVER['REQUEST_METHOD'] ?? '?')

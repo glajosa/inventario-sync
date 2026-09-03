@@ -12,6 +12,12 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../feriados.php';
 
+// Se sirve por HTTP en cobranza_app.php y como comentario en cobranza_nativo.php.
+// Sin esto no habia forma de comprobar QUE version esta desplegada: el endpoint
+// respondia 400 al GET igual de nuevo que de viejo, y los archivos de lib/ no se
+// sirven. Tres despliegues seguidos sin poder verificar por fuera.
+const COBRANZA_VER = 'cobranzas-boton-v4-ventana-de-ciclo';
+
 function cobranza_config(): array {
     return [
         // Tope de llamadas POR CICLO, por etapa. 0 = el boton no se ofrece.
