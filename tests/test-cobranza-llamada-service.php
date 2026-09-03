@@ -265,3 +265,39 @@ $bx = cob_fake_bx(['ID'=>77,'STAGE_ID'=>'C48:UC_LLUGGI','MOVED_TIME'=>'2026-09-0
 $r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bx, $ahora);
 test_same('procesado', $r['status'], 'el orden en que llegan las actividades no cambia el resultado');
 test_same(1, $r['intentos'], 'sigue siendo el intento 1');
+
+// ── el caso EXACTO del usuario: 1234 con fecha al 9, el deal queda en silencio ──
+$log = [];
+$conPacto = [
+    fake_activity(900,'Llamada saliente Ana','2026-09-03T08:00:00-05:00') + ['COMPLETED'=>'Y'],
+    fake_activity(901,'1234','2026-09-03T08:50:00-05:00')
+        + ['COMPLETED'=>'Y','DEADLINE'=>'2026-09-09T12:15:00-05:00'],
+];
+$bx = cob_fake_bx(['ID'=>77,'STAGE_ID'=>'C48:UC_LLUGGI','MOVED_TIME'=>'2026-09-03T14:00:00+03:00'],
+                  $conPacto, $log);
+$r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bx, $ahora);
+test_same('rechazado', $r['status'], 'con la fecha pactada al 9 NO se registra');
+test_same('pacto_vigente', $r['motivo'], 'y el motivo es el pacto');
+test_same('2026-09-09T12:15:00-05:00', $r['pactoFecha'], 'devuelve la fecha para mostrarla');
+test_same('1234', $r['pactoAsunto'], 'y de que acuerdo salio');
+test_same(0, count(array_filter($log, fn($c)=>$c['m']==='crm.activity.add')), 'no crea ninguna llamada');
+test_same(0, count(array_filter($log, fn($c)=>$c['m']==='crm.deal.update')), 'ni toca el deal');
+
+// pasado el 9, el mismo deal ya se puede trabajar
+$dsp = new DateTimeImmutable('2026-09-10T09:00:00-05:00');
+$log = [];
+$bx = cob_fake_bx(['ID'=>77,'STAGE_ID'=>'C48:UC_LLUGGI','MOVED_TIME'=>'2026-09-03T14:00:00+03:00'],
+                  $conPacto, $log);
+$r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bx, $dsp);
+test_same('procesado', $r['status'], 'pasada la fecha pactada si se puede llamar');
+test_same(1, $r['intentos'], 'y arranca en 1: el 1234 habia cerrado la tanda');
+
+// una PROMESA DE PAGO pacta igual
+$log = [];
+$conPromesa = [ fake_activity(910,'PROMESA DE PAGO','2026-09-03T08:50:00-05:00')
+                + ['COMPLETED'=>'Y','DEADLINE'=>'2026-09-15T10:00:00-05:00'] ];
+$bx = cob_fake_bx(['ID'=>77,'STAGE_ID'=>'C48:UC_VXD8VQ','MOVED_TIME'=>'2026-09-03T14:00:00+03:00'],
+                  $conPromesa, $log);
+$r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bx, $ahora);
+test_same('pacto_vigente', $r['motivo'], 'PROMESA DE PAGO tambien deja el deal en silencio');
+test_same('PROMESA DE PAGO', $r['pactoAsunto'], 'y se nombra el acuerdo');

@@ -70,6 +70,10 @@ function cobranza_no_contesto(
     }
     $deal['_planificada_futura'] = $planificadaFutura !== null;
 
+    // El pacto se busca sobre TODAS las actividades, sin filtrar por ciclo: el
+    // protocolo dice que la pausa SOBREVIVE al cambio de ciclo.
+    $deal['_pacto'] = cobranza_pacto_vigente($acts, $ahora->getTimestamp());
+
     // --- 3. el estado del ciclo ---
     // 🔴 '_entrada_etapa' era un nombre que inventé y NUNCA llené: siempre valía null,
     // la ventana del ciclo no existía y se contaban TODAS las llamadas de la historia
@@ -100,8 +104,13 @@ function cobranza_no_contesto(
 
     $permiso = cobranza_puede_llamar($stageId, $protocolo, $deal);
     if (!$permiso['puede']) {
-        return ['status' => 'rechazado', 'motivo' => $permiso['motivo'],
+        $out = ['status' => 'rechazado', 'motivo' => $permiso['motivo'],
                 'etapa' => $stageId, 'intentos' => (int)$protocolo['sinContestar']];
+        if (!empty($permiso['pacto'])) {
+            $out['pactoFecha']  = $permiso['pacto']['fecha'];
+            $out['pactoAsunto'] = $permiso['pacto']['asunto'];
+        }
+        return $out;
     }
 
     // --- 5. cerrar la planificada abierta (si la hay) ---

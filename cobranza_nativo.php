@@ -28,7 +28,8 @@ $CFG_JS = json_encode(cobranza_config(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_
     'etapa_sin_llamadas': 'En esta etapa no se llama. El recordatorio lo manda el sistema.',
     'tope_de_etapa':      'Ya se hicieron todos los intentos que permite esta etapa.',
     'en_pausa':           'Hay un pacto vigente con el cliente. No se le insiste hasta esa fecha.',
-    'otro_embudo':        'Este botón es solo para deals de COBRANZAS. Para ventas usá el otro «No contestó».'
+    'otro_embudo':        'Este botón es solo para deals de COBRANZAS. Para ventas usá el otro «No contestó».',
+    'pacto_vigente':      'Hay una fecha pactada con el cliente. El deal queda en silencio hasta entonces.'
   };
   var estado = null, error = null, corriendo = true;
 
@@ -56,11 +57,23 @@ $CFG_JS = json_encode(cobranza_config(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_
     // No se pudo registrar. Se dice POR QUÉ con la regla del protocolo, no un
     // código: la cobradora tiene que entender la negativa sin preguntarle a nadie.
     if (estado.status === 'rechazado') {
-      b.caja = { type:'section', properties:{ type:'warning', blocks:{
+      var bl = {
         a:{ type:'text', properties:{ bold:true, value:'No se registró.' } },
-        c:{ type:'text', properties:{ value: MOTIVOS[estado.motivo] || estado.motivo } },
-        d:{ type:'text', properties:{ size:'sm', color:'base_70',
-            value: etq + '  ·  intentos hechos: ' + (estado.intentos || 0) } } }}};
+        c:{ type:'text', properties:{ value: MOTIVOS[estado.motivo] || estado.motivo } }
+      };
+      // Con un pacto vivo lo que importa es LA FECHA y de qué acuerdo salió:
+      // "no se puede" sin decir hasta cuándo obliga a ir a buscarlo a mano.
+      if (estado.motivo === 'pacto_vigente' && estado.pactoFecha) {
+        bl.d = { type:'text', properties:{ bold:true,
+                 value:'Pactado hasta: ' + fecha(estado.pactoFecha) } };
+        bl.e = { type:'text', properties:{ size:'sm', color:'base_70',
+                 value:'Del acuerdo: ' + (estado.pactoAsunto || '—')
+                       + '. Ni llamada ni mensaje hasta esa fecha.' } };
+      } else {
+        bl.d = { type:'text', properties:{ size:'sm', color:'base_70',
+                 value: etq + '  ·  intentos hechos: ' + (estado.intentos || 0) } };
+      }
+      b.caja = { type:'section', properties:{ type:'warning', blocks: bl }};
       return { blocks:b, primaryButton:{title:''}, secondaryButton:{title:''} };
     }
 

@@ -192,3 +192,75 @@ $pz = cobranza_calcular_protocolo($cerr, null, null);
 test_same(true, $pz['ultimoCerrado'], 'una fallida completada se marca como cerrada');
 $abr = [fake_activity(4,'Llamada saliente Ana','2026-09-03T08:55:00-05:00') + ['COMPLETED'=>'N']];
 test_same(false, cobranza_calcular_protocolo($abr, null, null)['ultimoCerrado'], 'y una abierta no');
+
+// ════════════════════════════════════════════════════════════════════════════
+// LOS TRES ASUNTOS DE CONTESTADA (protocolo, textual: "1234, PROMESA DE PAGO
+// o REFINANCIAMIENTO. Cualquier otra cosa = NO contesto")
+// ════════════════════════════════════════════════════════════════════════════
+test_same(true,  cobranza_es_contestada('1234 hablé con la clienta'), '1234 es contestada');
+test_same(true,  cobranza_es_contestada('PROMESA DE PAGO'),           'PROMESA DE PAGO es contestada');
+test_same(true,  cobranza_es_contestada('promesa de pago 15/09'),     'sin importar mayusculas');
+test_same(true,  cobranza_es_contestada('REFINANCIAMIENTO'),          'REFINANCIAMIENTO es contestada');
+test_same(false, cobranza_es_contestada('Llamada saliente Ana'),      'una saliente normal NO');
+test_same(false, cobranza_es_contestada('no contesta'),               '"no contesta" NO');
+test_same(false, cobranza_es_contestada(''),                          'vacio NO');
+
+// una PROMESA DE PAGO reinicia la escalera igual que un 1234
+$conPromesa = [
+    fake_activity(1,'Llamada saliente Ana','2026-09-03T08:00:00-05:00'),
+    fake_activity(2,'PROMESA DE PAGO','2026-09-03T08:30:00-05:00'),
+];
+$pp2 = cobranza_calcular_protocolo($conPromesa, null, null);
+test_same(0, $pp2['sinContestar'], 'la PROMESA DE PAGO cierra la tanda');
+test_same(1, $pp2['contactos'],    'y cuenta como contacto efectivo');
+
+// ════════════════════════════════════════════════════════════════════════════
+// EL PACTO: una contestada con DEADLINE a futuro = silencio
+// ════════════════════════════════════════════════════════════════════════════
+$hoyTs = strtotime('2026-09-03T12:00:00-05:00');
+
+// el caso real: 1234 con deadline el 9 -> pacto vivo
+$pactada = [ fake_activity(10,'1234','2026-09-03T11:50:00-05:00')
+             + ['DEADLINE'=>'2026-09-09T12:15:00-05:00'] ];
+$pac = cobranza_pacto_vigente($pactada, $hoyTs);
+test_same('2026-09-09T12:15:00-05:00', $pac['fecha'], 'un 1234 con deadline futuro es pacto');
+test_same(false, cobranza_puede_llamar('C48:UC_LLUGGI', ['sinContestar'=>0], ['_pacto'=>$pac])['puede'],
+    'con pacto vivo NO se llama');
+test_same('pacto_vigente', cobranza_puede_llamar('C48:UC_LLUGGI', ['sinContestar'=>0], ['_pacto'=>$pac])['motivo'],
+    'y el motivo lo dice');
+
+// el pacto gana AL TOPE: aunque queden intentos, no se llama
+test_same('pacto_vigente', cobranza_puede_llamar('C48:UC_LLUGGI', ['sinContestar'=>1], ['_pacto'=>$pac])['motivo'],
+    'el pacto se revisa ANTES del tope');
+
+// PROMESA DE PAGO y REFINANCIAMIENTO tambien pactan
+foreach (['PROMESA DE PAGO','REFINANCIAMIENTO'] as $asunto) {
+    $a = [ fake_activity(11,$asunto,'2026-09-03T11:00:00-05:00') + ['DEADLINE'=>'2026-09-20T10:00:00-05:00'] ];
+    test_same('2026-09-20T10:00:00-05:00', cobranza_pacto_vigente($a,$hoyTs)['fecha'], "$asunto pacta fecha");
+}
+
+// deadline YA PASADO: no es pacto, se puede llamar (es justo el dia de llamar)
+$vencida = [ fake_activity(12,'1234','2026-08-20T11:00:00-05:00')
+             + ['DEADLINE'=>'2026-09-01T10:00:00-05:00'] ];
+test_same(null, cobranza_pacto_vigente($vencida,$hoyTs), 'un pacto vencido ya no frena');
+test_same(true, cobranza_puede_llamar('C48:UC_LLUGGI', ['sinContestar'=>0], ['_pacto'=>null])['puede'],
+    'y sin pacto se puede llamar');
+
+// una SALIENTE normal con deadline futuro (la que crea el propio boton) NO es pacto
+$propia = [ fake_activity(13,'Llamada saliente Ana','2026-09-03T11:50:00-05:00')
+            + ['DEADLINE'=>'2026-09-07T12:30:00-05:00'] ];
+test_same(null, cobranza_pacto_vigente($propia,$hoyTs),
+    'la planificada que crea el boton NO se confunde con un pacto');
+
+// fecha absurda: el tope de seguridad la descarta
+$absurda = [ fake_activity(14,'PROMESA DE PAGO','2026-09-03T11:00:00-05:00')
+             + ['DEADLINE'=>'2030-01-01T10:00:00-05:00'] ];
+test_same(null, cobranza_pacto_vigente($absurda,$hoyTs),
+    'una fecha a 4 anos no mutea el deal para siempre');
+
+// si hay dos pactos, gana el MAS LEJANO (el acuerdo mas reciente manda)
+$dos = [
+    fake_activity(15,'1234','2026-09-03T10:00:00-05:00') + ['DEADLINE'=>'2026-09-05T10:00:00-05:00'],
+    fake_activity(16,'PROMESA DE PAGO','2026-09-03T11:00:00-05:00') + ['DEADLINE'=>'2026-09-12T10:00:00-05:00'],
+];
+test_same('2026-09-12T10:00:00-05:00', cobranza_pacto_vigente($dos,$hoyTs)['fecha'], 'gana el pacto mas lejano');

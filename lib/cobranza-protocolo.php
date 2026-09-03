@@ -16,7 +16,7 @@ require_once __DIR__ . '/../feriados.php';
 // Sin esto no habia forma de comprobar QUE version esta desplegada: el endpoint
 // respondia 400 al GET igual de nuevo que de viejo, y los archivos de lib/ no se
 // sirven. Tres despliegues seguidos sin poder verificar por fuera.
-const COBRANZA_VER = 'cobranzas-boton-v6-ventana-respeta-cerradas';
+const COBRANZA_VER = 'cobranzas-boton-v7-tres-asuntos-y-pacto';
 
 function cobranza_config(): array {
     return [
@@ -40,6 +40,12 @@ function cobranza_config(): array {
         // avisa que ya estaba hecho. 10 min cubre el doble clic y el "no cargo,
         // le doy de nuevo" sin tapar un reintento legitimo (el proximo es a +2 dias).
         'ventana_repeticion_seg' => 600,
+        // Tope de seguridad del pacto, en dias. Existe solo contra una fecha
+        // absurda cargada a mano (un 2030 muteaba el deal para siempre). 0 = sin
+        // tope. OJO: el protocolo tiene su propio tope de 15 dias corridos para
+        // REFINANCIAMIENTO, y eso le toca al proceso que administra las pausas,
+        // que todavia no existe. Este numero NO es esa regla.
+        'tope_pacto_dias' => 90,
         // ABOGADO no es un ciclo que se agota: el tope se cuenta por MES calendario.
         'etapas_ciclo_mensual' => ['C48:FINAL_INVOICE'],
         'provider_id'      => 'VOXIMPLANT_CALL',
@@ -49,6 +55,58 @@ function cobranza_config(): array {
         'gestion_no_contesta' => 2107,
         'gestion_cumplido'    => 2105,
     ];
+}
+
+/**
+ * ¿Este asunto es una CONTESTADA? Son TRES, no uno.
+ *
+ * 🔴 Del protocolo, textual: "CONTESTADA = el SUBJECT es 1234, PROMESA DE PAGO o
+ * REFINANCIAMIENTO. Cualquier otra cosa = NO contesto. Antes esta especificacion
+ * decia solo 1234: con los tres asuntos hay que aceptar los tres."
+ * Yo habia programado solo 1234, asi que una PROMESA DE PAGO contaba como intento
+ * fallido: castigaba a la asesora por haber logrado justo lo que se le pedia.
+ */
+function cobranza_es_contestada(string $subject): bool {
+    $s = mb_strtoupper(trim($subject), 'UTF-8');
+    return str_contains($s, '1234')
+        || str_contains($s, 'PROMESA DE PAGO')
+        || str_contains($s, 'REFINANCIAMIENTO');
+}
+
+/**
+ * ¿Hay un PACTO vigente? Devuelve ['fecha'=>ISO,'asunto'=>..] o null.
+ *
+ * Una contestada que deja un DEADLINE a futuro es un acuerdo con el cliente:
+ *   1234 + deadline      -> quedaron en volver a hablar (CONVERSACION AGENDADA)
+ *   PROMESA DE PAGO      -> la fecha la puso EL cliente: "no se le molesta hasta ese dia"
+ *   REFINANCIAMIENTO     -> la asesora pidio no insistir mientras el directorio revisa
+ *
+ * 🔴 Mira TODAS las actividades, NO solo las del ciclo: el protocolo dice que "LA
+ * PAUSA SOBREVIVE AL CAMBIO DE CICLO". Un pacto a 3 semanas cae en el ciclo
+ * siguiente y sigue valiendo.
+ *
+ * 🔴 Y NO depende del campo ESTADO EN PAUSA: hoy ese campo lo llena nadie (el
+ * proceso que lo escribe todavia no existe), asi que exigirlo dejaba la guardia
+ * muerta y el boton llamaba encima de un pacto vivo.
+ */
+function cobranza_pacto_vigente(array $actividades, int $ahoraTs): ?array {
+    $mejor = null;
+    foreach ($actividades as $a) {
+        if ((int)($a['TYPE_ID'] ?? 0) !== 2 || (int)($a['DIRECTION'] ?? 0) !== 2) continue;
+        $subject = (string)($a['SUBJECT'] ?? '');
+        if (!cobranza_es_contestada($subject)) continue;
+        $dl = (string)($a['DEADLINE'] ?? '');
+        if ($dl === '') $dl = (string)($a['END_TIME'] ?? '');
+        if ($dl === '') continue;
+        $ts = strtotime($dl);
+        if ($ts === false || $ts <= $ahoraTs) continue;      // ya paso: no es pacto vigente
+        $tope = (int)cobranza_config()['tope_pacto_dias'];
+        if ($tope > 0 && ($ts - $ahoraTs) > $tope * 86400) continue;  // fecha absurda
+        if ($mejor === null || $ts > $mejor['ts']) {
+            $mejor = ['ts' => $ts, 'fecha' => $dl, 'asunto' => trim($subject)];
+        }
+    }
+    return $mejor;
 }
 
 function cobranza_tope_etapa(string $stageId): int {
@@ -95,13 +153,13 @@ function cobranza_calcular_protocolo(
         $subject  = (string)($a['SUBJECT'] ?? '');
         $selloMovil = str_starts_with($originId, 'VI_externalCall')
             || str_starts_with($subject, 'App móvil ·');
-        if ($selloMovil && stripos($subject, '1234') === false) continue;
+        if ($selloMovil && !cobranza_es_contestada($subject)) continue;
 
         $creada = (string)($a['CREATED'] ?? '');
         $creadaTs = $creada !== '' ? strtotime($creada) : false;
         if ($desdeTs !== null && $creadaTs !== false && $creadaTs < $desdeTs) { $fuera++; continue; }
 
-        if (stripos($subject, '1234') !== false) {
+        if (cobranza_es_contestada($subject)) {
             // Contesto: la tanda se cierra. 🔴 Tambien muere la ventana de
             // repeticion: reiniciaba la CUENTA pero seguia apuntando al intento
             // fallido anterior, asi que tras registrar una contestada el boton
@@ -179,9 +237,19 @@ function cobranza_puede_llamar(string $stageId, array $protocolo, array $deal): 
         return ['puede' => false, 'motivo' => 'etapa_sin_llamadas', 'restantes' => 0];
     }
 
-    // Pausa: SOLO frena si ademas hay una actividad planificada a futuro. El campo
-    // solo no alcanza -- un ESTADO EN PAUSA que quedo colgado sin planificada dejaria
-    // al deal mudo para siempre.
+    // 🔴 EL PACTO VA PRIMERO. El protocolo: "Verificacion de pausa ANTES DE CADA
+    // PASO (mensaje o llamada)" y "durante la ventana pactada NO sale ningun
+    // mensaje ni llamada". Se revisa antes del tope: un deal que pacto fecha no se
+    // llama aunque le queden intentos.
+    if (!empty($deal['_pacto']['fecha'])) {
+        return ['puede' => false, 'motivo' => 'pacto_vigente', 'restantes' => 0,
+                'pacto' => $deal['_pacto']];
+    }
+
+    // El campo ESTADO EN PAUSA como senal secundaria: hoy no lo llena nadie, pero
+    // el dia que el proceso de pausas exista, se respeta. Solo frena si ademas hay
+    // una planificada a futuro: un campo colgado sin planificada dejaria al deal
+    // mudo para siempre.
     $pausa = (string)($deal[$cfg['campo_pausa']] ?? '');
     if ($pausa !== '' && !empty($deal['_planificada_futura'])) {
         return ['puede' => false, 'motivo' => 'en_pausa', 'restantes' => 0];
