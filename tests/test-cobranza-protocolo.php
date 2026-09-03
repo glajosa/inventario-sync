@@ -72,3 +72,16 @@ test_same('2026-09-01 00:00:00', cobranza_inicio_ciclo('C48:FINAL_INVOICE', '202
     'ABOGADO cuenta por mes, no desde que entro a la etapa');
 test_same('2026-03-02 08:00:00', cobranza_inicio_ciclo('C48:UC_LLUGGI', '2026-03-02 08:00:00', $ahora),
     'el resto cuenta desde que entro a la etapa');
+
+// ── fuera de cobranzas: se dice claro, no se disfraza de "esta etapa no llama" ──
+// Un placement se engancha a TODOS los deals. En uno de ventas la etapa no esta
+// en el mapa de topes y el mensaje generico no le dice nada al vendedor.
+test_same('otro_embudo', cobranza_puede_llamar('C28:PREPARATION', ['sinContestar'=>0], [])['motivo'],
+    'un deal de VENTAS se rechaza por embudo, no por etapa');
+test_same(false, cobranza_puede_llamar('C28:NEW', ['sinContestar'=>0], [])['puede'], 'y no se puede llamar');
+test_same('otro_embudo', cobranza_puede_llamar('C44:WON', ['sinContestar'=>0], [])['motivo'], 'CLIENTES tambien fuera');
+test_same('otro_embudo', cobranza_puede_llamar('', ['sinContestar'=>0], [])['motivo'], 'etapa vacia: fuera');
+// los de cobranzas siguen pasando por la puerta correcta
+test_same('etapa_sin_llamadas', cobranza_puede_llamar('C48:UC_X35FSA', ['sinContestar'=>0], [])['motivo'],
+    'C48 sigue evaluandose por etapa');
+test_same(true, cobranza_puede_llamar('C79:PREPARATION', ['sinContestar'=>0], [])['puede'] === false, 'C79 entra al mapa (tope 0)');

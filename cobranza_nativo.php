@@ -26,7 +26,8 @@ $CFG_JS = json_encode(cobranza_config(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_
   var MOTIVOS = {
     'etapa_sin_llamadas': 'En esta etapa no se llama. El recordatorio lo manda el sistema.',
     'tope_de_etapa':      'Ya se hicieron todos los intentos que permite esta etapa.',
-    'en_pausa':           'Hay un pacto vigente con el cliente. No se le insiste hasta esa fecha.'
+    'en_pausa':           'Hay un pacto vigente con el cliente. No se le insiste hasta esa fecha.',
+    'otro_embudo':        'Este botón es solo para deals de COBRANZAS. Para ventas usá el otro «No contestó».'
   };
   var estado = null, error = null, corriendo = true;
 

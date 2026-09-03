@@ -22,7 +22,10 @@ if ($esperado === '' || !hash_equals($esperado, (string)($_GET['token'] ?? '')))
 
 const PLACEMENT = 'CRM_DEAL_DETAIL_ACTIVITY';
 const HANDLER   = 'https://galjosa-inventario-sync.pwluu1.easypanel.host/cobranza_nativo.php';
-const TITULO    = 'No contestó';
+// Los dos botones viven en la MISMA barra (ventas y cobranzas), y con el mismo
+// título no hay forma de saber cuál es cuál: el usuario apretó el de ventas sobre
+// un deal de cobranzas sin darse cuenta.
+const TITULO    = 'No contestó · Cobranzas';
 
 function cob_mostrar(): void {
     $r = cob_app_bx('placement.get');

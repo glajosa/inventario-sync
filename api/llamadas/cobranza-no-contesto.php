@@ -68,10 +68,20 @@ function cobranza_panel_production_http(string $method, string $body, array $env
     $auth = is_array($decoded) && is_string($decoded['auth'] ?? null) ? trim($decoded['auth']) : '';
     $domain = trim((string)($env['BITRIX_DOMAIN'] ?? 'galjosa.bitrix24.com'));
     $bx = llamada_no_contesto_panel_bx($auth, $domain, $transport);
+    // 🔴 'user.current' EXIGE el scope 'user', y la app de cobranzas se creó con
+    // CRM + placement nada más: el botón devolvía 401 unauthorized en un deal
+    // perfectamente normal. 'profile' devuelve al usuario actual y NO pide scope,
+    // así que se intenta primero. 'user.current' queda de respaldo para el día que
+    // la app sí tenga el scope, y para que un cambio de permisos no rompa nada.
     $currentUser = static function (string $token) use ($domain, $transport): int {
         $c = llamada_no_contesto_panel_bx($token, $domain, $transport);
-        $r = $c('user.current', []);
-        return ($r['ok'] ?? false) === true && is_array($r['result'] ?? null) ? (int)($r['result']['ID'] ?? 0) : 0;
+        foreach (['profile', 'user.current'] as $m) {
+            $r = $c($m, []);
+            if (($r['ok'] ?? false) !== true || !is_array($r['result'] ?? null)) continue;
+            $id = (int)($r['result']['ID'] ?? 0);
+            if ($id > 0) return $id;
+        }
+        return 0;
     };
     return cobranza_panel_http($method, $body, $env, $currentUser, $bx, $now);
 }

@@ -109,6 +109,15 @@ function cobranza_inicio_ciclo(string $stageId, ?string $entradaEtapa, DateTimeI
  */
 function cobranza_puede_llamar(string $stageId, array $protocolo, array $deal): array {
     $cfg  = cobranza_config();
+
+    // Un placement se engancha a TODOS los deals, no al embudo. En un deal de
+    // ventas (C28:...) la etapa no está en el mapa de topes y saldría el mensaje
+    // "en esta etapa no se llama", que a un vendedor no le dice nada. Se dice lo
+    // que pasa de verdad: este botón no es el suyo.
+    if (!preg_match('/^C(48|79):/', $stageId)) {
+        return ['puede' => false, 'motivo' => 'otro_embudo', 'restantes' => 0];
+    }
+
     $tope = cobranza_tope_etapa($stageId);
     if ($tope === 0) {
         return ['puede' => false, 'motivo' => 'etapa_sin_llamadas', 'restantes' => 0];
