@@ -71,14 +71,21 @@ function cobranza_no_contesto(
     $deal['_planificada_futura'] = $planificadaFutura !== null;
 
     // --- 3. el estado del ciclo ---
-    $inicio = cobranza_inicio_ciclo($stageId, (string)($deal['_entrada_etapa'] ?? '') ?: null, $ahoraEc);
+    // 🔴 '_entrada_etapa' era un nombre que inventé y NUNCA llené: siempre valía null,
+    // la ventana del ciclo no existía y se contaban TODAS las llamadas de la historia
+    // del deal. El 397207 decía "intento 4" por unas de agosto, de otro ciclo.
+    // MOVED_TIME es cuando el deal entró a su etapa ACTUAL (verificado en Bitrix).
+    $entrada = trim((string)($deal['MOVED_TIME'] ?? ''));
+    $inicio = cobranza_inicio_ciclo($stageId, $entrada !== '' ? $entrada : null, $ahoraEc);
     $protocolo = cobranza_calcular_protocolo($acts, null, $inicio);
 
     // --- 4. las guardias ---
     // Doble pulsacion: no se duplica en silencio, se avisa.
     $ultimo = $protocolo['ultimoIntento'] ?? null;
     if (is_string($ultimo) && $ultimo !== '') {
-        $edad = $ahora->getTimestamp() - strtotime($ultimo . ' -05:00');
+        // CREATED ya trae su huso: pegarle ' -05:00' a mano desplazaba la ventana.
+        $ultimoTs = strtotime($ultimo);
+        $edad = $ultimoTs !== false ? ($ahora->getTimestamp() - $ultimoTs) : -1;
         if ($edad >= 0 && $edad < $cfg['ventana_repeticion_seg']) {
             return ['status' => 'ya_registrado', 'motivo' => 'repeticion',
                     'haceMinutos' => intdiv($edad, 60),

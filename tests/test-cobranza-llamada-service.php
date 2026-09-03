@@ -175,3 +175,44 @@ $add2 = null;
 foreach ($log as $c) if ($c['m']==='crm.activity.add') $add2 = $c['p']['fields'];
 test_same('Llamada saliente cliente', $add2['SUBJECT'], 'sin contacto cae en "cliente"');
 test_same(false, isset($add2['COMMUNICATIONS']), 'y NO manda COMMUNICATIONS vacio');
+
+// ── 🔴 el servicio tiene que USAR MOVED_TIME, no solo saber calcularlo ──
+// Antes leia $deal['_entrada_etapa'], un nombre inventado que nunca se llenaba:
+// la ventana no existia y contaba llamadas de ciclos viejos como intentos de hoy.
+$log = [];
+$viejas = [
+    fake_activity(1,'Llamada saliente Ana','2026-08-06T09:00:00-05:00') + ['COMPLETED'=>'Y'],
+    fake_activity(2,'Llamada saliente Ana','2026-08-18T09:00:00-05:00') + ['COMPLETED'=>'Y'],
+    fake_activity(3,'Llamada saliente Ana','2026-09-01T09:00:00-05:00') + ['COMPLETED'=>'Y'],
+];
+$bxMoved = function (string $m, array $p = []) use (&$log, $viejas) {
+    $log[] = ['m'=>$m,'p'=>$p];
+    return match ($m) {
+        // entro a la etapa HOY 08:00 Ecuador == 16:00 del servidor de Bitrix
+        'crm.deal.get'      => ['ok'=>true,'result'=>['ID'=>77,'STAGE_ID'=>'C48:UC_LLUGGI',
+                                                      'MOVED_TIME'=>'2026-09-03T16:00:00+03:00']],
+        'crm.activity.list' => ['ok'=>true,'result'=>$viejas],
+        'crm.activity.add'  => ['ok'=>true,'result'=>9001],
+        default             => ['ok'=>true,'result'=>true],
+    };
+};
+$r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bxMoved, $ahora);
+test_same('procesado', $r['status'], 'con MOVED_TIME de hoy: procesa');
+test_same(1, $r['intentos'], 'es el intento 1: las 3 viejas son de otro ciclo');
+test_same(2, $r['restantes'], 'y quedan 2 de los 3 de la etapa');
+
+// sin MOVED_TIME el comportamiento viejo: cuenta todo. Se prueba para que quede
+// claro que la diferencia es el campo, no otra cosa.
+$log = [];
+$bxSinMoved = function (string $m, array $p = []) use (&$log, $viejas) {
+    $log[] = ['m'=>$m,'p'=>$p];
+    return match ($m) {
+        'crm.deal.get'      => ['ok'=>true,'result'=>['ID'=>77,'STAGE_ID'=>'C48:UC_LLUGGI']],
+        'crm.activity.list' => ['ok'=>true,'result'=>$viejas],
+        'crm.activity.add'  => ['ok'=>true,'result'=>9001],
+        default             => ['ok'=>true,'result'=>true],
+    };
+};
+$r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bxSinMoved, $ahora);
+test_same('rechazado', $r['status'], 'sin MOVED_TIME cuenta las 3 viejas y topa');
+test_same('tope_de_etapa', $r['motivo'], 'y el motivo es el tope');

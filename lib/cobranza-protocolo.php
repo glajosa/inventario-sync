@@ -64,7 +64,12 @@ function cobranza_calcular_protocolo(
     ?string $desde = null
 ): array {
     $sinContestar = 0; $contactos = 0; $fuera = 0; $ultima = null;
-    $desde = is_string($desde) ? substr($desde, 0, 19) : '';
+    // Se compara por INSTANTE, no por cadena. CREATED y MOVED_TIME llegan con su
+    // propio huso (+03:00 del servidor de Bitrix) y el inicio de mes se calcula en
+    // hora de Ecuador: recortar a 19 caracteres y comparar como texto mezclaba tres
+    // relojes distintos y el desfase se comia hasta 8 horas de actividades.
+    $desdeTs = (is_string($desde) && $desde !== '') ? strtotime($desde) : null;
+    if ($desdeTs === false) $desdeTs = null;
 
     foreach ($actividades as $a) {
         if ($excluirId !== null && (int)$a['ID'] === $excluirId) continue;
@@ -76,14 +81,17 @@ function cobranza_calcular_protocolo(
             || str_starts_with($subject, 'App móvil ·');
         if ($selloMovil && stripos($subject, '1234') === false) continue;
 
-        $creada = substr((string)($a['CREATED'] ?? ''), 0, 19);
-        if ($desde !== '' && $creada !== '' && $creada < $desde) { $fuera++; continue; }
+        $creada = (string)($a['CREATED'] ?? '');
+        $creadaTs = $creada !== '' ? strtotime($creada) : false;
+        if ($desdeTs !== null && $creadaTs !== false && $creadaTs < $desdeTs) { $fuera++; continue; }
 
         if (stripos($subject, '1234') !== false) {
             $contactos++; $sinContestar = 0; continue;    // contesto: la tanda se cierra
         }
         $sinContestar++;
-        if ($creada !== '' && ($ultima === null || $creada > $ultima)) $ultima = $creada;
+        // se guarda CRUDA, con su huso: el que la lea usa strtotime, no le pega un
+        // offset a mano (eso desplazaba la ventana de repeticion 5 horas).
+        if ($creadaTs !== false && ($ultima === null || $creadaTs > strtotime((string)$ultima))) $ultima = $creada;
     }
 
     return [
@@ -97,9 +105,12 @@ function cobranza_calcular_protocolo(
 /** Inicio del ciclo vigente: mes calendario en ABOGADO, entrada a la etapa en el resto. */
 function cobranza_inicio_ciclo(string $stageId, ?string $entradaEtapa, DateTimeImmutable $ahora): ?string {
     if (in_array($stageId, cobranza_config()['etapas_ciclo_mensual'], true)) {
-        return $ahora->modify('first day of this month')->setTime(0, 0)->format('Y-m-d H:i:s');
+        // ABOGADO no es un ciclo que se agota: cuenta por mes calendario.
+        return $ahora->modify('first day of this month')->setTime(0, 0)->format(DateTimeInterface::ATOM);
     }
-    return $entradaEtapa !== null ? substr($entradaEtapa, 0, 19) : null;
+    // El resto cuenta desde que el deal ENTRO a su etapa actual (MOVED_TIME). Se
+    // devuelve tal cual, con su huso: quien compara usa strtotime.
+    return ($entradaEtapa !== null && $entradaEtapa !== '') ? $entradaEtapa : null;
 }
 
 /**

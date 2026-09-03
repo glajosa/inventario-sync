@@ -68,10 +68,35 @@ test_same(2105, cobranza_estado_gestion(['sinContestar'=>2], 'C48:UC_LLUGGI'), '
 
 // ---- ciclo mensual de ABOGADO ----
 $ahora = new DateTimeImmutable('2026-09-15T10:00:00-05:00');
-test_same('2026-09-01 00:00:00', cobranza_inicio_ciclo('C48:FINAL_INVOICE', '2026-03-02 08:00:00', $ahora),
+test_same('2026-09-01T00:00:00-05:00',
+    cobranza_inicio_ciclo('C48:FINAL_INVOICE', '2026-03-02T08:00:00+03:00', $ahora),
     'ABOGADO cuenta por mes, no desde que entro a la etapa');
-test_same('2026-03-02 08:00:00', cobranza_inicio_ciclo('C48:UC_LLUGGI', '2026-03-02 08:00:00', $ahora),
-    'el resto cuenta desde que entro a la etapa');
+// el resto devuelve MOVED_TIME TAL CUAL, con su huso: quien compara usa strtotime
+test_same('2026-03-02T08:00:00+03:00',
+    cobranza_inicio_ciclo('C48:UC_LLUGGI', '2026-03-02T08:00:00+03:00', $ahora),
+    'el resto cuenta desde que entro a la etapa (MOVED_TIME sin tocar)');
+test_same(null, cobranza_inicio_ciclo('C48:UC_LLUGGI', '', $ahora),
+    'sin MOVED_TIME no hay ventana (cuenta todo), y se ve');
+
+// ── 🔴 la ventana del ciclo: el fallo que hacia decir "intento 2" con un intento ──
+// MOVED_TIME es la entrada a la etapa. Lo anterior es de OTRO ciclo y no cuenta.
+$hist = [
+    fake_activity(1,'Llamada saliente Ana','2026-08-06T09:00:00-05:00'),   // ciclo viejo
+    fake_activity(2,'Llamada saliente Ana','2026-08-18T09:00:00-05:00'),   // ciclo viejo
+    fake_activity(3,'Llamada saliente Ana','2026-09-03T10:25:00-05:00'),   // antes de mover
+    fake_activity(4,'Llamada saliente Ana','2026-09-03T11:00:00-05:00'),   // ya en la etapa
+];
+// entro a la etapa el 3-sep 10:40 Ecuador == 18:40 del servidor de Bitrix (+03:00)
+$movedTime = '2026-09-03T18:40:05+03:00';
+$p = cobranza_calcular_protocolo($hist, null, $movedTime);
+test_same(1, $p['sinContestar'], 'solo la llamada POSTERIOR a entrar a la etapa cuenta');
+test_same(3, $p['fueraDelCiclo'], 'las 3 anteriores se reportan como fuera, no se esconden');
+// sin ventana (el bug): contaria las cuatro
+test_same(4, cobranza_calcular_protocolo($hist, null, null)['sinContestar'],
+    'sin ventana cuenta TODA la historia: era el bug');
+// el huso importa: comparar como texto ponia 18:40 despues de las 11:00 locales
+test_same(1, cobranza_calcular_protocolo($hist, null, '2026-09-03T18:40:05+03:00')['sinContestar'],
+    'la comparacion es por instante, no por cadena');
 
 // ── fuera de cobranzas: se dice claro, no se disfraza de "esta etapa no llama" ──
 // Un placement se engancha a TODOS los deals. En uno de ventas la etapa no esta
