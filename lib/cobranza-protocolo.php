@@ -16,7 +16,7 @@ require_once __DIR__ . '/../feriados.php';
 // Sin esto no habia forma de comprobar QUE version esta desplegada: el endpoint
 // respondia 400 al GET igual de nuevo que de viejo, y los archivos de lib/ no se
 // sirven. Tres despliegues seguidos sin poder verificar por fuera.
-const COBRANZA_VER = 'cobranzas-boton-v5-abogado-mes-o-etapa';
+const COBRANZA_VER = 'cobranzas-boton-v6-ventana-respeta-cerradas';
 
 function cobranza_config(): array {
     return [
@@ -76,6 +76,16 @@ function cobranza_calcular_protocolo(
     // relojes distintos y el desfase se comia hasta 8 horas de actividades.
     $desdeTs = (is_string($desde) && $desde !== '') ? strtotime($desde) : null;
     if ($desdeTs === false) $desdeTs = null;
+    $ultimaCerrada = false;
+
+    // El conteo DEPENDE del orden (un 1234 posterior cierra la tanda anterior).
+    // El servicio ya pide CREATED ASC, pero dejarlo implicito es una trampa para
+    // el proximo que llame a esta funcion desde otro sitio.
+    usort($actividades, function ($a, $b) {
+        $ta = strtotime((string)($a['CREATED'] ?? '')) ?: 0;
+        $tb = strtotime((string)($b['CREATED'] ?? '')) ?: 0;
+        return $ta <=> $tb ?: ((int)($a['ID'] ?? 0) <=> (int)($b['ID'] ?? 0));
+    });
 
     foreach ($actividades as $a) {
         if ($excluirId !== null && (int)$a['ID'] === $excluirId) continue;
@@ -92,12 +102,23 @@ function cobranza_calcular_protocolo(
         if ($desdeTs !== null && $creadaTs !== false && $creadaTs < $desdeTs) { $fuera++; continue; }
 
         if (stripos($subject, '1234') !== false) {
-            $contactos++; $sinContestar = 0; continue;    // contesto: la tanda se cierra
+            // Contesto: la tanda se cierra. 🔴 Tambien muere la ventana de
+            // repeticion: reiniciaba la CUENTA pero seguia apuntando al intento
+            // fallido anterior, asi que tras registrar una contestada el boton
+            // quedaba bloqueado 10 minutos sin motivo.
+            $contactos++; $sinContestar = 0; $ultima = null; $ultimaCerrada = false;
+            continue;
         }
         $sinContestar++;
         // se guarda CRUDA, con su huso: el que la lea usa strtotime, no le pega un
         // offset a mano (eso desplazaba la ventana de repeticion 5 horas).
-        if ($creadaTs !== false && ($ultima === null || $creadaTs > strtotime((string)$ultima))) $ultima = $creada;
+        if ($creadaTs !== false && ($ultima === null || $creadaTs > strtotime((string)$ultima))) {
+            $ultima = $creada;
+            // Si la asesora YA cerro esa llamada planificada, esta diciendo "esta
+            // la hice". La proxima pulsacion es un intento nuevo, no un doble clic:
+            // la ventana no debe frenarla.
+            $ultimaCerrada = ((string)($a['COMPLETED'] ?? '') === 'Y');
+        }
     }
 
     return [
@@ -105,6 +126,7 @@ function cobranza_calcular_protocolo(
         'contactos'     => $contactos,
         'fueraDelCiclo' => $fuera,
         'ultimoIntento' => $ultima,
+        'ultimoCerrado' => $ultimaCerrada,
     ];
 }
 

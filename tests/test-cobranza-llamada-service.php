@@ -216,3 +216,52 @@ $bxSinMoved = function (string $m, array $p = []) use (&$log, $viejas) {
 $r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bxSinMoved, $ahora);
 test_same('rechazado', $r['status'], 'sin MOVED_TIME cuenta las 3 viejas y topa');
 test_same('tope_de_etapa', $r['motivo'], 'y el motivo es el tope');
+
+// ════════════════════════════════════════════════════════════════════════════
+// Los dos casos que fallaron probando con el presidente (3-sep-2026)
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── CASO 1: completar la actividad libera el botón ──
+// Se aprieta, se crea la planificada, la asesora la COMPLETA ("esta la hice").
+// La siguiente pulsación es un intento nuevo: la ventana de 10 min no la frena.
+$hace2min = '2026-09-03T08:58:00-05:00';   // $ahora = 09:00
+$cerrada  = fake_activity(800,'Llamada saliente Ana',$hace2min) + ['COMPLETED'=>'Y'];
+$log = [];
+$bx = cob_fake_bx(['ID'=>77,'STAGE_ID'=>'C48:UC_LLUGGI','MOVED_TIME'=>'2026-09-03T14:00:00+03:00'],
+                  [$cerrada], $log);
+$r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bx, $ahora);
+test_same('procesado', $r['status'], 'CASO 1: con la actividad COMPLETADA se puede apretar de nuevo');
+test_same(2, $r['intentos'], 'y cuenta como el intento 2 (el primero se hizo)');
+test_same(1, count(array_filter($log, fn($c)=>$c['m']==='crm.activity.add')), 'una sola actividad nueva');
+
+// la misma, SIN completar -> la ventana sigue protegiendo del doble clic
+$abierta = fake_activity(800,'Llamada saliente Ana',$hace2min) + ['COMPLETED'=>'N'];
+$log = [];
+$bx = cob_fake_bx(['ID'=>77,'STAGE_ID'=>'C48:UC_LLUGGI','MOVED_TIME'=>'2026-09-03T14:00:00+03:00'],
+                  [$abierta], $log);
+$r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bx, $ahora);
+test_same('ya_registrado', $r['status'], 'sin completar sigue frenando el doble clic');
+test_same(0, count(array_filter($log, fn($c)=>$c['m']==='crm.activity.add')), 'y no escribe');
+
+// ── CASO 2: una contestada (1234) mata la ventana ──
+// Se aprieta, el cliente después atiende y se registra el 1234: la tanda se
+// cerró. El botón NO puede quedar bloqueado por el intento fallido anterior.
+$log = [];
+$conContestada = [
+    fake_activity(810,'Llamada saliente Ana','2026-09-03T08:55:00-05:00') + ['COMPLETED'=>'N'],
+    fake_activity(811,'1234 hablé con la clienta','2026-09-03T08:58:00-05:00') + ['COMPLETED'=>'Y'],
+];
+$bx = cob_fake_bx(['ID'=>77,'STAGE_ID'=>'C48:UC_LLUGGI','MOVED_TIME'=>'2026-09-03T14:00:00+03:00'],
+                  $conContestada, $log);
+$r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bx, $ahora);
+test_same('procesado', $r['status'], 'CASO 2: tras un 1234 se puede apretar aunque sea hace 2 min');
+test_same(1, $r['intentos'], 'y la escalera arranca de nuevo en 1');
+test_same(2, $r['restantes'], 'con los 2 restantes de la etapa');
+
+// el orden no debe importar: el mismo par al revés da lo mismo
+$log = [];
+$bx = cob_fake_bx(['ID'=>77,'STAGE_ID'=>'C48:UC_LLUGGI','MOVED_TIME'=>'2026-09-03T14:00:00+03:00'],
+                  array_reverse($conContestada), $log);
+$r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bx, $ahora);
+test_same('procesado', $r['status'], 'el orden en que llegan las actividades no cambia el resultado');
+test_same(1, $r['intentos'], 'sigue siendo el intento 1');

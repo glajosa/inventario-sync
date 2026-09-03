@@ -81,8 +81,13 @@ function cobranza_no_contesto(
 
     // --- 4. las guardias ---
     // Doble pulsacion: no se duplica en silencio, se avisa.
+    // 🔴 Pero NO frena si la asesora ya cerro esa llamada planificada: completarla
+    // es decir "esta la hice", asi que la siguiente pulsacion es un intento nuevo.
+    // Sin esto, tras completar la actividad el boton quedaba muerto 10 minutos y
+    // no habia forma de registrar el intento siguiente (visto probando con el
+    // presidente, 3-sep-2026).
     $ultimo = $protocolo['ultimoIntento'] ?? null;
-    if (is_string($ultimo) && $ultimo !== '') {
+    if (is_string($ultimo) && $ultimo !== '' && empty($protocolo['ultimoCerrado'])) {
         // CREATED ya trae su huso: pegarle ' -05:00' a mano desplazaba la ventana.
         $ultimoTs = strtotime($ultimo);
         $edad = $ultimoTs !== false ? ($ahora->getTimestamp() - $ultimoTs) : -1;

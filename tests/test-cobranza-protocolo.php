@@ -175,3 +175,20 @@ $pEtapa = cobranza_calcular_protocolo($tresEnEtapa, null, $iniEtapaOct);
 test_same(3, $pEtapa['sinContestar'], '2 MESES sigue contando desde la etapa, aunque cambie el mes');
 test_same(false, cobranza_puede_llamar('C48:UC_LLUGGI', $pEtapa, [])['puede'],
     'y sigue topado: para reabrirlo el deal tiene que MOVERSE de etapa');
+
+// ── el 1234 mata la ventana, no solo la cuenta ──
+$par = [
+    fake_activity(1,'Llamada saliente Ana','2026-09-03T08:55:00-05:00') + ['COMPLETED'=>'N'],
+    fake_activity(2,'1234 hablé con la clienta','2026-09-03T08:58:00-05:00') + ['COMPLETED'=>'Y'],
+];
+$pc = cobranza_calcular_protocolo($par, null, null);
+test_same(0, $pc['sinContestar'], 'el 1234 reinicia la cuenta');
+test_same(null, $pc['ultimoIntento'], 'y TAMBIEN borra la ventana de repeticion');
+test_same(1, $pc['contactos'], 'y suma el contacto efectivo');
+
+// una fallida CERRADA se reporta como cerrada
+$cerr = [fake_activity(3,'Llamada saliente Ana','2026-09-03T08:55:00-05:00') + ['COMPLETED'=>'Y']];
+$pz = cobranza_calcular_protocolo($cerr, null, null);
+test_same(true, $pz['ultimoCerrado'], 'una fallida completada se marca como cerrada');
+$abr = [fake_activity(4,'Llamada saliente Ana','2026-09-03T08:55:00-05:00') + ['COMPLETED'=>'N']];
+test_same(false, cobranza_calcular_protocolo($abr, null, null)['ultimoCerrado'], 'y una abierta no');
