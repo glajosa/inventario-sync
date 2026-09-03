@@ -68,9 +68,28 @@ test_same(2105, cobranza_estado_gestion(['sinContestar'=>2], 'C48:UC_LLUGGI'), '
 
 // ---- ciclo mensual de ABOGADO ----
 $ahora = new DateTimeImmutable('2026-09-15T10:00:00-05:00');
+// ABOGADO: el corte es el MAS RECIENTE de mes-vs-etapa.
+// entro en marzo, hoy 15-sep -> gana el mes (la secuencia se repite mensual)
 test_same('2026-09-01T00:00:00-05:00',
     cobranza_inicio_ciclo('C48:FINAL_INVOICE', '2026-03-02T08:00:00+03:00', $ahora),
-    'ABOGADO cuenta por mes, no desde que entro a la etapa');
+    'ABOGADO viejo: cuenta desde el inicio de mes');
+// 🔴 entro a ABOGADO HOY -> gana la etapa, si no se traga los intentos de la
+// etapa anterior. Es el caso que se vio en vivo en el deal 406519.
+test_same('2026-09-10T09:00:00+03:00',
+    cobranza_inicio_ciclo('C48:FINAL_INVOICE', '2026-09-10T09:00:00+03:00', $ahora),
+    'ABOGADO recien: cuenta desde que entro, no desde el 1 del mes');
+test_same('2026-09-01T00:00:00-05:00',
+    cobranza_inicio_ciclo('C48:FINAL_INVOICE', '', $ahora),
+    'ABOGADO sin MOVED_TIME: cae en el mes');
+// y el intento de la etapa anterior YA NO cuenta
+$prev = [
+    fake_activity(1,'Llamada saliente Ana','2026-09-14T10:00:00-05:00'),  // en 3 MESES
+    fake_activity(2,'Llamada saliente Ana','2026-09-15T11:00:00-05:00'),  // ya en ABOGADO
+];
+$ini = cobranza_inicio_ciclo('C48:FINAL_INVOICE', '2026-09-15T18:30:00+03:00', $ahora); // 10:30 Ecuador
+$pp = cobranza_calcular_protocolo($prev, null, $ini);
+test_same(1, $pp['sinContestar'], 'al entrar a ABOGADO no se arrastra el intento de la etapa anterior');
+test_same(1, $pp['fueraDelCiclo'], 'el de la etapa anterior queda reportado como fuera');
 // el resto devuelve MOVED_TIME TAL CUAL, con su huso: quien compara usa strtotime
 test_same('2026-03-02T08:00:00+03:00',
     cobranza_inicio_ciclo('C48:UC_LLUGGI', '2026-03-02T08:00:00+03:00', $ahora),

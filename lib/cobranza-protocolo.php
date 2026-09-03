@@ -16,7 +16,7 @@ require_once __DIR__ . '/../feriados.php';
 // Sin esto no habia forma de comprobar QUE version esta desplegada: el endpoint
 // respondia 400 al GET igual de nuevo que de viejo, y los archivos de lib/ no se
 // sirven. Tres despliegues seguidos sin poder verificar por fuera.
-const COBRANZA_VER = 'cobranzas-boton-v4-ventana-de-ciclo';
+const COBRANZA_VER = 'cobranzas-boton-v5-abogado-mes-o-etapa';
 
 function cobranza_config(): array {
     return [
@@ -110,13 +110,30 @@ function cobranza_calcular_protocolo(
 
 /** Inicio del ciclo vigente: mes calendario en ABOGADO, entrada a la etapa en el resto. */
 function cobranza_inicio_ciclo(string $stageId, ?string $entradaEtapa, DateTimeImmutable $ahora): ?string {
+    $entrada = ($entradaEtapa !== null && $entradaEtapa !== '') ? $entradaEtapa : null;
+
     if (in_array($stageId, cobranza_config()['etapas_ciclo_mensual'], true)) {
-        // ABOGADO no es un ciclo que se agota: cuenta por mes calendario.
-        return $ahora->modify('first day of this month')->setTime(0, 0)->format(DateTimeInterface::ATOM);
+        // ABOGADO no es un ciclo que se agota: la secuencia se repite todos los
+        // meses. Pero el mes NO alcanza como corte.
+        //
+        // 🔴 Con el inicio de mes a secas, un deal que llega a ABOGADO el 3-sep se
+        // traga los intentos que hizo en 3 MESES VENCIDOS el 1 y el 2: el boton
+        // decia "ya se registro recien" por una llamada de OTRA etapa. Visto en
+        // vivo en el deal 406519.
+        //
+        // El corte es el MAS RECIENTE de los dos:
+        //   entro a ABOGADO en marzo, hoy es 15-sep -> cuenta desde el 1-sep  (mensual)
+        //   entro a ABOGADO hoy 3-sep             -> cuenta desde el 3-sep  (la etapa)
+        $mes = $ahora->modify('first day of this month')->setTime(0, 0)->format(DateTimeInterface::ATOM);
+        if ($entrada === null) return $mes;
+        $tm = strtotime($mes); $te = strtotime($entrada);
+        if ($te === false) return $mes;
+        return ($te > $tm) ? $entrada : $mes;
     }
+
     // El resto cuenta desde que el deal ENTRO a su etapa actual (MOVED_TIME). Se
     // devuelve tal cual, con su huso: quien compara usa strtotime.
-    return ($entradaEtapa !== null && $entradaEtapa !== '') ? $entradaEtapa : null;
+    return $entrada;
 }
 
 /**
