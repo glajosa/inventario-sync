@@ -116,7 +116,13 @@ $CFG_JS = json_encode(cobranza_config(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_
   BX24.init(function () {
     var info = {}, dealId = 0, auth = '';
     try { info = BX24.placement.info() || {}; } catch (e) {}
-    try { dealId = parseInt((info.options || {}).ID, 10) || 0; } catch (e) {}
+    // 🔴 Bitrix manda el id con NOMBRES DISTINTOS segun el placement y la version.
+    // Yo habia asumido 'ID' y el boton moria con "No se pudo leer el deal" en un
+    // deal perfectamente normal. El de prospectos ya probaba los tres: se copia.
+    try {
+      var o = info.options || {};
+      dealId = parseInt(o.ENTITY_ID || o.entityId || o.ID || 0, 10) || 0;
+    } catch (e) {}
     try { auth = (BX24.getAuth() || {}).access_token || ''; } catch (e) {}
     redibujar();
     if (!dealId) {

@@ -104,7 +104,34 @@ function cobranza_no_contesto(
 
     // --- 6. UNA actividad nueva: registro del fallo + cita del proximo ---
     $proximo  = cobranza_proximo_intento($ahoraEc);
-    $contacto = trim((string)($entrada['contactName'] ?? '')) ?: 'cliente';
+
+    // El SUBJECT es el dato que cuenta el dashboard ("1234" = contesto), asi que el
+    // nombre no puede depender de que el navegador lo mande: si llega vacio salia
+    // "Llamada saliente cliente" en todas. Se resuelve aca, con el CONTACT_ID del
+    // propio deal. Cuesta 1 llamada y solo cuando hace falta.
+    $contacto   = trim((string)($entrada['contactName'] ?? ''));
+    $contactoId = (int)($entrada['contactId'] ?? 0);
+    $tel        = (string)($entrada['selectedPhone'] ?? '');
+    if ($contacto === '') {
+        $cid = $contactoId ?: (int)($deal['CONTACT_ID'] ?? 0);
+        if ($cid > 0) {
+            $c = cobranza_bx($bx, 'crm.contact.get', ['id' => $cid]);
+            if (is_array($c)) {
+                $contacto = trim(implode(' ', array_filter([
+                    trim((string)($c['NAME'] ?? '')),
+                    trim((string)($c['LAST_NAME'] ?? '')),
+                ], fn(string $x): bool => $x !== '')));
+                $contactoId = $cid;
+                if ($tel === '') {
+                    foreach ((array)($c['PHONE'] ?? []) as $ph) {
+                        $tel = (string)($ph['VALUE'] ?? '');
+                        if ($tel !== '') break;
+                    }
+                }
+            }
+        }
+    }
+    if ($contacto === '') $contacto = 'cliente';
     $campos = [
         'OWNER_TYPE_ID' => 2,
         'OWNER_ID'      => $dealId,
@@ -124,10 +151,10 @@ function cobranza_no_contesto(
         'DESCRIPTION_TYPE' => 1,
         'DESCRIPTION'   => 'No contestó. Reintento automático a +2 días hábiles (protocolo de cobranzas).',
     ];
-    if ((int)($entrada['contactId'] ?? 0) > 0 && (string)($entrada['selectedPhone'] ?? '') !== '') {
+    if ($contactoId > 0 && $tel !== '') {
         $campos['COMMUNICATIONS'] = [[
-            'VALUE' => (string)$entrada['selectedPhone'],
-            'ENTITY_ID' => (int)$entrada['contactId'],
+            'VALUE' => $tel,
+            'ENTITY_ID' => $contactoId,
             'ENTITY_TYPE_ID' => 3,
             'TYPE' => 'PHONE',
         ]];

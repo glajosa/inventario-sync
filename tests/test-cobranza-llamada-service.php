@@ -134,3 +134,44 @@ $bx = cob_fake_bx(['ID'=>77,'STAGE_ID'=>'C48:UC_LLUGGI'], [$viejo], $log);
 $r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bx, $ahora);   // 30 min despues
 test_same('procesado', $r['status'], 'pasados 30 min si es un intento nuevo');
 test_same(2, $r['intentos'], 'y cuenta como el segundo');
+
+// ── el nombre del contacto sale del SERVIDOR, no del navegador ──
+// El SUBJECT es lo que cuenta el dashboard: si dependiera de que el cliente lo
+// mande, todas las llamadas dirian "Llamada saliente cliente".
+$log = [];
+$bxCont = function (string $m, array $p = []) use (&$log) {
+    $log[] = ['m'=>$m,'p'=>$p];
+    return match ($m) {
+        'crm.deal.get'      => ['ok'=>true,'result'=>['ID'=>77,'STAGE_ID'=>'C48:UC_LLUGGI','CONTACT_ID'=>555]],
+        'crm.activity.list' => ['ok'=>true,'result'=>[]],
+        'crm.contact.get'   => ['ok'=>true,'result'=>['ID'=>555,'NAME'=>'Anthony','LAST_NAME'=>'Safdie',
+                                                      'PHONE'=>[['VALUE'=>'+593999']]]],
+        'crm.activity.add'  => ['ok'=>true,'result'=>9001],
+        default             => ['ok'=>true,'result'=>true],
+    };
+};
+$r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bxCont, $ahora);
+test_same('procesado', $r['status'], 'con contacto resuelto: procesa');
+$add = null;
+foreach ($log as $c) if ($c['m']==='crm.activity.add') $add = $c['p']['fields'];
+test_same('Llamada saliente Anthony Safdie', $add['SUBJECT'], 'el SUBJECT lleva el nombre real');
+test_same('+593999', $add['COMMUNICATIONS'][0]['VALUE'], 'y el telefono del contacto');
+test_same(555, $add['COMMUNICATIONS'][0]['ENTITY_ID'], 'atado al contacto correcto');
+
+// sin contacto en el deal: no revienta, cae en "cliente"
+$log = [];
+$bxSinC = function (string $m, array $p = []) use (&$log) {
+    $log[] = ['m'=>$m,'p'=>$p];
+    return match ($m) {
+        'crm.deal.get'      => ['ok'=>true,'result'=>['ID'=>77,'STAGE_ID'=>'C48:UC_LLUGGI']],
+        'crm.activity.list' => ['ok'=>true,'result'=>[]],
+        'crm.activity.add'  => ['ok'=>true,'result'=>9001],
+        default             => ['ok'=>true,'result'=>true],
+    };
+};
+$r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bxSinC, $ahora);
+test_same('procesado', $r['status'], 'sin contacto tambien registra');
+$add2 = null;
+foreach ($log as $c) if ($c['m']==='crm.activity.add') $add2 = $c['p']['fields'];
+test_same('Llamada saliente cliente', $add2['SUBJECT'], 'sin contacto cae en "cliente"');
+test_same(false, isset($add2['COMMUNICATIONS']), 'y NO manda COMMUNICATIONS vacio');
