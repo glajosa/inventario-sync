@@ -16,23 +16,36 @@ require_once __DIR__ . '/../feriados.php';
 // Sin esto no habia forma de comprobar QUE version esta desplegada: el endpoint
 // respondia 400 al GET igual de nuevo que de viejo, y los archivos de lib/ no se
 // sirven. Tres despliegues seguidos sin poder verificar por fuera.
-const COBRANZA_VER = 'cobranzas-boton-v7-tres-asuntos-y-pacto';
+const COBRANZA_VER = 'cobranzas-boton-v8-topes-protocolo-7';
 
 function cobranza_config(): array {
     return [
         // Tope de llamadas POR CICLO, por etapa. 0 = el boton no se ofrece.
         // Los 6 de 3 MESES y ABOGADO son DOS TANDAS de 3 ("dias 6, 8, 10 · y 16, 18, 20"),
         // una por cada contacto efectivo exigido, no seis intentos sueltos.
+        // Tope de INTENTOS por ciclo, por etapa. Cada contacto efectivo exigido lleva
+        // su escalera de 3 intentos, asi que el tope = contactos x 3.
+        // Fuente: protocolo_cobranza-7 (4-sep-2026). CAMBIO respecto de la version
+        // anterior: 1 MES VENCIDO tenia 1 y son 3 -- "hasta 3 llamadas (D+13, D+15,
+        // D+17)" -- y 2 MESES es "IGUAL que 1 MES en fechas", no el doble.
         'topes' => [
-            'C48:UC_X35FSA'    => 0,   // MES CORRIENTE  - 100% automatica, nadie llama
+            'C48:UC_X35FSA'    => 0,   // MES CORRIENTE - "CERO llamadas", 100% automatica
             'C48:NEW'          => 0,   // AL DIA
+            'C48:PREPARATION'  => 0,   // RESERVA
             'C48:UC_TPE9QV'    => 0,   // ADELANTADO
             'C48:UC_JW3G4N'    => 0,   // CANJE
-            'C48:UC_1WHC5Q'    => 1,   // 1 MES VENCIDO
-            'C48:UC_LLUGGI'    => 3,   // 2 MESES VENCIDOS
-            'C48:UC_VXD8VQ'    => 6,   // 3 MESES VENCIDOS
-            'C48:FINAL_INVOICE'=> 6,   // ABOGADO - se repite TODOS LOS MESES, no se agota
+            'C48:UC_RSP3F0'    => 0,   // ABOGADO DAR DE BAJA - solo el mail final
+            'C48:UC_RIXTMH'    => 0,   // ERRORES O ANOMALIAS
+            'C48:UC_1WHC5Q'    => 3,   // 1 MES VENCIDO   - 1 contacto x 3 (D+13,15,17)
+            'C48:UC_LLUGGI'    => 3,   // 2 MESES VENCIDOS- igual que 1 MES
+            'C48:UC_VXD8VQ'    => 6,   // 3 MESES VENCIDOS- 2 contactos x 3 (D+10,12,14 y D+20,22,24)
+            // ABOGADO no va aca: su tope depende de si es el PRIMER MES en la etapa.
         ],
+        // 🔴 ABOGADO cambio en protocolo-7: "PRIMER MES: 2 contactos -- 1 de cobranzas
+        // + 1 del abogado (3 intentos cada uno). DESPUES: 1 contacto mensual del
+        // abogado, siempre. La asesora de cobranzas ya no vuelve a entrar."
+        'abogado_primer_mes' => 6,
+        'abogado_despues'    => 3,
         'dias_entre_intentos' => 2,          // habiles
         'intentos_por_tanda'  => 3,
         // Abrir la pestaña ES la accion, asi que abrirla dos veces registraria
@@ -109,8 +122,27 @@ function cobranza_pacto_vigente(array $actividades, int $ahoraTs): ?array {
     return $mejor;
 }
 
-function cobranza_tope_etapa(string $stageId): int {
-    return cobranza_config()['topes'][$stageId] ?? 0;
+function cobranza_tope_etapa(string $stageId, ?string $entradaEtapa = null,
+                             ?DateTimeImmutable $ahora = null): int {
+    $cfg = cobranza_config();
+
+    if ($stageId === 'C48:FINAL_INVOICE') {          // ABOGADO
+        // El primer mes entran dos: la asesora y el abogado. De ahi en adelante solo
+        // el abogado. Sin dato de entrada se devuelve el tope MAYOR: frenar de mas es
+        // peor que dejar un intento de sobra, porque el deal quedaria sin gestion.
+        $ahora = $ahora ?? new DateTimeImmutable('now', new DateTimeZone('America/Guayaquil'));
+        if ($entradaEtapa === null || $entradaEtapa === '') return (int)$cfg['abogado_primer_mes'];
+        $te = strtotime($entradaEtapa);
+        if ($te === false) return (int)$cfg['abogado_primer_mes'];
+        // los dos en hora de Ecuador: MOVED_TIME llega con el huso del servidor de
+        // Bitrix (+03:00) y comparar meses con 8 h de desfase falla el dia 1.
+        $ent = (new DateTimeImmutable('@'.$te))->setTimezone(new DateTimeZone('America/Guayaquil'));
+        return $ent->format('Y-m') === $ahora->format('Y-m')
+            ? (int)$cfg['abogado_primer_mes']
+            : (int)$cfg['abogado_despues'];
+    }
+
+    return (int)($cfg['topes'][$stageId] ?? 0);
 }
 
 /**
@@ -232,7 +264,8 @@ function cobranza_puede_llamar(string $stageId, array $protocolo, array $deal): 
         return ['puede' => false, 'motivo' => 'otro_embudo', 'restantes' => 0];
     }
 
-    $tope = cobranza_tope_etapa($stageId);
+    $tope = cobranza_tope_etapa($stageId, (string)($deal['MOVED_TIME'] ?? '') ?: null,
+                                $deal['_ahora'] ?? null);
     if ($tope === 0) {
         return ['puede' => false, 'motivo' => 'etapa_sin_llamadas', 'restantes' => 0];
     }

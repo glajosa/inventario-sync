@@ -73,6 +73,7 @@ function cobranza_no_contesto(
     // El pacto se busca sobre TODAS las actividades, sin filtrar por ciclo: el
     // protocolo dice que la pausa SOBREVIVE al cambio de ciclo.
     $deal['_pacto'] = cobranza_pacto_vigente($acts, $ahora->getTimestamp());
+    $deal['_ahora'] = $ahoraEc;   // el tope de ABOGADO compara el MES en hora de Ecuador
 
     // --- 3. el estado del ciclo ---
     // 🔴 '_entrada_etapa' era un nombre que inventé y NUNCA llené: siempre valía null,

@@ -5,10 +5,29 @@ require_once __DIR__ . '/../lib/cobranza-protocolo.php';
 
 // ---- topes por etapa (salen del protocolo del 2-sep-2026) ----
 test_same(0, cobranza_tope_etapa('C48:UC_X35FSA'), 'MES CORRIENTE no se llama');
-test_same(1, cobranza_tope_etapa('C48:UC_1WHC5Q'), '1 MES VENCIDO: 1 llamada');
+// protocolo-7 (4-sep-2026): cada contacto exigido lleva 3 intentos -> tope = contactos x 3
+test_same(3, cobranza_tope_etapa('C48:UC_1WHC5Q'), '1 MES VENCIDO: 3 intentos (D+13,15,17)');
 test_same(3, cobranza_tope_etapa('C48:UC_LLUGGI'), '2 MESES VENCIDOS: 3 llamadas');
 test_same(6, cobranza_tope_etapa('C48:UC_VXD8VQ'), '3 MESES VENCIDOS: 6 llamadas');
-test_same(6, cobranza_tope_etapa('C48:FINAL_INVOICE'), 'ABOGADO: 6 llamadas');
+// ABOGADO depende de si es el PRIMER MES en la etapa
+$hoyEc = new DateTimeImmutable('2026-09-15T10:00:00-05:00');
+test_same(6, cobranza_tope_etapa('C48:FINAL_INVOICE','2026-09-04T16:00:00+03:00',$hoyEc),
+    'ABOGADO primer mes: 6 (1 de cobranzas + 1 del abogado, 3 intentos cada uno)');
+test_same(3, cobranza_tope_etapa('C48:FINAL_INVOICE','2026-03-04T16:00:00+03:00',$hoyEc),
+    'ABOGADO despues: 3 (solo el abogado)');
+test_same(6, cobranza_tope_etapa('C48:FINAL_INVOICE', null, $hoyEc),
+    'sin MOVED_TIME devuelve el tope MAYOR: frenar de mas dejaria el deal sin gestion');
+test_same(6, cobranza_tope_etapa('C48:FINAL_INVOICE','basura',$hoyEc),
+    'una fecha ilegible tampoco frena de mas');
+// el 1 del mes, con el desfase de husos: entro el 31-ago 20:00 Ecuador = 1-sep 04:00 del
+// servidor de Bitrix. Comparando en hora de Ecuador es OTRO mes, y eso es lo correcto.
+test_same(3, cobranza_tope_etapa('C48:FINAL_INVOICE','2026-09-01T04:00:00+03:00',
+    new DateTimeImmutable('2026-09-15T10:00:00-05:00')),
+    'el huso no puede mover el mes de entrada');
+// ABOGADO DAR DE BAJA: solo el mail final
+test_same(0, cobranza_tope_etapa('C48:UC_RSP3F0'), 'ABOGADO DAR DE BAJA: cero llamadas');
+test_same(0, cobranza_tope_etapa('C48:UC_RIXTMH'), 'ERRORES O ANOMALIAS: cero');
+test_same(0, cobranza_tope_etapa('C48:PREPARATION'), 'RESERVA: cero');
 test_same(0, cobranza_tope_etapa('C48:INVENTADA'), 'etapa desconocida no habilita el boton');
 
 // ---- conteo del ciclo ----
@@ -41,8 +60,16 @@ $deal = [];
 test_same(false, cobranza_puede_llamar('C48:UC_X35FSA', ['sinContestar'=>0], $deal)['puede'], 'MES CORRIENTE: boton apagado');
 test_same('etapa_sin_llamadas', cobranza_puede_llamar('C48:UC_X35FSA', ['sinContestar'=>0], $deal)['motivo'], 'motivo explicito');
 test_same(true,  cobranza_puede_llamar('C48:UC_1WHC5Q', ['sinContestar'=>0], $deal)['puede'], '1 MES: primera si');
-test_same(false, cobranza_puede_llamar('C48:UC_1WHC5Q', ['sinContestar'=>1], $deal)['puede'], '1 MES: la segunda ya no');
-test_same('tope_de_etapa', cobranza_puede_llamar('C48:UC_1WHC5Q', ['sinContestar'=>1], $deal)['motivo'], 'motivo del tope');
+test_same(true,  cobranza_puede_llamar('C48:UC_1WHC5Q', ['sinContestar'=>2], $deal)['puede'], '1 MES: la tercera todavia si');
+test_same(false, cobranza_puede_llamar('C48:UC_1WHC5Q', ['sinContestar'=>3], $deal)['puede'], '1 MES: la cuarta ya no');
+test_same('tope_de_etapa', cobranza_puede_llamar('C48:UC_1WHC5Q', ['sinContestar'=>3], $deal)['motivo'], 'motivo del tope');
+// ABOGADO por la puerta de puede_llamar, con MOVED_TIME en el deal
+$abgNuevo = ['MOVED_TIME'=>'2026-09-04T16:00:00+03:00','_ahora'=>$hoyEc];
+$abgViejo = ['MOVED_TIME'=>'2026-03-04T16:00:00+03:00','_ahora'=>$hoyEc];
+test_same(2, cobranza_puede_llamar('C48:FINAL_INVOICE', ['sinContestar'=>4], $abgNuevo)['restantes'],
+    'ABOGADO primer mes: con 4 hechos quedan 2');
+test_same(false, cobranza_puede_llamar('C48:FINAL_INVOICE', ['sinContestar'=>4], $abgViejo)['puede'],
+    'ABOGADO despues: con 4 hechos ya topo (su tope es 3)');
 test_same(2, cobranza_puede_llamar('C48:UC_LLUGGI', ['sinContestar'=>1], $deal)['restantes'], 'quedan 2 de 3');
 
 // ---- la pausa: el campo SOLO no alcanza ----

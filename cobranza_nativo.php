@@ -22,7 +22,9 @@ $CFG_JS = json_encode(cobranza_config(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_
     'C48:UC_X35FSA':'MES CORRIENTE', 'C48:UC_1WHC5Q':'1 MES VENCIDO',
     'C48:UC_LLUGGI':'2 MESES VENCIDOS', 'C48:UC_VXD8VQ':'3 MESES VENCIDOS',
     'C48:FINAL_INVOICE':'ABOGADO', 'C48:NEW':'AL DÍA',
-    'C48:UC_TPE9QV':'ADELANTADO', 'C48:UC_JW3G4N':'CANJE'
+    'C48:UC_TPE9QV':'ADELANTADO', 'C48:UC_JW3G4N':'CANJE',
+    'C48:UC_RSP3F0':'ABOGADO DAR DE BAJA', 'C48:UC_RIXTMH':'ERRORES O ANOMALIAS',
+    'C48:PREPARATION':'RESERVA'
   };
   var MOTIVOS = {
     'etapa_sin_llamadas': 'En esta etapa no se llama. El recordatorio lo manda el sistema.',
