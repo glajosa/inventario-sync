@@ -127,3 +127,17 @@ foreach (['2026-09-01','2026-09-02','2026-09-03','2026-09-04','2026-09-07','2026
     }
 }
 echo "test-credito-protocolo OK\n";
+
+// ── el pacto tiene que estar PLANIFICADO, no cerrado ──
+// Protocolo: "COMPLETED = N (la conversacion pactada todavia no ocurrio)".
+$fut = '2026-09-20T10:00:00-05:00';
+$plan = [['ID'=>1,'TYPE_ID'=>2,'DIRECTION'=>2,'SUBJECT'=>'1234 quedamos','DEADLINE'=>$fut,'COMPLETED'=>'N']];
+$hech = [['ID'=>1,'TYPE_ID'=>2,'DIRECTION'=>2,'SUBJECT'=>'1234 quedamos','DEADLINE'=>$fut,'COMPLETED'=>'Y']];
+// 🔴 Las DOS callan al boton. El protocolo describe el pacto como COMPLETED=N,
+// pero en el uso real la asesora marca la llamada como hecha y le pone el deadline
+// de lo que quedaron -- asi salio en la prueba del 3-sep con el presidente, y lo
+// que se esperaba era silencio. Exigir COMPLETED=N rompia ese caso.
+test_same(true, credito_pacto_vigente($plan,$ahora) !== null, 'planificada + fecha futura = pacto');
+test_same(true, credito_pacto_vigente($hech,$ahora) !== null, 'y una CERRADA con fecha futura tambien: es como se registra de verdad');
+// y asi el boton y el campo ESTADO EN PAUSA dicen lo mismo
+echo "test-credito-protocolo (pacto planificado) OK\n";

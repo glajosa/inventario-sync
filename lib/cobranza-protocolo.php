@@ -108,6 +108,13 @@ function cobranza_pacto_vigente(array $actividades, int $ahoraTs): ?array {
         if ((int)($a['TYPE_ID'] ?? 0) !== 2 || (int)($a['DIRECTION'] ?? 0) !== 2) continue;
         $subject = (string)($a['SUBJECT'] ?? '');
         if (!cobranza_es_contestada($subject)) continue;
+        // 🔴 NO se mira COMPLETED, y es a proposito. El protocolo describe el pacto
+        // como COMPLETED=N ("la conversacion pactada todavia no ocurrio"), pero el
+        // uso REAL es otro: la asesora marca la llamada como HECHA -- porque la
+        // hizo -- y le pone el deadline de lo que quedaron. Asi salio en la prueba
+        // del 3-sep-2026 con el presidente: un 1234 completado con fecha al 9, y lo
+        // que se esperaba era SILENCIO. Exigir COMPLETED=N rompe ese caso; se probo
+        // el 5-sep y las pruebas lo atajaron.
         $dl = (string)($a['DEADLINE'] ?? '');
         if ($dl === '') $dl = (string)($a['END_TIME'] ?? '');
         if ($dl === '') continue;
