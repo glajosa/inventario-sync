@@ -31,7 +31,11 @@ test_same('procesado', $r['status'],  'pulsacion valida en DE CONTADO');
 test_same('proceso',   $r['regimen'], 'regimen de proceso');
 test_same(1,  $r['intentos'],  'primer intento');
 test_same(-1, $r['restantes'], 'sin techo: -1, que NO es cero');
-test_same('2026-09-04', substr($r['proximoIntento'],0,10), 'primer intento tras el pacto: al dia habil siguiente');
+// 🔴 Este deal NUNCA tuvo fecha de pago, asi que NO le toca el "+1 dia": el
+// protocolo manda el ritmo intercalado "hasta conseguir la primera".
+test_same(true, $r['sinFechaAun'], 'todavia no hay fecha de pago');
+test_same(4, $r['cadencia'], 'sin fecha: ritmo intercalado, 4 dias habiles');
+test_same('2026-09-09', substr($r['proximoIntento'],0,10), 'y cae 4 dias habiles despues');
 
 // 🔴 la prueba que evita el conteo doble
 test_same(1, count(array_filter($log, fn($c)=>$c['m']==='crm.activity.add')), 'UNA pulsacion crea UNA actividad');
@@ -45,13 +49,40 @@ test_same(true, !empty($add['DEADLINE']), 'y con DEADLINE: un deal de proceso si
 test_same('VOXIMPLANT_CALL', $add['PROVIDER_ID'], 'se registra como llamada, que es lo que cuentan los tableros');
 test_same('Llamada saliente Marco', $add['SUBJECT'], 'el nombre real del contacto en el asunto');
 
-// ── segundo intento en proceso: ya son 5 dias habiles ──
+// ── PROCESO con una fecha de pago que ya se incumplio ──
+// Primer intento despues del pacto roto: al dia habil siguiente.
 $log = [];
-$uno = [cre_act(1,'Llamada saliente Marco','2026-08-25T09:00:00-05:00')];
-$bx = cre_fake_bx(['ID'=>500,'STAGE_ID'=>'C79:UC_NGYPXQ'], $uno, $log);
+$conFechaRota = [cre_act(1,'FECHA DE PAGO 28/08','2026-08-20T09:00:00-05:00','Y','2026-08-28T10:00:00-05:00')];
+$bx = cre_fake_bx(['ID'=>500,'STAGE_ID'=>'C79:UC_NGYPXQ'], $conFechaRota, $log);
+$r = credito_no_contesto(['dealId'=>500,'bitrixUserId'=>42], $bx, $ahora);
+test_same(false, $r['sinFechaAun'], 'aca SI hubo fecha de pago');
+test_same(1, $r['cadencia'], 'primer intento tras la fecha incumplida: al dia siguiente');
+test_same('2026-09-04', substr($r['proximoIntento'],0,10), 'y cae el dia habil siguiente');
+
+// Ya reintentando: de ahi en adelante, cada 5 dias habiles.
+$log = [];
+$yaReintenta = [
+    cre_act(1,'FECHA DE PAGO 28/08','2026-08-20T09:00:00-05:00','Y','2026-08-28T10:00:00-05:00'),
+    cre_act(2,'Llamada saliente Marco','2026-08-31T09:00:00-05:00'),
+];
+$bx = cre_fake_bx(['ID'=>500,'STAGE_ID'=>'C79:UC_NGYPXQ'], $yaReintenta, $log);
 $r = credito_no_contesto(['dealId'=>500,'bitrixUserId'=>42], $bx, $ahora);
 test_same(2, $r['intentos'], 'segundo intento');
-test_same('2026-09-10', substr($r['proximoIntento'],0,10), 'de ahi en adelante, cada 5 dias habiles');
+test_same(5, $r['cadencia'], 'de ahi en adelante, cada 5 dias habiles');
+test_same('2026-09-10', substr($r['proximoIntento'],0,10), 'y cae 5 habiles despues');
+
+// ── MANTENIMIENTO: 3 meses en una etapa de gestion -> una llamada al mes ──
+$log = [];
+$bx = cre_fake_bx(['ID'=>500,'STAGE_ID'=>'C79:PREPAYMENT_INVOIC','MOVED_TIME'=>'2026-06-01T10:00:00+03:00'], [], $log);
+$r = credito_no_contesto(['dealId'=>500,'bitrixUserId'=>42], $bx, $ahora);
+test_same(true, $r['mantenimiento'], 'pasado el techo de 2 meses baja a mantenimiento');
+test_same(20, $r['cadencia'], 'una llamada al mes, pero NO se apaga');
+// y en la misma etapa recien entrado, sigue el intercalado
+$log = [];
+$bx = cre_fake_bx(['ID'=>500,'STAGE_ID'=>'C79:PREPAYMENT_INVOIC','MOVED_TIME'=>'2026-08-28T10:00:00+03:00'], [], $log);
+$r = credito_no_contesto(['dealId'=>500,'bitrixUserId'=>42], $bx, $ahora);
+test_same(false, $r['mantenimiento'], 'recien entrado NO es mantenimiento');
+test_same(4, $r['cadencia'], 'sigue el intercalado');
 
 // ── SIN TECHO: 12 intentos y sigue dejando ──
 $log = [];
@@ -61,7 +92,7 @@ $bx = cre_fake_bx(['ID'=>500,'STAGE_ID'=>'C79:PREPAYMENT_INVOIC'], $muchos, $log
 $r = credito_no_contesto(['dealId'=>500,'bitrixUserId'=>42], $bx, $ahora);
 test_same('procesado', $r['status'], '12 intentos y sigue: en credito NO hay techo');
 test_same(13, $r['intentos'], 'cuenta el intento 13');
-test_same('2026-09-09', substr($r['proximoIntento'],0,10), 'gestion: cada 4 dias habiles');
+test_same('2026-09-09', substr($r['proximoIntento'],0,10), 'gestion recien entrada: cada 4 dias habiles');
 
 // ── el PACTO lo calla ──
 $log = [];
@@ -77,12 +108,21 @@ $log = [];
 $conFecha = [
     cre_act(1,'Llamada saliente Marco','2026-08-01T09:00:00-05:00'),
     cre_act(2,'Llamada saliente Marco','2026-08-05T09:00:00-05:00'),
-    cre_act(3,'FECHA DE PAGO 30/08','2026-08-10T09:00:00-05:00'),
+    cre_act(3,'FECHA DE PAGO 30/08','2026-08-10T09:00:00-05:00','Y','2026-08-30T10:00:00-05:00'),
 ];
 $bx = cre_fake_bx(['ID'=>500,'STAGE_ID'=>'C79:UC_NGYPXQ'], $conFecha, $log);
 $r = credito_no_contesto(['dealId'=>500,'bitrixUserId'=>42], $bx, $ahora);
 test_same(1, $r['intentos'], 'tras una FECHA DE PAGO la escalera arranca de cero');
-test_same('2026-09-04', substr($r['proximoIntento'],0,10), 'y vuelve a la cadencia de "al dia siguiente"');
+test_same(false, $r['sinFechaAun'], 'y ya hubo fecha, asi que rige la cadencia de proceso');
+test_same('2026-09-04', substr($r['proximoIntento'],0,10), 'al dia habil siguiente');
+
+// 🔴 pero una FECHA DE PAGO SIN deadline no fija ninguna fecha: no hay dia que poner
+$log = [];
+$sinDl = [cre_act(1,'FECHA DE PAGO pero sin fecha','2026-08-10T09:00:00-05:00')];
+$bx = cre_fake_bx(['ID'=>500,'STAGE_ID'=>'C79:UC_NGYPXQ'], $sinDl, $log);
+$r = credito_no_contesto(['dealId'=>500,'bitrixUserId'=>42], $bx, $ahora);
+test_same(true, $r['sinFechaAun'], 'sin deadline sigue sin haber fecha de pago');
+test_same(4, $r['cadencia'], 'asi que manda el intercalado');
 
 // ── un deal de cobranzas no es de este boton ──
 $log = [];

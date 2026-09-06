@@ -98,6 +98,9 @@ function credito_no_contesto(
         return $out;
     }
     $regimen = (string)$permiso['regimen'];
+    // La cadencia no es una sola: depende de si el deal ya tuvo una fecha de pago
+    // y de cuanto lleva en su etapa. Sale de lo que ya se leyo, sin llamadas extra.
+    $ctx = credito_contexto($acts, (string)($deal['MOVED_TIME'] ?? '') ?: null, $ahoraEc);
 
     // --- 5. cerrar la planificada abierta ---
     $cerrada = null;
@@ -114,7 +117,7 @@ function credito_no_contesto(
     // BANCO APROBADO TODOS LOS DEALS TIENEN QUE TENER UNA LLAMADA AGENDADA CON
     // DEADLINE, SIEMPRE. Un deal en regimen de proceso sin llamada agendada es un
     // deal soltado, sin excusa posible." El boton lo deja agendado solo.
-    $proximo = credito_proximo_intento($regimen, $protocolo, $ahoraEc);
+    $proximo = credito_proximo_intento($regimen, $protocolo, $ahoraEc, $ctx);
 
     // El SUBJECT es lo que cuentan los tableros, asi que el nombre no puede depender
     // de que el navegador lo mande: si llega vacio se resuelve con el CONTACT_ID del
@@ -160,7 +163,7 @@ function credito_no_contesto(
         'NOTIFY_TYPE'   => 1,
         'NOTIFY_VALUE'  => 15,
         'DESCRIPTION_TYPE' => 1,
-        'DESCRIPTION'   => credito_nota($regimen, $proximo),
+        'DESCRIPTION'   => credito_nota($regimen, $proximo, $ctx),
     ];
     if ($contactoId > 0 && $tel !== '') {
         $campos['COMMUNICATIONS'] = [[
@@ -179,6 +182,10 @@ function credito_no_contesto(
         'status'          => 'procesado',
         'etapa'           => $stageId,
         'regimen'         => $regimen,
+        'cadencia'        => credito_cadencia($regimen, $protocolo, $ctx),
+        'mantenimiento'   => ($regimen !== 'proceso')
+                             && $ctx['meses_en_etapa'] >= (int)credito_config()['meses_para_mantenimiento'],
+        'sinFechaAun'     => ($regimen === 'proceso') && !$ctx['hubo_fecha'],
         'intentos'        => (int)$protocolo['sinContestar'] + 1,
         'restantes'       => -1,          // sin techo, a proposito
         'proximoIntento'  => $proximo->format(DateTimeInterface::ATOM),

@@ -57,6 +57,13 @@ function credito_config(): array {
         'dias_gestion'         => 4,   // habiles: la llamada cae cada 4, el mensaje va en el medio
         'dias_proceso_primero' => 1,   // "llamada AL DIA SIGUIENTE" de la fecha que no cumplio
         'dias_proceso_despues' => 5,   // habiles, "de ahi CADA 5 DIAS HABILES"
+        // 🔴 MANTENIMIENTO. En regimen de gestion el protocolo pone un techo de
+        // "2 meses / 8 mensajes", y al llegar: "Se eleva a decision de Luis y
+        // Alfonso y baja a MANTENIMIENTO (1 llamada + 1 mensaje al mes). No se
+        // apaga." O sea el ritmo NO se detiene, se espacia. 20 dias habiles es un
+        // mes de trabajo.
+        'dias_mantenimiento'   => 20,
+        'meses_para_mantenimiento' => 2,
         // Abrir la pestaña ES la accion: dos pulsaciones seguidas registrarian dos
         // intentos. Misma ventana que cobranzas, por la misma razon (doble clic).
         'ventana_repeticion_seg' => 600,
@@ -161,24 +168,51 @@ function credito_sumar_habiles(DateTimeImmutable $desde, int $dias): DateTimeImm
 }
 
 /**
- * Cuando cae el proximo intento.
+ * Cada cuantos DIAS HABILES vuelve la llamada. No es una sola cadencia: el
+ * protocolo distingue cuatro situaciones y aplanarlas seria inventarse una regla.
  *
- * PROCESO: si es el PRIMER intento despues de que la fecha pactada paso sin que
- * el cliente contestara, va AL DIA SIGUIENTE habil. De ahi en adelante, cada 5.
- * El "primero" se reconoce porque no hay intentos acumulados desde la ultima
- * contestada ($sinContestar === 0): el cliente venia pactando, no ignorando.
+ * $ctx = ['hubo_fecha' => bool, 'meses_en_etapa' => int]
  *
- * GESTION / PUERTA / SALIDA: cada 4 dias habiles. El mensaje del protocolo cae
+ * PROCESO con fecha pactada que ya paso:
+ *   "SI LLEGA LA FECHA Y NO CONTESTA: llamada AL DIA SIGUIENTE, y de ahi CADA 5
+ *   DIAS HABILES desde que dejo de contestar, hasta ubicarlo y fijar nueva fecha."
+ *   El "al dia siguiente" se reconoce porque no hay intentos acumulados desde la
+ *   ultima contestada: el cliente venia pactando, no ignorando.
+ *
+ * PROCESO sin ninguna fecha todavia:
+ *   "Sin fecha todavia, la asesora llama con el RITMO INTERCALADO hasta conseguir
+ *   la primera." No es el ritmo de 5 dias: ese arranca cuando hay una fecha que
+ *   se incumplio. 🔴 Y hoy es el caso de los 114 deals de proceso, porque ninguno
+ *   tiene fecha de pago cargada.
+ *
+ * GESTION pasado el techo de 2 meses -> MANTENIMIENTO: una llamada al mes.
+ *   "Se eleva a Luis y Alfonso y baja a MANTENIMIENTO (1 llamada + 1 mensaje al
+ *   mes). No se apaga." El ritmo no se detiene, se espacia.
+ *
+ * GESTION / PUERTA / SALIDA normal: cada 4 dias habiles, con el mensaje
  * intercalado en el medio, asi que el cliente recibe algo cada 2.
  */
-function credito_proximo_intento(string $regimen, array $protocolo, DateTimeImmutable $ahora): DateTimeImmutable {
+function credito_cadencia(string $regimen, array $protocolo, array $ctx = []): int {
     $cfg = credito_config();
-    $dias = match ($regimen) {
-        'proceso' => ((int)($protocolo['sinContestar'] ?? 0) === 0)
-                        ? (int)$cfg['dias_proceso_primero']
-                        : (int)$cfg['dias_proceso_despues'],
-        default   => (int)$cfg['dias_gestion'],
-    };
+    $hubo  = !empty($ctx['hubo_fecha']);
+    $meses = (int)($ctx['meses_en_etapa'] ?? 0);
+
+    if ($regimen === 'proceso') {
+        if (!$hubo) return (int)$cfg['dias_gestion'];          // todavia no hay fecha: intercalado
+        return ((int)($protocolo['sinContestar'] ?? 0) === 0)
+            ? (int)$cfg['dias_proceso_primero']
+            : (int)$cfg['dias_proceso_despues'];
+    }
+    if (($regimen === 'gestion' || $regimen === 'puerta')
+        && $meses >= (int)$cfg['meses_para_mantenimiento']) {
+        return (int)$cfg['dias_mantenimiento'];
+    }
+    return (int)$cfg['dias_gestion'];
+}
+
+/** Cuando cae el proximo intento, con la cadencia que le toca a su situacion. */
+function credito_proximo_intento(string $regimen, array $protocolo, DateTimeImmutable $ahora, array $ctx = []): DateTimeImmutable {
+    $dias = credito_cadencia($regimen, $protocolo, $ctx);
     $at = credito_sumar_habiles($ahora, $dias);
     $hora = match (true) {
         (int)$ahora->format('G') < 11 => '12:30',
@@ -191,12 +225,56 @@ function credito_proximo_intento(string $regimen, array $protocolo, DateTimeImmu
 }
 
 /** El texto que va en la actividad, para que se entienda sin abrir el codigo. */
-function credito_nota(string $regimen, DateTimeImmutable $proximo): string {
+function credito_nota(string $regimen, DateTimeImmutable $proximo, array $ctx = []): string {
     $cfg = credito_config();
-    return match ($regimen) {
-        'proceso' => 'No contestó. El deal está en régimen de PROCESO: toda llamada queda agendada. '
-                   . 'Reintento el ' . $proximo->format('d/m/Y') . '.',
-        default   => 'No contestó. Ritmo intercalado: el mensaje va en el medio y la llamada vuelve '
-                   . 'cada ' . $cfg['dias_gestion'] . ' días hábiles, el ' . $proximo->format('d/m/Y') . '.',
-    };
+    $f = $proximo->format('d/m/Y');
+    $meses = (int)($ctx['meses_en_etapa'] ?? 0);
+    if ($regimen === 'proceso') {
+        return empty($ctx['hubo_fecha'])
+            ? 'No contestó. Todavía no hay fecha de pago: ritmo intercalado hasta conseguirla. Reintento el ' . $f . '.'
+            : 'No contestó pese a la fecha pactada. Régimen de proceso: reintento el ' . $f . '.';
+    }
+    if (($regimen === 'gestion' || $regimen === 'puerta') && $meses >= (int)$cfg['meses_para_mantenimiento']) {
+        return 'No contestó. Lleva ' . $meses . ' meses en esta etapa: pasa a MANTENIMIENTO, '
+             . 'una llamada al mes. Reintento el ' . $f . '.';
+    }
+    return 'No contestó. Ritmo intercalado: el mensaje va en el medio y la llamada vuelve cada '
+         . $cfg['dias_gestion'] . ' días hábiles, el ' . $f . '.';
+}
+
+/**
+ * El contexto que decide la cadencia. Sale de datos que ya se leyeron: no cuesta
+ * ni una llamada mas.
+ *
+ * hubo_fecha    -> alguna vez se registro una FECHA DE PAGO con deadline (haya
+ *                  pasado o no). Sin eso, el deal todavia esta buscando la primera
+ *                  y le toca el ritmo intercalado.
+ * meses_en_etapa-> desde MOVED_TIME, que es cuando el deal entro a su etapa ACTUAL.
+ *                  Es el proxy del techo de "2 meses" que baja a mantenimiento.
+ *                  🔴 Se compara en hora de ECUADOR: MOVED_TIME llega con el huso
+ *                  del servidor de Bitrix (+03:00) y 8 horas de desfase cambian el
+ *                  mes el dia 1.
+ */
+function credito_contexto(array $actividades, ?string $movedTime, DateTimeImmutable $ahora): array {
+    $hubo = false;
+    foreach ($actividades as $a) {
+        if ((int)($a['TYPE_ID'] ?? 0) !== 2 || (int)($a['DIRECTION'] ?? 0) !== 2) continue;
+        if (!str_contains(mb_strtoupper((string)($a['SUBJECT'] ?? ''), 'UTF-8'), 'FECHA DE PAGO')) continue;
+        $dl = (string)($a['DEADLINE'] ?? '');
+        if ($dl === '') $dl = (string)($a['END_TIME'] ?? '');
+        if ($dl !== '' && strtotime($dl) !== false) { $hubo = true; break; }
+    }
+    $meses = 0;
+    if (is_string($movedTime) && trim($movedTime) !== '') {
+        $tm = strtotime($movedTime);
+        if ($tm !== false) {
+            $ent = (new DateTimeImmutable('@' . $tm))->setTimezone(new DateTimeZone('America/Guayaquil'));
+            $ahoraEc = $ahora->setTimezone(new DateTimeZone('America/Guayaquil'));
+            if ($ent <= $ahoraEc) {
+                $d = $ent->diff($ahoraEc);
+                $meses = (int)$d->y * 12 + (int)$d->m;
+            }
+        }
+    }
+    return ['hubo_fecha' => $hubo, 'meses_en_etapa' => $meses];
 }

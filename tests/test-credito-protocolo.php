@@ -3,6 +3,11 @@ declare(strict_types=1);
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/../lib/credito-protocolo.php';
 
+function ll(array $x = []): array {
+    return array_merge(['ID'=>1,'TYPE_ID'=>2,'DIRECTION'=>2,'SUBJECT'=>'Llamada saliente Juan',
+                        'CREATED'=>'2026-09-01T10:00:00-05:00','COMPLETED'=>'Y','DEADLINE'=>''], $x);
+}
+
 // ── los regimenes, con las etapas REALES del 79 leidas de Bitrix el 5-sep-2026 ──
 test_same('puerta',  credito_regimen('C79:NEW'),               'X GESTIONAR es la puerta');
 test_same('gestion', credito_regimen('C79:PREPAYMENT_INVOIC'), 'INDECISO es gestion');
@@ -73,24 +78,51 @@ test_same(null, credito_pacto_vigente($absurdo, $ahora), 'una fecha a 4 años no
 $noContestada = [['ID'=>9,'TYPE_ID'=>2,'DIRECTION'=>2,'SUBJECT'=>'no contesta','DEADLINE'=>'2026-09-20T10:00:00-05:00']];
 test_same(null, credito_pacto_vigente($noContestada, $ahora), 'una planificada sin contestada NO es un pacto');
 
-// ── la cadencia: dos velocidades ──
+// ── la cadencia: CUATRO situaciones, no una ──
 $vie = new DateTimeImmutable('2026-09-04T09:00:00-05:00');   // viernes
-$p1 = credito_proximo_intento('proceso', ['sinContestar'=>0], $vie);
-test_same('2026-09-07', $p1->format('Y-m-d'), 'PROCESO, primer intento tras el pacto: al dia habil siguiente (salta el finde)');
-$p2 = credito_proximo_intento('proceso', ['sinContestar'=>1], $vie);
+$CON = ['hubo_fecha'=>true,  'meses_en_etapa'=>0];
+$SIN = ['hubo_fecha'=>false, 'meses_en_etapa'=>0];
+$p1 = credito_proximo_intento('proceso', ['sinContestar'=>0], $vie, $CON);
+test_same('2026-09-07', $p1->format('Y-m-d'), 'PROCESO con fecha incumplida: al dia habil siguiente (salta el finde)');
+$p2 = credito_proximo_intento('proceso', ['sinContestar'=>1], $vie, $CON);
 test_same('2026-09-11', $p2->format('Y-m-d'), 'PROCESO, de ahi en adelante: 5 dias habiles');
-$p3 = credito_proximo_intento('gestion', ['sinContestar'=>3], $vie);
+// 🔴 sin fecha todavia NO es el ritmo de 5: el protocolo manda el intercalado
+$p2b = credito_proximo_intento('proceso', ['sinContestar'=>3], $vie, $SIN);
+test_same('2026-09-10', $p2b->format('Y-m-d'), 'PROCESO sin fecha aun: ritmo intercalado hasta conseguir la primera');
+test_same(4, credito_cadencia('proceso', ['sinContestar'=>9], $SIN), 'y da igual cuantos intentos lleve: sigue intercalado');
+test_same(1, credito_cadencia('proceso', ['sinContestar'=>0], $CON), 'con fecha incumplida y sin intentos: al dia siguiente');
+test_same(5, credito_cadencia('proceso', ['sinContestar'=>2], $CON), 'con fecha incumplida y ya reintentando: 5');
+$p3 = credito_proximo_intento('gestion', ['sinContestar'=>3], $vie, $SIN);
 test_same('2026-09-10', $p3->format('Y-m-d'), 'GESTION: la llamada vuelve cada 4 dias habiles');
-$p4 = credito_proximo_intento('puerta', ['sinContestar'=>0], $vie);
+$p4 = credito_proximo_intento('puerta', ['sinContestar'=>0], $vie, $SIN);
 test_same('2026-09-10', $p4->format('Y-m-d'), 'la puerta usa la cadencia de gestion');
+// 🔴 MANTENIMIENTO: pasado el techo de 2 meses, una llamada al MES. No se apaga.
+$VIEJO = ['hubo_fecha'=>false, 'meses_en_etapa'=>3];
+test_same(20, credito_cadencia('gestion', ['sinContestar'=>8], $VIEJO), '3 meses en gestion: mantenimiento, 1 llamada al mes');
+test_same(20, credito_cadencia('puerta',  ['sinContestar'=>1], $VIEJO), 'la puerta tambien baja a mantenimiento');
+test_same(4,  credito_cadencia('gestion', ['sinContestar'=>8], ['hubo_fecha'=>false,'meses_en_etapa'=>1]), 'al mes todavia no: sigue el intercalado');
+test_same(5,  credito_cadencia('proceso', ['sinContestar'=>2], ['hubo_fecha'=>true,'meses_en_etapa'=>9]), 'proceso NO baja a mantenimiento: ahi no se deja de cobrar nunca');
+
+// ── el contexto sale de las actividades y del MOVED_TIME ──
+$ahoraX = new DateTimeImmutable('2026-09-05T10:00:00-05:00');
+$cx = credito_contexto([ll(['SUBJECT'=>'FECHA DE PAGO 20/08','DEADLINE'=>'2026-08-20T10:00:00-05:00'])], null, $ahoraX);
+test_same(true, $cx['hubo_fecha'], 'una FECHA DE PAGO ya registrada cuenta, aunque haya vencido');
+$cx2 = credito_contexto([ll(['SUBJECT'=>'1234 hablamos','DEADLINE'=>'2026-08-20T10:00:00-05:00'])], null, $ahoraX);
+test_same(false, $cx2['hubo_fecha'], 'un 1234 no es una fecha de pago');
+$cx3 = credito_contexto([ll(['SUBJECT'=>'FECHA DE PAGO','DEADLINE'=>''])], null, $ahoraX);
+test_same(false, $cx3['hubo_fecha'], 'FECHA DE PAGO sin deadline no fija nada');
+test_same(3, credito_contexto([], '2026-06-01T10:00:00+03:00', $ahoraX)['meses_en_etapa'], 'tres meses en la etapa');
+test_same(0, credito_contexto([], '2026-09-01T10:00:00+03:00', $ahoraX)['meses_en_etapa'], 'cuatro dias son cero meses');
+test_same(0, credito_contexto([], null, $ahoraX)['meses_en_etapa'], 'sin MOVED_TIME no se inventa antiguedad');
+test_same(0, credito_contexto([], 'basura', $ahoraX)['meses_en_etapa'], 'una fecha ilegible tampoco');
 // la hora depende del momento del dia, igual que en cobranzas
-test_same('12:30', credito_proximo_intento('gestion', [], new DateTimeImmutable('2026-09-08T09:00:00-05:00'))->format('H:i'), 'de mañana temprano -> 12:30');
-test_same('09:30', credito_proximo_intento('gestion', [], new DateTimeImmutable('2026-09-08T20:00:00-05:00'))->format('H:i'), 'de noche -> 09:30 del dia siguiente habil');
+test_same('12:30', credito_proximo_intento('gestion', [], new DateTimeImmutable('2026-09-08T09:00:00-05:00'), [])->format('H:i'), 'de mañana temprano -> 12:30');
+test_same('09:30', credito_proximo_intento('gestion', [], new DateTimeImmutable('2026-09-08T20:00:00-05:00'), [])->format('H:i'), 'de noche -> 09:30 del dia siguiente habil');
 
 // ── nunca cae en fin de semana ni feriado ──
 foreach (['2026-09-01','2026-09-02','2026-09-03','2026-09-04','2026-09-07','2026-09-08'] as $d) {
     foreach (['proceso','gestion'] as $reg) {
-        $x = credito_proximo_intento($reg, ['sinContestar'=>0], new DateTimeImmutable($d.'T10:00:00-05:00'));
+        $x = credito_proximo_intento($reg, ['sinContestar'=>0], new DateTimeImmutable($d.'T10:00:00-05:00'), ['hubo_fecha'=>true,'meses_en_etapa'=>0]);
         test_same(true, fer_es_habil($x), "el proximo intento de $reg desde $d cae en dia habil");
     }
 }
