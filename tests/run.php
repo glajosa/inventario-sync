@@ -5,6 +5,8 @@ require_once __DIR__ . '/test-llamada-protocolo.php';
 require_once __DIR__ . '/test-cobranza-protocolo.php';
 require_once __DIR__ . '/test-cobranza-llamada-service.php';
 require_once __DIR__ . '/test-cobranza-endpoint.php';
+require_once __DIR__ . '/test-credito-protocolo.php';
+require_once __DIR__ . '/test-credito-llamada-service.php';
 require_once __DIR__ . '/test-private-api-auth.php';
 require_once __DIR__ . '/test-llamada-ciclos.php';
 require_once __DIR__ . '/test-llamada-resultado-service.php';

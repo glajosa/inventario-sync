@@ -157,8 +157,15 @@ function cobranza_tope_etapa(string $stageId, ?string $entradaEtapa = null,
 function cobranza_calcular_protocolo(
     array $actividades,
     ?int $excluirId = null,
-    ?string $desde = null
+    ?string $desde = null,
+    ?callable $esContestada = null
 ): array {
+    // 🔴 La regla de "contesto" entra por parametro para que CREDITO (pipeline 79)
+    // reuse este contador sin copiarlo: alla los asuntos validos incluyen FECHA DE
+    // PAGO. El orden, los sellos del movil y el reinicio por contacto efectivo son
+    // logica delicada y dos copias se separan solas. Por defecto se comporta EXACTO
+    // como antes: cobranza_es_contestada.
+    $esContestada = $esContestada ?? 'cobranza_es_contestada';
     $sinContestar = 0; $contactos = 0; $fuera = 0; $ultima = null;
     // Se compara por INSTANTE, no por cadena. CREATED y MOVED_TIME llegan con su
     // propio huso (+03:00 del servidor de Bitrix) y el inicio de mes se calcula en
@@ -185,13 +192,13 @@ function cobranza_calcular_protocolo(
         $subject  = (string)($a['SUBJECT'] ?? '');
         $selloMovil = str_starts_with($originId, 'VI_externalCall')
             || str_starts_with($subject, 'App móvil ·');
-        if ($selloMovil && !cobranza_es_contestada($subject)) continue;
+        if ($selloMovil && !$esContestada($subject)) continue;
 
         $creada = (string)($a['CREATED'] ?? '');
         $creadaTs = $creada !== '' ? strtotime($creada) : false;
         if ($desdeTs !== null && $creadaTs !== false && $creadaTs < $desdeTs) { $fuera++; continue; }
 
-        if (cobranza_es_contestada($subject)) {
+        if ($esContestada($subject)) {
             // Contesto: la tanda se cierra. 🔴 Tambien muere la ventana de
             // repeticion: reiniciaba la CUENTA pero seguia apuntando al intento
             // fallido anterior, asi que tras registrar una contestada el boton
