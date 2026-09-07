@@ -194,7 +194,7 @@ function cobranza_no_contesto(
 
     // --- 7. ESTADO DE GESTION. NO se tocan CICLOS_EXIG ni CICLOS_CUMPL:
     //        esos los lleva el proceso del ciclo, no un boton que aprieta una persona.
-    $gestion = cobranza_estado_gestion($protocolo, $stageId);
+    $gestion = cobranza_estado_gestion($protocolo, $stageId, $entrada !== '' ? $entrada : null, $ahoraEc);
     cobranza_bx($bx, 'crm.deal.update', ['id' => $dealId, 'fields' => [$cfg['campo_gestion'] => $gestion]]);
 
     return [

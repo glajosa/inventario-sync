@@ -95,10 +95,41 @@ foreach (['07:00','09:15','11:59','12:00','15:45','18:30','21:00'] as $hh) {
 $mar = new DateTimeImmutable('2026-09-01T09:00:00-05:00');
 test_same('2026-09-03', cobranza_proximo_intento($mar)->format('Y-m-d'), 'martes -> jueves');
 
-// ---- 3 intentos sin respuesta = CUMPLIDO (hizo su parte) ----
-test_same(2107, cobranza_estado_gestion(['sinContestar'=>0], 'C48:UC_LLUGGI'), 'primer fallo: NO CONTESTA');
-test_same(2107, cobranza_estado_gestion(['sinContestar'=>1], 'C48:UC_LLUGGI'), 'segundo fallo: NO CONTESTA');
-test_same(2105, cobranza_estado_gestion(['sinContestar'=>2], 'C48:UC_LLUGGI'), 'tercer fallo: CUMPLIDO');
+// ---- ESTADO DE GESTION: los 5 valores, con el significado que dice su nombre ----
+// 🔴 Antes era `intentos % 3`: decia NO CONTESTA en el primer intento y CUMPLIDO en
+// el 3 y otra vez en el 6. Unificado el 7-sep-2026 con la regla del proceso de
+// ciclos, porque el presidente veia el campo diciendo cosas que no correspondian.
+$EP=2109; $NC=2107; $CU=2105; $SG=2111; $PI=2117;
+$M1='C48:UC_1WHC5Q';   // 1 MES VENCIDO   -> 1 contacto exigido
+$M3='C48:UC_VXD8VQ';   // 3 MESES VENCIDOS -> 2 contactos exigidos
+
+test_same($EP, cobranza_estado_gestion(['intentos'=>0,'contactos'=>0], $M1),
+    'primer intento: EN PROCESO -- esta trabajandolo, no es "no contesta"');
+test_same($EP, cobranza_estado_gestion(['intentos'=>1,'contactos'=>0], $M1),
+    'segundo intento: sigue EN PROCESO');
+test_same($NC, cobranza_estado_gestion(['intentos'=>2,'contactos'=>0], $M1),
+    'tercer intento y CERO contactos: NO CONTESTA');
+test_same($NC, cobranza_estado_gestion(['intentos'=>7,'contactos'=>0], $M1),
+    'y sigue siendo NO CONTESTA en el octavo: no vuelve a CUMPLIDO como antes');
+test_same($CU, cobranza_estado_gestion(['intentos'=>2,'contactos'=>1], $M1),
+    '1 MES con 1 contacto logrado: CUMPLIDO');
+test_same($EP, cobranza_estado_gestion(['intentos'=>3,'contactos'=>1], $M3),
+    '3 MESES exige 2 contactos: con 1 todavia EN PROCESO');
+test_same($CU, cobranza_estado_gestion(['intentos'=>4,'contactos'=>2], $M3),
+    'con los 2 contactos: CUMPLIDO');
+test_same($PI, cobranza_estado_gestion(['intentos'=>1,'contactos'=>0,'pactoIncumplido'=>true], $M1),
+    'el pacto incumplido gana sobre todo lo demas');
+test_same($PI, cobranza_estado_gestion(['intentos'=>9,'contactos'=>5,'pactoIncumplido'=>true], $M3),
+    'incluso con los contactos logrados: quedo una llamada agendada sin hacer');
+// los contactos exigidos salen del tope /3, sin tabla duplicada
+test_same(1, intdiv(cobranza_tope_etapa($M1), 3), '1 MES exige 1 contacto (tope 3 / 3)');
+test_same(2, intdiv(cobranza_tope_etapa($M3), 3), '3 MESES exige 2 (tope 6 / 3)');
+$hoyEc2 = new DateTimeImmutable('2026-09-15T10:00:00-05:00');
+test_same(2, intdiv(cobranza_tope_etapa('C48:FINAL_INVOICE','2026-09-04T16:00:00+03:00',$hoyEc2), 3),
+    'ABOGADO primer mes exige 2 (tope 6 / 3)');
+test_same(1, intdiv(cobranza_tope_etapa('C48:FINAL_INVOICE','2026-03-04T16:00:00+03:00',$hoyEc2), 3),
+    'ABOGADO despues exige 1 (tope 3 / 3)');
+
 
 // ---- ciclo mensual de ABOGADO ----
 $ahora = new DateTimeImmutable('2026-09-15T10:00:00-05:00');
@@ -124,12 +155,23 @@ $ini = cobranza_inicio_ciclo('C48:FINAL_INVOICE', '2026-09-15T18:30:00+03:00', $
 $pp = cobranza_calcular_protocolo($prev, null, $ini);
 test_same(1, $pp['sinContestar'], 'al entrar a ABOGADO no se arrastra el intento de la etapa anterior');
 test_same(1, $pp['fueraDelCiclo'], 'el de la etapa anterior queda reportado como fuera');
-// el resto devuelve MOVED_TIME TAL CUAL, con su huso: quien compara usa strtotime
-test_same('2026-03-02T08:00:00+03:00',
-    cobranza_inicio_ciclo('C48:UC_LLUGGI', '2026-03-02T08:00:00+03:00', $ahora),
-    'el resto cuenta desde que entro a la etapa (MOVED_TIME sin tocar)');
-test_same(null, cobranza_inicio_ciclo('C48:UC_LLUGGI', '', $ahora),
-    'sin MOVED_TIME no hay ventana (cuenta todo), y se ve');
+// 🔴 Desde el 7-sep-2026 las etapas de mora tambien cuentan por MES: si el deal
+// entro hace meses, el ciclo arranca el 1 del mes corriente, no en la entrada.
+// Antes esto devolvia MOVED_TIME tal cual y los intentos de meses viejos
+// bloqueaban el boton para siempre.
+test_same('2026-09-01',
+    substr((string)cobranza_inicio_ciclo('C48:UC_LLUGGI', '2026-03-02T08:00:00+03:00', $ahora), 0, 10),
+    'entro en marzo: el ciclo cuenta desde el 1 del mes corriente');
+// y si entro DENTRO del mes, manda la entrada (es la mas reciente de las dos)
+test_same('2026-09-02T08:00:00+03:00',
+    cobranza_inicio_ciclo('C48:UC_LLUGGI', '2026-09-02T08:00:00+03:00', $ahora),
+    'entro este mes: cuenta desde que entro, con su huso sin tocar');
+// 🔴 Sin MOVED_TIME ya NO se cuenta toda la historia: en las etapas de mora se
+// cae al inicio del mes corriente, que es mas correcto. Antes devolvia null (sin
+// ventana) y los intentos de meses viejos bloqueaban el boton.
+test_same('2026-09-01',
+    substr((string)cobranza_inicio_ciclo('C48:UC_LLUGGI', null, $ahora), 0, 10),
+    'sin MOVED_TIME el ciclo arranca el 1 del mes corriente');
 
 // ── 🔴 la ventana del ciclo: el fallo que hacia decir "intento 2" con un intento ──
 // MOVED_TIME es la entrada a la etapa. Lo anterior es de OTRO ciclo y no cuenta.
@@ -206,9 +248,17 @@ $tresEnEtapa = [
 ];
 $iniEtapaOct = cobranza_inicio_ciclo('C48:UC_LLUGGI', $entradaAbogado, $oct);
 $pEtapa = cobranza_calcular_protocolo($tresEnEtapa, null, $iniEtapaOct);
-test_same(3, $pEtapa['sinContestar'], '2 MESES sigue contando desde la etapa, aunque cambie el mes');
-test_same(false, cobranza_puede_llamar('C48:UC_LLUGGI', $pEtapa, [])['puede'],
-    'y sigue topado: para reabrirlo el deal tiene que MOVERSE de etapa');
+// 🔴 Esta asercion afirmaba lo CONTRARIO hasta el 7-sep-2026: que 2 MESES contaba
+// desde la etapa aunque cambiara el mes. Se invirtio a pedido del usuario -- "si ya
+// pasa al otro mes deberia contar como el ciclo del siguiente mes para que haya
+// orden" -- y ahora los intentos de septiembre NO arrastran al ciclo de octubre.
+test_same(0, $pEtapa['sinContestar'], 'los intentos de septiembre no cuentan en el ciclo de octubre');
+test_same(3, $pEtapa['fueraDelCiclo'], 'quedan reportados como fuera del ciclo');
+// 🔴 Invertida el 7-sep-2026: al cambiar el mes el ciclo se reabre SOLO, sin que el
+// deal tenga que moverse de etapa. Antes hacia falta el cambio de etapa y un deal
+// que se quedaba quieto (pago parcial, refi en revision) quedaba mudo para siempre.
+test_same(true, cobranza_puede_llamar('C48:UC_LLUGGI', $pEtapa, ['MOVED_TIME'=>$entradaAbogado,'_ahora'=>$oct])['puede'],
+    'al cambiar el mes el ciclo se reabre solo: el boton vuelve a estar disponible');
 
 // ── el 1234 mata la ventana, no solo la cuenta ──
 $par = [
@@ -319,3 +369,30 @@ test_same(true, cobranza_pacto_vigente($actReal, strtotime('2026-09-07T10:00:00-
 $sinDl = $actReal; unset($sinDl[0]['DEADLINE']);
 test_same(true, cobranza_pacto_vigente($sinDl, $ahora406519) !== null,
     'sin DEADLINE cae al END_TIME de mañana: por eso DEADLINE va en el select');
+
+// ══════════════════════════════════════════════════════════════════════════
+// EL CICLO SE REINICIA CON EL MES en todas las etapas de mora (7-sep-2026).
+// El caso del usuario: el cliente pacta el 28, no cumple, y el intento del 3 del
+// mes siguiente NO puede arrastrar los intentos del mes que ya cerro.
+// ══════════════════════════════════════════════════════════════════════════
+$oct3 = new DateTimeImmutable('2026-10-03T10:00:00-05:00');
+// entro a 1 MES VENCIDO el 10 de septiembre; hoy es 3 de octubre
+$ini = cobranza_inicio_ciclo('C48:UC_1WHC5Q', '2026-09-10T14:00:00+03:00', $oct3);
+test_same('2026-10-01', substr((string)$ini, 0, 10),
+    'entro en septiembre y ya es octubre: el ciclo cuenta desde el 1-oct');
+// pero si entro a la etapa DENTRO de este mes, manda la entrada
+$ini2 = cobranza_inicio_ciclo('C48:UC_LLUGGI', '2026-10-02T14:00:00+03:00', $oct3);
+test_same('2026-10-02', substr((string)$ini2, 0, 10),
+    'entro el 2-oct: cuenta desde que entro, no desde el 1');
+// y los intentos del mes cerrado quedan FUERA de la cuenta
+$viejos = [
+    fake_activity(1,'Llamada saliente Ana','2026-09-11T09:00:00-05:00') + ['COMPLETED'=>'Y'],
+    fake_activity(2,'Llamada saliente Ana','2026-09-15T09:00:00-05:00') + ['COMPLETED'=>'Y'],
+    fake_activity(3,'Llamada saliente Ana','2026-09-18T09:00:00-05:00') + ['COMPLETED'=>'Y'],
+];
+$pv = cobranza_calcular_protocolo($viejos, null, $ini);
+test_same(0, $pv['sinContestar'], 'los 3 intentos de septiembre no cuentan en el ciclo de octubre');
+test_same(3, $pv['fueraDelCiclo'], 'quedan contados como fuera del ciclo');
+// con el ciclo viejo (desde la entrada) habrian bloqueado el boton
+$pvViejo = cobranza_calcular_protocolo($viejos, null, '2026-09-10T14:00:00+03:00');
+test_same(3, $pvViejo['sinContestar'], 'y con el criterio anterior si bloqueaban: el tope de 3 estaba agotado');

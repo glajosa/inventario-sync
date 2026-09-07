@@ -59,14 +59,32 @@ function cobranza_config(): array {
         // REFINANCIAMIENTO, y eso le toca al proceso que administra las pausas,
         // que todavia no existe. Este numero NO es esa regla.
         'tope_pacto_dias' => 90,
-        // ABOGADO no es un ciclo que se agota: el tope se cuenta por MES calendario.
-        'etapas_ciclo_mensual' => ['C48:FINAL_INVOICE'],
+        // El ciclo se cuenta por MES CALENDARIO en todas las etapas de mora, no solo
+        // en ABOGADO. Pedido del usuario el 7-sep-2026: "si ya pasa al otro mes, para
+        // planificar deberia contar ya como el ciclo del siguiente mes para que haya
+        // orden". El caso concreto: el cliente pacta el 28 y no cumple; el intento
+        // del 3 del mes siguiente no puede arrastrar los intentos del mes cerrado.
+        //
+        // El corte es el MAS RECIENTE entre el inicio de mes y la entrada a la etapa,
+        // asi que un deal que entro a mitad de mes cuenta desde que entro (ver
+        // cobranza_inicio_ciclo).
+        //
+        // Hoy esto casi no cambia nada -- medido: 0 de 237 deals en 1/2/3 MESES
+        // llevan mas de un mes en su etapa, porque el motor los va moviendo cuando
+        // avanza la mora. Se pone igual, porque el dia que un deal se quede quieto
+        // (pago parcial, refinanciamiento en revision) el tope no puede quedar
+        // agotado para siempre.
+        'etapas_ciclo_mensual' => ['C48:FINAL_INVOICE','C48:UC_1WHC5Q','C48:UC_LLUGGI','C48:UC_VXD8VQ'],
         'provider_id'      => 'VOXIMPLANT_CALL',
         'provider_type_id' => 'CALL',
         'campo_pausa'    => 'UF_CRM_ESTADO_PAUSA',
         'campo_gestion'  => 'UF_CRM_ESTADO_GESTION',
-        'gestion_no_contesta' => 2107,
-        'gestion_cumplido'    => 2105,
+        // los 5 ids de la lista ESTADO EN GESTION, leidos de Bitrix el 7-sep-2026
+        'gestion_cumplido'       => 2105,
+        'gestion_no_contesta'    => 2107,
+        'gestion_en_proceso'     => 2109,
+        'gestion_sin_gestionar'  => 2111,
+        'gestion_pacto_incumpl'  => 2117,
     ];
 }
 
@@ -174,6 +192,14 @@ function cobranza_calcular_protocolo(
     // como antes: cobranza_es_contestada.
     $esContestada = $esContestada ?? 'cobranza_es_contestada';
     $sinContestar = 0; $contactos = 0; $fuera = 0; $ultima = null;
+    // 🔴 'intentos' = TODAS las salientes del ciclo, planificadas incluidas. El
+    // registro que crea el boton nace COMPLETED='N' porque ES la cita de la proxima
+    // llamada: descartar las planificadas dejaria al boton sin ver sus propios
+    // intentos, y se caerian el tope y la ventana de doble clic. Por eso aca se
+    // cuenta distinto que en cic_contar() del proceso de ciclos, que mide dias con
+    // llamada HECHA -- son dos preguntas distintas sobre el mismo deal.
+    $intentos = 0; $pactoIncumplido = false;
+    $hoyEc = (new DateTimeImmutable('now', new DateTimeZone('America/Guayaquil')))->format('Y-m-d');
     // Se compara por INSTANTE, no por cadena. CREATED y MOVED_TIME llegan con su
     // propio huso (+03:00 del servidor de Bitrix) y el inicio de mes se calcula en
     // hora de Ecuador: recortar a 19 caracteres y comparar como texto mezclaba tres
@@ -205,6 +231,14 @@ function cobranza_calcular_protocolo(
         $creadaTs = $creada !== '' ? strtotime($creada) : false;
         if ($desdeTs !== null && $creadaTs !== false && $creadaTs < $desdeTs) { $fuera++; continue; }
 
+        $intentos++;
+        // ALARMA: quedo agendada una llamada con asunto de contestada, paso su fecha
+        // y nadie la hizo. Es el PACTO INCUMPLIDO del protocolo.
+        if ((string)($a['COMPLETED'] ?? '') === 'N') {
+            $dlp = substr((string)($a['DEADLINE'] ?? ''), 0, 10);
+            if ($dlp !== '' && $dlp < $hoyEc && $esContestada($subject)) $pactoIncumplido = true;
+        }
+
         if ($esContestada($subject)) {
             // Contesto: la tanda se cierra. 🔴 Tambien muere la ventana de
             // repeticion: reiniciaba la CUENTA pero seguia apuntando al intento
@@ -228,6 +262,8 @@ function cobranza_calcular_protocolo(
     return [
         'sinContestar'  => $sinContestar,
         'contactos'     => $contactos,
+        'intentos'      => $intentos,
+        'pactoIncumplido' => $pactoIncumplido,
         'fueraDelCiclo' => $fuera,
         'ultimoIntento' => $ultima,
         'ultimoCerrado' => $ultimaCerrada,
@@ -326,12 +362,39 @@ function cobranza_proximo_intento(DateTimeImmutable $ahora): DateTimeImmutable {
  * El estado de gestion que le toca al deal tras este intento fallido.
  * 3 intentos sin respuesta = CUMPLIDO: la asesora hizo su parte aunque no hablara.
  */
-function cobranza_estado_gestion(array $protocolo, string $stageId): int {
+/**
+ * ESTADO DE GESTION — los 5 valores de la lista, con el mismo SIGNIFICADO que les
+ * da el proceso de ciclos (cic_estado_gestion de lib_ciclos.php).
+ *
+ * 🔴 Antes era `intentos % 3 == 0 ? CUMPLIDO : NO CONTESTA`. Eso daba CUMPLIDO en
+ * el intento 3 y OTRA VEZ en el 6, decia NO CONTESTA en el primer intento, y nunca
+ * usaba EN PROCESO ni PACTO INCUMPLIDO. De ahi la inconsistencia que reporto el
+ * presidente: el campo no significaba lo que dice su nombre.
+ *
+ *   PACTO INCUMPLIDO  quedo una llamada agendada, paso su fecha y nadie la hizo
+ *   CUMPLIDO          logro los contactos efectivos que la etapa exige
+ *   NO CONTESTA       3 intentos o mas y CERO contactos
+ *   SIN GESTIONAR     ni un intento en el ciclo
+ *   EN PROCESO        algo hizo, todavia no alcanza
+ *
+ * Los CONTACTOS EXIGIDOS salen del tope de la etapa dividido 3, porque el tope se
+ * construyo como "contactos exigidos x 3 intentos": 1 MES 3/3=1, 3 MESES 6/3=2,
+ * ABOGADO primer mes 6/3=2 y despues 3/3=1. Una sola fuente, sin tabla duplicada.
+ */
+function cobranza_estado_gestion(array $protocolo, string $stageId,
+                                 ?string $entradaEtapa = null,
+                                 ?DateTimeImmutable $ahora = null): int {
     $cfg = cobranza_config();
-    $hechas = (int)($protocolo['sinContestar'] ?? 0) + 1;
-    return ($hechas % $cfg['intentos_por_tanda'] === 0)
-        ? $cfg['gestion_cumplido']
-        : $cfg['gestion_no_contesta'];
+    $intentos  = (int)($protocolo['intentos'] ?? 0) + 1;   // el que se registra ahora
+    $contactos = (int)($protocolo['contactos'] ?? 0);
+    $exigidos  = intdiv(cobranza_tope_etapa($stageId, $entradaEtapa, $ahora),
+                        (int)$cfg['intentos_por_tanda']);
+
+    if (!empty($protocolo['pactoIncumplido']))    return $cfg['gestion_pacto_incumpl'];
+    if ($exigidos > 0 && $contactos >= $exigidos) return $cfg['gestion_cumplido'];
+    if ($contactos === 0 && $intentos >= 3)       return $cfg['gestion_no_contesta'];
+    if ($intentos === 0)                          return $cfg['gestion_sin_gestionar'];
+    return $cfg['gestion_en_proceso'];
 }
 
 /**

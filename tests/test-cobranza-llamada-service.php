@@ -25,7 +25,11 @@ test_same('procesado', $r['status'], 'pulsacion valida');
 test_same(1, $r['intentos'], 'primer intento');
 test_same(2, $r['restantes'], 'quedan 2 de 3');
 test_same('2026-09-07', substr($r['proximoIntento'],0,10), '+2 habiles salta el finde');
-test_same(2107, $r['estadoGestion'], 'NO CONTESTA');
+// 🔴 El primer intento ya NO es NO CONTESTA: es EN PROCESO. Unificado con la regla
+// del proceso de ciclos el 7-sep-2026 -- antes el boton usaba `intentos % 3` y decia
+// CUMPLIDO en el 3 y otra vez en el 6, y nunca EN PROCESO. NO CONTESTA se reserva
+// para 3 intentos o mas con CERO contactos, que es lo que el nombre dice.
+test_same(2109, $r['estadoGestion'], 'primer intento: EN PROCESO, no NO CONTESTA');
 
 // 🔴 la prueba que evita el conteo doble
 $adds = count(array_filter($log, fn($c) => $c['m'] === 'crm.activity.add'));
@@ -49,10 +53,13 @@ test_same(1, count(array_filter($log, fn($c)=>$c['m']==='crm.activity.add')), 's
 
 // ── el tope de la etapa frena ──
 $log = [];
+// 🔴 Las tres van en el MISMO MES que $ahora (3-sep). Estaban en agosto y desde el
+// 7-sep-2026 el ciclo se reinicia con el mes, asi que caian fuera y el tope no se
+// probaba: el test pasaba a verde por la razon equivocada.
 $tres = [
-    fake_activity(1,'Llamada saliente Ana','2026-08-20T09:00:00-05:00') + ['COMPLETED'=>'Y'],
-    fake_activity(2,'Llamada saliente Ana','2026-08-24T09:00:00-05:00') + ['COMPLETED'=>'Y'],
-    fake_activity(3,'Llamada saliente Ana','2026-08-26T09:00:00-05:00') + ['COMPLETED'=>'Y'],
+    fake_activity(1,'Llamada saliente Ana','2026-09-01T09:00:00-05:00') + ['COMPLETED'=>'Y'],
+    fake_activity(2,'Llamada saliente Ana','2026-09-02T09:00:00-05:00') + ['COMPLETED'=>'Y'],
+    fake_activity(3,'Llamada saliente Ana','2026-09-03T08:00:00-05:00') + ['COMPLETED'=>'Y'],
 ];
 $bx = cob_fake_bx(['ID'=>77,'STAGE_ID'=>'C48:UC_LLUGGI'], $tres, $log);
 $r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bx, $ahora);
@@ -214,8 +221,11 @@ $bxSinMoved = function (string $m, array $p = []) use (&$log, $viejas) {
     };
 };
 $r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bxSinMoved, $ahora);
-test_same('rechazado', $r['status'], 'sin MOVED_TIME cuenta las 3 viejas y topa');
-test_same('tope_de_etapa', $r['motivo'], 'y el motivo es el tope');
+// 🔴 Sin MOVED_TIME el ciclo cae al inicio del mes corriente, asi que las 3 viejas
+// (de agosto) quedan FUERA y el boton deja registrar. Es lo correcto: antes contaba
+// toda la historia del deal y el tope quedaba agotado sin razon.
+test_same('procesado', $r['status'], 'sin MOVED_TIME las viejas quedan fuera del ciclo del mes');
+
 
 // ════════════════════════════════════════════════════════════════════════════
 // Los dos casos que fallaron probando con el presidente (3-sep-2026)
