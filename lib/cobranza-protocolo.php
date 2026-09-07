@@ -16,7 +16,7 @@ require_once __DIR__ . '/../feriados.php';
 // Sin esto no habia forma de comprobar QUE version esta desplegada: el endpoint
 // respondia 400 al GET igual de nuevo que de viejo, y los archivos de lib/ no se
 // sirven. Tres despliegues seguidos sin poder verificar por fuera.
-const COBRANZA_VER = 'cobranzas-boton-v9-estado-gestion-y-ciclo-mensual';
+const COBRANZA_VER = 'cobranzas-boton-v10-responsable-de-cobranza';
 
 function cobranza_config(): array {
     return [
@@ -79,6 +79,13 @@ function cobranza_config(): array {
         'provider_type_id' => 'CALL',
         'campo_pausa'    => 'UF_CRM_ESTADO_PAUSA',
         'campo_gestion'  => 'UF_CRM_ESTADO_GESTION',
+        // 🔴 La actividad va a nombre de la RESPONSABLE DE COBRANZA del deal, no del
+        // asesor comercial ni de quien aprieta el boton. Pedido del usuario el
+        // 7-sep-2026: "aqui no seria Ricardo, sino Martha Paola". El comercial cambia
+        // seguido y la cobranza la lleva otra persona; si la actividad queda a nombre
+        // del comercial, la asesora no la ve en su agenda y el deal se ve abandonado.
+        // Lleno en 676 de 687 deals vivos (medido). Campo tipo employee.
+        'campo_responsable_cob' => 'UF_CRM_1743119144',
         // los 5 ids de la lista ESTADO EN GESTION, leidos de Bitrix el 7-sep-2026
         'gestion_cumplido'       => 2105,
         'gestion_no_contesta'    => 2107,
@@ -414,4 +421,24 @@ function cobranza_estado_gestion(array $protocolo, string $stageId,
 function cobranza_hora_alterna(DateTimeImmutable $ahora): array {
     $esMañana = (int)$ahora->format('G') < 12;
     return $esMañana ? [13, 0] : [9, 30];
+}
+
+/**
+ * A nombre de QUIEN queda la actividad.
+ *
+ * La RESPONSABLE DE COBRANZA del deal manda. Si el campo esta vacio (11 de 687
+ * deals) se cae a quien apreto el boton, que es la persona que de verdad hizo la
+ * llamada -- nunca al asesor comercial, que no gestiona la cobranza.
+ * Acepta las dos formas del campo: UF_CRM_... (crm.deal.get) y ufCrm_...
+ * (crm.item.get), porque los dos caminos existen en este codigo.
+ */
+function cobranza_responsable(array $deal, int $usuarioQueApreto): int {
+    $c = cobranza_config()['campo_responsable_cob'];
+    foreach ([$c, lcfirst(str_replace('UF_CRM_', 'ufCrm_', $c))] as $k) {
+        $v = $deal[$k] ?? null;
+        if (is_array($v)) $v = $v[0] ?? null;
+        $id = (int)$v;
+        if ($id > 0) return $id;
+    }
+    return $usuarioQueApreto;
 }

@@ -155,7 +155,9 @@ function credito_no_contesto(
         'PROVIDER_TYPE_ID' => $cfg['provider_type_id'],
         'SUBJECT'       => 'Llamada saliente ' . $contacto,
         'COMPLETED'     => 'N',
-        'RESPONSIBLE_ID'=> $userId,
+        // Las mismas tres asesoras llevan credito y contado, asi que rige la misma
+        // regla: la actividad va a nombre de la RESPONSABLE DE COBRANZA del deal.
+        'RESPONSIBLE_ID'=> cobranza_responsable($deal, $userId),
         'START_TIME'    => $proximo->format(DateTimeInterface::ATOM),
         'END_TIME'      => $proximo->modify('+1 hour')->format(DateTimeInterface::ATOM),
         'DEADLINE'      => $proximo->format(DateTimeInterface::ATOM),

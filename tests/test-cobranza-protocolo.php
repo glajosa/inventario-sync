@@ -396,3 +396,20 @@ test_same(3, $pv['fueraDelCiclo'], 'quedan contados como fuera del ciclo');
 // con el ciclo viejo (desde la entrada) habrian bloqueado el boton
 $pvViejo = cobranza_calcular_protocolo($viejos, null, '2026-09-10T14:00:00+03:00');
 test_same(3, $pvViejo['sinContestar'], 'y con el criterio anterior si bloqueaban: el tope de 3 estaba agotado');
+
+// ══════════════════════════════════════════════════════════════════════════
+// A NOMBRE DE QUIEN queda la actividad (7-sep-2026).
+// Manda la RESPONSABLE DE COBRANZA del deal, NO el asesor comercial ni quien
+// aprieta el boton. Caso del usuario: "aqui no seria Ricardo, sino Martha Paola".
+// ══════════════════════════════════════════════════════════════════════════
+test_same(49234, cobranza_responsable(['UF_CRM_1743119144'=>'49234','ASSIGNED_BY_ID'=>'108990'], 42),
+    'manda la responsable de cobranza, no el comercial');
+test_same(49234, cobranza_responsable(['ufCrm_1743119144'=>49234], 42),
+    'tambien con el nombre en camelCase de crm.item');
+test_same(49234, cobranza_responsable(['UF_CRM_1743119144'=>['49234']], 42),
+    'y si viene como arreglo');
+test_same(42, cobranza_responsable(['UF_CRM_1743119144'=>'','ASSIGNED_BY_ID'=>'108990'], 42),
+    'campo vacio: cae en quien apreto el boton, que hizo la llamada');
+test_same(42, cobranza_responsable(['UF_CRM_1743119144'=>'0'], 42), 'un 0 tampoco es responsable');
+test_same(42, cobranza_responsable(['ASSIGNED_BY_ID'=>'108990'], 42),
+    '🔴 sin el campo NUNCA cae en el comercial: la cobranza no la lleva el');
