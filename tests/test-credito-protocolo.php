@@ -88,19 +88,19 @@ $p2 = credito_proximo_intento('proceso', ['sinContestar'=>1], $vie, $CON);
 test_same('2026-09-11', $p2->format('Y-m-d'), 'PROCESO, de ahi en adelante: 5 dias habiles');
 // 🔴 sin fecha todavia NO es el ritmo de 5: el protocolo manda el intercalado
 $p2b = credito_proximo_intento('proceso', ['sinContestar'=>3], $vie, $SIN);
-test_same('2026-09-10', $p2b->format('Y-m-d'), 'PROCESO sin fecha aun: ritmo intercalado hasta conseguir la primera');
-test_same(4, credito_cadencia('proceso', ['sinContestar'=>9], $SIN), 'y da igual cuantos intentos lleve: sigue intercalado');
+test_same('2026-09-11', $p2b->format('Y-m-d'), 'PROCESO sin fecha aun: ritmo intercalado hasta conseguir la primera');
+test_same(5, credito_cadencia('proceso', ['sinContestar'=>9], $SIN), 'y da igual cuantos intentos lleve: sigue intercalado');
 test_same(1, credito_cadencia('proceso', ['sinContestar'=>0], $CON), 'con fecha incumplida y sin intentos: al dia siguiente');
 test_same(5, credito_cadencia('proceso', ['sinContestar'=>2], $CON), 'con fecha incumplida y ya reintentando: 5');
 $p3 = credito_proximo_intento('gestion', ['sinContestar'=>3], $vie, $SIN);
-test_same('2026-09-10', $p3->format('Y-m-d'), 'GESTION: la llamada vuelve cada 4 dias habiles');
+test_same('2026-09-11', $p3->format('Y-m-d'), 'GESTION: la llamada vuelve cada 4 dias habiles');
 $p4 = credito_proximo_intento('puerta', ['sinContestar'=>0], $vie, $SIN);
-test_same('2026-09-10', $p4->format('Y-m-d'), 'la puerta usa la cadencia de gestion');
+test_same('2026-09-11', $p4->format('Y-m-d'), 'la puerta usa la cadencia de gestion');
 // 🔴 MANTENIMIENTO: pasado el techo de 2 meses, una llamada al MES. No se apaga.
 $VIEJO = ['hubo_fecha'=>false, 'meses_en_etapa'=>3];
 test_same(20, credito_cadencia('gestion', ['sinContestar'=>8], $VIEJO), '3 meses en gestion: mantenimiento, 1 llamada al mes');
 test_same(20, credito_cadencia('puerta',  ['sinContestar'=>1], $VIEJO), 'la puerta tambien baja a mantenimiento');
-test_same(4,  credito_cadencia('gestion', ['sinContestar'=>8], ['hubo_fecha'=>false,'meses_en_etapa'=>1]), 'al mes todavia no: sigue el intercalado');
+test_same(5,  credito_cadencia('gestion', ['sinContestar'=>8], ['hubo_fecha'=>false,'meses_en_etapa'=>1]), 'al mes todavia no: sigue el intercalado');
 test_same(5,  credito_cadencia('proceso', ['sinContestar'=>2], ['hubo_fecha'=>true,'meses_en_etapa'=>9]), 'proceso NO baja a mantenimiento: ahi no se deja de cobrar nunca');
 
 // ── el contexto sale de las actividades y del MOVED_TIME ──
@@ -141,3 +141,30 @@ test_same(true, credito_pacto_vigente($plan,$ahora) !== null, 'planificada + fec
 test_same(true, credito_pacto_vigente($hech,$ahora) !== null, 'y una CERRADA con fecha futura tambien: es como se registra de verdad');
 // y asi el boton y el campo ESTADO EN PAUSA dicen lo mismo
 echo "test-credito-protocolo (pacto planificado) OK\n";
+
+// ══════════════════════════════════════════════════════════════════════════
+// 🔴 LA ARITMETICA DEL TECHO. Esta prueba existe para que nadie vuelva a poner
+// la cadencia en 4 dias: el documento lo dice en un lugar, pero con 4 las 8
+// llamadas se agotan DOS SEMANAS antes de los 2 meses de techo.
+// ══════════════════════════════════════════════════════════════════════════
+$inicio = new DateTimeImmutable('2026-09-07T09:00:00-05:00');   // lunes
+// dias habiles reales que tiene la ventana de 2 meses
+$fin = $inicio->modify('+2 months');
+$habiles = 0; $d = $inicio;
+while ($d < $fin) { $d = $d->modify('+1 day'); if (fer_es_habil($d)) $habiles++; }
+test_same(true, $habiles >= 38 && $habiles <= 46, "2 meses son ~42 dias habiles (dieron $habiles)");
+
+// las 8 llamadas del techo, una tras otra con la cadencia de gestion
+$paso = credito_cadencia('gestion', ['sinContestar'=>1], ['hubo_fecha'=>false,'meses_en_etapa'=>0]);
+$at = $inicio; $habilesGastados = 0;
+for ($i = 1; $i < 8; $i++) {           // de la 1a a la 8a hay 7 saltos
+    $prox = credito_sumar_habiles($at, $paso);
+    $c = $at;
+    while ($c < $prox) { $c = $c->modify('+1 day'); if (fer_es_habil($c)) $habilesGastados++; }
+    $at = $prox;
+}
+test_same(true, $habilesGastados <= $habiles,
+    "las 8 llamadas entran en los 2 meses (gastan $habilesGastados de $habiles)");
+test_same(true, $habilesGastados >= $habiles - 10,
+    "y NO se agotan mucho antes: con paso 4 gastarian 28 de $habiles y sobraban 2 semanas (gastan $habilesGastados)");
+echo "test-credito-protocolo (aritmetica del techo) OK\n";

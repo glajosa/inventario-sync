@@ -54,7 +54,17 @@ function credito_config(): array {
             // paso en cobranzas y el deal se quedo sin gestion sin que nadie lo viera.
         ],
         'regimen_por_defecto' => 'gestion',
-        'dias_gestion'         => 4,   // habiles: la llamada cae cada 4, el mensaje va en el medio
+        // 🔴 CINCO dias habiles, no cuatro. El documento dice las dos cosas: la tabla
+        // de la estrategia de WhatsApp dice "la llamada cae cada 4 dias habiles",
+        // pero la secuencia detallada lista "Dia 0 -> LLAMADA · +2/3 MENSAJE ① ->
+        // +5 LLAMADA · +8 MENSAJE ②". Lo resuelve la aritmetica del propio techo:
+        // 2 meses son ~42 dias habiles (medido con el calendario de Ecuador, 41 a 44
+        // segun el mes) y el techo son 8 llamadas. Con paso 4 la octava cae el dia
+        // habil 28 de 42: la escalera se agota DOS SEMANAS antes del techo. Con 5 cae
+        // el 35 y entra con margen. El "cada 2-3 dias" del documento no es este paso:
+        // es el ritmo que PERCIBE el cliente, porque el mensaje cae en el medio
+        // (16 contactos / 42 dias = uno cada 2,6).
+        'dias_gestion'         => 5,   // habiles, entre llamada y llamada
         'dias_proceso_primero' => 1,   // "llamada AL DIA SIGUIENTE" de la fecha que no cumplio
         'dias_proceso_despues' => 5,   // habiles, "de ahi CADA 5 DIAS HABILES"
         // 🔴 MANTENIMIENTO. En regimen de gestion el protocolo pone un techo de
