@@ -16,7 +16,7 @@ require_once __DIR__ . '/../feriados.php';
 // Sin esto no habia forma de comprobar QUE version esta desplegada: el endpoint
 // respondia 400 al GET igual de nuevo que de viejo, y los archivos de lib/ no se
 // sirven. Tres despliegues seguidos sin poder verificar por fuera.
-const COBRANZA_VER = 'cobranzas-boton-v8-topes-protocolo-7';
+const COBRANZA_VER = 'cobranzas-boton-v9-estado-gestion-y-ciclo-mensual';
 
 function cobranza_config(): array {
     return [
