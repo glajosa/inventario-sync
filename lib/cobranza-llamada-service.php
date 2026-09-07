@@ -55,7 +55,13 @@ function cobranza_no_contesto(
     // --- 2. las actividades del deal ---
     $acts = cobranza_bx($bx, 'crm.activity.list', [
         'filter' => ['OWNER_TYPE_ID' => 2, 'OWNER_ID' => $dealId],
-        'select' => ['ID','SUBJECT','TYPE_ID','DIRECTION','COMPLETED','CREATED','ORIGIN_ID','END_TIME'],
+        // 🔴 DEADLINE va en el select. Sin el, cobranza_pacto_vigente() lo lee vacio
+        // y cae al respaldo END_TIME, que Bitrix pone al dia SIGUIENTE: un pacto
+        // puesto para hoy 11:20 el boton lo daba por vivo hasta mañana 03:59, y no
+        // dejaba registrar el intento. Medido en el deal 406519 el 7-sep-2026:
+        //   DEADLINE  2026-09-07T19:20:00+03:00 -> lun 7-sep 11:20 Ecuador  (correcto)
+        //   END_TIME  2026-09-08T11:59:00+03:00 -> mar 8-sep 03:59 Ecuador  (lo que usaba)
+        'select' => ['ID','SUBJECT','TYPE_ID','DIRECTION','COMPLETED','CREATED','ORIGIN_ID','END_TIME','DEADLINE'],
         'order'  => ['CREATED' => 'ASC'],
     ]);
     // null es "no pude leer", no "no tiene ninguna". Son cosas distintas.

@@ -88,19 +88,19 @@ $p2 = credito_proximo_intento('proceso', ['sinContestar'=>1], $vie, $CON);
 test_same('2026-09-11', $p2->format('Y-m-d'), 'PROCESO, de ahi en adelante: 5 dias habiles');
 // 🔴 sin fecha todavia NO es el ritmo de 5: el protocolo manda el intercalado
 $p2b = credito_proximo_intento('proceso', ['sinContestar'=>3], $vie, $SIN);
-test_same('2026-09-11', $p2b->format('Y-m-d'), 'PROCESO sin fecha aun: ritmo intercalado hasta conseguir la primera');
-test_same(5, credito_cadencia('proceso', ['sinContestar'=>9], $SIN), 'y da igual cuantos intentos lleve: sigue intercalado');
+test_same('2026-09-10', $p2b->format('Y-m-d'), 'PROCESO sin fecha aun: ritmo intercalado hasta conseguir la primera');
+test_same(4, credito_cadencia('proceso', ['sinContestar'=>9], $SIN), 'y da igual cuantos intentos lleve: sigue intercalado');
 test_same(1, credito_cadencia('proceso', ['sinContestar'=>0], $CON), 'con fecha incumplida y sin intentos: al dia siguiente');
 test_same(5, credito_cadencia('proceso', ['sinContestar'=>2], $CON), 'con fecha incumplida y ya reintentando: 5');
 $p3 = credito_proximo_intento('gestion', ['sinContestar'=>3], $vie, $SIN);
-test_same('2026-09-11', $p3->format('Y-m-d'), 'GESTION: la llamada vuelve cada 4 dias habiles');
+test_same('2026-09-10', $p3->format('Y-m-d'), 'GESTION: la llamada vuelve cada 4 dias habiles');
 $p4 = credito_proximo_intento('puerta', ['sinContestar'=>0], $vie, $SIN);
-test_same('2026-09-11', $p4->format('Y-m-d'), 'la puerta usa la cadencia de gestion');
+test_same('2026-09-10', $p4->format('Y-m-d'), 'la puerta usa la cadencia de gestion');
 // 🔴 MANTENIMIENTO: pasado el techo de 2 meses, una llamada al MES. No se apaga.
 $VIEJO = ['hubo_fecha'=>false, 'meses_en_etapa'=>3];
 test_same(20, credito_cadencia('gestion', ['sinContestar'=>8], $VIEJO), '3 meses en gestion: mantenimiento, 1 llamada al mes');
 test_same(20, credito_cadencia('puerta',  ['sinContestar'=>1], $VIEJO), 'la puerta tambien baja a mantenimiento');
-test_same(5,  credito_cadencia('gestion', ['sinContestar'=>8], ['hubo_fecha'=>false,'meses_en_etapa'=>1]), 'al mes todavia no: sigue el intercalado');
+test_same(4,  credito_cadencia('gestion', ['sinContestar'=>8], ['hubo_fecha'=>false,'meses_en_etapa'=>1]), 'al mes todavia no: sigue el intercalado');
 test_same(5,  credito_cadencia('proceso', ['sinContestar'=>2], ['hubo_fecha'=>true,'meses_en_etapa'=>9]), 'proceso NO baja a mantenimiento: ahi no se deja de cobrar nunca');
 
 // ── el contexto sale de las actividades y del MOVED_TIME ──
@@ -116,8 +116,13 @@ test_same(0, credito_contexto([], '2026-09-01T10:00:00+03:00', $ahoraX)['meses_e
 test_same(0, credito_contexto([], null, $ahoraX)['meses_en_etapa'], 'sin MOVED_TIME no se inventa antiguedad');
 test_same(0, credito_contexto([], 'basura', $ahoraX)['meses_en_etapa'], 'una fecha ilegible tampoco');
 // la hora depende del momento del dia, igual que en cobranzas
-test_same('12:30', credito_proximo_intento('gestion', [], new DateTimeImmutable('2026-09-08T09:00:00-05:00'), [])->format('H:i'), 'de mañana temprano -> 12:30');
-test_same('09:30', credito_proximo_intento('gestion', [], new DateTimeImmutable('2026-09-08T20:00:00-05:00'), [])->format('H:i'), 'de noche -> 09:30 del dia siguiente habil');
+test_same('13:00', credito_proximo_intento('gestion', [], new DateTimeImmutable('2026-09-08T09:00:00-05:00'), [])->format('H:i'), 'llamo de mañana -> la proxima en la TARDE');
+test_same('09:30', credito_proximo_intento('gestion', [], new DateTimeImmutable('2026-09-08T13:00:00-05:00'), [])->format('H:i'), 'llamo de tarde -> la proxima en la MAÑANA');
+// 🔴 nunca a las 17:00 ni a las 19:00: eso era de la escalera de vendedores
+foreach (['07:00','09:15','11:59','12:00','15:45','18:30'] as $hh) {
+    $hp = credito_proximo_intento('gestion', [], new DateTimeImmutable("2026-09-08T$hh:00-05:00"), [])->format('H:i');
+    test_same(true, in_array($hp, ['09:30','13:00'], true), "desde las $hh la proxima cae 09:30 o 13:00, nunca 17:00 (dio $hp)");
+}
 
 // ── nunca cae en fin de semana ni feriado ──
 foreach (['2026-09-01','2026-09-02','2026-09-03','2026-09-04','2026-09-07','2026-09-08'] as $d) {
@@ -165,6 +170,12 @@ for ($i = 1; $i < 8; $i++) {           // de la 1a a la 8a hay 7 saltos
 }
 test_same(true, $habilesGastados <= $habiles,
     "las 8 llamadas entran en los 2 meses (gastan $habilesGastados de $habiles)");
-test_same(true, $habilesGastados >= $habiles - 10,
-    "y NO se agotan mucho antes: con paso 4 gastarian 28 de $habiles y sobraban 2 semanas (gastan $habilesGastados)");
+// 🔴 Esta asercion decia que las 8 llamadas NO podian agotarse mucho antes del
+// techo. Se quito a proposito el 7-sep-2026: el usuario eligio paso 4 sabiendo que
+// se agotan ~2 semanas antes, porque en credito NO hay techo de llamadas -- se
+// sigue llamando igual -- y la presion real la ponen los mensajes automaticos.
+// Lo que si se sigue exigiendo es que ENTREN en la ventana, que es lo que romperia
+// el protocolo (llamar mas alla del techo de la etapa sin haberla cambiado).
+test_same(true, $habilesGastados < $habiles,
+    "las 8 llamadas entran holgadas en los 2 meses (gastan $habilesGastados de $habiles)");
 echo "test-credito-protocolo (aritmetica del techo) OK\n";

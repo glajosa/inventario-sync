@@ -318,13 +318,7 @@ function cobranza_proximo_intento(DateTimeImmutable $ahora): DateTimeImmutable {
         $at = $at->modify('+1 day');
         if (fer_es_habil($at)) $sumados++;
     }
-    $hora = match (true) {
-        (int)$ahora->format('G') < 11 => '12:30',
-        (int)$ahora->format('G') < 14 => '16:00',
-        (int)$ahora->format('G') < 18 => '19:00',
-        default                       => '09:30',
-    };
-    [$h, $m] = array_map('intval', explode(':', $hora));
+    [$h, $m] = cobranza_hora_alterna($ahora);
     return $at->setTime($h, $m);
 }
 
@@ -338,4 +332,23 @@ function cobranza_estado_gestion(array $protocolo, string $stageId): int {
     return ($hechas % $cfg['intentos_por_tanda'] === 0)
         ? $cfg['gestion_cumplido']
         : $cfg['gestion_no_contesta'];
+}
+
+/**
+ * La hora de la proxima llamada: SOLO mañana o tarde, y ALTERNANDO.
+ *
+ * Pedido del usuario el 7-sep-2026, y la razon es del oficio: las asesoras de
+ * cobranzas NO llaman como los vendedores. No hay llamadas a las 17:00 ni a las
+ * 19:00 -- eso era de la escalera de prospectos y aca no aplica.
+ *
+ *   llamo en la MAÑANA  -> la proxima cae en la TARDE   (13:00)
+ *   llamo en la TARDE   -> la proxima cae en la MAÑANA  (09:30)
+ *
+ * Alternar sirve para algo concreto: si el cliente nunca contesta de mañana, la
+ * vuelta siguiente lo busca de tarde. Llamar siempre a la misma hora es probar
+ * dos veces lo mismo.
+ */
+function cobranza_hora_alterna(DateTimeImmutable $ahora): array {
+    $esMañana = (int)$ahora->format('G') < 12;
+    return $esMañana ? [13, 0] : [9, 30];
 }

@@ -84,7 +84,14 @@ test_same(true, cobranza_puede_llamar('C48:UC_LLUGGI', ['sinContestar'=>0], $col
 // jueves 3-sep-2026 -> +2 habiles = lunes 7 (sabado y domingo no cuentan)
 $jue = new DateTimeImmutable('2026-09-03T09:00:00-05:00');
 test_same('2026-09-07', cobranza_proximo_intento($jue)->format('Y-m-d'), '+2 habiles salta el fin de semana');
-test_same('12:30', cobranza_proximo_intento($jue)->format('H:i'), 'antes de las 11 -> 12:30');
+// 🔴 Solo mañana o tarde, alternando (decision del usuario 7-sep-2026): las
+// asesoras de cobranzas NO llaman a las 17:00 ni a las 19:00 como los vendedores.
+test_same('13:00', cobranza_proximo_intento($jue)->format('H:i'), 'llamo de mañana -> la proxima en la TARDE');
+test_same('09:30', cobranza_proximo_intento(new DateTimeImmutable('2026-09-03T14:00:00-05:00'))->format('H:i'), 'llamo de tarde -> la proxima en la MAÑANA');
+foreach (['07:00','09:15','11:59','12:00','15:45','18:30','21:00'] as $hh) {
+    $hp = cobranza_proximo_intento(new DateTimeImmutable("2026-09-03T$hh:00-05:00"))->format('H:i');
+    test_same(true, in_array($hp, ['09:30','13:00'], true), "desde las $hh cae 09:30 o 13:00, nunca 17:00 ni 19:00 (dio $hp)");
+}
 $mar = new DateTimeImmutable('2026-09-01T09:00:00-05:00');
 test_same('2026-09-03', cobranza_proximo_intento($mar)->format('Y-m-d'), 'martes -> jueves');
 
@@ -291,3 +298,24 @@ $dos = [
     fake_activity(16,'PROMESA DE PAGO','2026-09-03T11:00:00-05:00') + ['DEADLINE'=>'2026-09-12T10:00:00-05:00'],
 ];
 test_same('2026-09-12T10:00:00-05:00', cobranza_pacto_vigente($dos,$hoyTs)['fecha'], 'gana el pacto mas lejano');
+
+// ══════════════════════════════════════════════════════════════════════════
+// 🔴 EL CASO REAL del deal 406519 (7-sep-2026). El usuario puso el pacto para
+// HOY 11:20 y el boton NO lo dejo registrar: decia "pactado hasta 8 sep 03:59".
+// Causa: el select del servicio no pedia DEADLINE, asi que se leia vacio y caia
+// al respaldo END_TIME, que Bitrix pone al dia SIGUIENTE.
+//   DEADLINE  2026-09-07T19:20:00+03:00 -> lun 7-sep 11:20 Ecuador  (lo que puso)
+//   END_TIME  2026-09-08T11:59:00+03:00 -> mar 8-sep 03:59 Ecuador  (lo que usaba)
+// ══════════════════════════════════════════════════════════════════════════
+$ahora406519 = strtotime('2026-09-07T12:07:00-05:00');
+$actReal = [['ID'=>2533165,'TYPE_ID'=>2,'DIRECTION'=>2,'SUBJECT'=>'1234','COMPLETED'=>'N',
+             'DEADLINE'=>'2026-09-07T19:20:00+03:00','END_TIME'=>'2026-09-08T11:59:00+03:00']];
+test_same(null, cobranza_pacto_vigente($actReal, $ahora406519),
+    'el pacto vencio a las 11:20: a las 12:07 ya NO calla el boton');
+// y con el mismo dato una hora ANTES si tiene que callar
+test_same(true, cobranza_pacto_vigente($actReal, strtotime('2026-09-07T10:00:00-05:00')) !== null,
+    'a las 10:00 el pacto todavia vale');
+// sin DEADLINE se cae al END_TIME: por eso va en el select del servicio
+$sinDl = $actReal; unset($sinDl[0]['DEADLINE']);
+test_same(true, cobranza_pacto_vigente($sinDl, $ahora406519) !== null,
+    'sin DEADLINE cae al END_TIME de mañana: por eso DEADLINE va en el select');

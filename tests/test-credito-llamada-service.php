@@ -34,8 +34,8 @@ test_same(-1, $r['restantes'], 'sin techo: -1, que NO es cero');
 // 🔴 Este deal NUNCA tuvo fecha de pago, asi que NO le toca el "+1 dia": el
 // protocolo manda el ritmo intercalado "hasta conseguir la primera".
 test_same(true, $r['sinFechaAun'], 'todavia no hay fecha de pago');
-test_same(5, $r['cadencia'], 'sin fecha: ritmo intercalado, 5 dias habiles');
-test_same('2026-09-10', substr($r['proximoIntento'],0,10), 'y cae 5 dias habiles despues');
+test_same(4, $r['cadencia'], 'sin fecha: ritmo intercalado, 4 dias habiles');
+test_same('2026-09-09', substr($r['proximoIntento'],0,10), 'y cae 4 dias habiles despues');
 
 // 🔴 la prueba que evita el conteo doble
 test_same(1, count(array_filter($log, fn($c)=>$c['m']==='crm.activity.add')), 'UNA pulsacion crea UNA actividad');
@@ -82,7 +82,7 @@ $log = [];
 $bx = cre_fake_bx(['ID'=>500,'STAGE_ID'=>'C79:PREPAYMENT_INVOIC','MOVED_TIME'=>'2026-08-28T10:00:00+03:00'], [], $log);
 $r = credito_no_contesto(['dealId'=>500,'bitrixUserId'=>42], $bx, $ahora);
 test_same(false, $r['mantenimiento'], 'recien entrado NO es mantenimiento');
-test_same(5, $r['cadencia'], 'sigue el intercalado');
+test_same(4, $r['cadencia'], 'sigue el intercalado');
 
 // ── SIN TECHO: 12 intentos y sigue dejando ──
 $log = [];
@@ -92,7 +92,7 @@ $bx = cre_fake_bx(['ID'=>500,'STAGE_ID'=>'C79:PREPAYMENT_INVOIC'], $muchos, $log
 $r = credito_no_contesto(['dealId'=>500,'bitrixUserId'=>42], $bx, $ahora);
 test_same('procesado', $r['status'], '12 intentos y sigue: en credito NO hay techo');
 test_same(13, $r['intentos'], 'cuenta el intento 13');
-test_same('2026-09-10', substr($r['proximoIntento'],0,10), 'gestion recien entrada: cada 5 dias habiles');
+test_same('2026-09-09', substr($r['proximoIntento'],0,10), 'gestion recien entrada: cada 4 dias habiles');
 
 // ── el PACTO lo calla ──
 $log = [];
@@ -122,7 +122,7 @@ $sinDl = [cre_act(1,'FECHA DE PAGO pero sin fecha','2026-08-10T09:00:00-05:00')]
 $bx = cre_fake_bx(['ID'=>500,'STAGE_ID'=>'C79:UC_NGYPXQ'], $sinDl, $log);
 $r = credito_no_contesto(['dealId'=>500,'bitrixUserId'=>42], $bx, $ahora);
 test_same(true, $r['sinFechaAun'], 'sin deadline sigue sin haber fecha de pago');
-test_same(5, $r['cadencia'], 'asi que manda el intercalado');
+test_same(4, $r['cadencia'], 'asi que manda el intercalado');
 
 // ── un deal de cobranzas no es de este boton ──
 $log = [];

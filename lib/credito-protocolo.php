@@ -54,17 +54,26 @@ function credito_config(): array {
             // paso en cobranzas y el deal se quedo sin gestion sin que nadie lo viera.
         ],
         'regimen_por_defecto' => 'gestion',
-        // 🔴 CINCO dias habiles, no cuatro. El documento dice las dos cosas: la tabla
+        // 🔴 CUATRO dias habiles. DECISION del usuario el 7-sep-2026, y su razon
+        // gana sobre la aritmetica: "como habra automatizaciones de mensajes, con
+        // los mensajes es con lo que mas se va a jorobar al cliente" -- o sea que la
+        // presion la ponen los mensajes, asi que la llamada puede volver mas seguido
+        // sin quemarlo. Y en credito NO hay techo de llamadas, asi que agotar la
+        // escalera antes del techo de la ETAPA no rompe nada: se sigue llamando.
+        //
+        // Queda anotado lo que se acepta al elegir 4, porque no es gratis:
+        // el documento dice las dos cosas. La tabla
         // de la estrategia de WhatsApp dice "la llamada cae cada 4 dias habiles",
         // pero la secuencia detallada lista "Dia 0 -> LLAMADA · +2/3 MENSAJE ① ->
         // +5 LLAMADA · +8 MENSAJE ②". Lo resuelve la aritmetica del propio techo:
         // 2 meses son ~42 dias habiles (medido con el calendario de Ecuador, 41 a 44
         // segun el mes) y el techo son 8 llamadas. Con paso 4 la octava cae el dia
-        // habil 28 de 42: la escalera se agota DOS SEMANAS antes del techo. Con 5 cae
-        // el 35 y entra con margen. El "cada 2-3 dias" del documento no es este paso:
+        // habil 28 de 42: las 8 llamadas se agotan DOS SEMANAS antes del techo de la
+        // etapa. Con 5 caian el 35. Se elige 4 a sabiendas.
+        // El "cada 2-3 dias" del documento no es este paso:
         // es el ritmo que PERCIBE el cliente, porque el mensaje cae en el medio
         // (16 contactos / 42 dias = uno cada 2,6).
-        'dias_gestion'         => 5,   // habiles, entre llamada y llamada
+        'dias_gestion'         => 4,   // habiles, entre llamada y llamada
         'dias_proceso_primero' => 1,   // "llamada AL DIA SIGUIENTE" de la fecha que no cumplio
         'dias_proceso_despues' => 5,   // habiles, "de ahi CADA 5 DIAS HABILES"
         // 🔴 MANTENIMIENTO. En regimen de gestion el protocolo pone un techo de
@@ -231,13 +240,9 @@ function credito_cadencia(string $regimen, array $protocolo, array $ctx = []): i
 function credito_proximo_intento(string $regimen, array $protocolo, DateTimeImmutable $ahora, array $ctx = []): DateTimeImmutable {
     $dias = credito_cadencia($regimen, $protocolo, $ctx);
     $at = credito_sumar_habiles($ahora, $dias);
-    $hora = match (true) {
-        (int)$ahora->format('G') < 11 => '12:30',
-        (int)$ahora->format('G') < 14 => '16:00',
-        (int)$ahora->format('G') < 18 => '19:00',
-        default                       => '09:30',
-    };
-    [$h, $m] = array_map('intval', explode(':', $hora));
+    // Misma regla que cobranzas: solo mañana o tarde, alternando. Las asesoras son
+    // las MISMAS tres personas y no llaman a las 17:00 como los vendedores.
+    [$h, $m] = cobranza_hora_alterna($ahora);
     return $at->setTime($h, $m);
 }
 
