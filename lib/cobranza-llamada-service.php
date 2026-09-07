@@ -167,6 +167,8 @@ function cobranza_no_contesto(
         'DIRECTION'     => 2,
         'PROVIDER_ID'      => $cfg['provider_id'],
         'PROVIDER_TYPE_ID' => $cfg['provider_type_id'],
+        // la marca: esta actividad ES el registro de una llamada hecha
+        'ORIGIN_ID'     => $cfg['marca_llamada_hecha'],
         'SUBJECT'       => 'Llamada saliente ' . $contacto,
         'COMPLETED'     => 'N',
         'RESPONSIBLE_ID'=> cobranza_responsable($deal, $userId),

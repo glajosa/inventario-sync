@@ -86,6 +86,18 @@ function cobranza_config(): array {
         // del comercial, la asesora no la ve en su agenda y el deal se ve abandonado.
         // Lleno en 676 de 687 deals vivos (medido). Campo tipo employee.
         'campo_responsable_cob' => 'UF_CRM_1743119144',
+        // 🔴 MARCA de "aca hubo una llamada HECHA". Va en ORIGIN_ID, que es invisible
+        // para el usuario y se puede filtrar (verificado el 7-sep-2026).
+        //
+        // Hace falta porque la actividad del boton es DOS cosas a la vez: el registro
+        // del intento que se acaba de hacer Y la cita de la proxima llamada. Por eso
+        // nace COMPLETED='N', y LLAMADAS REALIZADAS -- que contaba solo las 'Y' --
+        // nunca contaba la ULTIMA pulsacion. Con una sola pulsacion el campo mostraba
+        // CERO, que es justo lo que el usuario vio.
+        //
+        // Las llamadas que el cron crea para el ciclo NO llevan la marca: esas todavia
+        // no se hicieron, y contarlas seria inventar gestion que no ocurrio.
+        'marca_llamada_hecha' => 'GALJOSA_LLAMADA',
         // los 5 ids de la lista ESTADO EN GESTION, leidos de Bitrix el 7-sep-2026
         'gestion_cumplido'       => 2105,
         'gestion_no_contesta'    => 2107,

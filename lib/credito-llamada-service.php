@@ -153,6 +153,7 @@ function credito_no_contesto(
         'DIRECTION'     => 2,
         'PROVIDER_ID'      => $cfg['provider_id'],
         'PROVIDER_TYPE_ID' => $cfg['provider_type_id'],
+        'ORIGIN_ID'     => cobranza_config()['marca_llamada_hecha'],
         'SUBJECT'       => 'Llamada saliente ' . $contacto,
         'COMPLETED'     => 'N',
         // Las mismas tres asesoras llevan credito y contado, asi que rige la misma
