@@ -96,10 +96,21 @@ $CFG_JS = json_encode(cobranza_config(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_
       value:'Intento ' + estado.intentos + ' registrado' } };
     b.sub = { type:'text', properties:{ size:'sm', color:'base_70',
       value: etq + '  ·  ' + quedan } };
-    b.prox = { type:'section', properties:{ type:'primary', blocks:{
-      a:{ type:'text', properties:{ bold:true, value:'Próxima llamada: ' + fecha(estado.proximoIntento) } },
-      c:{ type:'text', properties:{ size:'sm', color:'base_70',
-          value:'+2 días hábiles. Ya quedó agendada en el deal.' } } }}};
+    // 🔴 El ultimo intento del techo NO deja cita: la actividad nace cerrada.
+    // Decir "ya quedo agendada" ahi manda a la asesora a buscar en su agenda una
+    // llamada que no existe. Se dice lo que de verdad pasa.
+    if (estado.ultimoDelTecho || !estado.proximoIntento) {
+      b.prox = { type:'section', properties:{ type:'primary', blocks:{
+        a:{ type:'text', properties:{ bold:true, value:'No queda otra llamada agendada.' } },
+        c:{ type:'text', properties:{ size:'sm', color:'base_70',
+            value:'Se agotaron los intentos de esta etapa. La llamada quedó registrada y cerrada; ' +
+                  'el deal avanza de etapa cuando avanza la mora.' } } }}};
+    } else {
+      b.prox = { type:'section', properties:{ type:'primary', blocks:{
+        a:{ type:'text', properties:{ bold:true, value:'Próxima llamada: ' + fecha(estado.proximoIntento) } },
+        c:{ type:'text', properties:{ size:'sm', color:'base_70',
+            value:'+2 días hábiles. Ya quedó agendada en el deal.' } } }}};
+    }
     if (estado.estadoGestion === CFG.gestion_cumplido) {
       b.cum = { type:'text', properties:{ size:'sm', color:'base_70',
         value:'3 intentos sin respuesta: el ciclo queda CUMPLIDO.' } };

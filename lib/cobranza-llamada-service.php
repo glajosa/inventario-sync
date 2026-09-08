@@ -234,7 +234,13 @@ function cobranza_no_contesto(
         'etapa'           => $stageId,
         'intentos'        => (int)$protocolo['sinContestar'] + 1,
         'restantes'       => $permiso['restantes'] - 1,
-        'proximoIntento'  => $proximo->format(DateTimeInterface::ATOM),
+        // 🔴 En el ULTIMO intento del techo no hay proximo: la actividad nacio
+        // cerrada y no queda cita. Antes se devolvia la fecha igual y el panel
+        // mostraba "Proxima llamada: 10 sep - Ya quedo agendada en el deal" con
+        // CERO actividades abiertas en el deal. Visto el 8-sep-2026 apretando el
+        // boton de verdad en Bitrix. null = no hay proxima, y el panel lo dice.
+        'proximoIntento'  => $ultimoDelTecho ? null : $proximo->format(DateTimeInterface::ATOM),
+        'ultimoDelTecho'  => $ultimoDelTecho,
         'actividadNueva'  => (int)$nueva,
         'actividadCerrada'=> $cerrada,
         'estadoGestion'   => $gestion,

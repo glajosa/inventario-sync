@@ -434,3 +434,34 @@ test_same(999, cobranza_responsable([], 999, 0),
     'sin campo y sin dueño anterior: quien apreto el boton');
 test_same($ABOG, cobranza_responsable([], 999, $ABOG),
     'y el abogado gana incluso si el deal no tiene responsable de cobranza');
+
+// ══════════════════════════════════════════════════════════════════════════
+// CONTACTOS EXIGIDOS: tabla del documento, no una division (8-sep-2026).
+// Antes salia de intdiv(tope, 3) y en ABOGADO daba 2 en vez de 1, asi que con
+// UN contacto efectivo el boton escribia EN PROCESO y el recalculo diario del
+// servidor escribia CUMPLIDO: el campo se daba vuelta solo cada noche.
+// Tiene que decir lo mismo que gc_exigidos() de cobranzaphp/lib_gestion_cob.php.
+// ══════════════════════════════════════════════════════════════════════════
+test_same(0, cobranza_contactos_exigidos('C48:UC_1WHC5Q'), '1 MES VENCIDO no exige contacto');
+test_same(1, cobranza_contactos_exigidos('C48:UC_LLUGGI'), '2 MESES exige 1 contacto');
+test_same(2, cobranza_contactos_exigidos('C48:UC_VXD8VQ'), '3 MESES exige 2 contactos');
+test_same(1, cobranza_contactos_exigidos('C48:FINAL_INVOICE'),
+    '🔴 ABOGADO exige 1, no 2: el tope de 6 son dos escaleras del MISMO contacto mensual');
+test_same(0, cobranza_contactos_exigidos('C48:NEW'), 'una etapa sin mora no exige nada');
+
+$CUMPL = 2105; $NOCONT = 2107; $PROCESO = 2109;
+$hoyAb = new DateTimeImmutable('2026-09-15T10:00:00-05:00');
+// ABOGADO, primer mes (tope 6), 1 contacto efectivo logrado: el documento lo da por CUMPLIDO
+test_same($CUMPL, cobranza_estado_gestion(
+        ['intentos'=>2,'contactos'=>1], 'C48:FINAL_INVOICE', '2026-09-04T16:00:00+03:00', $hoyAb),
+    '🔴 ABOGADO con 1 contacto = CUMPLIDO (antes daba EN PROCESO y el cron lo corregia de noche)');
+test_same($NOCONT, cobranza_estado_gestion(
+        ['intentos'=>2,'contactos'=>0], 'C48:FINAL_INVOICE', '2026-09-04T16:00:00+03:00', $hoyAb),
+    'ABOGADO sin contactos y con 3 intentos: NO CONTESTA');
+// 1 MES VENCIDO exige 0, asi que un contacto no puede "sobrar" y quedar en proceso
+test_same($CUMPL, cobranza_estado_gestion(['intentos'=>0,'contactos'=>1], 'C48:UC_1WHC5Q'),
+    '1 MES con un contacto logrado: CUMPLIDO');
+test_same($PROCESO, cobranza_estado_gestion(['intentos'=>0,'contactos'=>0], 'C48:UC_1WHC5Q'),
+    '1 MES, primer intento sin contactos: EN PROCESO');
+test_same($NOCONT, cobranza_estado_gestion(['intentos'=>2,'contactos'=>0], 'C48:UC_1WHC5Q'),
+    '1 MES, tercer intento sin contactos: NO CONTESTA');

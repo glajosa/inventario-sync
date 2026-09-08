@@ -411,6 +411,29 @@ function cobranza_proximo_intento(DateTimeImmutable $ahora): DateTimeImmutable {
 }
 
 /**
+ * CONTACTOS EXIGIDOS por el documento en el ciclo de la etapa.
+ *
+ * 🔴 Es una TABLA del documento, no una division. Antes esto se calculaba como
+ * intdiv(tope, intentos_por_tanda) y en ABOGADO daba 2 (tope 6 / 3) cuando el
+ * documento exige 1: con un solo contacto efectivo el boton escribia EN PROCESO
+ * y el recalculo diario del servidor escribia CUMPLIDO, asi que el campo se daba
+ * vuelta solo cada noche. Visto el 8-sep-2026 probando el boton en vivo.
+ *
+ * Tiene que decir LO MISMO que gc_exigidos() de cobranzaphp/lib_gestion_cob.php.
+ * Son dos servidores distintos (EasyPanel y SiteGround) y no comparten archivo:
+ * si se cambia una, se cambia la otra.
+ */
+function cobranza_contactos_exigidos(string $stageId): int {
+    switch ($stageId) {
+        case 'C48:UC_1WHC5Q':     return 0;   // 1 MES VENCIDO
+        case 'C48:UC_LLUGGI':     return 1;   // 2 MESES VENCIDOS
+        case 'C48:UC_VXD8VQ':     return 2;   // 3 MESES VENCIDOS
+        case 'C48:FINAL_INVOICE': return 1;   // ABOGADO
+        default: return 0;
+    }
+}
+
+/**
  * El estado de gestion que le toca al deal tras este intento fallido.
  * 3 intentos sin respuesta = CUMPLIDO: la asesora hizo su parte aunque no hablara.
  */
@@ -439,11 +462,15 @@ function cobranza_estado_gestion(array $protocolo, string $stageId,
     $cfg = cobranza_config();
     $intentos  = (int)($protocolo['intentos'] ?? 0) + 1;   // el que se registra ahora
     $contactos = (int)($protocolo['contactos'] ?? 0);
-    $exigidos  = intdiv(cobranza_tope_etapa($stageId, $entradaEtapa, $ahora),
-                        (int)$cfg['intentos_por_tanda']);
+    $exigidos  = cobranza_contactos_exigidos($stageId);
 
     if (!empty($protocolo['pactoIncumplido']))    return $cfg['gestion_pacto_incumpl'];
-    if ($exigidos > 0 && $contactos >= $exigidos) return $cfg['gestion_cumplido'];
+    // 🔴 HABLAR ES CUMPLIR. La condicion es "contactos > 0", no "exigidos > 0":
+    // en 1 MES VENCIDO el documento exige 0 contactos, y con la version anterior un
+    // contacto efectivo logrado caia en EN PROCESO mientras el recalculo diario del
+    // servidor (gc_estado) lo declaraba CUMPLIDO. El campo se daba vuelta de noche.
+    // Lo que el "> 0" evita es que 0 >= 0 declare CUMPLIDO a un deal donde nadie llamo.
+    if ($contactos > 0 && $contactos >= $exigidos) return $cfg['gestion_cumplido'];
     if ($contactos === 0 && $intentos >= 3)       return $cfg['gestion_no_contesta'];
     if ($intentos === 0)                          return $cfg['gestion_sin_gestionar'];
     return $cfg['gestion_en_proceso'];

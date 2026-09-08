@@ -346,6 +346,12 @@ $add = null;
 foreach ($log as $c) if ($c['m'] === 'crm.activity.add') $add = $c['p']['fields'];
 test_same('Y', $add['COMPLETED'], '🔴 el ULTIMO intento nace CERRADA: "¿quién cierra el tres?"');
 test_same(true, str_contains((string)$add['DESCRIPTION'], 'ÚLTIMO intento'), 'y la descripcion lo dice');
+// 🔴 Y NO PUEDE ANUNCIAR UNA PROXIMA LLAMADA QUE NO EXISTE. El panel dibujaba
+// "Proxima llamada: 10 sep - Ya quedo agendada en el deal" con CERO actividades
+// abiertas en el deal (visto el 8-sep-2026 apretando el boton de verdad en Bitrix,
+// deal de prueba 407523). La actividad del techo nace cerrada: no hay cita.
+test_same(true, $r['ultimoDelTecho'], 'la respuesta avisa que este era el ultimo del techo');
+test_same(null, $r['proximoIntento'], '🔴 y NO devuelve fecha de proxima llamada: no hay');
 
 // una pulsacion que NO agota el techo sigue naciendo abierta (es la cita del proximo)
 $log = [];
