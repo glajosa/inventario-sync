@@ -98,6 +98,9 @@ function cobranza_config(): array {
         // Las llamadas que el cron crea para el ciclo NO llevan la marca: esas todavia
         // no se hicieron, y contarlas seria inventar gestion que no ocurrio.
         'marca_llamada_hecha' => 'GALJOSA_LLAMADA',
+        // Ab. Jose Barek, Jefe del Area Legal (verificado por user.search el 7-sep-2026).
+        // En ABOGADO el 2o contacto del primer mes es suyo, y desde el 2o mes todos.
+        'abogado_user_id' => 8007,
         // los 5 ids de la lista ESTADO EN GESTION, leidos de Bitrix el 7-sep-2026
         'gestion_cumplido'       => 2105,
         'gestion_no_contesta'    => 2107,
@@ -444,7 +447,16 @@ function cobranza_hora_alterna(DateTimeImmutable $ahora): array {
  * Acepta las dos formas del campo: UF_CRM_... (crm.deal.get) y ufCrm_...
  * (crm.item.get), porque los dos caminos existen en este codigo.
  */
-function cobranza_responsable(array $deal, int $usuarioQueApreto): int {
+function cobranza_responsable(array $deal, int $usuarioQueApreto, int $duenoAnterior = 0): int {
+    // 🔴 Si la llamada que se cierra era del ABOGADO, el reintento sigue siendo suyo.
+    // El documento reparte los contactos de la etapa ABOGADO: "Contacto 1 · COBRANZAS
+    // D+10 ... lo hace la ASESORA" y "Contacto 2 · ABOGADO D+16 ... lo hace el Ab. Jose
+    // Barek. Su propia escalera de 3 intentos". Del segundo mes en adelante TODOS los
+    // contactos son del abogado: "la asesora de cobranzas ya no vuelve a entrar".
+    // Sin esto, el 2o intento del abogado caia en la agenda de la asesora.
+    $abog = (int)(cobranza_config()['abogado_user_id'] ?? 0);
+    if ($abog > 0 && $duenoAnterior === $abog) return $abog;
+
     $c = cobranza_config()['campo_responsable_cob'];
     foreach ([$c, lcfirst(str_replace('UF_CRM_', 'ufCrm_', $c))] as $k) {
         $v = $deal[$k] ?? null;

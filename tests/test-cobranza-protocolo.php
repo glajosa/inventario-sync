@@ -413,3 +413,24 @@ test_same(42, cobranza_responsable(['UF_CRM_1743119144'=>'','ASSIGNED_BY_ID'=>'1
 test_same(42, cobranza_responsable(['UF_CRM_1743119144'=>'0'], 42), 'un 0 tampoco es responsable');
 test_same(42, cobranza_responsable(['ASSIGNED_BY_ID'=>'108990'], 42),
     '🔴 sin el campo NUNCA cae en el comercial: la cobranza no la lleva el');
+
+// ══ ABOGADO: el reintento no le cambia el dueño a la escalera (7-sep-2026) ══
+// El documento reparte los contactos de ABOGADO: el 1o del primer mes es de la
+// asesora, el 2o es del Ab. Barek, y desde el 2o mes TODOS son del abogado
+// ("la asesora de cobranzas ya no vuelve a entrar"). Cada contacto tiene su
+// propia escalera de 3 intentos, asi que el reintento tiene que quedar a nombre
+// de quien venia haciendo esa escalera.
+$ABOG = 8007;                                        // Ab. Jose Barek
+$dealCob = ['UF_CRM_1743119144' => 49234];           // responsable de cobranza
+test_same(49234, cobranza_responsable($dealCob, 999),
+    'sin dueño anterior: la responsable de cobranza');
+test_same(49234, cobranza_responsable($dealCob, 999, 49234),
+    'si la que se cierra era de ella, sigue siendo de ella');
+test_same($ABOG, cobranza_responsable($dealCob, 999, $ABOG),
+    '🔴 si la llamada que se cierra era del ABOGADO, el reintento tambien es suyo');
+test_same(49234, cobranza_responsable($dealCob, 999, 7605),
+    'otro usuario cualquiera NO hereda: vuelve a la responsable de cobranza');
+test_same(999, cobranza_responsable([], 999, 0),
+    'sin campo y sin dueño anterior: quien apreto el boton');
+test_same($ABOG, cobranza_responsable([], 999, $ABOG),
+    'y el abogado gana incluso si el deal no tiene responsable de cobranza');

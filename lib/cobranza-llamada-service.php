@@ -61,7 +61,7 @@ function cobranza_no_contesto(
         // dejaba registrar el intento. Medido en el deal 406519 el 7-sep-2026:
         //   DEADLINE  2026-09-07T19:20:00+03:00 -> lun 7-sep 11:20 Ecuador  (correcto)
         //   END_TIME  2026-09-08T11:59:00+03:00 -> mar 8-sep 03:59 Ecuador  (lo que usaba)
-        'select' => ['ID','SUBJECT','TYPE_ID','DIRECTION','COMPLETED','CREATED','ORIGIN_ID','END_TIME','DEADLINE'],
+        'select' => ['ID','SUBJECT','TYPE_ID','DIRECTION','COMPLETED','CREATED','ORIGIN_ID','END_TIME','DEADLINE','RESPONSIBLE_ID'],
         'order'  => ['CREATED' => 'ASC'],
     ]);
     // null es "no pude leer", no "no tiene ninguna". Son cosas distintas.
@@ -122,10 +122,18 @@ function cobranza_no_contesto(
 
     // --- 5. cerrar la planificada abierta (si la hay) ---
     $cerrada = null;
+    $duenoCerrada = 0;
     foreach ($acts as $a) {
         if ((int)($a['TYPE_ID'] ?? 0) !== 2 || (int)($a['DIRECTION'] ?? 0) !== 2) continue;
         if ((string)($a['COMPLETED'] ?? '') === 'Y') continue;
         $cerrada = (int)$a['ID'];
+        // 🔴 de quien era la llamada que se esta cerrando. En ABOGADO el protocolo
+        // reparte los contactos: el 1o del primer mes es de la asesora de cobranzas
+        // y TODO lo demas es del Ab. Barek ("la asesora de cobranzas ya no vuelve a
+        // entrar"). Cada contacto tiene su propia escalera de 3 intentos, asi que el
+        // reintento tiene que quedar a nombre de QUIEN venia haciendo esa escalera;
+        // si no, el reintento del abogado le aparecia en la agenda a la asesora.
+        $duenoCerrada = (int)($a['RESPONSIBLE_ID'] ?? 0);
         cobranza_bx($bx, 'crm.activity.update', ['id' => $cerrada, 'fields' => ['COMPLETED' => 'Y']]);
         break;
     }
@@ -171,7 +179,7 @@ function cobranza_no_contesto(
         'ORIGIN_ID'     => $cfg['marca_llamada_hecha'],
         'SUBJECT'       => 'Llamada saliente ' . $contacto,
         'COMPLETED'     => 'N',
-        'RESPONSIBLE_ID'=> cobranza_responsable($deal, $userId),
+        'RESPONSIBLE_ID'=> cobranza_responsable($deal, $userId, $duenoCerrada),
         'START_TIME'    => $proximo->format(DateTimeInterface::ATOM),
         'END_TIME'      => $proximo->modify('+1 hour')->format(DateTimeInterface::ATOM),
         'DEADLINE'      => $proximo->format(DateTimeInterface::ATOM),
