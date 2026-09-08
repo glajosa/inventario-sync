@@ -217,6 +217,20 @@ $opts = ['extraPartes' => $extraPartes,
          'maxExtra'    => $modelo['maxExtra'],
          'fechaFirma'  => $fFirma];
 
+/* FIRMA A LA MEDIDA: el asesor elige EN QUE cuotas cae la firma y CUANTO en cada una.
+   Se manda por numero de cuota (firmamonto1..12) y no por mes escrito: la pantalla ya
+   lista las 12 primeras cuotas con su fecha real, asi que el asesor ve "16/09/2026" y
+   escribe sobre la cuota que existe. Un mes tecleado a mano podria no caer en ninguna. */
+$firmaPers = (($_GET['firmapers'] ?? '') === '1');
+$firmaPlanIn = [];
+if ($firmaPers) {
+    for ($k = 1; $k <= 12; $k++) {
+        $vv = str_replace([',', '$', ' '], '', (string)($_GET['firmamonto' . $k] ?? ''));
+        if (is_numeric($vv) && (float)$vv > 0) $firmaPlanIn[$k] = (float)$vv;
+    }
+    if ($firmaPlanIn) $opts['firmaPlan'] = $firmaPlanIn;
+}
+
 // MONTOS PERSONALIZADOS de las extraordinarias. Se escriben las primeras; la última
 // la calcula el motor con el residuo, así que acá NO se lee ni se manda.
 $extraPers   = (($_GET['extrapers'] ?? '') === '1');
@@ -749,6 +763,36 @@ $hoy  = new DateTimeImmutable('now');
           <input type="text" name="firmacuota" inputmode="decimal" placeholder="auto" value="<?= h($vFirmaCuota) ?>"
                  title="Monto mensual editable de esa firma diferida. Si en 12 meses no alcanza a cubrirla, el resto se suma a las extraordinarias."></div>
       </div>
+      <?php /* A LA MEDIDA. Los dos campos de arriba solo saben repartir parejo sobre los
+               PRIMEROS meses. Acá el asesor elige mes por mes: "$100 en la de septiembre
+               y $300 en la de noviembre". Se listan las 12 primeras cuotas CON SU FECHA
+               REAL — el asesor razona en meses, no en números de cuota. */ ?>
+      <label class="chk-linea" style="margin-top:10px"
+             title="Elegir mes por mes cuánto de la firma se paga. Los dos campos de arriba solo reparten parejo sobre los primeros meses.">
+        <input type="checkbox" id="firma-pers" name="firmapers" value="1" <?= $firmaPers ? 'checked' : '' ?>
+               onchange="var c=document.getElementById('firma-caja'); if(c) c.style.display=this.checked?'':'none';">
+        Elegir yo el mes y el monto de cada pago
+      </label>
+      <div class="pers-caja" id="firma-caja" style="<?= $firmaPers ? '' : 'display:none' ?>">
+        <div class="ayuda-campo">Escribí solo los meses en que quiere pagar. Lo que sume
+          <b>es la firma</b>: si suma menos que el <?= (int)($fin['reserva_pct'] ?? 10) ?>% normal,
+          la <b>cuota mensual sube</b> para que el plan cuadre con el precio.</div>
+        <div class="extras-grid">
+          <?php $topeUI = min(12, count($plan['filas']));
+                $yaPuesto = [];
+                foreach ((array)($plan['firmaPlan'] ?? []) as $fp) $yaPuesto[(int)$fp['n']] = $fp['monto'];
+                for ($k = 1; $k <= $topeUI; $k++):
+                  $fecha = $plan['filas'][$k-1]['fecha'] ?? '';
+                  $val = isset($yaPuesto[$k]) ? number_format($yaPuesto[$k], 2, '.', '') : ''; ?>
+          <div class="extra-campo">
+            <label><?= h($fecha) ?></label>
+            <input type="text" class="firma-monto" name="firmamonto<?= $k ?>" inputmode="decimal"
+                   placeholder="0.00" value="<?= h($val) ?>"
+                   title="Cuánto de la firma se paga en la cuota del <?= h($fecha) ?>. Se suma a la cuota de ese mes.">
+          </div>
+          <?php endfor; ?>
+        </div>
+      </div>
     </div>
 
     <?php if ($modalidad !== 'iguales'):
@@ -1083,11 +1127,24 @@ $hoy  = new DateTimeImmutable('now');
     <div class="aviso">La cuota mensual quedó en <b>$0</b>: entre la firma y las extraordinarias
       ya se cubre todo lo que va antes de la entrega. Baja alguna de las dos si quieres cuotas reales.</div>
   <?php endif; ?>
-  <?php if ($plan['diferidoMeses'] > 0): ?>
+  <?php /* Dos avisos distintos porque son dos cosas distintas. El automatico se puede
+           resumir en una frase ("N cuotas de $X"); el reparto a la medida NO -- cada pago
+           tiene su mes y su monto, y decir un promedio seria mentir sobre lo que va a
+           pagar. Ahi se listan los pagos, que es el dato que el cliente necesita. */ ?>
+  <?php if (!empty($plan['firmaPlan'])): ?>
+    <div class="aviso" style="background:#eaf6ff;border-color:#b9ddf5;color:#0c4a6e">
+      La firma no se paga al firmar: se reparte en <b><?= count($plan['firmaPlan']) ?>
+      pago<?= count($plan['firmaPlan']) > 1 ? 's' : '' ?></b> sumados a la cuota de esos meses
+      (marcados <b>FIRMA</b> en la tabla) —
+      <?php $ps = [];
+            foreach ($plan['firmaPlan'] as $fp) $ps[] = cot_money($fp['monto']) . ' el ' . $fp['fecha'];
+            echo h(implode(' · ', $ps)); ?>.
+    </div>
+  <?php elseif ($plan['diferidoMeses'] > 0): ?>
     <div class="aviso" style="background:#eaf6ff;border-color:#b9ddf5;color:#0c4a6e">
       La firma no se paga al firmar: se reparte en <b><?= (int)$plan['diferidoMeses'] ?> cuota<?= $plan['diferidoMeses'] > 1 ? 's' : '' ?></b>
       de <b><?= h(cot_money($plan['diferidoCuota'])) ?></b> cada una, sumadas a la cuota normal (marcadas <b>FIRMA</b> en la tabla).
-      <?= $plan['diferidoMeses'] >= 12 ? ' Es el tope: no se puede diferir más de 12 meses.' : '' ?></div>
+      <?= $plan['diferidoMeses'] >= COT_FIRMA_TOPE_MESES ? ' Es el tope: no se puede diferir más de ' . COT_FIRMA_TOPE_MESES . ' meses.' : '' ?></div>
   <?php endif; ?>
 
   <?php if ($cliente !== ''): ?>
@@ -1192,12 +1249,20 @@ $hoy  = new DateTimeImmutable('now');
       <?php /* La etiqueta FIRMA va SOLO en la primera cuota diferida. Repetirla en
                todas está mal legalmente: da a entender que hay varias firmas del
                contrato, y firma hay una. En las siguientes se entiende por el monto. */
-            $primerDiferido = true; ?>
+            $primerDiferido = true;
+            $aMedida = !empty($plan['firmaPlan']); ?>
       <?php foreach ($plan['filas'] as $f): ?>
       <tr class="<?= $f['extra'] ? 'extra' : ($f['diferido'] ? 'diferido' : '') ?>">
         <td><?= (int)$f['n'] ?></td>
         <td><?= h($f['fecha']) ?><?= $f['extra'] ? ' <span class="etq">EXTRA</span>' : '' ?><?php
-            if (!empty($f['diferido']) && $primerDiferido) { echo ' <span class="etq2">FIRMA</span>'; $primerDiferido = false; }
+            /* La etiqueta FIRMA: con el diferido AUTOMATICO va solo en la primera, porque
+               son meses seguidos y todos por el mismo monto -- repetirla catorce veces era
+               ruido. Con el reparto A LA MEDIDA va en CADA UNA: son pagos distintos, en
+               meses que el asesor eligio y por montos distintos, y el cliente tiene que
+               poder ver cual de sus cuotas lleva firma. */
+            if (!empty($f['diferido']) && ($aMedida || $primerDiferido)) {
+                echo ' <span class="etq2">FIRMA</span>'; $primerDiferido = false;
+            }
             /* La cuota que absorbe el redondeo NO se rotula. Se probo con una etiqueta
                AJUSTE y el usuario la saco: al cliente no le aporta y mete una palabra
                tecnica en un documento comercial. El pie sigue diciendo cual es y por

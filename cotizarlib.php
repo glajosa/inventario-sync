@@ -163,6 +163,11 @@ const COT_PLAZO_REF = 60;     // plazo de referencia
 /** Proyecto cuyo cotizador NO recorta cuotas por la fecha de entrega. Ver el
  *  comentario dentro de cot_entrega(): es una decision de negocio, no un bug. */
 const COT_SIN_TOPE_DE_PLAZO = 49;   // Sun Bay Engabao (solares)
+/* Tope de meses sobre los que se puede repartir la firma. Regla del director,
+ *  textual: "que no aplique a mas, porque si no la gente no termina pagando la
+ *  entrada nunca". Vale para las dos formas de diferir: la automatica y la que
+ *  elige el asesor mes por mes. */
+const COT_FIRMA_TOPE_MESES = 12;
 const COT_SEPARACION = 1000;  // la separación siempre es $1.000 (o el 10% si es menor)
 /* Plazo para pagar lo de la firma, en dias CORRIDOS desde la cotizacion. Se suman
    dias y no meses a proposito: '+1 month' sobre el 31 de agosto da 1 de octubre. */
@@ -469,7 +474,43 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     // Cuánto va en extraordinarias: monto por extraordinaria, total explícito, o el
     // 10% de siempre. Poner más acá alivia la cuota mensual, que es una de las
     // variantes que se venden.
+    /* ── FIRMA A LA MEDIDA: el asesor elige EN QUE cuotas y CUANTO ─────────────
+     * Diferir la firma ya se podia, pero solo de una forma: caia en las PRIMERAS N
+     * cuotas y todas por el MISMO monto. El vendedor pedia otra cosa: "$100 en la
+     * cuota de septiembre y $300 en la de noviembre" -- meses elegidos, no
+     * necesariamente seguidos, y montos distintos.
+     *
+     * `firmaPlan` es un mapa NUMERO DE CUOTA => MONTO. El numero de cuota y no el mes
+     * del calendario a proposito: la pantalla ya lista las cuotas con su fecha real
+     * (16/09/2026), asi que el asesor ve el mes y elige sobre la cuota que existe. Con
+     * un mes escrito a mano habria que resolverlo y podria no caer en ninguna.
+     *
+     * La suma de esos montos ES la firma. Se comporta igual que `firma` fijada a mano,
+     * que es la semantica que el motor ya tenia probada: la CUOTA absorbe la
+     * diferencia. Asi el plan sigue cuadrando con el precio por construccion.
+     */
+    $planFirma = [];
+    if (!empty($opts['firmaPlan']) && is_array($opts['firmaPlan'])) {
+        $topeCuota = min(COT_FIRMA_TOPE_MESES, $n);
+        foreach ($opts['firmaPlan'] as $nCuota => $monto) {
+            $nCuota = (int)$nCuota;
+            $monto  = (float)$monto;
+            if ($nCuota < 1 || $nCuota > $topeCuota || $monto <= 0.0) continue;
+            // dos montos sobre la misma cuota se suman: es un solo pago ese mes
+            $planFirma[$nCuota - 1] = ($planFirma[$nCuota - 1] ?? 0.0) + $monto;
+        }
+        ksort($planFirma);
+    }
+    $firmaPlanTotal = array_sum($planFirma);
+
     $firmaFijada   = isset($opts['firma'])   && $opts['firma'] !== '';
+    /* Con plan a la medida la firma queda FIJADA en la suma de sus montos, salvo que
+       el asesor haya escrito además un monto de firma a mano: ahi manda lo que escribio
+       y el plan solo dice COMO se reparte. */
+    if ($planFirma && !$firmaFijada) {
+        $firmaFijada    = true;
+        $opts['firma']  = $firmaPlanTotal;
+    }
     $extraAbsorbio = false;
     // Proyecto SIN extraordinarias (Galero Torre C / Casas): el 30% de entrada se
     // reparte entre separación, firma y cuotas, y no hay dónde poner un extra.
@@ -551,18 +592,33 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     $diferidoSobra = 0.0;
     $mesesFirmaOpt = (int)($opts['firmaMeses'] ?? 0);
     $cuotaFirmaOpt = (float)($opts['firmaCuota'] ?? 0);
-    if ($firmaBase > 0.01 && ($mesesFirmaOpt > 0 || $cuotaFirmaOpt > 0)) {
+    /* $difPorFila: cuanto de FIRMA lleva cada cuota, por indice de fila. Reemplaza al
+       par (diferidoMeses, diferidoCuota), que solo podia describir "las primeras N,
+       todas iguales". Las dos formas escriben en este mismo mapa, asi que la tabla y
+       el cuadre no saben cual se uso. */
+    $difPorFila = [];
+    if ($planFirma) {
+        // A LA MEDIDA: los meses y los montos son los que eligio el asesor. Si el monto
+        // de firma se fijo a mano y no coincide con la suma del plan, los montos se
+        // escalan para que el reparto siga sumando la firma -- el asesor mando el
+        // CUANTO en total y el plan dice COMO se reparte.
+        $escala = ($firmaPlanTotal > 0.01) ? $firmaBase / $firmaPlanTotal : 0.0;
+        foreach ($planFirma as $i => $m) $difPorFila[$i] = $m * $escala;
+        $diferidoMeses = count($difPorFila);
+        $diferidoCuota = $diferidoMeses > 0 ? $firmaBase / $diferidoMeses : 0.0;   // promedio, solo para el resumen
+        $firma = 0.0;   // no se paga nada al firmar: quedo repartida en las cuotas
+    } elseif ($firmaBase > 0.01 && ($mesesFirmaOpt > 0 || $cuotaFirmaOpt > 0)) {
         if ($cuotaFirmaOpt > 0) {
             // El asesor edita el monto mensual del diferido; de ahí sale cuántos meses
             // hacen falta, topado a 12. Lo que no alcance a cobrarse en el tope se
             // suma a las extraordinarias — "que el saldo lo pague en la extraordinaria".
             $mesesNecesarios = (int)ceil($firmaBase / $cuotaFirmaOpt);
-            $diferidoMeses = max(1, min(12, $mesesNecesarios, $n));
+            $diferidoMeses = max(1, min(COT_FIRMA_TOPE_MESES, $mesesNecesarios, $n));
             $diferidoCuota = $cuotaFirmaOpt;
             $cobrado = $diferidoCuota * $diferidoMeses;
             $diferidoSobra = max(0.0, $firmaBase - $cobrado);
         } else {
-            $diferidoMeses = max(1, min(12, $mesesFirmaOpt, $n));
+            $diferidoMeses = max(1, min(COT_FIRMA_TOPE_MESES, $mesesFirmaOpt, $n));
             $diferidoCuota = $firmaBase / $diferidoMeses;
         }
         $firma = 0.0;   // ya no se paga nada al firmar: quedó repartida en las cuotas
@@ -570,6 +626,7 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
             $extraTotal += $diferidoSobra;
             $diferidoSobra = 0.0;
         }
+        for ($i = 0; $i < $diferidoMeses; $i++) $difPorFila[$i] = $diferidoCuota;
     }
     // MONTOS POR EXTRAORDINARIA. Por defecto se reparte el total en partes iguales.
     // Si el asesor los personaliza, escribe los primeros y la ÚLTIMA sale del RESIDUO:
@@ -597,13 +654,16 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     $filas = [];
     foreach ($fechas as $i => $f) {
         $esExtra = in_array($i, $posExtra, true);
-        $esDiferido = $i < $diferidoMeses;
+        $deFirma = (float)($difPorFila[$i] ?? 0.0);
         $filas[] = [
             'n'        => $i + 1,
             'fecha'    => $f->format('d/m/Y'),
-            'monto'    => $mensual + ($esExtra ? cot_monto_extra($posExtra, $extraMontos, $valorExtra, $i) : 0.0) + ($esDiferido ? $diferidoCuota : 0.0),
+            'monto'    => $mensual + ($esExtra ? cot_monto_extra($posExtra, $extraMontos, $valorExtra, $i) : 0.0) + $deFirma,
             'extra'    => $esExtra,
-            'diferido' => $esDiferido,
+            'diferido' => $deFirma > 0.0,
+            // Cuanto de esta cuota es FIRMA. La pantalla lo necesita para poder decir
+            // "$403.64 + $100 de firma" en vez de un total que nadie sabe de donde sale.
+            'firma'    => $deFirma,
         ];
     }
 
@@ -628,15 +688,34 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     $sumaRed  = round(array_sum(array_column($filas, 'monto')), 2);
     $ajuste   = round($objetivo - $sumaRed, 2);
     if (abs($ajuste) >= 0.01) {
+        /* 🔴 LA CUOTA ELEGIDA TIENE QUE PODER ABSORBER EL AJUSTE SIN QUEDAR NEGATIVA.
+         * Antes se tomaba la ultima cuota comun a secas. Con la cuota mensual en CERO
+         * -pasa cuando toda la entrada se paga en un pago de firma y no queda nada que
+         * repartir al mes- restarle 2 centavos dejaba la fila en -0,02. Una cuota
+         * negativa en un documento que firma el cliente no es un redondeo: es un error.
+         * Se busca de atras hacia adelante la ultima cuota COMUN que aguante, y si
+         * ninguna aguanta se usa cualquier fila que aguante (incluida una
+         * extraordinaria) antes que imprimir un negativo. */
+        $aguanta = fn(int $k): bool => round($filas[$k]['monto'] + $ajuste, 2) >= 0.0;
         $idx = null;
         for ($k = count($filas) - 1; $k >= 0; $k--) {
-            if (empty($filas[$k]['extra'])) { $idx = $k; break; }
+            if (empty($filas[$k]['extra']) && $aguanta($k)) { $idx = $k; break; }
         }
-        if ($idx === null) $idx = count($filas) - 1;        // todas extra: la última
-        if ($idx >= 0) {
+        if ($idx === null) {
+            for ($k = count($filas) - 1; $k >= 0; $k--) {
+                if ($aguanta($k)) { $idx = $k; break; }
+            }
+        }
+        if ($idx !== null) {
             $filas[$idx]['monto'] = round($filas[$idx]['monto'] + $ajuste, 2);
             $filas[$idx]['ajuste'] = true;                  // la pantalla lo marca
         }
+        /* Si NINGUNA fila aguanta, el ajuste no se aplica: la columna impresa quedaria
+           con un centavo de diferencia, pero ninguna cuota sale negativa. Es el mal
+           menor, y `ajustePendiente` lo deja dicho en vez de que pase en silencio. */
+        $ajustePendiente = ($idx === null) ? $ajuste : 0.0;
+    } else {
+        $ajustePendiente = 0.0;
     }
 
     // Cierre: la contraentrega es lo que falta para llegar al precio, sumando la
@@ -721,6 +800,16 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         'firmaBase'     => $firmaBase,
         'diferidoMeses' => $diferidoMeses,
         'diferidoCuota' => $diferidoCuota,
+        /* El reparto de la firma, cuota por cuota, para que la pantalla lo pueda
+           mostrar y para que los campos vuelvan con lo que de verdad se aplico (no con
+           lo que se escribio, que puede haberse topado). Vacio = firma en un solo pago
+           o diferido automatico parejo. */
+        'firmaPlan'     => $planFirma ? array_map(
+                               fn($i, $m) => ['n' => $i + 1,
+                                              'fecha' => $fechas[$i]->format('d/m/Y'),
+                                              'monto' => round($m * (($firmaPlanTotal > 0.01) ? $firmaBase / $firmaPlanTotal : 0.0), 2)],
+                               array_keys($planFirma), $planFirma) : [],
+        'firmaPlanTotal' => round($firmaPlanTotal, 2),
         'inicio'        => $primera->format('Y-m'),
         'inicioTxt'     => cot_mes_es((int)$primera->format('n')) . ' ' . $primera->format('Y'),
         'plazoMax'      => $plazoMax,
