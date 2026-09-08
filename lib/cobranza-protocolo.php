@@ -193,6 +193,37 @@ function cobranza_pacto_vigente(array $actividades, int $ahoraTs): ?array {
     return $mejor;
 }
 
+/**
+ * ¿Hay un contacto efectivo cuyo DIA pactado YA PASO? = lo pactado se incumplio.
+ *
+ * 🔴 Se compara por DIA, no por instante, y con el reloj que le pasan (no con
+ * date()). Las tres situaciones son distintas:
+ *   fecha pactada MAÑANA o despues -> pacto vivo, silencio (cobranza_pacto_vigente)
+ *   fecha pactada HOY              -> hablo hoy, el dia no termino: el ciclo esta
+ *                                     cumplido y no se registra otra "no contesto"
+ *   fecha pactada ANTES DE HOY     -> prometio y no cumplio: HAY que perseguirlo
+ * Sin el ultimo caso, un 1234 dejaba el deal mudo el resto del mes justo cuando
+ * mas hay que llamarlo. Es la misma comparacion por dia que hace gc_pacto_incumplido()
+ * en cobranzaphp/lib_gestion_cob.php.
+ *
+ * NO se usa $protocolo['pactoIncumplido'] a proposito: ese se calcula contra date(),
+ * el reloj real del servidor, y aca hace falta el reloj que se inyecta.
+ */
+function cobranza_pacto_vencido(array $actividades, DateTimeImmutable $ahoraEc,
+                                ?callable $esContestada = null): bool {
+    $esContestada = $esContestada ?? 'cobranza_es_contestada';
+    $hoy = $ahoraEc->format('Y-m-d');
+    foreach ($actividades as $a) {
+        if ((int)($a['TYPE_ID'] ?? 0) !== 2 || (int)($a['DIRECTION'] ?? 0) !== 2) continue;
+        if (!$esContestada((string)($a['SUBJECT'] ?? ''))) continue;
+        $dl = (string)($a['DEADLINE'] ?? '');
+        if ($dl === '') $dl = (string)($a['END_TIME'] ?? '');
+        if ($dl === '') continue;                  // sin fecha no se pacto nada
+        if (substr($dl, 0, 10) < $hoy) return true;
+    }
+    return false;
+}
+
 function cobranza_tope_etapa(string $stageId, ?string $entradaEtapa = null,
                              ?DateTimeImmutable $ahora = null): int {
     $cfg = cobranza_config();
@@ -388,6 +419,32 @@ function cobranza_puede_llamar(string $stageId, array $protocolo, array $deal): 
     $pausa = (string)($deal[$cfg['campo_pausa']] ?? '');
     if ($pausa !== '' && !empty($deal['_planificada_futura'])) {
         return ['puede' => false, 'motivo' => 'en_pausa', 'restantes' => 0];
+    }
+
+    // 🔴 SI YA HABLO CON EL CLIENTE, EL CICLO ESTA CUMPLIDO: no se registra otra
+    // "no contesto". Antes el boton lo dejaba y la propia pantalla se contradecia:
+    // "Intento 1 registrado - quedan 2 intentos" arriba y "Ya hubo contacto efectivo
+    // en este ciclo: queda CUMPLIDO" abajo. Medido el 8-sep-2026 en el deal de prueba
+    // 407523 con un 1234 del mismo dia.
+    // No es un problema de tiempo real: el boton lee las actividades en vivo en cada
+    // pulsacion. Era la REGLA, que solo frenaba con un pacto a FUTURO (cobranza_pacto_vigente)
+    // y no miraba si el ciclo ya estaba cumplido por contacto efectivo.
+    // La condicion es la MISMA que decide CUMPLIDO en cobranza_estado_gestion: hablar
+    // es cumplir. Y es por CICLO, asi que el mes siguiente el boton vuelve a servir.
+    // En 3 MESES el documento exige 2 contactos, asi que con UNO todavia queda la
+    // segunda escalera: por eso se compara contra los exigidos y no contra cero.
+    // 🔴 CON UNA EXCEPCION: si lo pactado se INCUMPLIO, el ciclo no esta cumplido y
+    // hay que volver a perseguirlo. Prometio pagar el 9, paso el 9 y no pago: ahi la
+    // asesora TIENE que poder llamar. Es la misma precedencia que en el estado de
+    // gestion, donde PACTO INCUMPLIDO se evalua ANTES que CUMPLIDO.
+    // Sin esta excepcion la regla dejaba al deal mudo el resto del mes justo cuando
+    // mas hay que llamarlo. Lo atrapo una prueba que ya existia ("pasada la fecha
+    // pactada si se puede llamar"), no yo leyendo el codigo.
+    $contactos = (int)($protocolo['contactos'] ?? 0);
+    $exigidos  = cobranza_contactos_exigidos($stageId);
+    if ($contactos > 0 && $contactos >= $exigidos && empty($deal['_pacto_vencido'])) {
+        return ['puede' => false, 'motivo' => 'ciclo_cumplido', 'restantes' => 0,
+                'contactos' => $contactos];
     }
 
     $hechas = (int)($protocolo['sinContestar'] ?? 0);

@@ -31,7 +31,8 @@ $CFG_JS = json_encode(cobranza_config(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_
     'tope_de_etapa':      'Ya se hicieron todos los intentos que permite esta etapa.',
     'en_pausa':           'Hay un pacto vigente con el cliente. No se le insiste hasta esa fecha.',
     'otro_embudo':        'Este botón es solo para deals de COBRANZAS. Para ventas usá el otro «No contestó».',
-    'pacto_vigente':      'Hay una fecha pactada con el cliente. El deal queda en silencio hasta entonces.'
+    'pacto_vigente':      'Hay una fecha pactada con el cliente. El deal queda en silencio hasta entonces.',
+    'ciclo_cumplido':     'Ya se habló con el cliente en este ciclo. Hablar es cumplir: el ciclo quedó CUMPLIDO y no se registran más llamadas sin contestar. Vuelve a habilitarse el ciclo siguiente.'
   };
   var estado = null, error = null, corriendo = true;
 

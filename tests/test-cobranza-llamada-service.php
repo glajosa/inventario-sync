@@ -253,9 +253,15 @@ $r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bx, $ahora);
 test_same('ya_registrado', $r['status'], 'sin completar sigue frenando el doble clic');
 test_same(0, count(array_filter($log, fn($c)=>$c['m']==='crm.activity.add')), 'y no escribe');
 
-// ── CASO 2: una contestada (1234) mata la ventana ──
-// Se aprieta, el cliente después atiende y se registra el 1234: la tanda se
-// cerró. El botón NO puede quedar bloqueado por el intento fallido anterior.
+// ── CASO 2: una contestada (1234) mata la ventana, pero CUMPLE el ciclo ──
+// 🔴 AFIRMACION INVERTIDA el 8-sep-2026, por regla del usuario: "cuando contesta,
+// o sea la actividad de 1234, el boton aun deja crear la actividad" -- y no debe.
+// Antes esto esperaba 'procesado' y la pantalla se contradecia sola: "Intento 1
+// registrado - quedan 2 intentos" arriba y "Ya hubo contacto efectivo en este ciclo:
+// queda CUMPLIDO" abajo (visto en el deal de prueba 407523 apretando el boton).
+// Lo que este caso probaba de verdad -- que la ventana anti-doble-clic NO sea la que
+// frena despues de un 1234 -- se sigue probando abajo, en 3 MESES, donde UN contacto
+// todavia no cumple el ciclo y por lo tanto el boton tiene que dejar.
 $log = [];
 $conContestada = [
     fake_activity(810,'Llamada saliente Ana','2026-09-03T08:55:00-05:00') + ['COMPLETED'=>'N'],
@@ -264,17 +270,28 @@ $conContestada = [
 $bx = cob_fake_bx(['ID'=>77,'STAGE_ID'=>'C48:UC_LLUGGI','MOVED_TIME'=>'2026-09-03T14:00:00+03:00'],
                   $conContestada, $log);
 $r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bx, $ahora);
-test_same('procesado', $r['status'], 'CASO 2: tras un 1234 se puede apretar aunque sea hace 2 min');
-test_same(1, $r['intentos'], 'y la escalera arranca de nuevo en 1');
-test_same(2, $r['restantes'], 'con los 2 restantes de la etapa');
+test_same('rechazado', $r['status'], 'CASO 2: tras un 1234 el ciclo esta CUMPLIDO y el boton no registra');
+test_same('ciclo_cumplido', $r['motivo'], 'y el motivo lo dice: hablar es cumplir');
+test_same(0, count(array_filter($log, fn($c)=>$c['m']==='crm.activity.add')), 'no crea ninguna actividad');
+
+// 🔴 LA PROTECCION ORIGINAL, donde todavia aplica: en 3 MESES el documento exige DOS
+// contactos, asi que con UNO el ciclo no esta cumplido y el boton tiene que dejar
+// aunque el 1234 sea de hace 2 minutos. Si esto se rompiera, la ventana anti-doble-clic
+// habria vuelto a ser la que frena.
+$log = [];
+$bx = cob_fake_bx(['ID'=>78,'STAGE_ID'=>'C48:UC_VXD8VQ','MOVED_TIME'=>'2026-09-03T14:00:00+03:00'],
+                  $conContestada, $log);
+$r3 = cobranza_no_contesto(['dealId'=>78,'bitrixUserId'=>42], $bx, $ahora);
+test_same('procesado', $r3['status'], '3 MESES tras un 1234 de hace 2 min: SI deja (falta el 2do contacto)');
+test_same(1, $r3['intentos'], 'y la escalera del segundo contacto arranca en 1');
 
 // el orden no debe importar: el mismo par al revés da lo mismo
 $log = [];
 $bx = cob_fake_bx(['ID'=>77,'STAGE_ID'=>'C48:UC_LLUGGI','MOVED_TIME'=>'2026-09-03T14:00:00+03:00'],
                   array_reverse($conContestada), $log);
 $r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bx, $ahora);
-test_same('procesado', $r['status'], 'el orden en que llegan las actividades no cambia el resultado');
-test_same(1, $r['intentos'], 'sigue siendo el intento 1');
+test_same('rechazado', $r['status'], 'el orden en que llegan las actividades no cambia el resultado');
+test_same('ciclo_cumplido', $r['motivo'], 'y el motivo es el mismo');
 
 // ── el caso EXACTO del usuario: 1234 con fecha al 9, el deal queda en silencio ──
 $log = [];

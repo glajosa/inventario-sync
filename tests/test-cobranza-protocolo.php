@@ -465,3 +465,56 @@ test_same($PROCESO, cobranza_estado_gestion(['intentos'=>0,'contactos'=>0], 'C48
     '1 MES, primer intento sin contactos: EN PROCESO');
 test_same($NOCONT, cobranza_estado_gestion(['intentos'=>2,'contactos'=>0], 'C48:UC_1WHC5Q'),
     '1 MES, tercer intento sin contactos: NO CONTESTA');
+
+// ══════════════════════════════════════════════════════════════════════════
+// HABLAR ES CUMPLIR: con contacto efectivo en el ciclo, el boton NO registra
+// otra "no contesto" (8-sep-2026). Antes la pantalla se contradecia sola:
+// "Intento 1 registrado - quedan 2" arriba y "queda CUMPLIDO" abajo.
+// ══════════════════════════════════════════════════════════════════════════
+$dealVacio = ['MOVED_TIME'=>'2026-09-01T10:00:00+03:00'];
+$pc = fn(string $st, int $cont, int $sin=0) =>
+    cobranza_puede_llamar($st, ['contactos'=>$cont,'sinContestar'=>$sin], $dealVacio);
+
+test_same('ciclo_cumplido', $pc('C48:UC_1WHC5Q', 1)['motivo'],
+    '🔴 1 MES con un contacto efectivo: el boton NO deja registrar otra');
+test_same(true, $pc('C48:UC_1WHC5Q', 0)['puede'],
+    'sin contacto efectivo si deja (es el caso normal)');
+test_same('ciclo_cumplido', $pc('C48:UC_LLUGGI', 1)['motivo'],
+    '2 MESES exige 1 contacto: con uno, cumplido');
+// 3 MESES exige DOS contactos -> con uno todavia queda la segunda escalera
+test_same(true, $pc('C48:UC_VXD8VQ', 1)['puede'],
+    '🔴 3 MESES con UN contacto: sigue habilitado, falta el segundo');
+test_same('ciclo_cumplido', $pc('C48:UC_VXD8VQ', 2)['motivo'],
+    '3 MESES con los dos contactos: cumplido');
+test_same('ciclo_cumplido', $pc('C48:FINAL_INVOICE', 1)['motivo'],
+    'ABOGADO exige 1: con uno, cumplido');
+// el pacto sigue mandando por encima
+$conPacto = $dealVacio + ['_pacto'=>['fecha'=>'2026-09-20T13:00:00-05:00','asunto'=>'1234']];
+test_same('pacto_vigente', cobranza_puede_llamar('C48:UC_1WHC5Q',
+    ['contactos'=>1,'sinContestar'=>0], $conPacto)['motivo'],
+    'con pacto vivo manda el pacto, no el ciclo cumplido');
+// y el tope sigue frenando cuando no hubo contacto
+test_same('tope_de_etapa', $pc('C48:UC_1WHC5Q', 0, 3)['motivo'],
+    'sin contacto y con el techo agotado: sigue siendo tope_de_etapa');
+// 🔴 la excepcion: si lo pactado se INCUMPLIO, el ciclo NO esta cumplido y hay que llamar
+test_same(true, cobranza_puede_llamar('C48:UC_1WHC5Q', ['contactos'=>1,'sinContestar'=>0],
+    $dealVacio + ['_pacto_vencido'=>true])['puede'],
+    '🔴 hablo pero INCUMPLIO lo pactado: el boton tiene que dejar llamar de nuevo');
+test_same('ciclo_cumplido', cobranza_puede_llamar('C48:UC_1WHC5Q', ['contactos'=>1,'sinContestar'=>0],
+    $dealVacio + ['_pacto_vencido'=>false])['motivo'],
+    'y si lo esta cumpliendo, sigue en silencio');
+
+// ── las TRES situaciones de un 1234, que son distintas ──
+$hoyEc = new DateTimeImmutable('2026-09-08T15:00:00-05:00');
+$c1234 = fn(string $dl) => [[ 'TYPE_ID'=>2,'DIRECTION'=>2,'SUBJECT'=>'1234 hable con el cliente','DEADLINE'=>$dl ]];
+test_same(false, cobranza_pacto_vencido($c1234('2026-09-20T13:00:00-05:00'), $hoyEc),
+    'fecha pactada a futuro: no esta vencido (lo frena el pacto vigente)');
+test_same(false, cobranza_pacto_vencido($c1234('2026-09-08T09:00:00-05:00'), $hoyEc),
+    '🔴 fecha pactada HOY, aunque la hora ya paso: el dia no termino, NO esta vencido');
+test_same(true,  cobranza_pacto_vencido($c1234('2026-09-07T09:00:00-05:00'), $hoyEc),
+    '🔴 fecha pactada AYER: incumplido, hay que perseguirlo');
+test_same(false, cobranza_pacto_vencido($c1234(''), $hoyEc),
+    'sin fecha no se pacto nada: no hay nada que incumplir');
+test_same(false, cobranza_pacto_vencido([['TYPE_ID'=>2,'DIRECTION'=>2,
+    'SUBJECT'=>'Llamada saliente Ana','DEADLINE'=>'2026-09-01T09:00:00-05:00']], $hoyEc),
+    'una llamada NO contestada con fecha vieja no es un pacto incumplido');
