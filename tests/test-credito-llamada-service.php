@@ -157,3 +157,29 @@ catch (CreditoLlamadaError $e) { $exploto = ($e->getMessage() === 'bitrix_unavai
 test_same(true, $exploto, 'si Bitrix se cae, se corta: no se llama encima de un pacto invisible');
 
 echo "test-credito-llamada-service OK\n";
+
+// ══ doble clic con la edad NEGATIVA (8-sep-2026) ══
+// El CREATED lo estampa Bitrix y la edad se mide con el reloj de este servidor: si
+// Bitrix va un segundo adelante, la edad de una actividad recien creada sale
+// negativa. Antes '$edad >= 0' se saltaba la guardia justo ahi.
+$log = [];
+$futuro = cre_act(9001, 'Llamada saliente Marco', '2026-09-03T09:00:05-05:00', 'N');  // 5 s DESPUES de $ahora
+$bx = cre_fake_bx(['ID'=>510,'STAGE_ID'=>'C79:NEW'], [$futuro], $log);
+$r = credito_no_contesto(['dealId'=>510,'bitrixUserId'=>42,'contactName'=>'Marco'], $bx, $ahora);
+test_same('ya_registrado', $r['status'], '🔴 edad NEGATIVA (Bitrix adelantado): se FRENA el doble clic');
+test_same('repeticion', $r['motivo'], 'y el motivo es repeticion');
+test_same(0, count(array_filter($log, fn($c)=>$c['m']==='crm.activity.add')), 'no crea nada');
+
+// pero si la asesora YA cerro esa planificada, no es doble clic: es un intento nuevo
+$log = [];
+$cerrada = cre_act(9002, 'Llamada saliente Marco', '2026-09-03T09:00:05-05:00', 'Y');
+$bx = cre_fake_bx(['ID'=>511,'STAGE_ID'=>'C79:NEW'], [$cerrada], $log);
+$r = credito_no_contesto(['dealId'=>511,'bitrixUserId'=>42,'contactName'=>'Marco'], $bx, $ahora);
+test_same('procesado', $r['status'], 'si la anterior esta CERRADA, la siguiente pulsacion pasa');
+
+// una fecha corrupta no puede bloquear a la asesora
+$log = [];
+$rota = cre_act(9003, 'Llamada saliente Marco', 'no-es-una-fecha', 'N');
+$bx = cre_fake_bx(['ID'=>512,'STAGE_ID'=>'C79:NEW'], [$rota], $log);
+$r = credito_no_contesto(['dealId'=>512,'bitrixUserId'=>42,'contactName'=>'Marco'], $bx, $ahora);
+test_same('procesado', $r['status'], 'fecha corrupta: NO bloquea (mejor un intento de mas)');

@@ -78,8 +78,18 @@ function credito_no_contesto(
     $ultimo = $protocolo['ultimoIntento'] ?? null;
     if (is_string($ultimo) && $ultimo !== '' && empty($protocolo['ultimoCerrado'])) {
         $ultimoTs = strtotime($ultimo);
-        $edad = $ultimoTs !== false ? ($ahora->getTimestamp() - $ultimoTs) : -1;
-        if ($edad >= 0 && $edad < $cfg['ventana_repeticion_seg']) {
+        // si la fecha no parsea NO se puede juzgar: se deja pasar (mejor un intento de
+        // mas que bloquear a la asesora por una fecha corrupta).
+        $edad = $ultimoTs !== false ? ($ahora->getTimestamp() - $ultimoTs) : PHP_INT_MAX;
+        // 🔴 LA EDAD PUEDE SALIR NEGATIVA, y antes eso dejaba pasar el doble clic.
+        // El CREATED lo estampa el reloj de BITRIX y la edad se calcula con el reloj
+        // de ESTE servidor: si Bitrix va un segundo adelante, la edad de una actividad
+        // recien creada es negativa y la condicion '$edad >= 0' se saltaba la guardia
+        // -- justo en el caso que la guardia existe para atrapar. Visto el 8-sep-2026
+        // probando el boton de credito contra Bitrix real.
+        // Una edad negativa solo puede significar "se acaba de crear": se FRENA.
+        // El -1 de "no se pudo parsear la fecha" se filtro arriba con $ultimoTs!==false.
+        if ($edad < $cfg['ventana_repeticion_seg']) {
             return ['status' => 'ya_registrado', 'motivo' => 'repeticion',
                     'haceMinutos' => intdiv($edad, 60),
                     'etapa' => $stageId, 'intentos' => (int)$protocolo['sinContestar']];
