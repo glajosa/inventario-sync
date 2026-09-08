@@ -241,6 +241,9 @@ function cobranza_no_contesto(
         // boton de verdad en Bitrix. null = no hay proxima, y el panel lo dice.
         'proximoIntento'  => $ultimoDelTecho ? null : $proximo->format(DateTimeInterface::ATOM),
         'ultimoDelTecho'  => $ultimoDelTecho,
+        // los contactos efectivos que YA tenia el ciclo: el panel necesita saber
+        // POR QUE quedo CUMPLIDO (por haber hablado, o por agotar los 3 intentos).
+        'contactos'       => (int)($protocolo['contactos'] ?? 0),
         'actividadNueva'  => (int)$nueva,
         'actividadCerrada'=> $cerrada,
         'estadoGestion'   => $gestion,

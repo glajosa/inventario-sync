@@ -362,3 +362,12 @@ test_same(2, $r['restantes'], 'y quedan 2');
 $add = null;
 foreach ($log as $c) if ($c['m'] === 'crm.activity.add') $add = $c['p']['fields'];
 test_same('N', $add['COMPLETED'], 'esta si nace abierta: es la cita del proximo intento');
+
+// El panel necesita saber POR QUE quedo CUMPLIDO: "hablar es cumplir" y "3 intentos
+// sin respuesta" son dos motivos distintos y la frase no puede ser la misma.
+$log = [];
+$bx = cob_fake_bx(['ID'=>81,'STAGE_ID'=>'C48:UC_LLUGGI'], [], $log);
+$r = cobranza_no_contesto(['dealId'=>81,'bitrixUserId'=>42], $bx, $ahora);
+test_same(0, $r['contactos'], 'sin contestadas en el ciclo, contactos = 0');
+test_same(false, $r['ultimoDelTecho'], 'y no es el ultimo del techo');
+test_same(true, is_string($r['proximoIntento']), 'con proxima llamada de verdad');

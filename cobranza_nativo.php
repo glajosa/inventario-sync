@@ -111,9 +111,14 @@ $CFG_JS = json_encode(cobranza_config(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_
         c:{ type:'text', properties:{ size:'sm', color:'base_70',
             value:'+2 días hábiles. Ya quedó agendada en el deal.' } } }}};
     }
+    // CUMPLIDO tiene dos motivos distintos y no se pueden decir con la misma frase:
+    // se hablo con el cliente (hablar es cumplir), o se agotaron los intentos sin
+    // respuesta. Decir "3 intentos sin respuesta" cuando si hubo contacto es falso.
     if (estado.estadoGestion === CFG.gestion_cumplido) {
       b.cum = { type:'text', properties:{ size:'sm', color:'base_70',
-        value:'3 intentos sin respuesta: el ciclo queda CUMPLIDO.' } };
+        value: estado.contactos > 0
+          ? 'Ya hubo contacto efectivo en este ciclo: queda CUMPLIDO.'
+          : '3 intentos sin respuesta: el ciclo queda CUMPLIDO.' } };
     }
     return { blocks:b, primaryButton:{title:''}, secondaryButton:{title:''} };
   }
