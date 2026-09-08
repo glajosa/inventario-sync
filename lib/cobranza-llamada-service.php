@@ -178,6 +178,8 @@ function cobranza_no_contesto(
         }
     }
     if ($contacto === '') $contacto = 'cliente';
+    // ¿esta pulsacion agota el techo de la etapa? (restantes queda en 0)
+    $ultimoDelTecho = ((int)$permiso['restantes'] - 1) <= 0 && (int)$permiso['restantes'] > 0;
     $campos = [
         'OWNER_TYPE_ID' => 2,
         'OWNER_ID'      => $dealId,
@@ -188,7 +190,15 @@ function cobranza_no_contesto(
         // la marca: esta actividad ES el registro de una llamada hecha
         'ORIGIN_ID'     => $cfg['marca_llamada_hecha'],
         'SUBJECT'       => 'Llamada saliente ' . $contacto,
-        'COMPLETED'     => 'N',
+        // 🔴 EL ULTIMO INTENTO NO PUEDE QUEDAR COLGADO.
+        // La actividad que crea el boton es dos cosas: el registro del intento que se
+        // acaba de hacer Y la cita del proximo. Cuando ESTA pulsacion agota el techo de
+        // la etapa no hay proximo: el boton se va a negar. Si naciera abierta, quedaria
+        // en la agenda de la asesora una llamada pendiente que NO puede hacer, para
+        // siempre, hasta que el deal cambie de etapa.
+        // Pregunta del usuario que lo destapo: "¿y quién cierra el tres?".
+        // Asi que en el ultimo intento nace CERRADA: registra la llamada y no deja cita.
+        'COMPLETED'     => $ultimoDelTecho ? 'Y' : 'N',
         'RESPONSIBLE_ID'=> cobranza_responsable($deal, $userId, $duenoCerrada),
         'START_TIME'    => $proximo->format(DateTimeInterface::ATOM),
         'END_TIME'      => $proximo->modify('+1 hour')->format(DateTimeInterface::ATOM),
@@ -197,7 +207,9 @@ function cobranza_no_contesto(
         'NOTIFY_TYPE'   => 1,
         'NOTIFY_VALUE'  => 15,
         'DESCRIPTION_TYPE' => 1,
-        'DESCRIPTION'   => 'No contestó. Reintento automático a +2 días hábiles (protocolo de cobranzas).',
+        'DESCRIPTION'   => $ultimoDelTecho
+            ? 'No contestó. ÚLTIMO intento de la escalera de esta etapa: se registra la llamada y no se agenda otra (techo alcanzado).'
+            : 'No contestó. Reintento automático a +2 días hábiles (protocolo de cobranzas).',
     ];
     if ($contactoId > 0 && $tel !== '') {
         $campos['COMMUNICATIONS'] = [[

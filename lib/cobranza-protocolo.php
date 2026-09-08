@@ -98,6 +98,9 @@ function cobranza_config(): array {
         // Las llamadas que el cron crea para el ciclo NO llevan la marca: esas todavia
         // no se hicieron, y contarlas seria inventar gestion que no ocurrio.
         'marca_llamada_hecha' => 'GALJOSA_LLAMADA',
+        // La marca del RECORDATORIO que agenda el sistema al entrar a una etapa de
+        // mora. Tiene que coincidir con LLC_MARCA_RECORD de lib_llamadas_cob.php.
+        'marca_recordatorio'  => 'GALJOSA_RECORDATORIO',
         // Ab. Jose Barek, Jefe del Area Legal (verificado por user.search el 7-sep-2026).
         // En ABOGADO el 2o contacto del primer mes es suyo, y desde el 2o mes todos.
         'abogado_user_id' => 8007,
@@ -108,6 +111,27 @@ function cobranza_config(): array {
         'gestion_sin_gestionar'  => 2111,
         'gestion_pacto_incumpl'  => 2117,
     ];
+}
+
+/**
+ * ¿Esta actividad es el RECORDATORIO que agenda el sistema, y no una llamada?
+ *
+ * 🔴 REGLA DEL USUARIO (8-sep-2026): "se planifica una actividad, es un tipo de
+ * recordatorio para las asesoras... no es una llamada verdadera. Digamos que el
+ * recordatorio es el cero".
+ *
+ * MEDIDO en el deal de prueba ANTES de esto, en 1 MES VENCIDO (tope 3):
+ *   recordatorio + pulsacion 1 + pulsacion 2  =  3 intentos  ->  TECHO
+ * La tercera pulsacion salia "tope_de_etapa" con solo DOS llamadas hechas: el
+ * recordatorio se comia un intento de los tres que tiene la asesora. El conteo del
+ * boton (este archivo, en EasyPanel) es distinto del de los campos (lib_llamadas_cob
+ * en SiteGround), asi que arreglar uno no arreglaba el otro.
+ */
+function cobranza_es_recordatorio(array $a): bool {
+    $cfg = cobranza_config();
+    if ((string)($a['ORIGIN_ID'] ?? '') === (string)($cfg['marca_recordatorio'] ?? '')) return true;
+    $s = mb_strtoupper((string)($a['SUBJECT'] ?? ''), 'UTF-8');
+    return str_contains($s, '(PROTOCOLO)');
 }
 
 /**
@@ -248,6 +272,12 @@ function cobranza_calcular_protocolo(
         $selloMovil = str_starts_with($originId, 'VI_externalCall')
             || str_starts_with($subject, 'App móvil ·');
         if ($selloMovil && !$esContestada($subject)) continue;
+
+        // 🔴 EL RECORDATORIO ES EL CERO: no es un intento y NO consume techo.
+        // Sin esto, en 1 MES VENCIDO (tope 3) el recordatorio + 2 pulsaciones daban
+        // 3 y la TERCERA llamada se rechazaba por "tope_de_etapa" -- la asesora
+        // perdia un intento de cada tres. Medido en el deal de prueba el 8-sep-2026.
+        if (cobranza_es_recordatorio($a)) continue;
 
         $creada = (string)($a['CREATED'] ?? '');
         $creadaTs = $creada !== '' ? strtotime($creada) : false;

@@ -311,3 +311,48 @@ $bx = cob_fake_bx(['ID'=>77,'STAGE_ID'=>'C48:UC_VXD8VQ','MOVED_TIME'=>'2026-09-0
 $r = cobranza_no_contesto(['dealId'=>77,'bitrixUserId'=>42], $bx, $ahora);
 test_same('pacto_vigente', $r['motivo'], 'PROMESA DE PAGO tambien deja el deal en silencio');
 test_same('PROMESA DE PAGO', $r['pactoAsunto'], 'y se nombra el acuerdo');
+
+// ══ EL RECORDATORIO ES EL CERO: no consume techo (8-sep-2026) ══
+// Medido en el deal de prueba: en 1 MES VENCIDO (tope 3), recordatorio + 2
+// pulsaciones daban 3 intentos y la TERCERA llamada se rechazaba por techo. La
+// asesora perdia un intento de cada tres.
+function cob_rec(int $id, string $created, string $completed = 'N'): array {
+    return ['ID'=>$id,'TYPE_ID'=>2,'DIRECTION'=>2,'SUBJECT'=>'Llamada de cobranzas (protocolo)',
+            'CREATED'=>$created,'COMPLETED'=>$completed,'ORIGIN_ID'=>'GALJOSA_RECORDATORIO',
+            'DEADLINE'=>''];
+}
+function cob_puls(int $id, string $created, string $completed = 'Y'): array {
+    return ['ID'=>$id,'TYPE_ID'=>2,'DIRECTION'=>2,'SUBJECT'=>'Llamada saliente Juan',
+            'CREATED'=>$created,'COMPLETED'=>$completed,'ORIGIN_ID'=>'GALJOSA_LLAMADA','DEADLINE'=>''];
+}
+test_same(true,  cobranza_es_recordatorio(cob_rec(1,'2026-09-01T09:00:00-05:00')), 'por la marca');
+test_same(true,  cobranza_es_recordatorio(['SUBJECT'=>'Llamada del area legal (protocolo)','ORIGIN_ID'=>'']),
+    'y por el asunto, para los que ya existian');
+test_same(false, cobranza_es_recordatorio(cob_puls(2,'2026-09-01T09:00:00-05:00')), 'una pulsacion no es recordatorio');
+
+// 1 MES VENCIDO, tope 3: recordatorio + 2 pulsaciones -> la TERCERA tiene que pasar
+$log = [];
+$hist = [cob_rec(10,'2026-08-30T09:00:00-05:00','Y'),
+         cob_puls(11,'2026-09-01T09:00:00-05:00'),
+         cob_puls(12,'2026-09-02T09:00:00-05:00')];
+$bx = cob_fake_bx(['ID'=>78,'STAGE_ID'=>'C48:UC_1WHC5Q'], $hist, $log);
+$r = cobranza_no_contesto(['dealId'=>78,'bitrixUserId'=>42,'contactName'=>'Juan'], $bx, $ahora);
+test_same('procesado', $r['status'], '🔴 la 3a llamada pasa: el recordatorio ya no come techo');
+test_same(3, $r['intentos'], 'y son 3 intentos, no 4');
+test_same(0, $r['restantes'], 'con esta se agota el techo de la etapa');
+
+// 🔴 y ESA, la del techo, nace CERRADA: no deja cita que nadie pueda hacer
+$add = null;
+foreach ($log as $c) if ($c['m'] === 'crm.activity.add') $add = $c['p']['fields'];
+test_same('Y', $add['COMPLETED'], '🔴 el ULTIMO intento nace CERRADA: "¿quién cierra el tres?"');
+test_same(true, str_contains((string)$add['DESCRIPTION'], 'ÚLTIMO intento'), 'y la descripcion lo dice');
+
+// una pulsacion que NO agota el techo sigue naciendo abierta (es la cita del proximo)
+$log = [];
+$bx = cob_fake_bx(['ID'=>79,'STAGE_ID'=>'C48:UC_1WHC5Q'], [cob_rec(20,'2026-08-30T09:00:00-05:00','Y')], $log);
+$r = cobranza_no_contesto(['dealId'=>79,'bitrixUserId'=>42,'contactName'=>'Juan'], $bx, $ahora);
+test_same(1, $r['intentos'], 'con solo el recordatorio, esta es la PRIMERA llamada');
+test_same(2, $r['restantes'], 'y quedan 2');
+$add = null;
+foreach ($log as $c) if ($c['m'] === 'crm.activity.add') $add = $c['p']['fields'];
+test_same('N', $add['COMPLETED'], 'esta si nace abierta: es la cita del proximo intento');
