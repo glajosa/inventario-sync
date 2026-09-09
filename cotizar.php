@@ -697,6 +697,25 @@ $hoy  = new DateTimeImmutable('now');
              value="<?= $precioEditado ? h(number_format($pvp, 2, '.', '')) : '' ?>"
              placeholder="<?= h(number_format($pvpInventario, 2, '.', '')) ?> (del inventario)"
              title="Precio de venta de la unidad. Si lo dejas vacío se usa el del inventario (<?= h(cot_money($pvpInventario)) ?>). Todo el plan se recalcula sobre este número."></div>
+    <?php if ($suites >= 2 && !$separadas): ?>
+    <?php /* AGREGAR PARQUEO. La misma palanca `sinparq` de siempre, pero EN POSITIVO y
+             pegada al precio, que es donde el vendedor la necesita: en una fusion de 2+
+             suites se perdona UN parqueo (-20.000) porque el segundo no es obligatorio,
+             y si el cliente SI lo quiere hay que volver a sumarlo. Estaba al final del
+             formulario y en negativo ("una unidad sin parqueo"), que es al reves de como
+             lo piensa quien vende: el no quita un descuento, AGREGA un parqueo.
+             El hidden en 1 va delante: un checkbox desmarcado no se envia, asi que sin
+             el no habria forma de decir "no lo agregues" y el descuento normal
+             (sinparq=1) se perderia. Marcar la casilla manda sinparq=0 = sin perdon. */ ?>
+    <div class="col2">
+      <label class="chk-linea"
+             title="En una fusión de 2 o más suites el segundo parqueo no es obligatorio, así que se perdona uno (−<?= h(cot_money((float)COT_PARQUEO)) ?>). Si el cliente sí lo compra, marcá esto y los <?= h(cot_money((float)COT_PARQUEO)) ?> vuelven al precio.">
+        <input type="hidden" name="sinparq" value="1">
+        <input type="checkbox" name="sinparq" value="0" <?= $sinParqueo ? '' : 'checked' ?>>
+        Agregar parqueo <b>(+<?= h(cot_money((float)COT_PARQUEO)) ?>)</b>
+      </label>
+    </div>
+    <?php endif; ?>
     <div><label>Cuotas<?= !empty($plan['plazoFijo']) ? ' · fijas' : '' ?></label>
       <input type="number" name="n" min="<?= !empty($modelo['inmediata']) ? 0 : 1 ?>" max="<?= (int)($plan['plazoMax'] ?? 120) ?>" value="<?= (int)$plan['cuotas'] ?>"
              <?= !empty($plan['plazoFijo']) ? 'readonly' : '' ?>
@@ -941,19 +960,10 @@ $hoy  = new DateTimeImmutable('now');
       </label>
     </div>
     <?php endif; ?>
-    <?php if ($suites >= 2 && !$separadas): ?>
-    <!-- Solo aparece con 2+ suites de Noral Plaza: es el único caso donde la regla existe. -->
-    <div class="col2" style="align-self:center">
-      <label class="chk-linea">
-        <!-- Va un hidden en 0 delante: un checkbox desmarcado NO se envia, asi que sin
-             esto el formulario no tendria como decir "apagalo" y el descuento seria
-             imposible de quitar. -->
-        <input type="hidden" name="sinparq" value="0">
-        <input type="checkbox" name="sinparq" value="1" <?= $sinParqueo ? 'checked' : '' ?>>
-        Una unidad sin parqueo <b>(−<?= h(cot_money((float)COT_PARQUEO)) ?>)</b>
-      </label>
-    </div>
-    <?php endif; ?>
+    <?php /* La casilla del parqueo se MUDO arriba, pegada al precio del activo, y se dio
+             vuelta a "Agregar parqueo (+20.000)". No puede quedar tambien aca: dos
+             controles del mismo `sinparq` en un formulario se pelean -- gana el ultimo
+             que el navegador serialice, y el vendedor ve una marca que no manda. */ ?>
     <button class="ir" type="submit">Recalcular</button>
   </form>
 </div>
@@ -1183,6 +1193,14 @@ $hoy  = new DateTimeImmutable('now');
       cada una lleva su parqueo y <b>no se descuentan los
       <?= h(cot_money((float)COT_PARQUEO)) ?></b>. Para que aplique, hay que marcarlas
       como fusión en el campo Inventario del negocio.</div>
+  <?php endif; ?>
+  <?php if ($suites >= 2 && !$separadas && !$sinParqueo): ?>
+    <?php /* Mismo motivo que el aviso de "separadas": el asesor mira el precio, no la
+             casilla, y sin esta linea ve $20.000 mas y cree que la pantalla se
+             equivoco. La clase `aviso` no se imprime, asi que el cliente no la ve. */ ?>
+    <div class="aviso">Se <b>agregó el parqueo</b>: el precio incluye los
+      <?= h(cot_money((float)COT_PARQUEO)) ?> del segundo parqueo. Si el cliente no lo
+      compra, desmarcá <b>Agregar parqueo</b> y se vuelven a descontar.</div>
   <?php endif; ?>
   <div class="precio"><span>Precio final</span><span><?= h(cot_money($plan['valor'])) ?></span></div>
   <div class="legal"><span>Valores legales promesa C/V</span><span><?= h(cot_money((float)$plan['legal'])) ?></span></div>
