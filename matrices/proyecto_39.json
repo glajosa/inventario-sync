@@ -357,7 +357,7 @@
         "M": null,
         "E1": 135000,
         "E2": 137000,
-        "E3": null
+        "E3": 139000
       },
       "PA": {
         "M": 125850,
@@ -432,6 +432,10 @@
     "del edificio esta sin definir o no aplica."
   ],
   "overrides_unidad": {
+    "I-1-1": {
+      "categoria": "E3",
+      "nota": "El director lo declaro ESQUINERO 3 el 09-sep-2026. Va por unidad y NO en `posiciones.I` a proposito: ese mapa es por (edificio, posicion) y no por piso, asi que cambiarlo ahi habria movido tambien I-2-1, I-3-1 y I-4-1, que nadie pidio. Sin `sigue_a` porque ningun grupo tiene 139.000 en PB/E3: el numero va en `precios.I.PB.E3`, que con este override alcanza EXACTAMENTE a esta unidad."
+    },
     "C-2-8": {
       "categoria": "E2",
       "sigue_a": "D",
