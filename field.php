@@ -747,6 +747,16 @@ foreach ($elegidos as $id) {
     for (var k in PAREJA) if (PAREJA[k] === cod) out.push(k);
     return out;
   }
+  /** Deja la fila donde estaba a la vista despues de que la lista cambie de alto.
+   *  Se usa scrollIntoView y no guardar/restaurar scrollTop a proposito: al ocultarse
+   *  los botones de cada fila las alturas CAMBIAN, asi que el scrollTop viejo ya no
+   *  apunta al mismo sitio. La referencia buena es la fila, no el numero de pixeles. */
+  function mantenerALaVista(fila){
+    if (!fila || !fila.scrollIntoView) return;
+    try { fila.scrollIntoView({block: 'nearest', inline: 'nearest'}); }
+    catch (e) { fila.scrollIntoView(false); }   // navegadores viejos: sin opciones
+  }
+
   /** De codigo a id de fila, dentro del proyecto que se esta viendo. */
   function idDeCodigo(cod){
     var f = R.querySelector('.gu-fila[data-cod-txt="' + cod + '"]');
@@ -1319,6 +1329,12 @@ foreach ($elegidos as $id) {
       // conteo normal y luego llama a pintarCotSel, así que al desmarcar la
       // última el pie vuelve a su texto en vez de quedarse en "1 marcada".
       filtrar();
+      /* 🔴 Y devolver la fila a la vista. Al marcar la PRIMERA, `gu-marcando` esconde
+         el boton "Cotizar" de CADA fila: todas se encogen, el contenido de la lista
+         mide menos y el navegador sube el scroll solo. El asesor bajaba, elegia una
+         unidad y la lista se le iba al principio -- perdia donde estaba.
+         `block:'nearest'` y no `center`: si la fila ya se ve, no mueve nada. */
+      mantenerALaVista(f);
       return;
     }
     if (f.dataset.libre !== '1') return;          // ocupada: no seleccionable
@@ -1327,6 +1343,9 @@ foreach ($elegidos as $id) {
     val.value = sel.join(',');
     marcarFila(id, false);          // queda tomada por este deal
     pintar(); pintarElegidas(); filtrar(); ajustarIframe(); guardar();
+    // Elegir tambien reacomoda la lista (la unidad sale del listado y entra a
+    // "Elegidas"): se mantiene la vista donde estaba el dedo.
+    mantenerALaVista(f);
   });
 
   document.addEventListener('click', function(){ abrirMenu(false); });

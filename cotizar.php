@@ -287,7 +287,28 @@ foreach (['cuotasPct', 'extraPct'] as $k)
 // falta prenderlo: con fusion viene puesto.
 $sinParqueo = !$separadas && (($_GET['sinparq'] ?? '1') !== '0');
 $dctoParq   = cot_descuento_parqueo($suites, $sinParqueo);
-$pvpFinal   = max(0.0, $pvp - $dctoParq);
+
+/* AGREGAR PARQUEO: un sumando PROPIO, no la cancelacion del descuento.
+ *
+ * 🔴 POR QUE SE SEPARO. El descuento de arriba solo existe en las SUITES de Noral
+ * Plaza. En los LOCALES fusionados no hay descuento que cancelar: su precio ya viene
+ * guardado como UN numero por el par -- A-1-13 vale 229.181 por las dos y A-1-14 va
+ * vacia. O sea que en locales no habia nada que "devolver", y el vendedor igual
+ * necesita poder sumar el parqueo que el cliente SI compra.
+ *
+ * Modelandolo como sumando aparte los dos casos salen bien y con UN solo control:
+ *   suites  sin marcar:  suma - 20.000            (el perdon de siempre)
+ *   suites  marcado:     suma - 20.000 + 20.000 = suma   (identico a como estaba)
+ *   locales sin marcar:  suma
+ *   locales marcado:     suma + 20.000
+ *
+ * `sinparq` queda como estaba y no lo maneja la pantalla: sigue siendo la palanca
+ * interna del perdon, con su default puesto. La casilla mueve `addparq`, que es otra
+ * cosa. Mezclarlas en un solo parametro daba +40.000 en suites. */
+$addParqueo = $fusion && (($_GET['addparq'] ?? '') === '1');
+$addParq    = $addParqueo ? (float)COT_PARQUEO : 0.0;
+
+$pvpFinal   = max(0.0, $pvp - $dctoParq + $addParq);
 
 // UNIFICAR: por defecto las unidades van en UN solo plan (es como Galjosa vende una
 // fusión y como lo trata cobranzas). Apagarlo saca un plan POR UNIDAD, útil para que
@@ -697,21 +718,18 @@ $hoy  = new DateTimeImmutable('now');
              value="<?= $precioEditado ? h(number_format($pvp, 2, '.', '')) : '' ?>"
              placeholder="<?= h(number_format($pvpInventario, 2, '.', '')) ?> (del inventario)"
              title="Precio de venta de la unidad. Si lo dejas vacío se usa el del inventario (<?= h(cot_money($pvpInventario)) ?>). Todo el plan se recalcula sobre este número."></div>
-    <?php if ($suites >= 2 && !$separadas): ?>
-    <?php /* AGREGAR PARQUEO. La misma palanca `sinparq` de siempre, pero EN POSITIVO y
-             pegada al precio, que es donde el vendedor la necesita: en una fusion de 2+
-             suites se perdona UN parqueo (-20.000) porque el segundo no es obligatorio,
-             y si el cliente SI lo quiere hay que volver a sumarlo. Estaba al final del
-             formulario y en negativo ("una unidad sin parqueo"), que es al reves de como
-             lo piensa quien vende: el no quita un descuento, AGREGA un parqueo.
-             El hidden en 1 va delante: un checkbox desmarcado no se envia, asi que sin
-             el no habria forma de decir "no lo agregues" y el descuento normal
-             (sinparq=1) se perderia. Marcar la casilla manda sinparq=0 = sin perdon. */ ?>
+    <?php if ($fusion && !$separadas): ?>
+    <?php /* AGREGAR PARQUEO: el cliente compra un parqueo mas y se SUMA al precio.
+             Va pegada al precio porque ahi la necesita el vendedor, y en POSITIVO
+             porque asi lo piensa: no quita un descuento, agrega un parqueo.
+             Sale en CUALQUIER fusion, no solo suites. En suites el motor ya perdona un
+             parqueo (-20.000) y esto lo devuelve encima; en LOCALES fusionados no hay
+             descuento que cancelar -- su precio ya viene guardado como un solo numero
+             por el par -- y aca simplemente suma. Ver el comentario del calculo. */ ?>
     <div class="col2">
       <label class="chk-linea"
-             title="En una fusión de 2 o más suites el segundo parqueo no es obligatorio, así que se perdona uno (−<?= h(cot_money((float)COT_PARQUEO)) ?>). Si el cliente sí lo compra, marcá esto y los <?= h(cot_money((float)COT_PARQUEO)) ?> vuelven al precio.">
-        <input type="hidden" name="sinparq" value="1">
-        <input type="checkbox" name="sinparq" value="0" <?= $sinParqueo ? '' : 'checked' ?>>
+             title="Si el cliente compra un parqueo mas, marcá esto y se suman <?= h(cot_money((float)COT_PARQUEO)) ?> al precio. En las suites de Noral Plaza el sistema ya perdona un parqueo en las fusiones; esto lo vuelve a cobrar.">
+        <input type="checkbox" name="addparq" value="1" <?= $addParqueo ? 'checked' : '' ?>>
         Agregar parqueo <b>(+<?= h(cot_money((float)COT_PARQUEO)) ?>)</b>
       </label>
     </div>
@@ -1194,7 +1212,7 @@ $hoy  = new DateTimeImmutable('now');
       <?= h(cot_money((float)COT_PARQUEO)) ?></b>. Para que aplique, hay que marcarlas
       como fusión en el campo Inventario del negocio.</div>
   <?php endif; ?>
-  <?php if ($suites >= 2 && !$separadas && !$sinParqueo): ?>
+  <?php if ($addParqueo): ?>
     <?php /* Mismo motivo que el aviso de "separadas": el asesor mira el precio, no la
              casilla, y sin esta linea ve $20.000 mas y cree que la pantalla se
              equivoco. La clase `aviso` no se imprime, asi que el cliente no la ve. */ ?>
