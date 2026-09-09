@@ -74,9 +74,13 @@ function panel_endpoint_dir(): string {
 
 function panel_endpoint_cleanup(string $directory): void {
     unset($GLOBALS['panel_endpoint_store']);
-    foreach (['llamada-resultados.sqlite', 'llamada-resultados.sqlite-shm', 'llamada-resultados.sqlite-wal'] as $name) {
-        $path = $directory . '/' . $name;
-        if (is_file($path)) unlink($path);
+    foreach (['llamada-resultados.sqlite', 'cola-no-contesto.sqlite'] as $base) {
+        // ⭐ tambien los -wal y -shm: con WAL encendido quedan tres archivos, y
+        // si uno sobrevive el rmdir avisa "Directory not empty" y nadie lo lee
+        foreach ([$base, $base . '-shm', $base . '-wal'] as $name) {
+            $path = $directory . '/' . $name;
+            if (is_file($path)) unlink($path);
+        }
     }
     if (is_dir($directory)) rmdir($directory);
 }
@@ -271,8 +275,21 @@ try {
     $response = llamada_no_contesto_panel_http(
         'POST', panel_endpoint_body(), panel_endpoint_env($directory), $currentUser, $fake, $now
     );
-    test_same(503, $response['status'], 'Bitrix write failure stays retryable');
+    /* 🔴 ESTA PRUEBA CAMBIO A PROPOSITO EL 9-SEP-2026.
+     *
+     * Antes exigia 503 ("que el vendedor reintente"). Medido ese dia: 13
+     * pulsaciones quedaron en `processing` y NADIE las volvio a tocar nunca
+     * —4 de ese mismo dia—. El reintento humano no existe.
+     *
+     * Ahora la pulsacion se GUARDA con su hora y bin/drenar-no-contesto.php la
+     * crea cuando el portal respira. Lo que NO cambia es la mitad segura: si la
+     * escritura fallo, no se inventa ninguna actividad. */
+    test_same(200, $response['status'], 'Bitrix saturado ya no rebota al vendedor');
+    test_same('encolada', (string)($response['body']['status'] ?? ''), 'la pulsacion queda encolada');
     test_same(0, count(array_filter($fake->calls, fn(array $call): bool => $call[0] === 'crm.activity.add')), 'failed pending update creates no future activity');
+    $colaDb = cola_nc_db($directory);
+    test_same(1, cola_nc_conteo($colaDb)['encolada'], 'y quedo UNA fila esperando en la cola');
+    unset($colaDb);
 } finally {
     panel_endpoint_cleanup($directory);
 }

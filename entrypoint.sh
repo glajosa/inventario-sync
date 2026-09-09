@@ -13,6 +13,8 @@ export BITRIX_WEBHOOK="${BITRIX_WEBHOOK}"
 export OUTBOUND_TOKEN="${OUTBOUND_TOKEN}"
 export NORAL_URL="${NORAL_URL}"
 export NORAL_SYNC_TOKEN="${NORAL_SYNC_TOKEN}"
+# la etapa de "no interesado" la necesita el drenador de la cola del boton
+export NO_INTEREST_STAGE_ID="${NO_INTEREST_STAGE_ID}"
 EOF
 chmod 600 /data/env.sh
 
@@ -73,6 +75,30 @@ sleep 1
     . /data/env.sh 2>/dev/null || true
     php /var/www/html/conciliar-cron.php >> /data/cron.log 2>&1 || true
     sleep 300
+  done
+) &
+
+# ── DRENAR LA COLA DEL BOTON "NO CONTESTO" ──────────────────────────────────
+# Cuando Bitrix se satura, la pulsacion del vendedor se guarda en una cola en vez
+# de rebotarle un error. Este bucle la reproduce cada 2 minutos, con la HORA EN QUE
+# EL VENDEDOR APRETO —no la de ahora—, hasta que Bitrix responda.
+#
+# 🔴 Va en un bucle propio y NO en /etc/cron.d: medido en este mismo contenedor,
+# cron esta vivo, el archivo esta bien, y los trabajos no corren. Una tarea de cron
+# aca es una tarea que no pasa. (Ver el comentario del reloj propio de arriba.)
+#
+# ⚠ Cada 2 min y no cada 30 s: el arriendo que deja un intento fallido dura 60 s, y
+# mientras vive el servicio contesta "en curso" sin escribir. Insistir mas seguido
+# solo empuja mas al portal, que es justo lo que hay que evitar.
+#
+# Correr de mas no duplica: la cola guarda una fila por pulsacion (request_id) y el
+# servicio es idempotente.
+(
+  sleep 60
+  while true; do
+    . /data/env.sh 2>/dev/null || true
+    php /var/www/html/bin/drenar-no-contesto.php --lote=10 >> /data/cron.log 2>&1 || true
+    sleep 120
   done
 ) &
 

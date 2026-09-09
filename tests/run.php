@@ -12,6 +12,7 @@ require_once __DIR__ . '/test-llamada-ciclos.php';
 require_once __DIR__ . '/test-llamada-resultado-service.php';
 require_once __DIR__ . '/test-resultado-endpoint.php';
 require_once __DIR__ . '/test-no-contesto-panel-endpoint.php';
+require_once __DIR__ . '/test-cola-no-contesto.php';
 require_once __DIR__ . '/test-bot-recommendation-contract.php';
 require_once __DIR__ . '/test-bot-recommendation-service.php';
 require_once __DIR__ . '/test-bot-recommendation-endpoint.php';

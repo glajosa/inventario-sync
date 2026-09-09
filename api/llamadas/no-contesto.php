@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__, 2);
 require_once $root . '/lib/llamada-resultado-service.php';
+require_once $root . '/lib/cola-no-contesto.php';
 
 const LLAMADA_PANEL_MAX_BODY_BYTES = 65_536;
 
@@ -50,7 +51,10 @@ function llamada_no_contesto_panel_http(
         }
 
         $store = new LlamadaIdempotenciaStore($dataDir);
-        $result = llamada_procesar_resultado([
+        /* ⭐ EL PEDIDO SE GUARDA EN UNA VARIABLE, no se arma dentro de la llamada.
+         * Hace falta tenerlo a mano para poder ENCOLARLO si Bitrix falla: la cola
+         * reproduce la pulsación entera, no un resumen. */
+        $pedido = [
             'callRequestId' => $decoded->requestId ?? null,
             'memberId' => 'panel-' . $bitrixUserId,
             'dealId' => $decoded->dealId ?? null,
@@ -60,7 +64,10 @@ function llamada_no_contesto_panel_http(
             'selectedPhone' => $decoded->selectedPhone ?? null,
             'nextActivityAt' => null,
             'comment' => $decoded->comment ?? '',
-        ], $bx, $store, new DateTimeImmutable('@' . $now), $noInterestStage, 'panel');
+        ];
+        $result = llamada_procesar_resultado(
+            $pedido, $bx, $store, new DateTimeImmutable('@' . $now), $noInterestStage, 'panel'
+        );
 
         $status = (string)($result['status'] ?? '');
         if ($status === 'processed' || $status === 'already_processed') {
@@ -78,29 +85,68 @@ function llamada_no_contesto_panel_http(
                 'reason' => (string)($result['reason'] ?? 'manual_review'),
             ]];
         }
+        /* ⭐⭐ SATURADO NO ES UN ERROR PARA EL VENDEDOR: SE ENCOLA.
+         *
+         * Antes esto devolvía 503 y el vendedor tenía que volver a aplastar. Y si
+         * no volvía, la pulsación moría: medido el 9-sep-2026, había 13
+         * operaciones en `processing` que NADIE retomó nunca —4 de ese mismo día—.
+         *
+         * Ahora la pulsación queda guardada con su hora y
+         * bin/drenar-no-contesto.php la crea cuando el portal respira. El
+         * vendedor recibe 200 y sigue trabajando. */
         if ($status === 'processing') {
-            return [
-                'status' => 503,
-                'headers' => ['Retry-After' => '1'],
-                'body' => [
-                    'status' => 'processing',
-                    'requestId' => (string)$result['callRequestId'],
-                    'reason' => 'processing',
-                ],
-            ];
+            return llamada_no_contesto_panel_encolar(
+                $dataDir, $pedido, $now, $noInterestStage, 'processing'
+            );
         }
-        return llamada_no_contesto_panel_error(503, 'bitrix_unavailable');
+        return llamada_no_contesto_panel_encolar(
+            $dataDir, $pedido, $now, $noInterestStage, 'estado ' . ($status !== '' ? $status : 'desconocido')
+        );
     } catch (JsonException | LlamadaValidationError) {
+        // un pedido mal formado NO se encola: reproducirlo fallaría igual
         return llamada_no_contesto_panel_error(400, 'invalid_request');
     } catch (LlamadaForbidden) {
+        // sin permiso tampoco: la cola no consigue permisos que no existen
         return llamada_no_contesto_panel_error(403, 'forbidden');
     } catch (LlamadaIdempotenciaConflict) {
         return llamada_no_contesto_panel_error(409, 'conflict');
-    } catch (LlamadaBitrixError) {
-        return llamada_no_contesto_panel_error(503, 'bitrix_unavailable');
+    } catch (LlamadaBitrixError $error) {
+        return llamada_no_contesto_panel_encolar(
+            $dataDir, $pedido ?? [], $now, $noInterestStage, 'bitrix: ' . $error->getMessage()
+        );
+    } catch (Throwable $error) {
+        return llamada_no_contesto_panel_encolar(
+            $dataDir, $pedido ?? [], $now, $noInterestStage, get_class($error) . ': ' . $error->getMessage()
+        );
+    }
+}
+
+/**
+ * Guarda la pulsación y le responde al vendedor que quedó registrada.
+ *
+ * ⚠ SI LA COLA MISMA FALLA, se vuelve al 503 de antes. Decirle "encolada" sin
+ * haberla guardado seria la peor de las mentiras: el vendedor se va tranquilo y
+ * la llamada no existe en ninguna parte.
+ */
+function llamada_no_contesto_panel_encolar(
+    string $dataDir, array $pedido, int $now, string $stage, string $motivo
+): array {
+    $requestId = (string)($pedido['callRequestId'] ?? '');
+    if ($requestId === '') return llamada_no_contesto_panel_error(503, 'bitrix_unavailable');
+    try {
+        $db = cola_nc_db($dataDir);
+        if (!cola_nc_encolar($db, $requestId, $pedido, $now, 'panel', $stage, $motivo)) {
+            return llamada_no_contesto_panel_error(503, 'bitrix_unavailable');
+        }
     } catch (Throwable) {
         return llamada_no_contesto_panel_error(503, 'bitrix_unavailable');
     }
+    return ['status' => 200, 'body' => [
+        'status' => 'encolada',
+        'requestId' => $requestId,
+        'reason' => 'portal_saturado',
+        'mensaje' => 'Queda registrada. Se crea sola en cuanto Bitrix responda; no hace falta volver a aplastar.',
+    ]];
 }
 
 function llamada_no_contesto_panel_transport(string $url, array $params): array {
