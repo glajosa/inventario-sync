@@ -5,6 +5,17 @@
 .worktrees
 .superpowers
 docs
+
+# 🔴 bin/ NO ENTRA A LA IMAGEN. Es a proposito: ahi viven herramientas que se corren
+# desde el Mac (bin/desplegar.sh) y que Apache no debe servir como texto.
+#
+# CONSECUENCIA que ya costo tiempo a otra sesion el 09-sep-2026: si escribis codigo
+# que tiene que CORRER DENTRO del contenedor -un drenador, un cron, un worker- NO va
+# en bin/. Ahi no existe. Va en la raiz del repo.
+#
+# Y el sintoma es traicionero: en el Mac funciona, las pruebas pasan, y recien al
+# desplegar el archivo no aparece. Lo detecta la huella (bin/ tambien esta fuera de
+# ella, en huella.php), pero solo si te fijas en que el archivo nuevo no cuenta.
 bin
 
 .env
