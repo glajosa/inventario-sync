@@ -2,6 +2,26 @@
 /**
  * feriados.php — días NO hábiles de Ecuador, para no agendar llamadas en ellos.
  * ---------------------------------------------------------------------------
+ * 🔴🔴 ESTE ARCHIVO TIENE UNA COPIA EN OTRO SERVIDOR. NO ES EL ÚNICO.
+ *
+ * El 09-sep-2026 cobranzas lo copió LITERAL a SiteGround como
+ * `public_html/cobranzaphp/lib_feriados.php` (con guardas `function_exists`),
+ * porque los dos servidores no comparten disco. O sea: si agregás un puente a
+ * `FER_EXTRA` acá y no vuelves a copiar el archivo allá, **cobranzas sigue
+ * agendando llamadas ese día** y nadie se entera — el error no revienta, miente.
+ *
+ * Es la misma enfermedad que costó medio día con la fecha de entrega de Noral
+ * Plaza, que vivía en TRES copias y dos estaban viejas. Ver
+ * `reference_fecha_entrega_dos_motores` en el cerebro.
+ *
+ * Al cambiar los feriados hay que hacer las DOS cosas:
+ *   1. editar acá y desplegar `inventario-sync`
+ *   2. copiar este archivo a SiteGround como `cobranzaphp/lib_feriados.php`
+ *
+ * `tests/test-credito-protocolo.php` tiene un candado con la huella de la lista:
+ * si cambia, la prueba se pone roja y te recuerda el paso 2. No es un permiso
+ * denegado — es un recordatorio, y se actualiza la huella a propósito.
+ * ---------------------------------------------------------------------------
  * ⚠ POR QUÉ IMPORTA Y NO ES COSMÉTICO.
  * El panel de "No contestó" fija la fecha de la próxima llamada según la
  * escalera. Si esa fecha cae sábado, domingo o feriado, el vendedor no va a

@@ -178,4 +178,23 @@ test_same(true, $habilesGastados <= $habiles,
 // el protocolo (llamar mas alla del techo de la etapa sin haberla cambiado).
 test_same(true, $habilesGastados < $habiles,
     "las 8 llamadas entran holgadas en los 2 meses (gastan $habilesGastados de $habiles)");
+/* ── CANDADO: los feriados viven en DOS servidores ────────────────────────────
+ * `feriados.php` se copio LITERAL a SiteGround el 09-sep-2026 como
+ * `cobranzaphp/lib_feriados.php`, porque los dos servidores no comparten disco.
+ * Si alguien agrega un puente a FER_EXTRA aca y no vuelve a copiar el archivo
+ * alla, cobranzas sigue agendando llamadas ese dia y NADIE se entera: el fallo
+ * no revienta, miente. Es la misma enfermedad que la fecha de entrega de Noral
+ * Plaza, que vivia en tres copias y dos estaban viejas.
+ *
+ * Esta prueba NO prohibe cambiar los feriados. Solo obliga a que el cambio sea
+ * deliberado: si la lista se mueve, se pone roja, se actualiza la huella de
+ * abajo Y SE COPIA EL ARCHIVO A SITEGROUND. Las dos cosas, no una.
+ */
+$FER_HUELLA_ESPERADA = '3837bd1ad92c000e';   // fer_lista(2026, 2028), 36 feriados
+$ferHuella = substr(hash('sha256', implode(',', fer_lista(2026, 2028))), 0, 16);
+test_same($FER_HUELLA_ESPERADA, $ferHuella,
+    "la lista de feriados 2026-2028 cambio: actualiza \$FER_HUELLA_ESPERADA aca Y "
+  . "copia feriados.php a SiteGround como cobranzaphp/lib_feriados.php -- si no, "
+  . "cobranzas va a seguir agendando llamadas en un dia que no se trabaja");
+
 echo "test-credito-protocolo (aritmetica del techo) OK\n";
