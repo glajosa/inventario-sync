@@ -97,7 +97,7 @@ sleep 1
   sleep 60
   while true; do
     . /data/env.sh 2>/dev/null || true
-    php /var/www/html/bin/drenar-no-contesto.php --lote=10 >> /data/cron.log 2>&1 || true
+    php /var/www/html/drenar-no-contesto.php --lote=10 >> /data/cron.log 2>&1 || true
     sleep 120
   done
 ) &

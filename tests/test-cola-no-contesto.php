@@ -251,9 +251,23 @@ function test_cola_no_contesto_enchufada(): void {
     test_same(true, (int)($m[1] ?? 0) >= 120,
         'entrypoint: espera >= 120 s (el arriendo dura 60; insistir mas rapido empuja al portal)');
 
-    // el archivo que el bucle invoca tiene que existir de verdad
-    test_same(true, is_file(__DIR__ . '/../bin/drenar-no-contesto.php'),
+    /* 🔴 EL ARCHIVO TIENE QUE ESTAR EN LA RUTA QUE EL BUCLE INVOCA, y esa ruta
+     * tiene que ENTRAR A LA IMAGEN.
+     *
+     * Lo escribi primero en bin/ y `bin` esta en .dockerignore (son las
+     * herramientas de despliegue, que a proposito no viajan). Dentro del
+     * contenedor el archivo no habria existido: el bucle lo llamaba cada 2
+     * minutos, fallaba en silencio, y la cola se llenaba sin que nadie la
+     * drenara. Se atrapo antes de desplegar, por leer .dockerignore. */
+    test_same(true, is_file(__DIR__ . '/../drenar-no-contesto.php'),
         'el drenador existe en la ruta que invoca el entrypoint');
+    test_same(false, is_file(__DIR__ . '/../bin/drenar-no-contesto.php'),
+        'el drenador NO vive en bin/ (bin esta en .dockerignore: no entra a la imagen)');
+    $ignore = (string)file_get_contents(__DIR__ . '/../.dockerignore');
+    test_same(false, in_array('drenar-no-contesto.php', array_map('trim', explode("\n", $ignore)), true),
+        'y su nombre no esta en .dockerignore');
+    test_same(true, str_contains($vivas, '/var/www/html/drenar-no-contesto.php'),
+        'el entrypoint lo invoca desde la raiz web');
 }
 
 test_cola_no_contesto();

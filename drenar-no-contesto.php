@@ -21,12 +21,16 @@
  * ⚠ SE DETIENE AL PRIMER FALLO DE BITRIX. Si el portal sigue saturado, insistir
  * con las otras nueve lo empuja más. Se espera al siguiente turno del cron.
  *
- * Uso:  php bin/drenar-no-contesto.php [--lote=10] [--seco]
+ * Uso:  php drenar-no-contesto.php [--lote=10] [--seco]
  */
 declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit("solo CLI\n"); }
 
-$root = dirname(__DIR__);
+/* ⚠ VIVE EN LA RAIZ, NO EN bin/.
+ * `bin` esta en .dockerignore (son herramientas de despliegue que no deben entrar
+ * a la imagen). Un trabajador puesto ahi NO existe dentro del contenedor: el bucle
+ * lo invocaria cada 2 minutos y fallaria en silencio para siempre. */
+$root = __DIR__;
 require_once $root . '/lib/llamada-resultado-service.php';
 require_once $root . '/lib/llamada-idempotencia.php';
 require_once $root . '/lib/cola-no-contesto.php';
