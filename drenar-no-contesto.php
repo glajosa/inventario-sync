@@ -76,6 +76,9 @@ $bx = static function (string $method, array $params) use ($webhook): array {
 };
 
 $db = cola_nc_db($dataDir);
+// las resueltas viejas se van: ahora toda pulsacion deja una fila
+$borradas = cola_nc_limpiar($db, 7);
+if ($borradas > 0) printf("limpieza: %d filas resueltas de mas de 7 dias\n", $borradas);
 $conteo = cola_nc_conteo($db);
 printf("cola: encoladas %d · hechas %d · fallidas %d\n",
     $conteo['encolada'], $conteo['hecha'], $conteo['fallida']);

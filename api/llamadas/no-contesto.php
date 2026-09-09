@@ -65,12 +65,31 @@ function llamada_no_contesto_panel_http(
             'nextActivityAt' => null,
             'comment' => $decoded->comment ?? '',
         ];
+        /* ⭐⭐ SE GUARDA ANTES DE INTENTAR, NO DESPUES DE FALLAR.
+         *
+         * 🔴 Por que: encolar en el `catch` solo cubre los fallos que se pueden
+         * atrapar. Si el proceso MUERE a mitad —Bitrix cuelga y se agota el tiempo
+         * de ejecucion, o se reinicia el contenedor con la peticion en vuelo— no
+         * corre ningun catch, y la pulsacion se pierde igual.
+         *
+         * Medido el 9-sep-2026: con la cola ya desplegada, una pulsacion de las
+         * 14:32 (uid 111820) quedo en `processing` sin tocar y NO estaba en la
+         * cola. El unico modo de que eso pase es que el proceso no llegara a
+         * ningun `catch`. Guardar primero lo cierra: la fila ya existe antes de
+         * que Bitrix pueda colgarse.
+         *
+         * Cuesta una escritura local por pulsacion (~2.000/dia, SQLite en disco)
+         * y se limpia sola: las `hecha` se borran a los 7 dias. */
+        llamada_no_contesto_panel_guardar_primero($dataDir, $pedido, $now, $noInterestStage);
+
         $result = llamada_procesar_resultado(
             $pedido, $bx, $store, new DateTimeImmutable('@' . $now), $noInterestStage, 'panel'
         );
 
         $status = (string)($result['status'] ?? '');
         if ($status === 'processed' || $status === 'already_processed') {
+            // salio por el camino rapido: la fila guardada ya no hace falta
+            llamada_no_contesto_panel_cerrar($dataDir, $pedido, 'hecha');
             return ['status' => 200, 'body' => [
                 'status' => $status,
                 'requestId' => (string)$result['callRequestId'],
@@ -79,6 +98,8 @@ function llamada_no_contesto_panel_http(
             ]];
         }
         if ($status === 'manual_review') {
+            // lo tiene que mirar una persona: reintentarlo 60 veces no lo arregla
+            llamada_no_contesto_panel_cerrar($dataDir, $pedido, 'revision manual');
             return ['status' => 422, 'body' => [
                 'status' => 'manual_review',
                 'requestId' => (string)$result['callRequestId'],
@@ -106,9 +127,12 @@ function llamada_no_contesto_panel_http(
         // un pedido mal formado NO se encola: reproducirlo fallaría igual
         return llamada_no_contesto_panel_error(400, 'invalid_request');
     } catch (LlamadaForbidden) {
-        // sin permiso tampoco: la cola no consigue permisos que no existen
+        // sin permiso: la cola no consigue permisos que no existen
+        if (isset($pedido)) llamada_no_contesto_panel_cerrar($dataDir, $pedido, 'sin permiso');
         return llamada_no_contesto_panel_error(403, 'forbidden');
     } catch (LlamadaIdempotenciaConflict) {
+        // otra pulsacion del mismo ciclo la tiene agarrada: esa es la que vale
+        if (isset($pedido)) llamada_no_contesto_panel_cerrar($dataDir, $pedido, 'hecha');
         return llamada_no_contesto_panel_error(409, 'conflict');
     } catch (LlamadaBitrixError $error) {
         return llamada_no_contesto_panel_encolar(
@@ -118,6 +142,43 @@ function llamada_no_contesto_panel_http(
         return llamada_no_contesto_panel_encolar(
             $dataDir, $pedido ?? [], $now, $noInterestStage, get_class($error) . ': ' . $error->getMessage()
         );
+    }
+}
+
+/**
+ * Deja la pulsación guardada ANTES de tocar Bitrix.
+ *
+ * Silencioso a propósito: si la cola no se puede abrir, el camino rápido tiene que
+ * seguir funcionando igual. Lo que no puede pasar es lo contrario —responderle
+ * "encolada" sin haberla guardado—, y de eso se encarga
+ * llamada_no_contesto_panel_encolar(), que sí verifica.
+ */
+function llamada_no_contesto_panel_guardar_primero(
+    string $dataDir, array $pedido, int $now, string $stage
+): void {
+    $requestId = (string)($pedido['callRequestId'] ?? '');
+    if ($requestId === '') return;
+    try {
+        cola_nc_encolar(cola_nc_db($dataDir), $requestId, $pedido, $now, 'panel', $stage,
+            'guardada antes de intentar');
+    } catch (Throwable) {
+        // se sigue: el catch de abajo la vuelve a intentar guardar si Bitrix falla
+    }
+}
+
+/**
+ * Cierra la fila guardada: `hecha` si ya se resolvió, o `fallida` si no tiene
+ * sentido reintentarla (sin permiso, revisión manual).
+ */
+function llamada_no_contesto_panel_cerrar(string $dataDir, array $pedido, string $motivo): void {
+    $requestId = (string)($pedido['callRequestId'] ?? '');
+    if ($requestId === '') return;
+    try {
+        $db = cola_nc_db($dataDir);
+        if ($motivo === 'hecha') cola_nc_hecha($db, $requestId);
+        else cola_nc_fallo($db, $requestId, $motivo, 1);
+    } catch (Throwable) {
+        // no se pierde nada: el drenador la vera y el servicio es idempotente
     }
 }
 

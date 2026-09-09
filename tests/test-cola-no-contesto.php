@@ -270,7 +270,63 @@ function test_cola_no_contesto_enchufada(): void {
         'el entrypoint lo invoca desde la raiz web');
 }
 
+/**
+ * ⭐⭐ LA FILA EXISTE ANTES DE QUE BITRIX CONTESTE.
+ *
+ * 🔴 Esta es la prueba que faltaba, y el hueco que tapa es real: el 9-sep-2026,
+ * con la cola YA desplegada, una pulsacion de las 14:32 (uid 111820) quedo en
+ * `processing` sin tocar y NO estaba en la cola. La unica forma es que el proceso
+ * muriera a mitad —Bitrix colgado, tiempo de ejecucion agotado— sin llegar a
+ * ningun `catch`. Encolar en el `catch` solo cubre los fallos que se atrapan.
+ *
+ * Se mide espiando desde DENTRO de la primera llamada a Bitrix: si en ese momento
+ * la fila ya esta guardada, entonces un corte de luz a mitad tampoco la pierde.
+ */
+function test_cola_no_contesto_guarda_antes_de_intentar(): void {
+    $dir = cola_nc_test_dir();
+    $fake = new PanelEndpointFakeBitrix();
+    $pulsada = (new DateTimeImmutable('2026-09-09 14:32:00', new DateTimeZone('America/Guayaquil')))->getTimestamp();
+
+    $filasAlPrimerContacto = -1;
+    $espia = function (string $metodo, array $params) use ($fake, $dir, &$filasAlPrimerContacto): array {
+        if ($filasAlPrimerContacto < 0) {
+            // primera vez que se toca Bitrix: ¿ya esta guardada la pulsacion?
+            $c = cola_nc_conteo(cola_nc_db($dir));
+            $filasAlPrimerContacto = $c['encolada'] + $c['hecha'] + $c['fallida'];
+        }
+        return $fake($metodo, $params);
+    };
+
+    $resp = llamada_no_contesto_panel_http(
+        'POST', panel_endpoint_body(), panel_endpoint_env($dir),
+        static fn(string $t): int => 42, $espia, $pulsada
+    );
+    test_same(200, (int)$resp['status'], 'guardar-primero: el camino rapido sigue funcionando');
+    test_same('processed', (string)($resp['body']['status'] ?? ''), 'guardar-primero: se proceso normal');
+    test_same(1, $filasAlPrimerContacto,
+        'guardar-primero: la pulsacion YA estaba guardada al primer contacto con Bitrix');
+
+    // y al salir bien, la fila queda cerrada: el drenador no la vuelve a hacer
+    $db = cola_nc_db($dir);
+    $c = cola_nc_conteo($db);
+    test_same(0, $c['encolada'], 'guardar-primero: al salir bien no queda esperando');
+    test_same(1, $c['hecha'], 'guardar-primero: queda marcada hecha');
+
+    // la limpieza borra las resueltas viejas y NO toca las fallidas
+    test_same(0, cola_nc_limpiar($db, 7), 'limpieza: una fila de hoy no se borra');
+    $db->exec('UPDATE cola_no_contesto SET creada = creada - 30*86400');
+    cola_nc_encolar($db, 'req-fallida', ['dealId' => 9], $pulsada, 'panel', 'C28:X', 'x');
+    cola_nc_fallo($db, 'req-fallida', 'sin permiso', 1);
+    $db->exec("UPDATE cola_no_contesto SET creada = creada - 30*86400 WHERE request_id = 'req-fallida'");
+    test_same(1, cola_nc_limpiar($db, 7), 'limpieza: borra UNA (la hecha vieja)');
+    test_same(1, cola_nc_conteo($db)['fallida'], 'limpieza: la fallida vieja se conserva para poder mirarla');
+
+    unset($db);
+    cola_nc_test_limpiar($dir);
+}
+
 test_cola_no_contesto();
 test_cola_no_contesto_se_hace_sola();
+test_cola_no_contesto_guarda_antes_de_intentar();
 test_cola_no_contesto_enchufada();
 echo "test-cola-no-contesto OK\n";

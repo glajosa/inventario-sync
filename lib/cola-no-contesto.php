@@ -217,3 +217,20 @@ function cola_nc_ec(int $ts): string {
         ->setTimezone(new DateTimeZone('America/Guayaquil'))
         ->format('Y-m-d H:i');
 }
+
+/**
+ * Borra las filas ya resueltas viejas.
+ *
+ * Ahora TODA pulsación deja una fila (se guarda antes de intentar), así que sin
+ * esto la libreta crecería para siempre: ~2.000 pulsaciones al día. Solo se borran
+ * las `hecha`: las `fallida` se quedan para poder mirarlas.
+ *
+ * @return int filas borradas
+ */
+function cola_nc_limpiar(SQLite3 $db, int $dias = 7): int {
+    $corte = time() - max(1, $dias) * 86400;
+    $st = $db->prepare('DELETE FROM cola_no_contesto WHERE estado = \'hecha\' AND creada < :corte');
+    $st->bindValue(':corte', $corte, SQLITE3_INTEGER);
+    $st->execute();
+    return $db->changes();
+}
