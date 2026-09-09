@@ -268,6 +268,15 @@ function test_cola_no_contesto_enchufada(): void {
         'y su nombre no esta en .dockerignore');
     test_same(true, str_contains($vivas, '/var/www/html/drenar-no-contesto.php'),
         'el entrypoint lo invoca desde la raiz web');
+
+    /* 🔴 Y LO CORRE COMO www-data, el mismo usuario que Apache.
+     * Si lo corre root, el archivo de la libreta queda root:root y Apache recibe
+     * "attempt to write a readonly database" cuando el vendedor aplasta: la cola
+     * marca 0 con pulsaciones entrando. Paso el 9-sep-2026. */
+    test_same(true, str_contains($vivas, 'su -s /bin/sh www-data -c'),
+        'entrypoint: el drenador corre como www-data, no como root');
+    test_same(true, str_contains($vivas, 'chown www-data:www-data /data/cola-no-contesto.sqlite'),
+        'entrypoint: y la libreta se deja de www-data al arrancar');
 }
 
 /**

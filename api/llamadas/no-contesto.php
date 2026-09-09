@@ -159,10 +159,17 @@ function llamada_no_contesto_panel_guardar_primero(
     $requestId = (string)($pedido['callRequestId'] ?? '');
     if ($requestId === '') return;
     try {
-        cola_nc_encolar(cola_nc_db($dataDir), $requestId, $pedido, $now, 'panel', $stage,
-            'guardada antes de intentar');
-    } catch (Throwable) {
-        // se sigue: el catch de abajo la vuelve a intentar guardar si Bitrix falla
+        if (!cola_nc_encolar(cola_nc_db($dataDir), $requestId, $pedido, $now, 'panel', $stage,
+                'guardada antes de intentar')) {
+            error_log('cola-no-contesto: no se pudo guardar la pulsacion ' . $requestId);
+        }
+    } catch (Throwable $error) {
+        /* ⚠ SE DEJA CONSTANCIA. Este catch existe para que un problema de la cola no
+         * tumbe el camino rapido del vendedor — pero callado escondio el fallo real
+         * del 9-sep (la libreta era de root y Apache no podia escribirla): la cola
+         * marcaba 0 con pulsaciones entrando. Un fallo que no se ve no se arregla. */
+        error_log('cola-no-contesto: ' . get_class($error) . ' al guardar ' . $requestId
+            . ': ' . $error->getMessage());
     }
 }
 

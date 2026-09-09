@@ -42,7 +42,24 @@ const COLA_NC_TOPE_INTENTOS = 60;   // ~2 h a un intento cada 2 min
 
 /** Abre (y crea si hace falta) la libreta de la cola. */
 function cola_nc_db(string $dataDir): SQLite3 {
-    $db = new SQLite3(rtrim($dataDir, '/') . '/' . COLA_NC_ARCHIVO);
+    /* 🔴 DOS USUARIOS DISTINTOS ESCRIBEN ESTA LIBRETA y el que la crea decide si
+     * el otro puede.
+     *
+     * Apache corre como www-data (ahi entra la pulsacion del vendedor) y el
+     * trabajador corre en el contenedor. El 9-sep-2026 mi propia comprobacion la
+     * creo como root:root 0644: Apache recibio *"attempt to write a readonly
+     * database"*, el guardado quedo en el catch, y DOS pulsaciones reales de las
+     * 14:48 no dejaron ninguna fila. La cola estaba muerta y no se veia.
+     *
+     * SQLite necesita escribir el archivo Y sus -wal/-shm, asi que se abren 0666.
+     * /data ya es drwxrwxrwx y es un volumen privado del servicio. */
+    $ruta = rtrim($dataDir, '/') . '/' . COLA_NC_ARCHIVO;
+    $nueva = !is_file($ruta);
+    $db = new SQLite3($ruta);
+    if ($nueva) { @chmod($ruta, 0666); }
+    foreach ([$ruta . '-wal', $ruta . '-shm'] as $lado) {
+        if (is_file($lado) && (fileperms($lado) & 0666) !== 0666) @chmod($lado, 0666);
+    }
     $db->busyTimeout(5000);
     $db->exec('PRAGMA journal_mode=WAL');
     $db->exec('CREATE TABLE IF NOT EXISTS cola_no_contesto (
