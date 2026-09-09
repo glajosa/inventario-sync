@@ -229,6 +229,34 @@ function test_cola_no_contesto_se_hace_sola(): void {
  * comentario que explica el bucle contara como prueba, la prueba se aprobaria a
  * si misma.
  */
+/**
+ * 🔴 LA LIBRETA NUEVA NACE ESCRIBIBLE PARA LOS DOS USUARIOS.
+ *
+ * Esta es la prueba del fallo del 9-sep-2026: la creo un proceso root, quedo 0644,
+ * y Apache (www-data) no pudo escribir. Dos pulsaciones reales de las 14:48 no
+ * dejaron ninguna fila y la cola marcaba 0.
+ */
+function test_cola_no_contesto_permisos(): void {
+    $dir = cola_nc_test_dir();
+    $db = cola_nc_db($dir);
+    $modo = fileperms($dir . '/' . COLA_NC_ARCHIVO) & 0777;
+    test_same(0666, $modo & 0666,
+        'permisos: la libreta nueva queda escribible para dueno, grupo y otros');
+    // los archivos de al lado que crea el modo WAL cuentan igual
+    cola_nc_encolar($db, 'req-perm', ['dealId' => 1], time(), 'panel', 'C28:X', 'x');
+    foreach ([COLA_NC_ARCHIVO . '-wal', COLA_NC_ARCHIVO . '-shm'] as $lado) {
+        $ruta = $dir . '/' . $lado;
+        if (!is_file($ruta)) continue;
+        clearstatcache(true, $ruta);
+        unset($db);
+        $db = cola_nc_db($dir);   // el segundo abre corrige los -wal/-shm
+        clearstatcache(true, $ruta);
+        test_same(0666, fileperms($ruta) & 0666, "permisos: $lado tambien escribible");
+    }
+    unset($db);
+    cola_nc_test_limpiar($dir);
+}
+
 function test_cola_no_contesto_enchufada(): void {
     $ep = (string)file_get_contents(__DIR__ . '/../entrypoint.sh');
     $vivas = implode("\n", array_filter(
@@ -269,14 +297,20 @@ function test_cola_no_contesto_enchufada(): void {
     test_same(true, str_contains($vivas, '/var/www/html/drenar-no-contesto.php'),
         'el entrypoint lo invoca desde la raiz web');
 
-    /* 🔴 Y LO CORRE COMO www-data, el mismo usuario que Apache.
-     * Si lo corre root, el archivo de la libreta queda root:root y Apache recibe
-     * "attempt to write a readonly database" cuando el vendedor aplasta: la cola
-     * marca 0 con pulsaciones entrando. Paso el 9-sep-2026. */
-    test_same(true, str_contains($vivas, 'su -s /bin/sh www-data -c'),
-        'entrypoint: el drenador corre como www-data, no como root');
+    /* 🔴 LOS PERMISOS DE LA LIBRETA, que es lo que de verdad rompio la cola.
+     * Apache (www-data) y el bucle (root) escriben el mismo archivo. Si queda
+     * 0644 de root, Apache recibe "attempt to write a readonly database" al
+     * aplastar y la cola marca 0 con pulsaciones entrando. Paso el 9-sep-2026.
+     *
+     * ⚠ NO se exige que el bucle corra como www-data: probado, `su` pierde el PATH
+     * ("php: not found") y no puede leer /data/env.sh (600 de root). El arreglo
+     * correcto es el archivo en 0666, no el usuario del bucle. */
     test_same(true, str_contains($vivas, 'chown www-data:www-data /data/cola-no-contesto.sqlite'),
-        'entrypoint: y la libreta se deja de www-data al arrancar');
+        'entrypoint: la libreta se deja de www-data al arrancar');
+    test_same(true, str_contains($vivas, 'chmod 0666 /data/cola-no-contesto.sqlite'),
+        'entrypoint: y en 0666, para que la escriban los dos');
+    test_same(false, str_contains($vivas, 'su -s /bin/sh www-data -c'),
+        'entrypoint: el bucle NO usa su (pierde el PATH y no lee env.sh)');
 }
 
 /**
@@ -337,5 +371,6 @@ function test_cola_no_contesto_guarda_antes_de_intentar(): void {
 test_cola_no_contesto();
 test_cola_no_contesto_se_hace_sola();
 test_cola_no_contesto_guarda_antes_de_intentar();
+test_cola_no_contesto_permisos();
 test_cola_no_contesto_enchufada();
 echo "test-cola-no-contesto OK\n";

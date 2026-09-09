@@ -94,19 +94,26 @@ sleep 1
 # Correr de mas no duplica: la cola guarda una fila por pulsacion (request_id) y el
 # servicio es idempotente.
 #
-# 🔴 CORRE COMO www-data, NO COMO root. La libreta la escriben DOS usuarios: Apache
-# (www-data) cuando el vendedor aplasta, y este bucle cuando la drena. El que crea
-# el archivo decide si el otro puede. El 9-sep-2026 quedo root:root 0644 y Apache
-# recibio "attempt to write a readonly database": la cola marcaba 0 con pulsaciones
-# reales entrando. Se corrige de dos lados —aca el usuario, y 0666 en cola_nc_db().
+# 🔴 LA LIBRETA LA ESCRIBEN DOS USUARIOS y el que la crea decide si el otro puede.
+# Apache es www-data (ahi entra la pulsacion del vendedor); este bucle es root.
+# El 9-sep-2026 quedo root:root 0644 y Apache recibio "attempt to write a readonly
+# database": la cola marcaba 0 con pulsaciones reales entrando.
+#
+# ⚠ SE ARREGLA CON LOS PERMISOS DEL ARCHIVO, NO CAMBIANDO EL USUARIO DEL BUCLE.
+# Probe correrlo con `su -s /bin/sh www-data` y quedo PEOR, medido en el log:
+#   /bin/sh: 1: php: not found          <- `su` no hereda el PATH con /usr/local/bin
+#   .: cannot open /data/env.sh          <- env.sh es 600 de root, www-data no lo lee
+# O sea que para ganar un usuario habia que abrir el archivo de credenciales y
+# arreglar el PATH: dos puntos de fallo nuevos. Con el archivo en 0666 da igual
+# quien lo cree primero, y cola_nc_db() lo deja asi siempre.
 touch /data/cola-no-contesto.sqlite
 chown www-data:www-data /data/cola-no-contesto.sqlite* 2>/dev/null || true
 chmod 0666 /data/cola-no-contesto.sqlite* 2>/dev/null || true
 (
   sleep 60
   while true; do
-    php_cmd='. /data/env.sh 2>/dev/null; php /var/www/html/drenar-no-contesto.php --lote=10'
-    su -s /bin/sh www-data -c "$php_cmd" >> /data/cron.log 2>&1 || true
+    . /data/env.sh 2>/dev/null || true
+    php /var/www/html/drenar-no-contesto.php --lote=10 >> /data/cron.log 2>&1 || true
     sleep 120
   done
 ) &
