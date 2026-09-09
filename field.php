@@ -609,6 +609,19 @@ foreach ($elegidos as $id) {
    * imprimía aquí — mismas clases y mismos data-*, para que filtrar() y el resto
    * del JS sigan funcionando sin tocarse.
    */
+  /* MITADES DE LOCAL FUSIONADO: mitad -> la que lleva el precio. Sale de
+     `mitades_pareja` de cada matriz, no de una tabla escrita aca -- ese bloque tiene la
+     nota de por que esta escrito y como se dedujo. Se recorren TODAS las matrices para
+     que declararlo en otro proyecto funcione sin tocar este archivo.
+     Se lee el JSON directo y no `mz_cfg()`: field.php no carga matrizlib a proposito
+     (arrastra el motor de precios entero para leer un mapa de 18 entradas). */
+  $MITADES_PAREJA = [];
+  foreach (glob(__DIR__ . '/matrices/proyecto_*.json') ?: [] as $__f) {
+      $__j = json_decode((string)@file_get_contents($__f), true);
+      foreach ((array)($__j['mitades_pareja'] ?? []) as $__mitad => $__con)
+          if (is_string($__mitad) && is_string($__con)) $MITADES_PAREJA[$__mitad] = $__con;
+  }
+
   $datos = [];
   foreach ($proys as $cid => $nom) {
       $lst = $porProyecto[(string)$cid] ?? [];
@@ -716,6 +729,29 @@ foreach ($elegidos as $id) {
   var copiaN   = document.getElementById('<?= $uid ?>_copiaN');
   var juntoN   = document.getElementById('<?= $uid ?>_juntoN');
   var CAT_PLAZA = 33, TIPO_DEPTO = 1793, TIPO_SUITE = 1797, PARQUEO = 20000;
+
+  /* MITADES DE LOCAL FUSIONADO. Un par de locales unidos guarda UN solo precio y UN
+     solo metraje, los dos en una de las dos unidades; la otra va vacia. La vacia no se
+     podia marcar -"sin precio no suma"- y el asesor terminaba cotizando A-1-13 sola
+     mientras A-1-14 seguia figurando libre. Confundio a mas de uno.
+     Ahora las dos van SIEMPRE juntas: marcar una marca las dos, desmarcar una desmarca
+     las dos. El precio no cambia -la vacia suma 0- pero la cotizacion nombra las dos y
+     el negocio ata las dos.
+     El mapa esta ESCRITO en `mitades_pareja` de la matriz, no deducido aca: el SPA no
+     registra el emparejamiento en ningun campo. Ver la nota de ese bloque. */
+  var PAREJA = <?= json_encode($MITADES_PAREJA, JSON_UNESCAPED_UNICODE) ?>;
+  /** El o los codigos que van pegados a este: su pareja, en cualquiera de los dos sentidos. */
+  function pegadosA(cod){
+    var out = [];
+    if (PAREJA[cod]) out.push(PAREJA[cod]);
+    for (var k in PAREJA) if (PAREJA[k] === cod) out.push(k);
+    return out;
+  }
+  /** De codigo a id de fila, dentro del proyecto que se esta viendo. */
+  function idDeCodigo(cod){
+    var f = R.querySelector('.gu-fila[data-cod-txt="' + cod + '"]');
+    return f ? f.dataset.id : null;
+  }
 
   /** Separadas o fusion. Sin nada elegido o con una sola, fusion (es el defecto). */
   function esSeparadas(){
@@ -1264,9 +1300,21 @@ foreach ($elegidos as $id) {
     if (BLOQ) {
       // No se puede APARTAR en esta etapa, pero sí cotizar: el clic marca y
       // desmarca para armar la fusión que se va a cotizar. Nada se guarda.
-      if ((parseFloat(f.dataset.pvp || 0) || 0) <= 0) return;   // sin precio no suma
+      /* Las mitades de un local fusionado van juntas SIEMPRE, en los dos sentidos:
+         la vacia se puede marcar (arrastra a la que tiene el precio) y marcar la del
+         precio arrastra a la vacia. Antes la vacia era inerte por la guarda de abajo y
+         el asesor cotizaba una sola de las dos. */
+      var pegados = pegadosA(f.dataset.codTxt || '');
+      var idsPeg  = pegados.map(idDeCodigo).filter(function(x){ return x; });
+      if ((parseFloat(f.dataset.pvp || 0) || 0) <= 0 && !idsPeg.length) return;   // sin precio y sin pareja: no suma
       var i = selCot.indexOf(id);
-      if (i === -1) selCot.push(id); else selCot.splice(i, 1);
+      if (i === -1) {
+          selCot.push(id);
+          idsPeg.forEach(function(q){ if (selCot.indexOf(q) === -1) selCot.push(q); });
+      } else {
+          selCot.splice(i, 1);
+          idsPeg.forEach(function(q){ var j = selCot.indexOf(q); if (j !== -1) selCot.splice(j, 1); });
+      }
       // filtrar() y no pintarCotSel() a secas: filtrar reescribe el pie con el
       // conteo normal y luego llama a pintarCotSel, así que al desmarcar la
       // última el pie vuelve a su texto en vez de quedarse en "1 marcada".
