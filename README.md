@@ -21,6 +21,15 @@ vuelve a leer con `crm.item.get` antes de responder. La ruta es estrictamente de
 solo lectura: no reserva, no cotiza formalmente y no actualiza unidades, deals,
 etapas ni el campo Proyecto.
 
+Para la actualización semanal del conocimiento del vendedor virtual existe
+`POST /api/private/bot/v1/commercial-summary.php`. Devuelve solo un resumen por
+proyecto con el precio mínimo disponible, los meses de cuotas definidos por el
+perfil comercial, el número de unidades disponibles y la antigüedad del corte.
+No devuelve unidades, nombres, teléfonos ni deals, y rechaza un catálogo
+parcial o con más de una hora de antigüedad. Usa la misma firma HMAC y la misma
+bandera `BOT_INVENTORY_API_ENABLED`; el consumidor conserva la ficha anterior
+si esta ruta no está disponible.
+
 Variables:
 
 - `BOT_INVENTORY_API_ENABLED=1` habilita la ruta; con `0` la reversión es

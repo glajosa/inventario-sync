@@ -16,6 +16,7 @@ require_once __DIR__ . '/test-cola-no-contesto.php';
 require_once __DIR__ . '/test-bot-recommendation-contract.php';
 require_once __DIR__ . '/test-bot-recommendation-service.php';
 require_once __DIR__ . '/test-bot-recommendation-endpoint.php';
+require_once __DIR__ . '/test-bot-commercial-summary-endpoint.php';
 require_once __DIR__ . '/test-bot-quote-contract.php';
 require_once __DIR__ . '/test-bot-quote-service.php';
 require_once __DIR__ . '/test-bot-quote-endpoints.php';
