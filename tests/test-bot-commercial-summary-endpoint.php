@@ -44,6 +44,17 @@ try {
     test_same(2, $response['body']['projects']['Noral Apartments']['available_units'], 'summary counts available units');
     test_same('no-store', $response['headers']['Cache-Control'] ?? null, 'summary is never cached');
 
+    $command = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(dirname(__DIR__) . '/api/private/bot/v1/commercial-summary.php');
+    $output = [];
+    $exitCode = 1;
+    exec($command, $output, $exitCode);
+    test_same(0, $exitCode, 'public endpoint process exits cleanly');
+    test_same(
+        true,
+        str_contains(implode("\n", $output), 'method_not_allowed'),
+        'public endpoint emits HTTP response when accessed directly'
+    );
+
     $stale = $catalog;
     $stale['built'] = $now - 3601;
     file_put_contents($dir . '/selector_cache.json', json_encode($stale, JSON_THROW_ON_ERROR));

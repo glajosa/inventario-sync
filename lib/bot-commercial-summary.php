@@ -133,7 +133,7 @@ function bot_commercial_summary_http(
     }
 }
 
-if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
+function bot_commercial_summary_emit_http(): void {
     $requestHeaders = function_exists('getallheaders') ? getallheaders() : [];
     $environment = getenv();
     $result = bot_commercial_summary_http(
@@ -147,4 +147,8 @@ if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
     header('Content-Type: application/json; charset=utf-8');
     foreach (($result['headers'] ?? []) as $name=>$value) header($name . ': ' . $value);
     echo json_encode($result['body'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+}
+
+if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
+    bot_commercial_summary_emit_http();
 }
