@@ -337,6 +337,50 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         if ($primera < $piso) $primera = $piso;
     }
 
+    /* ── F1 · LA FIRMA PARTIDA VA ANTES DE LAS CUOTAS ─────────────────────────
+     * Con `firmaAntes` los pagos de firma dejan de sumarse a la cuota y pasan a ser
+     * filas PROPIAS. El vendedor lo pidio asi: "pago la firma en 3 meses, hasta
+     * diciembre, pero NETAMENTE la firma, y de ahi en enero recien la primera cuota".
+     *
+     * Aca solo se corre `$primera` al mes siguiente al ULTIMO pago de firma. Las filas
+     * se arman mas abajo, donde se arma la tabla.
+     *
+     * 🔴 ESTO TIENE QUE PASAR ANTES DE `$plazoMax`. El plazo se deriva de `$primera`:
+     * si se corriera despues, el motor calcularia el tope sobre una fecha que ya
+     * cambio y prometeria mas cuotas de las que caben antes de la entrega.
+     *
+     * El acortamiento del plazo NO se programa: sale solo. La entrega no se mueve, asi
+     * que arrancar mas tarde deja menos meses. Medido en A-1-7: 55 -> 52 cuotas.
+     */
+    $firmaAntes = !empty($opts['firmaAntes']);
+    $mesesFirmaAntes = [];           // meses (Y-m) en que se paga SOLO firma
+    if ($firmaAntes) {
+        /* `$planPos` y no `$plan`: `$plan` es como la pantalla llama al resultado
+           entero de esta funcion, y reusar el nombre acá confunde al leerlo. */
+        $planPos = (array)($opts['firmaPlan'] ?? []);
+        if ($planPos) {
+            /* Con plan a la medida el asesor ya eligio los meses, pero los eligio como
+               NUMERO DE CUOTA (1..12) contra el cronograma viejo, donde la firma iba
+               encima de las cuotas. Aca esas posiciones se leen como "el 1er mes de
+               firma, el 3ro...", contadas desde el mes de la FIRMA. */
+            $maxPos = 0;
+            foreach (array_keys($planPos) as $k) $maxPos = max($maxPos, (int)$k);
+            $cuantos = max(1, min(COT_FIRMA_TOPE_MESES, $maxPos));
+        } else {
+            $cuantos = (int)($opts['firmaMeses'] ?? 0);
+            if ($cuantos <= 0 && (float)($opts['firmaCuota'] ?? 0) > 0) $cuantos = 1;  // se resuelve abajo
+            $cuantos = max(1, min(COT_FIRMA_TOPE_MESES, $cuantos));
+        }
+        /* Los pagos de firma arrancan en el mes de la FIRMA, no en el siguiente: si el
+           cliente firma en septiembre, su primer abono de firma es de septiembre. */
+        $base = new DateTimeImmutable($firmaFecha->format('Y-m-16'));
+        for ($i = 0; $i < $cuantos; $i++) $mesesFirmaAntes[] = $base->modify("+{$i} month");
+        $ultima = end($mesesFirmaAntes);
+        $siguiente = $ultima->modify('+1 month');
+        // Si el asesor ya escribio un mes de primera cuota POSTERIOR, manda el suyo.
+        if ($primera < $siguiente) $primera = $siguiente;
+    }
+
     // --- plazo máximo: cuántas cuotas caben antes de la entrega ---
     $plazoMax = null;
     if ($entrega) {
@@ -597,7 +641,36 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
        todas iguales". Las dos formas escriben en este mismo mapa, asi que la tabla y
        el cuadre no saben cual se uso. */
     $difPorFila = [];
-    if ($planFirma) {
+    /* Con `firmaAntes` la firma NO se monta sobre ninguna cuota: va en filas propias,
+       que se arman abajo. `$firmaFilas` guarda cuanto se paga cada mes. */
+    $firmaFilas = [];
+    if ($firmaAntes && $firmaBase > 0.01 && $mesesFirmaAntes) {
+        $n_f = count($mesesFirmaAntes);
+        if ($planFirma) {
+            /* Montos a la medida: se respetan sus proporciones y se escalan a la firma
+               que de verdad toca, igual que en el reparto de siempre. */
+            $sumaPlan = array_sum($planFirma);
+            $esc = $sumaPlan > 0.01 ? $firmaBase / $sumaPlan : 0.0;
+            foreach ($mesesFirmaAntes as $i => $f) {
+                $m = (float)($planFirma[$i] ?? 0.0);
+                $firmaFilas[] = ['fecha' => $f, 'monto' => $m * $esc];
+            }
+        } elseif ((float)($opts['firmaCuota'] ?? 0) > 0) {
+            // "cobrame $X al mes de firma": el ultimo abono absorbe el residuo.
+            $cuota = (float)$opts['firmaCuota'];
+            $rest = $firmaBase;
+            foreach ($mesesFirmaAntes as $i => $f) {
+                $m = ($i === $n_f - 1) ? $rest : min($cuota, $rest);
+                $firmaFilas[] = ['fecha' => $f, 'monto' => max(0.0, $m)];
+                $rest -= $m;
+            }
+        } else {
+            foreach ($mesesFirmaAntes as $f) $firmaFilas[] = ['fecha' => $f, 'monto' => $firmaBase / $n_f];
+        }
+        $firma = 0.0;              // ya no se paga nada el dia de firmar
+        $diferidoMeses = $n_f;     // el resumen de pantalla sigue sabiendo cuantos son
+        $diferidoCuota = $n_f > 0 ? $firmaBase / $n_f : 0.0;
+    } elseif ($planFirma) {
         // A LA MEDIDA: los meses y los montos son los que eligio el asesor. Si el monto
         // de firma se fijo a mano y no coincide con la suma del plan, los montos se
         // escalan para que el reparto siga sumando la firma -- el asesor mando el
@@ -636,6 +709,32 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     $valorExtra   = $nExtra > 0 ? $extraTotal / $nExtra : 0.0;
     $extraMontos  = [];
     $extraExcedido = 0.0;
+    /* ── F2 · A QUE EXTRAORDINARIA VA LA DIFERENCIA ───────────────────────────
+     * Cuando la firma partida corre la primera cuota, caben MENOS cuotas y cada una
+     * sube. El asesor puede mandar esa diferencia a las extraordinarias en vez de a
+     * la cuota -- y eligiendo EN CUAL, que es lo que pidio: "en una, en dos, o sea en
+     * cual, que puedas escoger".
+     *
+     * `extraSuma` es la plata que llega de mas (la calcula la pantalla corriendo el
+     * motor una vez SIN el corrimiento: mensualBase x cuotas que ya no caben) y ya
+     * viene sumada dentro de `extraTotal`. Aca solo se decide DONDE cae: sin
+     * `extraAbsorbe` se reparte entre todas, con el va entera a esa.
+     *
+     * Se hace sobre `extraMontos`, que es el reparto que el motor ya sabe cuadrar y
+     * redondear. No se inventa un camino nuevo. */
+    $extraSuma    = max(0.0, (float)($opts['extraSuma'] ?? 0));
+    $extraAbsorbe = (int)($opts['extraAbsorbe'] ?? 0);
+    if ($nExtra > 0 && $extraSuma > 0.01 && $extraAbsorbe >= 1 && $extraAbsorbe <= $nExtra
+        && empty($opts['extraMontos'])) {
+        $repartoBase = ($extraTotal - $extraSuma) / $nExtra;   // lo que valia cada una
+        for ($k = 0; $k < $nExtra; $k++) $extraMontos[$k] = $repartoBase;
+        $extraMontos[$extraAbsorbe - 1] += $extraSuma;
+        /* La ultima sale del RESIDUO, igual que en el reparto a mano: asi la suma de
+           la columna es exacta aunque el reparto base tenga decimales. */
+        $usado = 0.0;
+        for ($k = 0; $k < $nExtra - 1; $k++) $usado += $extraMontos[$k];
+        $extraMontos[$nExtra - 1] = max(0.0, $extraTotal - $usado);
+    }
     if ($nExtra > 0 && !empty($opts['extraMontos']) && is_array($opts['extraMontos'])) {
         $pedidos = array_values(array_map(fn($x) => max(0.0, (float)$x), $opts['extraMontos']));
         $usado = 0.0;
@@ -652,6 +751,20 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
 
     // --- tabla final ---
     $filas = [];
+    /* Las filas de FIRMA van primero y SIN numero de cuota: no son cuotas, son los
+       abonos de la entrada. Numerarlas correria la numeracion de las cuotas y el
+       cliente contaria 58 cuotas donde su contrato dice 55. */
+    foreach ($firmaFilas as $ff) {
+        $filas[] = [
+            'n'         => 0,
+            'fecha'     => $ff['fecha']->format('d/m/Y'),
+            'monto'     => $ff['monto'],
+            'extra'     => false,
+            'diferido'  => true,
+            'firma'     => $ff['monto'],
+            'soloFirma' => true,
+        ];
+    }
     foreach ($fechas as $i => $f) {
         $esExtra = in_array($i, $posExtra, true);
         $deFirma = (float)($difPorFila[$i] ?? 0.0);

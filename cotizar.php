@@ -315,6 +315,41 @@ $pvpFinal   = max(0.0, $pvp - $dctoParq + $addParq);
 // el cliente compare "si compro una" contra "si compro las dos".
 $unificar = $fusion ? (($_GET['unif'] ?? '1') !== '0') : true;
 
+/* ── FIRMA SOLA, ANTES DE LAS CUOTAS ──────────────────────────────────────────
+ * `firmaantes=1`: los abonos de la firma dejan de sumarse a la cuota y pasan a ser
+ * filas propias; la primera CUOTA arranca despues del ultimo abono. Lo pidio asi:
+ * "pago la firma en 3 meses, hasta diciembre, pero NETAMENTE la firma, y de ahi en
+ * enero recien la primera cuota".
+ *
+ * La entrega no se mueve, asi que arrancar mas tarde deja MENOS cuotas y cada una
+ * sube. `absorbe` decide donde va esa diferencia:
+ *   cuota  (defecto) sube el mensual, que es lo que pasaba antes
+ *   extra  el mensual se queda igual y la diferencia va a la extraordinaria elegida
+ *
+ * La diferencia NO se deduce con una formula inversa: se corre el motor UNA vez SIN
+ * el corrimiento y se compara. Calculo puro, sin IO, y no se desincroniza del
+ * reparto real -- que es lo que pasa cuando se re-deriva a mano. */
+$firmaAntes = (($_GET['firmaantes'] ?? '') === '1');
+$absorbe    = ($_GET['absorbe'] ?? 'cuota') === 'extra' ? 'extra' : 'cuota';
+$extraCual  = max(0, min(6, (int)($_GET['extracual'] ?? 0)));
+$difPlazo   = 0.0;   // la plata de las cuotas que ya no caben
+if ($firmaAntes) {
+    $opts['firmaAntes'] = true;
+    if ($absorbe === 'extra') {
+        $soloCuotas = fn(array $pl) => count(array_filter($pl['filas'], fn($x) => empty($x['soloFirma'])));
+        $sinCorrer = cot_plan($pvpFinal, $cuotas, $modalidad, $mesIni, $entrega, $presu,
+                              array_diff_key($opts, ['firmaAntes' => 1]));
+        $corrido   = cot_plan($pvpFinal, $cuotas, $modalidad, $mesIni, $entrega, $presu, $opts);
+        $faltan    = $soloCuotas($sinCorrer) - $soloCuotas($corrido);
+        if ($faltan > 0) {
+            $difPlazo = round($sinCorrer['mensual'] * $faltan, 2);
+            $opts['extraTotal']   = $sinCorrer['extraTotal'] + $difPlazo;
+            $opts['extraSuma']    = $difPlazo;
+            if ($extraCual >= 1) $opts['extraAbsorbe'] = $extraCual;
+        }
+    }
+}
+
 $bloques = [];
 if ($unificar) {
     $bloques[] = ['cods'=>$codigos, 'pvp'=>$pvpFinal, 'm2'=>$m2, 'dcto'=>$dctoParq, 'bruto'=>$pvp,
@@ -800,6 +835,37 @@ $hoy  = new DateTimeImmutable('now');
           <input type="text" name="firmacuota" inputmode="decimal" placeholder="auto" value="<?= h($vFirmaCuota) ?>"
                  title="Monto mensual editable de esa firma diferida. Si en 12 meses no alcanza a cubrirla, el resto se suma a las extraordinarias."></div>
       </div>
+      <?php /* FIRMA SOLA. Con esto los abonos de la firma NO se suman a la cuota: van en
+               filas propias y la primera cuota arranca despues del ultimo abono.
+               Y como la entrega no se mueve, caben menos cuotas: el asesor elige si esa
+               diferencia sube el mensual o se va a la extraordinaria que el diga. */ ?>
+      <label class="chk-linea" style="margin-top:10px"
+             title="Los abonos de la firma van en filas propias, antes de las cuotas. La primera cuota arranca el mes siguiente al último abono.">
+        <input type="checkbox" name="firmaantes" value="1" <?= $firmaAntes ? 'checked' : '' ?>>
+        Pagar la firma <b>sola</b>, antes de las cuotas
+      </label>
+      <?php if ($firmaAntes): ?>
+      <div class="pers-caja">
+        <div class="ayuda-campo">La entrega no se mueve, así que arrancar más tarde deja
+          <b>menos cuotas</b> y cada una sube. ¿Dónde va esa diferencia<?= $difPlazo > 0 ? ' de <b>' . h(cot_money($difPlazo)) . '</b>' : '' ?>?</div>
+        <div class="grupo-campos">
+          <div><label>La diferencia va a</label>
+            <select name="absorbe">
+              <option value="cuota" <?= $absorbe === 'cuota' ? 'selected' : '' ?>>la cuota mensual (sube)</option>
+              <option value="extra" <?= $absorbe === 'extra' ? 'selected' : '' ?>>las extraordinarias</option>
+            </select></div>
+          <div><label>¿A cuál extraordinaria?</label>
+            <select name="extracual" <?= $absorbe === 'extra' ? '' : 'disabled' ?>
+                    title="Vacío = se reparte entre todas. Si elegís una, se lleva la diferencia entera.">
+              <option value="0">repartir entre todas</option>
+              <?php for ($k = 1; $k <= (int)$plan['nExtra']; $k++): ?>
+              <option value="<?= $k ?>" <?= $extraCual === $k ? 'selected' : '' ?>>la <?= $k ?>ª</option>
+              <?php endfor; ?>
+            </select></div>
+        </div>
+      </div>
+      <?php endif; ?>
+
       <?php /* A LA MEDIDA. Los dos campos de arriba solo saben repartir parejo sobre los
                PRIMEROS meses. Acá el asesor elige mes por mes: "$100 en la de septiembre
                y $300 en la de noviembre". Se listan las 12 primeras cuotas CON SU FECHA
@@ -1289,14 +1355,21 @@ $hoy  = new DateTimeImmutable('now');
             $aMedida = !empty($plan['firmaPlan']); ?>
       <?php foreach ($plan['filas'] as $f): ?>
       <tr class="<?= $f['extra'] ? 'extra' : ($f['diferido'] ? 'diferido' : '') ?>">
-        <td><?= (int)$f['n'] ?></td>
+        <?php /* Las filas de FIRMA SOLA no llevan numero: no son cuotas, son los abonos
+                 de la entrada. Numerarlas correria la numeracion y el cliente contaria
+                 56 cuotas donde su contrato dice 53. Sin esto salia un "0". */ ?>
+        <td><?= empty($f['soloFirma']) ? (int)$f['n'] : '' ?></td>
         <td><?= h($f['fecha']) ?><?= $f['extra'] ? ' <span class="etq">EXTRA</span>' : '' ?><?php
             /* La etiqueta FIRMA: con el diferido AUTOMATICO va solo en la primera, porque
                son meses seguidos y todos por el mismo monto -- repetirla catorce veces era
                ruido. Con el reparto A LA MEDIDA va en CADA UNA: son pagos distintos, en
                meses que el asesor eligio y por montos distintos, y el cliente tiene que
                poder ver cual de sus cuotas lleva firma. */
-            if (!empty($f['diferido']) && ($aMedida || $primerDiferido)) {
+            /* En las filas de FIRMA SOLA la etiqueta va SIEMPRE: son pagos de firma y
+               nada mas, y sin el rotulo el cliente no distingue esas tres filas de una
+               cuota cualquiera que casualmente vale distinto. */
+            if (!empty($f['soloFirma'])) { echo ' <span class="etq2">FIRMA</span>'; }
+            elseif (!empty($f['diferido']) && ($aMedida || $primerDiferido)) {
                 echo ' <span class="etq2">FIRMA</span>'; $primerDiferido = false;
             }
             /* La cuota que absorbe el redondeo NO se rotula. Se probo con una etiqueta
