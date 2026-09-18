@@ -432,7 +432,15 @@ try {
     endpoint_test_response(403, ['error' => 'forbidden'], llamada_resultado_http(
         'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
     ), 'identical Bitrix access denied retry');
-    test_same($callsAfterForbidden, $fake->calls, 'access denied endpoint retry performs no Bitrix call');
+    /* 🔴 CAMBIO 17-sep-2026 — antes el reintento NO volvia a llamar a Bitrix: el
+     * ACCESS_DENIED se sellaba como definitivo. Eso protegia al portal, pero
+     * tiraba la pulsacion cuando la causa era una sesion vencida (medido ese dia:
+     * 7 pulsaciones perdidas, todas con los datos correctos). La actividad es el
+     * comprobante del trabajo del vendedor, asi que ahora se puede reintentar.
+     * EL PRECIO, dicho en voz alta: un cliente que reintente en bucle vuelve a
+     * golpear Bitrix. En el panel eso lo limita el tope del drenador
+     * (COLA_NC_TOPE_ACCESO); en el movil lo decide el cliente. */
+    test_same(true, $fake->calls > $callsAfterForbidden, 'el reintento vuelve a llamar a Bitrix');
 
     $differentBody = endpoint_test_body([
         'callRequestId' => '33333333-3333-4333-8333-333333333333',
@@ -441,7 +449,7 @@ try {
     endpoint_test_response(409, ['error' => 'conflict'], llamada_resultado_http(
         'POST', $differentBody, endpoint_test_headers($differentBody, $now), endpoint_test_env($directory), $fake, $now
     ), 'different payload after access denied');
-    test_same(1, count(array_filter($fake->calls, fn(array $call): bool => $call[0] === 'crm.activity.update')), 'access denied is not retried or reassigned');
+    test_same(2, count(array_filter($fake->calls, fn(array $call): bool => $call[0] === 'crm.activity.update')), 'la escritura denegada se reintenta una vez mas');
     test_same(0, count(array_filter($fake->calls, fn(array $call): bool => $call[0] === 'crm.deal.update')), 'access denied does not reassign the deal');
 } finally {
     endpoint_test_cleanup($directory);
@@ -468,10 +476,16 @@ try {
     endpoint_test_response(403, ['error' => 'forbidden'], llamada_resultado_http(
         'POST', $body, endpoint_test_headers($body, $now), endpoint_test_env($directory), $fake, $now
     ), 'identical comment access denied retry');
-    test_same($callsAfterForbidden, $fake->calls, 'comment access denied retry duplicates no external effect');
+    /* Lo que hay que proteger al reintentar NO es "cero llamadas", es que no se
+     * DUPLIQUE lo ya hecho: la actividad ya se habia escrito antes de que fallara
+     * el comentario. El reintento reanuda del checkpoint y solo repite el comentario. */
+    $updatesActividad = fn(): int => count(array_filter($fake->calls, fn(array $c): bool => $c[0] === 'crm.activity.update'));
+    $comentarios = fn(): int => count(array_filter($fake->calls, fn(array $c): bool => $c[0] === 'crm.timeline.comment.add'));
+    test_same(2, $updatesActividad(), 'el reintento NO vuelve a escribir la actividad');
+    test_same(2, $comentarios(), 'el reintento SI vuelve a intentar el comentario');
     $store = new LlamadaIdempotenciaStore($directory);
     $record = $store->get('member-1:34343434-3434-4343-8343-343434343434');
-    test_same('forbidden', $record['state'] ?? null, 'endpoint persists comment forbidden state');
+    test_same('retryable', $record['state'] ?? null, 'el endpoint deja el acceso denegado como retryable');
     test_same('pending', $record['comment_state'] ?? null, 'endpoint clears uncertain comment marker for known denial');
     unset($store);
 } finally {

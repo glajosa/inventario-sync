@@ -126,8 +126,22 @@ function llamada_no_contesto_panel_http(
     } catch (JsonException | LlamadaValidationError) {
         // un pedido mal formado NO se encola: reproducirlo fallaría igual
         return llamada_no_contesto_panel_error(400, 'invalid_request');
-    } catch (LlamadaForbidden) {
-        // sin permiso: la cola no consigue permisos que no existen
+    } catch (LlamadaForbidden $error) {
+        /* ⭐ ACCESS_DENIED NO ES "no tiene permiso": casi siempre es la SESIÓN del
+         * vendedor vencida, y eso se arregla solo. Medido el 17-sep-2026: 7
+         * pulsaciones descartadas por esto, las 5 revisadas con el deal correcto,
+         * el contacto correcto y el teléfono coincidiendo. Se tiraron por nada.
+         *
+         * Y esto no es un detalle técnico: la actividad ES el comprobante de que
+         * el vendedor hizo la llamada. Descartarla le borra su trabajo.
+         *
+         * El permanente (el teléfono no es del contacto, el deal no es ese) sí se
+         * cierra: reproducirlo falla igual. */
+        if ($error->esTransitorio()) {
+            return llamada_no_contesto_panel_encolar(
+                $dataDir, $pedido ?? [], $now, $noInterestStage, 'acceso denegado (sesión)'
+            );
+        }
         if (isset($pedido)) llamada_no_contesto_panel_cerrar($dataDir, $pedido, 'sin permiso');
         return llamada_no_contesto_panel_error(403, 'forbidden');
     } catch (LlamadaIdempotenciaConflict) {

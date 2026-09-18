@@ -1175,23 +1175,62 @@ try {
         'Bitrix read access denied is forbidden'
     );
     $callsAfterFirst = $fake->calls;
-    test_same('forbidden', $store->get('member-1:' . $input['callRequestId'])['state'] ?? null, 'read access denied is stored as terminal forbidden');
+    /* 🔴 CAMBIO 17-sep-2026 — antes esto se sellaba como 'forbidden' TERMINAL y se
+     * daba por perdida la pulsacion. Medido ese dia: 7 pulsaciones descartadas asi,
+     * y las 5 revisadas tenian el deal correcto, el contacto correcto y el telefono
+     * coincidiendo. Ninguna era un permiso inexistente: era la SESION del vendedor.
+     * Y la actividad es el comprobante de que el vendedor hizo la llamada.
+     * Ahora queda 'retryable' y el tope de reintentos vive en el drenador. */
+    test_same('retryable', $store->get('member-1:' . $input['callRequestId'])['state'] ?? null,
+        'ACCESS_DENIED queda retryable, no terminal');
 
     unset($store);
     $store = new LlamadaIdempotenciaStore($directory);
     test_throws(
         fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage),
         LlamadaForbidden::class,
-        'identical forbidden read remains forbidden after restart'
+        'sigue denegado mientras Bitrix siga denegando'
     );
-    test_same($callsAfterFirst, $fake->calls, 'forbidden read retry performs no Bitrix call');
-    test_throws(
-        fn() => llamada_procesar_resultado(array_replace($input, ['comment' => 'different']), $fake, $store, $now, $noInterestStage),
-        LlamadaIdempotenciaConflict::class,
-        'different payload after forbidden read still conflicts'
-    );
-    test_same([], llamada_calls($fake, 'crm.activity.update'), 'read access denied performs no write');
+    /* La prueba que hace falta para que el arreglo signifique algo: el reintento
+     * TIENE que volver a preguntarle a Bitrix. Si se cortara antes (como hacia el
+     * sello terminal), la cola reintentaria eternamente sin llegar nunca al portal
+     * — se veria sana y la actividad no se crearia jamas. */
+    test_same(true, $fake->calls > $callsAfterFirst, 'el reintento SI vuelve a llamar a Bitrix');
+
+    /* Y la prueba de que sirve: cuando la sesion vuelve, la pulsacion se crea. */
+    unset($fake->errors['crm.deal.get']);
+    $recuperada = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
+    test_same('processed', $recuperada['status'] ?? null,
+        'al volver el acceso, la pulsacion se procesa en vez de perderse');
+
     test_same([], llamada_calls($fake, 'crm.deal.update'), 'read access denied never reassigns or updates deal');
+} finally {
+    llamada_test_cleanup($directory);
+}
+
+/* 🔴 LA OTRA MITAD, que NO cambia: un forbidden por DATOS sigue siendo terminal.
+ * Reproducirlo falla igual, y la proteccion original —no volver a golpear Bitrix—
+ * tiene que seguir viva justo aca. Si alguien "simplifica" haciendo transitorio
+ * todo forbidden, esta prueba se cae. */
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->deal['ID'] = '999999';   // el deal que contesta NO es el que se pidio
+    $input = llamada_test_input(['callRequestId' => '77777777-7777-4777-8777-777777777777']);
+    test_throws(
+        fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage),
+        LlamadaForbidden::class,
+        'deal que no cuadra es forbidden'
+    );
+    test_same('forbidden', $store->get('member-1:' . $input['callRequestId'])['state'] ?? null,
+        'el forbidden por DATOS sigue siendo terminal');
+    $callsTrasDatos = $fake->calls;
+    test_throws(
+        fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage),
+        LlamadaForbidden::class,
+        'el forbidden por datos se mantiene'
+    );
+    test_same($callsTrasDatos, $fake->calls, 'el forbidden por datos NO vuelve a llamar a Bitrix');
 } finally {
     llamada_test_cleanup($directory);
 }
@@ -1213,7 +1252,10 @@ try {
     );
     $callsAfterFirst = $fake->calls;
     $record = $store->get('member-1:' . $input['callRequestId']);
-    test_same('forbidden', $record['state'] ?? null, 'comment access denied is stored as terminal forbidden');
+    /* 17-sep-2026: retryable, no terminal. Un ACCESS_DENIED es un RECHAZO — la
+     * escritura no ocurrio— asi que reintentarla es seguro, y es el mismo estado
+     * que este archivo ya usa para reanudar progreso a medias. */
+    test_same('retryable', $record['state'] ?? null, 'comentario denegado queda retryable');
     test_same('pending', $record['comment_state'] ?? null, 'known comment denial is not delivery uncertain');
     test_same(2, count(llamada_calls($fake, 'crm.activity.update')), 'technical and pending activities are updated once before comment denial');
     test_same(1, count(llamada_calls($fake, 'crm.timeline.comment.add')), 'denied comment is attempted once');
@@ -1223,9 +1265,24 @@ try {
     test_throws(
         fn() => llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage),
         LlamadaForbidden::class,
-        'identical denied comment remains forbidden after restart'
+        'sigue denegado mientras el comentario siga denegado'
     );
-    test_same($callsAfterFirst, $fake->calls, 'forbidden comment retry duplicates no external effect');
+    /* 🔴 LO QUE DE VERDAD HAY QUE PROTEGER AL REINTENTAR: que no se duplique lo ya
+     * hecho. La actividad ya se habia actualizado 2 veces ANTES de que fallara el
+     * comentario — o sea el trabajo del vendedor ya estaba registrado. El reintento
+     * reanuda desde el checkpoint y solo vuelve a intentar el comentario. Si algun
+     * dia el progreso deja de leerse, esto se cae y avisa. */
+    test_same(2, count(llamada_calls($fake, 'crm.activity.update')),
+        'el reintento NO vuelve a actualizar la actividad (reanuda del checkpoint)');
+    test_same(2, count(llamada_calls($fake, 'crm.timeline.comment.add')),
+        'el reintento SI vuelve a intentar el comentario denegado');
+
+    /* Y al volver el permiso, el comentario entra y la operacion cierra. */
+    unset($fake->errors['crm.timeline.comment.add']);
+    $recuperada = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
+    test_same('processed', $recuperada['status'] ?? null, 'al volver el permiso, el comentario se entrega');
+    test_same(2, count(llamada_calls($fake, 'crm.activity.update')),
+        'la recuperacion tampoco duplica la actividad');
     test_throws(
         fn() => llamada_procesar_resultado(array_replace($input, ['comment' => 'different']), $fake, $store, $now, $noInterestStage),
         LlamadaIdempotenciaConflict::class,

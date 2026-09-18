@@ -37,6 +37,13 @@
  */
 declare(strict_types=1);
 
+/* Cuántas veces se reintenta un ACCESS_DENIED antes de darlo por permiso real.
+ * Con el bucle de 120 s son ~20 min de margen para que el vendedor recargue y
+ * su sesión vuelva. Perilla: COLA_NC_TOPE_ACCESO en el entorno. */
+if (!defined('COLA_NC_TOPE_ACCESO')) {
+    define('COLA_NC_TOPE_ACCESO', max(1, (int)(getenv('COLA_NC_TOPE_ACCESO') ?: 10)));
+}
+
 const COLA_NC_ARCHIVO = 'cola-no-contesto.sqlite';
 const COLA_NC_TOPE_INTENTOS = 60;   // ~2 h a un intento cada 2 min
 
@@ -204,10 +211,25 @@ function cola_nc_drenar(
             cola_nc_fallo($db, $rid, 'estado ' . ($estado !== '' ? $estado : 'desconocido'));
             $decir("  … $rid sigue en curso ($estado), se reintenta");
         } catch (LlamadaForbidden $e) {
-            // sin permiso NO se reintenta para siempre: se marca y se sigue
-            cola_nc_fallo($db, $rid, 'forbidden: ' . $e->getMessage(), 1);
-            $fallidas++;
-            $decir("  ✗ $rid sin permiso, no se reintenta");
+            /* Dos caminos, porque "sin permiso" son dos cosas:
+             *  · TRANSITORIO (ACCESS_DENIED = sesión vencida): se reintenta, con
+             *    tope. La actividad es el comprobante del trabajo del vendedor:
+             *    tirarla por una sesión vencida le borra una llamada que sí hizo.
+             *  · PERMANENTE (los datos no cuadran): se marca y se sigue.
+             * 🔴 El tope existe para que un permiso que de verdad no existe no se
+             * reintente cada 2 minutos para siempre. Al agotarse queda marcada
+             * para que una persona la mire, NO se borra. */
+            if ($e->esTransitorio() && (int)$p['intentos'] < COLA_NC_TOPE_ACCESO) {
+                cola_nc_fallo($db, $rid, 'acceso denegado (sesión), se reintenta: ' . $e->getMessage());
+                $decir("  … $rid acceso denegado, intento " . ((int)$p['intentos'] + 1)
+                       . " de " . COLA_NC_TOPE_ACCESO);
+            } else {
+                cola_nc_fallo($db, $rid, 'forbidden: ' . $e->getMessage(), 1);
+                $fallidas++;
+                $decir("  ✗ $rid sin permiso"
+                       . ($e->esTransitorio() ? " tras " . COLA_NC_TOPE_ACCESO . " intentos" : "")
+                       . ", no se reintenta");
+            }
         } catch (LlamadaBitrixError $e) {
             cola_nc_fallo($db, $rid, $e->getMessage());
             $cortado = true;

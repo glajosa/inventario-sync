@@ -5,7 +5,24 @@ require_once __DIR__ . '/llamada-idempotencia.php';
 require_once __DIR__ . '/llamada-protocolo.php';
 
 final class LlamadaValidationError extends InvalidArgumentException {}
-final class LlamadaForbidden extends RuntimeException {}
+/**
+ * "Sin permiso" son DOS cosas distintas y meterlas en la misma bolsa costó
+ * 7 pulsaciones perdidas (medido 17-sep-2026, usuario 7609, 5 días distintos):
+ *
+ *   PERMANENTE  los datos no cuadran — el deal no es ese, el teléfono no es del
+ *               contacto. Reintentarlo falla igual: reproducirlo no arregla nada.
+ *   TRANSITORIO Bitrix contestó ACCESS_DENIED. Casi siempre es la SESIÓN del
+ *               vendedor vencida, no un permiso que no exista. Eso se arregla
+ *               solo, y descartarlo le borra al vendedor el comprobante de una
+ *               llamada que SÍ hizo.
+ */
+final class LlamadaForbidden extends RuntimeException {
+    public function __construct(string $message, private bool $transitorio = false) {
+        parent::__construct($message);
+    }
+
+    public function esTransitorio(): bool { return $this->transitorio; }
+}
 final class LlamadaBitrixError extends RuntimeException {
     public function __construct(string $message, private bool $deliveryUncertain = false) {
         parent::__construct($message);
@@ -462,7 +479,28 @@ function llamada_procesar_resultado(
 
     return $response;
     } catch (LlamadaForbidden $error) {
-        $store->forbid($idempotencyKey, $store->now(), $leaseToken);
+        /* 🔴 Sellar como 'forbidden' es DEFINITIVO: begin() vuelve a lanzar
+         * 'request was previously forbidden' sin siquiera llamar a Bitrix. Si se
+         * sella un fallo transitorio, el reintento es humo — la cola se ve sana y
+         * la actividad no se crea nunca. Por eso el transitorio se deja
+         * 'retryable', que es el estado que begin() sí sabe re-tomar. */
+        if ($error->esTransitorio()) {
+            /* 🔴 La MISMA degradacion que hace forbid(): un comentario que quedo
+             * 'in_progress' sin id NO se entrego (ACCESS_DENIED es un rechazo, no
+             * una duda), asi que vuelve a 'pending'. Sin esto el reintento lo lee
+             * como "entrega incierta" y manda la pulsacion a REVISION MANUAL en vez
+             * de reintentarla — o sea el arreglo no arreglaria nada. Lo destapo una
+             * prueba que ya existia; no lo habria visto mirando el codigo. */
+            $estadoComentario = ($commentState ?? null) === 'in_progress' && ($commentId ?? null) === null
+                ? 'pending'
+                : ($commentState ?? null);
+            llamada_guardar_progreso(
+                $store, $idempotencyKey, $progress ?? [],
+                $estadoComentario, $commentId ?? null, $leaseToken, 'retryable'
+            );
+        } else {
+            $store->forbid($idempotencyKey, $store->now(), $leaseToken);
+        }
         throw $error;
     }
 }
@@ -698,7 +736,7 @@ function llamada_bx_result(callable $bx, string $method, array $params): mixed {
         $error = trim((string)($response['error'] ?? 'unknown error'));
         $description = trim((string)($response['desc'] ?? ''));
         if (strtoupper($error) === 'ACCESS_DENIED' || preg_match('/\baccess denied\b/i', $description) === 1) {
-            throw new LlamadaForbidden('Bitrix access denied');
+            throw new LlamadaForbidden('Bitrix access denied', true);   // transitorio: la sesion se renueva
         }
         $detail = $description !== '' && $description !== $error
             ? $error . ': ' . $description
