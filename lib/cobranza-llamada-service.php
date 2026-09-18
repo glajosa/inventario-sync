@@ -71,7 +71,19 @@ function cobranza_no_contesto(
     $planificadaFutura = null;
     foreach ($acts as $a) {
         if ((string)($a['COMPLETED'] ?? '') === 'Y') continue;
-        $fin = (string)($a['END_TIME'] ?? '');
+        // 🔴 LA FECHA QUE MANDA ES EL DEADLINE, NO EL END_TIME.
+        // El comentario del select de arriba ya explica por que, y cobranza_pacto_vigente()
+        // y cobranza_pacto_vencido() ya lo hacen asi. Este bucle se quedo sin el arreglo:
+        // el 7-sep-2026 se corrigio en un sitio y no en el otro.
+        //
+        // Caso real del 18-sep-2026, deal 403425 (Alfredo Heres, Noral Plaza E-1-12):
+        //   DEADLINE  2026-09-18T17:05:00+03:00 -> vie 18-sep 09:05 Ecuador (la fecha PROMETIDA)
+        //   END_TIME  2026-09-24T18:05:00+03:00 -> jue 24-sep 10:05 Ecuador (SEIS dias despues)
+        // El pacto ya estaba vencido para las otras dos reglas, pero este bucle veia el
+        // END_TIME en el futuro, marcaba "hay una planificada" y el boton devolvia
+        // en_pausa: la asesora llamo, no le contestaron, y no pudo registrarlo.
+        $fin = (string)($a['DEADLINE'] ?? '');
+        if ($fin === '') $fin = (string)($a['END_TIME'] ?? '');
         if ($fin !== '' && strtotime($fin) > $ahora->getTimestamp()) { $planificadaFutura = $a; break; }
     }
     $deal['_planificada_futura'] = $planificadaFutura !== null;

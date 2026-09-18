@@ -509,8 +509,19 @@ $hoyEc = new DateTimeImmutable('2026-09-08T15:00:00-05:00');
 $c1234 = fn(string $dl) => [[ 'TYPE_ID'=>2,'DIRECTION'=>2,'SUBJECT'=>'1234 hable con el cliente','DEADLINE'=>$dl ]];
 test_same(false, cobranza_pacto_vencido($c1234('2026-09-20T13:00:00-05:00'), $hoyEc),
     'fecha pactada a futuro: no esta vencido (lo frena el pacto vigente)');
-test_same(false, cobranza_pacto_vencido($c1234('2026-09-08T09:00:00-05:00'), $hoyEc),
-    '🔴 fecha pactada HOY, aunque la hora ya paso: el dia no termino, NO esta vencido');
+// 🔴 REGLA CAMBIADA el 18-sep-2026 por el usuario. Antes: "el dia no termino, NO esta
+// vencido". Ahora: en cuanto pasa la HORA pactada la escalera se reinicia y la asesora
+// puede llamar y registrar. Textual: "tendria que poder llamar hoy, y poner no contesta
+// si no lo hizo, y la escalera recien empieza nuevamente ahi". El incumplimiento formal
+// (PROMESAS INCUMPLIDAS +1) sigue siendo al dia siguiente y no se toca.
+test_same(true, cobranza_pacto_vencido($c1234('2026-09-08T09:00:00-05:00'), $hoyEc),
+    '🔴 fecha pactada HOY y la hora ya paso: la escalera se reinicia, SI se puede llamar');
+// pero ANTES de la hora pactada sigue mandando el pacto: al cliente no se le insiste
+test_same(false, cobranza_pacto_vencido($c1234('2026-09-08T18:00:00-05:00'), $hoyEc),
+    'fecha pactada HOY pero la hora NO ha llegado: todavia no esta vencido');
+// y el minuto exacto no se adelanta
+test_same(false, cobranza_pacto_vencido($c1234('2026-09-08T15:00:00-05:00'), $hoyEc),
+    'justo a la hora pactada todavia no esta vencido: se necesita que PASE');
 test_same(true,  cobranza_pacto_vencido($c1234('2026-09-07T09:00:00-05:00'), $hoyEc),
     '🔴 fecha pactada AYER: incumplido, hay que perseguirlo');
 test_same(false, cobranza_pacto_vencido($c1234(''), $hoyEc),

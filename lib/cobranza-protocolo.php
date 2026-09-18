@@ -196,12 +196,27 @@ function cobranza_pacto_vigente(array $actividades, int $ahoraTs): ?array {
 /**
  * ¿Hay un contacto efectivo cuyo DIA pactado YA PASO? = lo pactado se incumplio.
  *
- * 🔴 Se compara por DIA, no por instante, y con el reloj que le pasan (no con
- * date()). Las tres situaciones son distintas:
- *   fecha pactada MAÑANA o despues -> pacto vivo, silencio (cobranza_pacto_vigente)
- *   fecha pactada HOY              -> hablo hoy, el dia no termino: el ciclo esta
- *                                     cumplido y no se registra otra "no contesto"
- *   fecha pactada ANTES DE HOY     -> prometio y no cumplio: HAY que perseguirlo
+ * 🔴 Se compara por INSTANTE (no por dia) y con el reloj que le pasan, no con date().
+ *
+ * REGLA DEL USUARIO (18-sep-2026), textual: "cuando contesta, la escalera se reinicia,
+ * entonces tendria que poder llamar hoy, y poner no contesta si no lo hizo, y la
+ * escalera recien empieza nuevamente ahi; y entonces ahi si, pasa de ese dia, se pone
+ * que el cliente incumplio con el pacto, ya que ese dia como maximo dijo que iba a pagar".
+ *
+ *   fecha pactada a FUTURO          -> pacto vivo, silencio (cobranza_pacto_vigente)
+ *   fecha pactada YA PASADA (hoy    -> la escalera se REINICIA: la asesora puede llamar
+ *   mismo, pasada la hora, incluido)   y registrar el intento, que cuenta como el 1o
+ *   el DIA siguiente                -> ademas PROMESAS INCUMPLIDAS +1 (eso lo hace
+ *                                      llc_promesa_evaluar, con fecha+1, y no cambia)
+ *
+ * ANTES comparaba por dia, y eso dejaba un hueco de horas: el deal 403425 (Alfredo
+ * Heres, 18-sep-2026) tenia el pacto para las 09:05, la asesora llamo a las 11:51, no
+ * le contestaron, y el boton lo rechazo con ciclo_cumplido -- la promesa ya vencida
+ * seguia contando como contacto del ciclo.
+ *
+ * 🔴 Su gemela gc_pacto_incumplido() en cobranzaphp/lib_gestion_cob.php SIGUE por dia,
+ * a proposito: esa decide si el deal se marca PACTO INCUMPLIDO, y ya protege a la
+ * asesora ("si llamo ese dia o despues, cumplio"). Son dos preguntas distintas.
  * Sin el ultimo caso, un 1234 dejaba el deal mudo el resto del mes justo cuando
  * mas hay que llamarlo. Es la misma comparacion por dia que hace gc_pacto_incumplido()
  * en cobranzaphp/lib_gestion_cob.php.
@@ -219,7 +234,8 @@ function cobranza_pacto_vencido(array $actividades, DateTimeImmutable $ahoraEc,
         $dl = (string)($a['DEADLINE'] ?? '');
         if ($dl === '') $dl = (string)($a['END_TIME'] ?? '');
         if ($dl === '') continue;                  // sin fecha no se pacto nada
-        if (substr($dl, 0, 10) < $hoy) return true;
+        $ts = strtotime($dl);
+        if ($ts !== false && $ts < $ahoraEc->getTimestamp()) return true;
     }
     return false;
 }

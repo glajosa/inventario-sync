@@ -388,3 +388,48 @@ $r = cobranza_no_contesto(['dealId'=>81,'bitrixUserId'=>42], $bx, $ahora);
 test_same(0, $r['contactos'], 'sin contestadas en el ciclo, contactos = 0');
 test_same(false, $r['ultimoDelTecho'], 'y no es el ultimo del techo');
 test_same(true, is_string($r['proximoIntento']), 'con proxima llamada de verdad');
+
+// ══════════ EL PACTO SE MIDE POR SU DEADLINE, NO POR SU END_TIME ══════════
+// 🔴 Caso real del 18-sep-2026, deal 403425 (Alfredo Heres, Noral Plaza E-1-12).
+// Bitrix pone el END_TIME de una actividad DIAS despues de su fecha limite:
+//   DEADLINE  2026-09-18T17:05:00+03:00 -> vie 18-sep 09:05 Ecuador (lo PROMETIDO)
+//   END_TIME  2026-09-24T18:05:00+03:00 -> jue 24-sep 10:05 Ecuador (6 dias despues)
+// El bucle de _planificada_futura miraba el END_TIME, veia futuro, y el boton
+// contestaba en_pausa: la asesora llamo el dia prometido, no le contestaron, y no
+// pudo registrarlo. cobranza_pacto_vigente() y cobranza_pacto_vencido() ya usaban
+// el DEADLINE desde el 7-sep; este bucle se habia quedado sin el arreglo.
+$ahoraPacto = new DateTimeImmutable('2026-09-18T11:51:00-05:00');   // el dia prometido, ya pasadas las 09:05
+
+$log = [];
+$pactoVencidoHoy = fake_activity(900, 'PROMESA DE PAGO', '2026-09-11T09:06:00-05:00')
+    + ['COMPLETED'=>'N', 'DEADLINE'=>'2026-09-18T17:05:00+03:00', 'END_TIME'=>'2026-09-24T18:05:00+03:00'];
+$bx = cob_fake_bx(['ID'=>403425,'STAGE_ID'=>'C48:UC_LLUGGI','UF_CRM_ESTADO_PAUSA'=>'2119'],
+                  [$pactoVencidoHoy], $log);
+$r = cobranza_no_contesto(['dealId'=>403425,'bitrixUserId'=>42], $bx, $ahoraPacto);
+// Lo que este arreglo cambia es que la PAUSA deje de frenarlo. Que despues lo frene
+// otra regla (ciclo_cumplido: ya se hablo con el cliente este ciclo) es una decision
+// distinta, del negocio, y todavia no esta tomada -- ver la bitacora del 18-sep-2026.
+test_same('procesado', $r['status'],
+    '🔴 EL CASO DE ALFREDO: pacto vencido hoy a las 09:05, ella llama a las 11:51 -> SI registra');
+test_same(1, $r['intentos'],
+    'y la escalera empieza de cero: es el intento 1, no la continuacion del anterior');
+
+// y al reves: mientras el DEADLINE sigue en el futuro, la pausa manda
+$log = [];
+$pactoVivo = fake_activity(901, 'PROMESA DE PAGO', '2026-09-11T09:06:00-05:00')
+    + ['COMPLETED'=>'N', 'DEADLINE'=>'2026-09-25T17:05:00+03:00', 'END_TIME'=>'2026-09-30T18:05:00+03:00'];
+$bx = cob_fake_bx(['ID'=>403425,'STAGE_ID'=>'C48:UC_LLUGGI','UF_CRM_ESTADO_PAUSA'=>'2119'],
+                  [$pactoVivo], $log);
+$r = cobranza_no_contesto(['dealId'=>403425,'bitrixUserId'=>42], $bx, $ahoraPacto);
+test_same('pacto_vigente', $r['motivo'],
+    'pacto con DEADLINE a futuro: lo frena la regla del pacto, no se le insiste');
+
+// y si no hay DEADLINE, el END_TIME sigue sirviendo de respaldo
+$log = [];
+$sinDeadline = fake_activity(902, 'PROMESA DE PAGO', '2026-09-11T09:06:00-05:00')
+    + ['COMPLETED'=>'N', 'END_TIME'=>'2026-09-30T18:05:00+03:00'];
+$bx = cob_fake_bx(['ID'=>403425,'STAGE_ID'=>'C48:UC_LLUGGI','UF_CRM_ESTADO_PAUSA'=>'2119'],
+                  [$sinDeadline], $log);
+$r = cobranza_no_contesto(['dealId'=>403425,'bitrixUserId'=>42], $bx, $ahoraPacto);
+test_same('pacto_vigente', $r['motivo'],
+    'sin DEADLINE se cae al END_TIME: el respaldo sigue frenando');
