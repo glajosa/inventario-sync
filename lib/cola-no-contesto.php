@@ -83,6 +83,18 @@ function cola_nc_db(string $dataDir): SQLite3 {
         ultimo_error   TEXT NOT NULL DEFAULT \'\'
     )');
     $db->exec('CREATE INDEX IF NOT EXISTS cola_nc_estado ON cola_no_contesto (estado, creada)');
+    /* intentos_sanos = intentos en los que EL PORTAL CONTESTO y aun asi denego.
+     * Va aparte de `intentos` a proposito: si la saturacion gastara el cupo, una
+     * tarde apretada daria por "sin acceso" una pulsacion que solo necesitaba
+     * esperar. Lo que decide el veredicto es este contador, no el otro. */
+    $tiene = false;
+    $res = $db->query('PRAGMA table_info(cola_no_contesto)');
+    while ($res && ($c = $res->fetchArray(SQLITE3_ASSOC))) {
+        if (($c['name'] ?? '') === 'intentos_sanos') { $tiene = true; break; }
+    }
+    if (!$tiene) {
+        $db->exec('ALTER TABLE cola_no_contesto ADD COLUMN intentos_sanos INTEGER NOT NULL DEFAULT 0');
+    }
     return $db;
 }
 
@@ -148,6 +160,38 @@ function cola_nc_fallo(SQLite3 $db, string $requestId, string $error, int $tope 
     $st->execute();
 }
 
+/**
+ * El portal CONTESTO y denego el acceso. Eso ya descarta la saturacion: un portal
+ * saturado devuelve 503, nunca ACCESS_DENIED.
+ *
+ * 🔴 Y lo reintenta la credencial DEL SERVICIO, no la sesion del vendedor (ver
+ * drenar-no-contesto.php). O sea que si aca sigue denegando, tampoco es la sesion.
+ * Descartadas las dos causas comunes, el veredicto se puede afirmar: al servicio
+ * le falta acceso a ese deal. Eso NO es "que alguien lo mire": es una causa con
+ * nombre, y queda escrita en la fila.
+ */
+function cola_nc_acceso_denegado(SQLite3 $db, string $requestId, string $error, int $dealId, int $tope): void {
+    $st = $db->prepare('UPDATE cola_no_contesto
+        SET intentos = intentos + 1, intentos_sanos = intentos_sanos + 1,
+            ultimo_intento = :t, ultimo_error = :e,
+            estado = CASE WHEN intentos_sanos + 1 >= :tope THEN \'bloqueada\' ELSE \'encolada\' END
+        WHERE request_id = :r');
+    $st->bindValue(':t', time(), SQLITE3_INTEGER);
+    $st->bindValue(':e', mb_substr($error, 0, 500), SQLITE3_TEXT);
+    $st->bindValue(':tope', max(1, $tope), SQLITE3_INTEGER);
+    $st->bindValue(':r', $requestId, SQLITE3_TEXT);
+    $st->execute();
+}
+
+/** Cuantos intentos con el portal sano lleva una fila. */
+function cola_nc_intentos_sanos(SQLite3 $db, string $requestId): int {
+    $st = $db->prepare('SELECT intentos_sanos FROM cola_no_contesto WHERE request_id = :r');
+    $st->bindValue(':r', $requestId, SQLITE3_TEXT);
+    $res = $st->execute();
+    $row = $res ? $res->fetchArray(SQLITE3_ASSOC) : null;
+    return (int)($row['intentos_sanos'] ?? 0);
+}
+
 /** Cuántas hay de cada estado — para el monitor y para mirarlo de un vistazo. */
 function cola_nc_conteo(SQLite3 $db): array {
     $out = ['encolada' => 0, 'hecha' => 0, 'fallida' => 0];
@@ -180,7 +224,7 @@ function cola_nc_drenar(
 ): array {
     $decir = $log ?? static function (string $_): void {};
     $pendientes = cola_nc_pendientes($db, $lote);
-    $hechas = 0; $fallidas = 0; $cortado = false;
+    $hechas = 0; $fallidas = 0; $bloqueadas = 0; $cortado = false;
 
     foreach ($pendientes as $p) {
         $rid = (string)$p['request_id'];
@@ -219,16 +263,30 @@ function cola_nc_drenar(
              * 🔴 El tope existe para que un permiso que de verdad no existe no se
              * reintente cada 2 minutos para siempre. Al agotarse queda marcada
              * para que una persona la mire, NO se borra. */
-            if ($e->esTransitorio() && (int)$p['intentos'] < COLA_NC_TOPE_ACCESO) {
-                cola_nc_fallo($db, $rid, 'acceso denegado (sesión), se reintenta: ' . $e->getMessage());
-                $decir("  … $rid acceso denegado, intento " . ((int)$p['intentos'] + 1)
-                       . " de " . COLA_NC_TOPE_ACCESO);
+            if ($e->esTransitorio()) {
+                /* EL PORTAL CONTESTO Y DENEGO. Eso descarta la saturacion por si
+                 * solo: saturado devuelve 503, nunca ACCESS_DENIED. Y este reintento
+                 * lo hizo la credencial DEL SERVICIO, no la sesion del vendedor, asi
+                 * que tampoco es la sesion. Se cuenta aparte y, al agotarse, se dicta
+                 * el veredicto con las dos causas ya descartadas. */
+                $deal = (int)(json_decode((string)$p['input_json'], true)['dealId'] ?? 0);
+                cola_nc_acceso_denegado($db, $rid, 'acceso denegado con el portal respondiendo: '
+                    . $e->getMessage(), $deal, COLA_NC_TOPE_ACCESO);
+                $sanos = cola_nc_intentos_sanos($db, $rid);
+                if ($sanos >= COLA_NC_TOPE_ACCESO) {
+                    $bloqueadas++;
+                    $decir("  ⛔ $rid BLOQUEADA · deal $deal · el portal respondió y negó el acceso"
+                           . " $sanos veces con la credencial del servicio."
+                           . " NO es saturación (saturado da 503) NI la sesión del vendedor"
+                           . " (el drenador no la usa). Falta acceso al deal $deal.");
+                } else {
+                    $decir("  … $rid acceso denegado, intento $sanos de " . COLA_NC_TOPE_ACCESO
+                           . " con el portal sano (deal $deal)");
+                }
             } else {
                 cola_nc_fallo($db, $rid, 'forbidden: ' . $e->getMessage(), 1);
                 $fallidas++;
-                $decir("  ✗ $rid sin permiso"
-                       . ($e->esTransitorio() ? " tras " . COLA_NC_TOPE_ACCESO . " intentos" : "")
-                       . ", no se reintenta");
+                $decir("  ✗ $rid datos que no cuadran, no se reintenta");
             }
         } catch (LlamadaBitrixError $e) {
             cola_nc_fallo($db, $rid, $e->getMessage());
@@ -241,7 +299,7 @@ function cola_nc_drenar(
             $decir("  ✗ $rid · " . $e->getMessage());
         }
     }
-    return ['hechas' => $hechas, 'fallidas' => $fallidas,
+    return ['hechas' => $hechas, 'fallidas' => $fallidas, 'bloqueadas' => $bloqueadas,
             'cortado' => $cortado, 'vistas' => count($pendientes)];
 }
 

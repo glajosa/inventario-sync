@@ -76,12 +76,36 @@ if (is_file($colaF) && class_exists('SQLite3')) {
         $db = new SQLite3($colaF, SQLITE3_OPEN_READONLY);
         $db->busyTimeout(2000);
         $r = $db->querySingle("SELECT COUNT(*) c, COALESCE(MIN(creada),0) v FROM cola_no_contesto WHERE estado = 'encolada'", true);
+        /* 🔴 LAS QUE YA NO SE VAN A CREAR SOLAS. Esta pieza miraba unicamente las
+         * 'encolada', o sea lo que todavia tiene esperanza. Las que se dieron por
+         * perdidas no aparecian en ningun lado: medido el 17-sep-2026, 7 pulsaciones
+         * llevaban hasta 8 DIAS muertas y el panel decia 0. Un termometro que solo
+         * mira lo que va bien no es un termometro.
+         * Cada una es una llamada que el vendedor hizo y que no le quedo registrada. */
+        $m = $db->querySingle("SELECT COUNT(*) c FROM cola_no_contesto WHERE estado IN ('bloqueada','fallida')", true);
+        $deudas = $db->query("SELECT estado, input_json, ultimo_error FROM cola_no_contesto
+                              WHERE estado IN ('bloqueada','fallida') ORDER BY creada DESC LIMIT 5");
+        $detalles = [];
+        while ($deudas && ($d = $deudas->fetchArray(SQLITE3_ASSOC))) {
+            $deal = (int)(json_decode((string)($d['input_json'] ?? ''), true)['dealId'] ?? 0);
+            $detalles[] = ($d['estado'] === 'bloqueada' ? 'sin acceso' : 'datos') . " · deal $deal · "
+                . mb_substr((string)($d['ultimo_error'] ?? ''), 0, 70);
+        }
         $db->close();
-        $n = (int)($r['c'] ?? 0); $viejo = (int)($r['v'] ?? 0);
-        $colaDet = $n . ' pulsación(es) esperando turno';
+        $n = (int)($r['c'] ?? 0); $viejo = (int)($r['v'] ?? 0); $perdidas = (int)($m['c'] ?? 0);
+        $colaDet = $n . ' pulsación(es) esperando turno'
+            . ($perdidas > 0 ? ' · ' . $perdidas . ' SIN CREAR' : '');
         if ($n > 0 && $viejo > 0 && (time() - $viejo) > 1800) {
             $colaAlerta = $n . ' pulsación(es) del botón sin crear; la más vieja hace '
                 . round((time() - $viejo) / 60) . ' min';
+        }
+        if ($perdidas > 0) {
+            /* El veredicto va en la alerta, no un "revisalo": el portal respondio y
+             * nego el acceso con la credencial del servicio, asi que no es saturacion
+             * ni la sesion del vendedor. */
+            $colaAlerta = trim($colaAlerta . ' · ' . $perdidas
+                . ' pulsación(es) que NO se van a crear solas — no es saturación: '
+                . implode(' | ', $detalles), ' ·');
         }
     } catch (Throwable $e) {
         /* Una lectura que falla NO puede parecerse a "cero en cola": se dice que no se pudo. */

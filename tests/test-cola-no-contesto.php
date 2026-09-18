@@ -374,3 +374,51 @@ test_cola_no_contesto_guarda_antes_de_intentar();
 test_cola_no_contesto_permisos();
 test_cola_no_contesto_enchufada();
 echo "test-cola-no-contesto OK\n";
+
+/**
+ * EL VEREDICTO: saturación vs acceso. Pedido del usuario (17-sep-2026), textual:
+ * *"no me sirve que si los reintentos fallan, que alguien lo mire; debes de ver que
+ * realmente no se pueda, y ver si es por saturación o no, y si no hay saturación ya
+ * es por otro factor"*.
+ *
+ * 🔴 LA PRUEBA QUE SOSTIENE TODO: la SATURACIÓN NO PUEDE GASTAR EL CUPO. Si lo
+ * gastara, una tarde apretada daría por "sin acceso" pulsaciones que solo
+ * necesitaban esperar — y volveríamos a tirar el trabajo del vendedor.
+ */
+function test_cola_nc_veredicto(): void {
+    $d = cola_nc_test_dir();
+    try {
+        $db = cola_nc_db($d);
+        $input = ['callRequestId' => 'v-1', 'memberId' => 'panel-1', 'dealId' => 4242,
+                  'bitrixUserId' => 1, 'bitrixActivityId' => null, 'outcome' => 'no_answer',
+                  'selectedPhone' => '+593999999999', 'nextActivityAt' => null, 'comment' => ''];
+        cola_nc_encolar($db, 'v-1', $input, time(), 'panel', 'C28:X', 'prueba');
+
+        // 20 fallos POR SATURACIÓN: gastan `intentos`, NO gastan el cupo de acceso
+        for ($i = 0; $i < 20; $i++) cola_nc_fallo($db, 'v-1', 'Bitrix saturado 503');
+        $f = $db->querySingle("SELECT estado, intentos, intentos_sanos FROM cola_no_contesto WHERE request_id='v-1'", true);
+        test_same(0, (int)$f['intentos_sanos'], 'la saturación NO gasta el cupo de acceso');
+        test_same(20, (int)$f['intentos'], 'la saturación sí cuenta como intento');
+        test_same('encolada', (string)$f['estado'], 'tras 20 saturaciones la pulsación SIGUE viva');
+
+        // ahora el portal RESPONDE y niega: eso sí gasta cupo
+        for ($i = 0; $i < 3; $i++) cola_nc_acceso_denegado($db, 'v-1', 'ACCESS_DENIED', 4242, 3);
+        $f = $db->querySingle("SELECT estado, intentos_sanos FROM cola_no_contesto WHERE request_id='v-1'", true);
+        test_same(3, (int)$f['intentos_sanos'], 'el acceso denegado con portal sano sí cuenta');
+        test_same('bloqueada', (string)$f['estado'], 'al agotar el cupo queda BLOQUEADA, con causa');
+
+        // bloqueada NO es lo mismo que fallida: son causas distintas y se distinguen
+        cola_nc_encolar($db, 'v-2', $input + ['callRequestId' => 'v-2'], time(), 'panel', 'C28:X', 'prueba');
+        cola_nc_fallo($db, 'v-2', 'datos que no cuadran', 1);
+        test_same('fallida', (string)$db->querySingle("SELECT estado FROM cola_no_contesto WHERE request_id='v-2'"),
+            'el forbidden por datos queda fallida, no bloqueada');
+
+        // 🔴 y una que sigue viva NO puede contarse como perdida
+        cola_nc_encolar($db, 'v-3', $input + ['callRequestId' => 'v-3'], time(), 'panel', 'C28:X', 'prueba');
+        test_same(2, (int)$db->querySingle("SELECT COUNT(*) FROM cola_no_contesto WHERE estado IN ('bloqueada','fallida')"),
+            'solo 2 perdidas: la que sigue encolada no cuenta');
+    } finally {
+        cola_nc_test_limpiar($d);
+    }
+}
+test_cola_nc_veredicto();
