@@ -291,6 +291,22 @@ test_same(false, cobranza_es_contestada('Llamada saliente Ana'),      'una salie
 test_same(false, cobranza_es_contestada('no contesta'),               '"no contesta" NO');
 test_same(false, cobranza_es_contestada(''),                          'vacio NO');
 
+// ── CONCILIACION PENDIENTE: calla, pero NO es una contestada ──
+// Decision del usuario 18-sep-2026: "si lo calla, asi que si debe de saber".
+test_same(true,  cobranza_es_conciliacion('CONCILIACIÓN PENDIENTE'), 'con acento es conciliacion');
+test_same(true,  cobranza_es_conciliacion('CONCILIACION PENDIENTE'), 'sin acento tambien');
+test_same(true,  cobranza_es_conciliacion('conciliacion'),           'en minusculas y sin PENDIENTE');
+test_same(false, cobranza_es_conciliacion('1234'),                   'un 1234 no es conciliacion');
+test_same(false, cobranza_es_conciliacion('Llamada saliente Ana'),   'una saliente normal tampoco');
+// 🔴 LA QUE IMPORTA: no se cuela en el contador de contactos efectivos
+test_same(false, cobranza_es_contestada('CONCILIACIÓN PENDIENTE'),   '🔴 NO cuenta como llamada contestada');
+// y el pacto SI la reconoce -> el boton se calla
+$__ahora = strtotime('2026-09-18 10:00:00');
+$__conc  = [['TYPE_ID'=>2,'DIRECTION'=>2,'SUBJECT'=>'CONCILIACIÓN PENDIENTE','DEADLINE'=>'2026-09-25T12:00:00+03:00']];
+test_same(true,  cobranza_pacto_vigente($__conc, $__ahora) !== null, 'una conciliacion a futuro CALLA el boton');
+$__viejo = [['TYPE_ID'=>2,'DIRECTION'=>2,'SUBJECT'=>'CONCILIACIÓN PENDIENTE','DEADLINE'=>'2026-09-10T12:00:00+03:00']];
+test_same(true,  cobranza_pacto_vigente($__viejo, $__ahora) === null, '🔴 con la fecha pasada NO calla');
+
 // una PROMESA DE PAGO reinicia la escalera igual que un 1234
 $conPromesa = [
     fake_activity(1,'Llamada saliente Ana','2026-09-03T08:00:00-05:00'),

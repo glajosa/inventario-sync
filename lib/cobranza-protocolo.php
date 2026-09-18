@@ -145,6 +145,28 @@ function cobranza_es_recordatorio(array $a): bool {
  * Yo habia programado solo 1234, asi que una PROMESA DE PAGO contaba como intento
  * fallido: castigaba a la asesora por haber logrado justo lo que se le pedia.
  */
+/**
+ * ¿Este asunto es una CONCILIACION PENDIENTE?
+ *
+ * 🔴 VA APARTE DE cobranza_es_contestada() A PROPOSITO. Esa funcion alimenta TRES
+ * cosas: el pacto que calla el boton (linea ~176) y dos contadores de CONTACTO
+ * EFECTIVO (~231 y ~288). Una conciliacion pendiente CALLA -- decision del usuario,
+ * 18-sep-2026: "si lo calla, asi que si debe de saber" -- pero NO es una llamada
+ * atendida: se crea cuando cobranza debe revisar la cuenta, y puede que nunca se
+ * haya hablado con el cliente. Metiendola en es_contestada le sumariamos al deal
+ * una contestada que no existio, que es justo el error que v-anteriores corrigio al
+ * reves (castigar a la asesora por una promesa de pago).
+ *
+ * El gemelo del servidor es llc_estado_pausa() en cobranzaphp/lib_llamadas_cob.php,
+ * que ademas escribe ESTADO EN PAUSA = 2139. Los dos tienen que conocer el asunto o
+ * el deal oscila: el cron lo calla y el boton le crea la llamada igual.
+ *
+ * 'CONCILIACI' cubre CONCILIACION y CONCILIACIÓN: aca no se quitan acentos.
+ */
+function cobranza_es_conciliacion(string $subject): bool {
+    return str_contains(mb_strtoupper(trim($subject), 'UTF-8'), 'CONCILIACI');
+}
+
 function cobranza_es_contestada(string $subject): bool {
     $s = mb_strtoupper(trim($subject), 'UTF-8');
     return str_contains($s, '1234')
@@ -173,7 +195,7 @@ function cobranza_pacto_vigente(array $actividades, int $ahoraTs): ?array {
     foreach ($actividades as $a) {
         if ((int)($a['TYPE_ID'] ?? 0) !== 2 || (int)($a['DIRECTION'] ?? 0) !== 2) continue;
         $subject = (string)($a['SUBJECT'] ?? '');
-        if (!cobranza_es_contestada($subject)) continue;
+        if (!cobranza_es_contestada($subject) && !cobranza_es_conciliacion($subject)) continue;   // v-concilia: tambien calla
         // 🔴 NO se mira COMPLETED, y es a proposito. El protocolo describe el pacto
         // como COMPLETED=N ("la conversacion pactada todavia no ocurrio"), pero el
         // uso REAL es otro: la asesora marca la llamada como HECHA -- porque la
