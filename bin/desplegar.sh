@@ -55,9 +55,16 @@ if [ "$ANTES" = "$LOCAL" ]; then
 fi
 
 # ¿el repo está limpio y subido?
-if [ -n "$(git -C "$REPO" status --porcelain)" ]; then
+# Los respaldos sueltos (.bak, .bak-motivo, .orig, ~) NO cuentan: huella.php los
+# excluye igual, o sea que ni viajan a la imagen ni pueden hacer que la huella
+# difiera. Frenar por ellos solo lograba que el despliegue fuera imposible
+# mientras otra sesión tuviera un respaldo en el disco. El filtro es EL MISMO
+# que el de huella.php:66 — si cambia uno, cambia el otro.
+SUCIO="$(git -C "$REPO" status --porcelain \
+         | grep -Ev '\.(bak|orig|rej|swp|swo)$|\.bak-|\.pre-|~$' || true)"
+if [ -n "$SUCIO" ]; then
   rojo "Hay cambios sin commitear. EasyPanel despliega la RAMA de GitHub, no tu disco."
-  git -C "$REPO" status --short
+  printf '%s\n' "$SUCIO"
   exit 1
 fi
 if [ "$(git -C "$REPO" rev-parse HEAD)" != "$(git -C "$REPO" rev-parse '@{u}' 2>/dev/null)" ]; then
