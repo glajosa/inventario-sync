@@ -39,6 +39,8 @@ function cobranza_config(): array {
             'C48:UC_1WHC5Q'    => 3,   // 1 MES VENCIDO   - 1 contacto x 3 (D+13,15,17)
             'C48:UC_LLUGGI'    => 3,   // 2 MESES VENCIDOS- igual que 1 MES
             'C48:UC_VXD8VQ'    => 6,   // 3 MESES VENCIDOS- 2 contactos x 3 (D+10,12,14 y D+20,22,24)
+            'C48:UC_9JEJX6'    => 6,   // 4 MESES VENCIDOS- identico a 3 MESES (regla del usuario 17-sep-2026)
+            'C48:UC_6HIS1P'    => 6,   // 5 MESES VENCIDOS- identico a 3 MESES
             // ABOGADO no va aca: su tope depende de si es el PRIMER MES en la etapa.
         ],
         // 🔴 ABOGADO cambio en protocolo-7: "PRIMER MES: 2 contactos -- 1 de cobranzas
@@ -74,7 +76,7 @@ function cobranza_config(): array {
         // avanza la mora. Se pone igual, porque el dia que un deal se quede quieto
         // (pago parcial, refinanciamiento en revision) el tope no puede quedar
         // agotado para siempre.
-        'etapas_ciclo_mensual' => ['C48:FINAL_INVOICE','C48:UC_1WHC5Q','C48:UC_LLUGGI','C48:UC_VXD8VQ'],
+        'etapas_ciclo_mensual' => ['C48:FINAL_INVOICE','C48:UC_1WHC5Q','C48:UC_LLUGGI','C48:UC_VXD8VQ','C48:UC_9JEJX6','C48:UC_6HIS1P'],
         'provider_id'      => 'VOXIMPLANT_CALL',
         'provider_type_id' => 'CALL',
         'campo_pausa'    => 'UF_CRM_ESTADO_PAUSA',
@@ -501,6 +503,8 @@ function cobranza_contactos_exigidos(string $stageId): int {
         case 'C48:UC_1WHC5Q':     return 0;   // 1 MES VENCIDO
         case 'C48:UC_LLUGGI':     return 1;   // 2 MESES VENCIDOS
         case 'C48:UC_VXD8VQ':     return 2;   // 3 MESES VENCIDOS
+        case 'C48:UC_9JEJX6':     return 2;   // 4 MESES VENCIDOS
+        case 'C48:UC_6HIS1P':     return 2;   // 5 MESES VENCIDOS
         case 'C48:FINAL_INVOICE': return 1;   // ABOGADO
         default: return 0;
     }

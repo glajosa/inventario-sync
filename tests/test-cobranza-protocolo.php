@@ -9,6 +9,8 @@ test_same(0, cobranza_tope_etapa('C48:UC_X35FSA'), 'MES CORRIENTE no se llama');
 test_same(3, cobranza_tope_etapa('C48:UC_1WHC5Q'), '1 MES VENCIDO: 3 intentos (D+13,15,17)');
 test_same(3, cobranza_tope_etapa('C48:UC_LLUGGI'), '2 MESES VENCIDOS: 3 llamadas');
 test_same(6, cobranza_tope_etapa('C48:UC_VXD8VQ'), '3 MESES VENCIDOS: 6 llamadas');
+test_same(6, cobranza_tope_etapa('C48:UC_9JEJX6'), '4 MESES VENCIDOS: 6 llamadas (igual que 3)');
+test_same(6, cobranza_tope_etapa('C48:UC_6HIS1P'), '5 MESES VENCIDOS: 6 llamadas (igual que 3)');
 // ABOGADO depende de si es el PRIMER MES en la etapa
 $hoyEc = new DateTimeImmutable('2026-09-15T10:00:00-05:00');
 test_same(6, cobranza_tope_etapa('C48:FINAL_INVOICE','2026-09-04T16:00:00+03:00',$hoyEc),
@@ -445,6 +447,10 @@ test_same($ABOG, cobranza_responsable([], 999, $ABOG),
 test_same(0, cobranza_contactos_exigidos('C48:UC_1WHC5Q'), '1 MES VENCIDO no exige contacto');
 test_same(1, cobranza_contactos_exigidos('C48:UC_LLUGGI'), '2 MESES exige 1 contacto');
 test_same(2, cobranza_contactos_exigidos('C48:UC_VXD8VQ'), '3 MESES exige 2 contactos');
+test_same(2, cobranza_contactos_exigidos('C48:UC_9JEJX6'), '4 MESES exige 2 contactos');
+test_same(2, cobranza_contactos_exigidos('C48:UC_6HIS1P'), '5 MESES exige 2 contactos');
+// 🔴 el caso REAL que fallo: deal 255548 en 4 MESES VENCIDOS, el boton decia
+// "en esta etapa no se llama" porque la etapa no estaba en la tabla de topes.
 test_same(1, cobranza_contactos_exigidos('C48:FINAL_INVOICE'),
     '🔴 ABOGADO exige 1, no 2: el tope de 6 son dos escaleras del MISMO contacto mensual');
 test_same(0, cobranza_contactos_exigidos('C48:NEW'), 'una etapa sin mora no exige nada');
@@ -484,6 +490,15 @@ test_same('ciclo_cumplido', $pc('C48:UC_LLUGGI', 1)['motivo'],
 // 3 MESES exige DOS contactos -> con uno todavia queda la segunda escalera
 test_same(true, $pc('C48:UC_VXD8VQ', 1)['puede'],
     '🔴 3 MESES con UN contacto: sigue habilitado, falta el segundo');
+// 🔴 EL CASO REAL QUE FALLO (18-sep-2026, deal 255548 Gabriela Vera): el boton
+// "No contesto" respondia "En esta etapa no se llama" en 4 MESES VENCIDOS. La etapa
+// no estaba en la tabla de topes de ESTE servicio -> tope 0 -> etapa_sin_llamadas.
+// El motor de SiteGround ya la conocia desde v250; este servidor no. Son dos
+// programas distintos y cada uno tiene su propia lista.
+test_same(true,  $pc('C48:UC_9JEJX6', 0)['puede'], '4 MESES: el boton SI deja registrar');
+test_same(true,  $pc('C48:UC_6HIS1P', 0)['puede'], '5 MESES: el boton SI deja registrar');
+test_same('ciclo_cumplido', $pc('C48:UC_9JEJX6', 2)['motivo'], '4 MESES con 2 contactos: ciclo cumplido');
+test_same('ciclo_cumplido', $pc('C48:UC_6HIS1P', 2)['motivo'], '5 MESES con 2 contactos: ciclo cumplido');
 test_same('ciclo_cumplido', $pc('C48:UC_VXD8VQ', 2)['motivo'],
     '3 MESES con los dos contactos: cumplido');
 test_same('ciclo_cumplido', $pc('C48:FINAL_INVOICE', 1)['motivo'],
