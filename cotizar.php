@@ -1350,9 +1350,15 @@ $hoy  = new DateTimeImmutable('now');
       <?php endif; ?>
       <?php /* La etiqueta FIRMA va SOLO en la primera cuota diferida. Repetirla en
                todas está mal legalmente: da a entender que hay varias firmas del
-               contrato, y firma hay una. En las siguientes se entiende por el monto. */
-            $primerDiferido = true;
-            $aMedida = !empty($plan['firmaPlan']); ?>
+               contrato, y firma hay una. En las siguientes se entiende por el monto.
+
+               🔴 ESTE COMENTARIO YA ESTABA Y YO LO PASE POR ENCIMA. El 09-sep agregue
+               una excepcion (`$aMedida`) razonando que con montos distintos convenia
+               repetirla, y el 16-sep otra para las filas de firma sola. El usuario las
+               saco las dos el 18-sep: "solo pon firma en una y nada mas". La regla no
+               tenia excepciones y el motivo estaba escrito aca mismo -- es legal, no
+               estetico. Si alguna vez parece que hace falta repetirla, no hace falta. */
+            $primerDiferido = true; ?>
       <?php foreach ($plan['filas'] as $f): ?>
       <tr class="<?= $f['extra'] ? 'extra' : ($f['diferido'] ? 'diferido' : '') ?>">
         <?php /* Las filas de FIRMA SOLA no llevan numero: no son cuotas, son los abonos
@@ -1360,16 +1366,15 @@ $hoy  = new DateTimeImmutable('now');
                  56 cuotas donde su contrato dice 53. Sin esto salia un "0". */ ?>
         <td><?= empty($f['soloFirma']) ? (int)$f['n'] : '' ?></td>
         <td><?= h($f['fecha']) ?><?= $f['extra'] ? ' <span class="etq">EXTRA</span>' : '' ?><?php
-            /* La etiqueta FIRMA: con el diferido AUTOMATICO va solo en la primera, porque
-               son meses seguidos y todos por el mismo monto -- repetirla catorce veces era
-               ruido. Con el reparto A LA MEDIDA va en CADA UNA: son pagos distintos, en
-               meses que el asesor eligio y por montos distintos, y el cliente tiene que
-               poder ver cual de sus cuotas lleva firma. */
-            /* En las filas de FIRMA SOLA la etiqueta va SIEMPRE: son pagos de firma y
-               nada mas, y sin el rotulo el cliente no distingue esas tres filas de una
-               cuota cualquiera que casualmente vale distinto. */
-            if (!empty($f['soloFirma'])) { echo ' <span class="etq2">FIRMA</span>'; }
-            elseif (!empty($f['diferido']) && ($aMedida || $primerDiferido)) {
+            /* 🔴 LA ETIQUETA FIRMA VA UNA SOLA VEZ. Regla del usuario, dicha dos veces:
+               primero al armar el cuadre al centavo y otra vez el 18-sep viendo tres
+               etiquetas seguidas en la firma sola -- "solo pon firma en una y nada mas".
+               Da igual si los pagos son seguidos o salteados, del mismo monto o de
+               montos distintos, o si van encima de la cuota o en filas propias: el
+               documento lo lee un cliente y el rotulo repetido es ruido.
+               Las dos excepciones que yo habia metido -- `$aMedida` y las filas de firma
+               sola -- se quitan: eran razonamiento mio, no una regla suya. */
+            if (!empty($f['diferido']) && $primerDiferido) {
                 echo ' <span class="etq2">FIRMA</span>'; $primerDiferido = false;
             }
             /* La cuota que absorbe el redondeo NO se rotula. Se probo con una etiqueta
