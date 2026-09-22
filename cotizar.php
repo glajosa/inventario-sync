@@ -18,6 +18,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/cotizarlib.php';
+require_once __DIR__ . '/cotizacioneslib.php';   // cothist_registrar()
 
 // El catálogo se lee del MISMO archivo de caché que usa field.php. No se incluye
 // selector.php a propósito: ese módulo puede lanzar una reconstrucción completa
@@ -141,9 +142,11 @@ if (preg_match('/^\d+(\.\d+)?$/', $vPrecio) && (float)$vPrecio > 0 && $pvpInvent
 // ---------- cliente ----------
 $cliente = '';
 $separadas = false;   // sin deal no hay marca: se cotiza como fusion, que es el defecto
+$asesorId = 0;   // responsable del deal: es de quien es la cotizacion
 if ($dealId > 0) {
     $d = cot_bx('crm.deal.get', ['id' => $dealId]);
     $deal = $d['result'] ?? [];
+    $asesorId = (int)($deal['ASSIGNED_BY_ID'] ?? 0);
     // Fusion o separadas: lo declara el vendedor en el campo Inventario y decide si
     // se perdona un parqueo. No es una preferencia de esta pantalla.
     $separadas = unidades_separadas((string)($deal[COT_CAMPO_UNIDADES] ?? ''));
@@ -369,6 +372,27 @@ if ($unificar) {
     }
 }
 $plan = $bloques[0]['plan'];          // el primero manda para los avisos de plazo
+
+/* ── HISTORIAL ────────────────────────────────────────────────────────────────
+ * Queda guardada la tabla ENTERA, no los parametros: filas con su fecha y su monto,
+ * como las vio el cliente. Se consulta en cotizaciones.php.
+ *
+ * 🔴 VA DESPUES DE ARMAR EL PLAN Y NO PUEDE ROMPER NADA. `cothist_registrar()` se
+ * traga cualquier error y devuelve ''; si la base no se puede escribir, el asesor
+ * cotiza igual y la queja queda en sync.log. Guardar el historial nunca puede ser
+ * mas importante que atender al cliente que esta enfrente.
+ *
+ * Se registra AL DIBUJAR, no al bajar el PDF: una tabla que ya se le mostro al
+ * cliente circulo, se haya bajado el PDF o no. Repetir la misma no duplica -- sube
+ * un contador. Ver cotizacioneslib.php. */
+$cotHuella = cothist_registrar($_GET, $plan, [
+    'dealId'    => $dealId,
+    'asesorId'  => $asesorId,
+    'cliente'   => $cliente,
+    'proyecto'  => $proyecto,
+    'categoria' => $catPrincipal,
+    'unidades'  => implode(', ', $codigos),
+]);
 // Los porcentajes se CALCULAN, no se escriben a mano: el reparto ya no es fijo, así que
 // un "10%" rotulado mentiría en cuanto el asesor mueva una variante.
 $pc = fn(float $x) => rtrim(rtrim(number_format($x * 100, 1), '0'), '.') . '%';
