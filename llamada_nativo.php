@@ -684,6 +684,25 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
 
   function actividadParaProtocolo(actividad) {
     var subject = String(actividad.SUBJECT || '');
+    var tipo = parseInt(actividad.TYPE_ID || 0, 10);
+    var dir  = parseInt(actividad.DIRECTION || 0, 10);
+    /* ⭐⭐ LA REUNION REINICIA LA ESCALERA. Decision del usuario (22-sep-2026):
+       *"cuando tienen una reunion, se reinicia la escalera... porque es un
+       pacto"*, y *"indiferentemente de que este completado o no"* — el pacto
+       existe desde que se AGENDA. Se marca `reunion` para que calcularProtocolo
+       la trate como contacto sin contarla como intento.
+       ESTO TIENE QUE DECIR LO MISMO QUE llamada_calcular_protocolo(). */
+    if (tipo === 1) {
+      if (subject.indexOf('1234') < 0) return null;
+      return {
+        ts: String(actividad.CREATED || '').substr(0,19),
+        iso: String(actividad.CREATED || ''),
+        resp: parseInt(actividad.RESPONSIBLE_ID || 0, 10),
+        nuestra: false, reunion: true, contesto: true
+      };
+    }
+    // el resto del historial que no es llamada saliente no dice nada del escalon
+    if (tipo !== 2 || dir !== 2) return null;
     var tecnicaMovil = subject.indexOf('App móvil ·') === 0;
     if (tecnicaMovil && subject.indexOf('1234') < 0) return null;
     return {
@@ -691,6 +710,7 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
       iso: String(actividad.CREATED || ''),
       resp: parseInt(actividad.RESPONSIBLE_ID || 0, 10),
       nuestra: esNuestra(subject, actividad.DEADLINE),
+      reunion: false,
       contesto: subject.indexOf('1234') >= 0
     };
   }
@@ -722,9 +742,16 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
       // ⚠ Sin paginar se leerían solo 50 y en un deal trabajado las llamadas
       // recientes quedan fuera: el escalón saldría mal. 200 cubre de sobra —
       // el deal más cargado de la base tiene 93.
+      // ⭐⭐ SIN FILTRO DE TIPO: las REUNIONES tambien entran, porque una cita
+      // agendada es un pacto y reinicia la escalera (ver calcularProtocolo).
+      // Antes pedia TYPE_ID:2 DIRECTION:2 y la reunion era invisible: el deal
+      // 403791 agendaba al 30-dic con una cita del 15-sep en el medio.
+      // El filtrado por tipo se hace en actividadParaProtocolo, que es el MISMO
+      // criterio que llamada_calcular_protocolo() del servicio.
       hist: ['crm.activity.list', {
-        filter: { OWNER_TYPE_ID:2, OWNER_ID:dealId, TYPE_ID:2, DIRECTION:2 },
-        select: ['ID','CREATED','SUBJECT','RESPONSIBLE_ID','DEADLINE'], order: { ID:'ASC' }, start: -1
+        filter: { OWNER_TYPE_ID:2, OWNER_ID:dealId },
+        select: ['ID','CREATED','SUBJECT','RESPONSIBLE_ID','DEADLINE','TYPE_ID','DIRECTION','COMPLETED'],
+        order: { ID:'ASC' }, start: -1
       }],
       // CUANDO VOLVIO A DEJAR SU NUMERO. Cada entrada a RECONTACTAR es un
       // reingreso; la mas nueva manda, asi que ID DESC y se toma la primera.

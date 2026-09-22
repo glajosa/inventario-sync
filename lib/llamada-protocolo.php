@@ -28,9 +28,46 @@ function llamada_calcular_protocolo(
 
     foreach ($actividades as $actividad) {
         if ($excluirId !== null && (int)$actividad['ID'] === $excluirId) continue;
-        if ((int)$actividad['TYPE_ID'] !== 2 || (int)$actividad['DIRECTION'] !== 2) continue;
-        $originId = (string)($actividad['ORIGIN_ID'] ?? '');
+        $tipo = (int)$actividad['TYPE_ID'];
         $subject = (string)($actividad['SUBJECT'] ?? '');
+        /* ⭐⭐ UNA REUNIÓN QUE OCURRIÓ REINICIA LA ESCALERA.
+         *
+         * Decisión del usuario (22-sep-2026), textual: *"cuando tienen una
+         * reunión, se reinicia la escalera... porque es un pacto"*.
+         *
+         * EL CASO QUE LO DESTAPÓ — deal 403791, Vanessa Cobeña. El 15-sep hubo
+         * reunión completada con 1234 (contacto real), pero la escalera solo
+         * miraba llamadas: contó 3 fallos seguidos donde en el medio el cliente
+         * SÍ había aparecido, y agendó la próxima llamada al 30-dic-2026. La
+         * vendedora la corrigió a mano al 29-sep. Medido con estas mismas
+         * funciones: con la reunión contando da el 28-sep — su criterio y la
+         * escalera coinciden; lo que fallaba era QUÉ MIRABA la escalera.
+         *
+         * 🔴 NO HACE FALTA QUE ESTÉ COMPLETADA. Corrección del usuario, el mismo
+         * día: *"si hago una reunión no va a salir como completada, si es un
+         * pacto futuro... el momento que se crea esa reunión simplemente se
+         * reinicia la escalera, indiferentemente de que esté completado o no"*.
+         * El pacto existe desde que se AGENDA: el cliente ya se comprometió a
+         * una fecha, así que el silencio anterior dejó de importar.
+         *
+         * El 1234 SÍ se exige: es la marca que usa todo el portal para decir
+         * "esto es una interacción real con el cliente", la misma de contestadas
+         * y citas realizadas. Medido el 22-sep sobre las 50 reuniones del mes:
+         * 23 de 24 PENDIENTES ya la traen, así que exigirla no deja fuera a las
+         * citas futuras. Sin ella quedan 4 de 50, que son las que no dicen nada.
+         *
+         * No abre escalón nuevo ni cuenta como fallo — solo reinicia, igual que
+         * una llamada contestada. */
+        if ($tipo === 1) {
+            if (stripos($subject, '1234') === false) continue;
+            $creadaR = substr((string)($actividad['CREATED'] ?? ''), 0, 19);
+            if ($reingreso !== '' && $creadaR !== '' && $creadaR < $reingreso) { $viejas++; continue; }
+            $estado = 'CONTACTADO';
+            $sinContestar = 0;
+            continue;
+        }
+        if ($tipo !== 2 || (int)$actividad['DIRECTION'] !== 2) continue;
+        $originId = (string)($actividad['ORIGIN_ID'] ?? '');
         $technicalMobileCall = str_starts_with($originId, 'VI_externalCall')
             || str_starts_with($subject, 'App móvil ·');
         if ($technicalMobileCall && stripos($subject, '1234') === false) continue;

@@ -70,3 +70,73 @@ $fields = llamada_campos_actividad([
 test_same('VOXIMPLANT_CALL', $fields['PROVIDER_ID'], 'activity uses configured provider');
 test_same('2026-08-21T20:00:00-05:00', $fields['END_TIME'], 'activity ends one hour later');
 test_same([['VALUE' => '+593 99 123 4567', 'ENTITY_ID' => 9, 'ENTITY_TYPE_ID' => 3, 'TYPE' => 'PHONE']], $fields['COMMUNICATIONS'], 'activity links selected phone');
+
+/* ⭐⭐ LA REUNIÓN REINICIA LA ESCALERA — decisión del usuario del 22-sep-2026:
+ * *"cuando tienen una reunión, se reinicia la escalera... porque es un pacto"*.
+ * El caso real: deal 403791, reunión completada con 1234 el 15-sep invisible
+ * para la escalera; agendaba al 30-dic en vez del 28-sep. */
+function fake_meeting(int $id, string $subject, string $created, string $completed = 'Y'): array {
+    return ['ID' => $id, 'TYPE_ID' => 1, 'DIRECTION' => 0, 'SUBJECT' => $subject,
+            'CREATED' => $created, 'COMPLETED' => $completed];
+}
+
+$conReunion = [
+    fake_activity(50, 'Llamada saliente Ana', '2026-09-07T09:00:00-05:00'),
+    fake_activity(51, 'Llamada saliente Ana', '2026-09-09T09:00:00-05:00'),
+    fake_meeting(52,  '1234',                 '2026-09-15T14:00:00-05:00'),
+    fake_activity(53, 'Llamada saliente Ana', '2026-09-16T09:00:00-05:00'),
+];
+test_same(['estado' => 'ESCALERA-1', 'sinContestar' => 1, 'viejas' => 0],
+    llamada_calcular_protocolo($conReunion, null),
+    'una reunion completada con 1234 reinicia la escalera');
+
+/* Sin la reunion, los mismos datos dan MANTENIMIENTO: es la diferencia que
+ * mandaba al 30-dic. Si alguien quita la regla, esta prueba y la de arriba
+ * dejan de poder dar las dos a la vez. */
+$sinReunion = [$conReunion[0], $conReunion[1], $conReunion[3]];
+test_same(['estado' => 'MANTENIMIENTO', 'sinContestar' => 3, 'viejas' => 0],
+    llamada_calcular_protocolo($sinReunion, null),
+    'sin la reunion los mismos datos siguen escalando');
+
+/* ⭐⭐ UNA CITA AGENDADA A FUTURO YA ES UN PACTO, aunque no este completada.
+ * Correccion del usuario el 22-sep: *"si hago una reunion no va a salir como
+ * completada, si es un pacto futuro... se reinicia la escalera,
+ * indiferentemente de que este completado o no"*.
+ * Medido ese dia: de 24 reuniones PENDIENTES del mes, 23 ya traen el 1234. */
+$reunionPendiente = [
+    fake_activity(60, 'Llamada saliente Ana', '2026-09-07T09:00:00-05:00'),
+    fake_meeting(61,  '1234',                 '2026-09-15T14:00:00-05:00', 'N'),
+    fake_activity(62, 'Llamada saliente Ana', '2026-09-16T09:00:00-05:00'),
+];
+test_same(['estado' => 'ESCALERA-1', 'sinContestar' => 1, 'viejas' => 0],
+    llamada_calcular_protocolo($reunionPendiente, null),
+    'una cita agendada a futuro TAMBIEN reinicia: el pacto ya existe');
+
+/* 🔴 UNA REUNION SIN 1234 TAMPOCO: el 1234 es lo que dice que el cliente aparecio. */
+$reunionSinMarca = [
+    fake_activity(70, 'Llamada saliente Ana', '2026-09-07T09:00:00-05:00'),
+    fake_meeting(71,  'Reunion de seguimiento', '2026-09-15T14:00:00-05:00'),
+    fake_activity(72, 'Llamada saliente Ana', '2026-09-16T09:00:00-05:00'),
+];
+test_same(['estado' => 'ESCALERA-2', 'sinContestar' => 2, 'viejas' => 0],
+    llamada_calcular_protocolo($reunionSinMarca, null),
+    'una reunion sin 1234 NO reinicia');
+
+/* La reunion NO cuenta como fallo: dos reuniones seguidas no escalan nada. */
+$dosReuniones = [
+    fake_meeting(80, '1234', '2026-09-10T14:00:00-05:00'),
+    fake_meeting(81, '1234', '2026-09-15T14:00:00-05:00'),
+];
+test_same(['estado' => 'CONTACTADO', 'sinContestar' => 0, 'viejas' => 0],
+    llamada_calcular_protocolo($dosReuniones, null),
+    'las reuniones no suman fallos');
+
+/* Y respeta el reingreso igual que las llamadas: una reunion ANTERIOR al
+ * reingreso pertenece al ciclo viejo y no reinicia nada. */
+$reunionVieja = [
+    fake_meeting(90,  '1234',                 '2026-08-01T14:00:00-05:00'),
+    fake_activity(91, 'Llamada saliente Ana', '2026-09-16T09:00:00-05:00'),
+];
+test_same(['estado' => 'ESCALERA-1', 'sinContestar' => 1, 'viejas' => 1],
+    llamada_calcular_protocolo($reunionVieja, null, '2026-09-01T00:00:00'),
+    'una reunion anterior al reingreso es del ciclo viejo');
