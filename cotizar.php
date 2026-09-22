@@ -30,17 +30,73 @@ function cot_catalogo(): array {
 
 function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
 
-/** Lectura puntual contra Bitrix (solo el contacto del deal). */
+/**
+ * Lectura puntual contra Bitrix (el deal y su contacto).
+ *
+ * 🔴 REINTENTA CUANDO BITRIX DICE "MUY RAPIDO". Antes devolvia null y se acabo, y ese
+ * null se veia igual que "este deal no tiene contacto": la cotizacion salia SIN EL
+ * NOMBRE DEL CLIENTE, en pantalla y en el PDF, sin un solo error a la vista.
+ *
+ * Medido el 22-sep-2026: abriendo la MISMA cotizacion 5 veces seguidas, el nombre
+ * salio 2 veces y falto 3. Y golpeando `crm.contact.get` 12 veces desde el
+ * contenedor: 11 OK y 1 con HTTP 503 `QUERY_LIMIT_EXCEEDED · Too many requests`. Con
+ * los vendedores y los handlers trabajando, ese 1 de 12 sube.
+ *
+ * El reintento es corto y solo para el limite de consultas: 3 intentos con 0,4 s y
+ * 0,9 s de espera. Un 503 de Bitrix no es un dato, es un "esperame".
+ */
 function cot_bx(string $metodo, array $params): array {
     $base = rtrim((string)getenv('BITRIX_WEBHOOK'), '/') . '/';
-    $ch = curl_init($base . $metodo);
-    curl_setopt_array($ch, [
-        CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query($params),
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_CONNECTTIMEOUT => 8,
-    ]);
-    $raw = curl_exec($ch);
-    $j = json_decode((string)$raw, true);
-    return (is_array($j) && !isset($j['error'])) ? ['result' => $j['result'] ?? null] : ['result' => null];
+    $esperas = [0, 400000, 900000];          // microsegundos antes de cada intento
+    foreach ($esperas as $i => $pausa) {
+        if ($pausa > 0) usleep($pausa);
+        $ch = curl_init($base . $metodo);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query($params),
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_CONNECTTIMEOUT => 8,
+        ]);
+        $raw = curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $j = json_decode((string)$raw, true);
+        if (is_array($j) && !isset($j['error'])) return ['result' => $j['result'] ?? null];
+        /* Solo se reintenta lo que se cura esperando. Un metodo mal escrito o un id que
+           no existe van a fallar igual las tres veces: ahi se corta y no se castiga al
+           portal con dos llamadas mas. */
+        $limite = $code === 503
+               || in_array((string)($j['error'] ?? ''), ['QUERY_LIMIT_EXCEEDED', 'OPERATION_TIME_LIMIT'], true);
+        if (!$limite || $i === count($esperas) - 1) {
+            @file_put_contents((getenv('DATA_DIR') ?: '/data') . '/sync.log',
+                date('c') . " cotizar[$metodo] HTTP $code " . (string)($j['error'] ?? 'sin respuesta') . "\n", FILE_APPEND);
+            return ['result' => null];
+        }
+    }
+    return ['result' => null];
+}
+
+/**
+ * El nombre del cliente de un deal, con memoria.
+ *
+ * Aunque el reintento de arriba tape casi todo, un 503 sostenido seguiria dejando la
+ * cotizacion sin nombre. Este cache guarda el ultimo nombre que SI se pudo leer de
+ * cada deal: si hoy Bitrix no contesta, sale el de ayer -- que es el mismo -- en vez
+ * de un hueco. Solo se escribe cuando se leyo de verdad: un fallo nunca pisa el cache
+ * con vacio.
+ */
+function cot_cliente_recordado(int $dealId, ?string $leido): string {
+    $ruta = (getenv('DATA_DIR') ?: '/data') . '/clientes_deal.json';
+    $c = json_decode((string)@file_get_contents($ruta), true);
+    if (!is_array($c)) $c = [];
+    $k = (string)$dealId;
+    if ($leido !== null && trim($leido) !== '') {
+        if (($c[$k] ?? null) !== $leido) {
+            $c[$k] = $leido;
+            if (count($c) > 5000) $c = array_slice($c, -4000, null, true);
+            @file_put_contents($ruta, json_encode($c, JSON_UNESCAPED_UNICODE), LOCK_EX);
+        }
+        return $leido;
+    }
+    return (string)($c[$k] ?? '');
 }
 
 header('Content-Type: text/html; charset=utf-8');
@@ -152,13 +208,21 @@ if ($dealId > 0) {
     $separadas = unidades_separadas((string)($deal[COT_CAMPO_UNIDADES] ?? ''));
     // El nombre sale del CONTACTO: el título del deal casi siempre es el texto
     // crudo del formulario ("Complete CRM form ...") y no se le muestra a nadie.
+    /* Se pregunta por el contacto SIEMPRE que haya deal, aunque `crm.deal.get` no haya
+       traido CONTACT_ID: si esa primera llamada fue la que se topo con el limite,
+       `$deal` viene vacio y saltarse el contacto por eso seria dar por bueno un fallo.
+       Con CONTACT_ID en mano se pide el contacto; sin el, se cae al nombre recordado. */
+    $leido = null;
     if (!empty($deal['CONTACT_ID'])) {
         $c = cot_bx('crm.contact.get', ['id' => (int)$deal['CONTACT_ID']]);
-        $ct = $c['result'] ?? [];
-        $cliente = trim(implode(' ', array_filter([
+        $ct = $c['result'] ?? null;
+        // null = la llamada fallo (no hay nombre que recordar). [] o sin nombre = el
+        // contacto existe pero no tiene nombre: eso si es un dato, aunque este vacio.
+        if (is_array($ct)) $leido = trim(implode(' ', array_filter([
             $ct['NAME'] ?? '', $ct['SECOND_NAME'] ?? '', $ct['LAST_NAME'] ?? ''
         ])));
     }
+    $cliente = cot_cliente_recordado($dealId, $leido);
 }
 $cliente = mb_strtoupper((string)($_GET['cliente'] ?? $cliente), 'UTF-8');
 
