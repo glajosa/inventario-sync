@@ -157,7 +157,29 @@ function cothist_registrar(array $get, array $plan, array $meta): string {
              categoria, unidades, valor, separacion, firma, contraentrega, mensual, cuotas,
              modalidad, hasta, params, plan, hitos)
             VALUES (:h,:t,:t,:dia,1,:deal,:ase,:cli,:proy,:cat,:uni,:val,:sep,:fir,:con,:men,:cuo,:mod,:has,:par,:pla,:hit)
-            ON CONFLICT(huella) DO UPDATE SET veces = veces + 1, ultima_vez = :t");
+            ON CONFLICT(huella) DO UPDATE SET
+                veces      = veces + 1,
+                ultima_vez = :t,
+                /* 🔴 AL REPETIRSE TAMBIEN SE REFRESCA DE QUIEN ES. Antes solo subia el
+                   contador, y eso dejaba un dato parcial congelado para siempre: si la
+                   PRIMERA vez Bitrix contestaba 503, el cliente se guardaba vacio y no
+                   se llenaba nunca mas, por mucho que las siguientes veces si trajeran
+                   el nombre. Medido en el deal 408979: 15 repeticiones, 8 de ellas con
+                   el nombre a la vista en pantalla, y la fila seguia con cliente ''.
+                   Lo encontro la sesion de COBRANZAS leyendo el JSON.
+
+                   Solo se pisa cuando lo nuevo VALE: un vacio jamas borra un nombre que
+                   ya se sabia. Al reves de lo de antes, pero por el mismo motivo -- un
+                   fallo de lectura no puede hacerse pasar por un dato.
+
+                   🔴 EL CAST NO ES DECORACION. PDO ata los parametros como TEXTO, y en
+                   SQLite '0' <> 0 es VERDADERO porque compara tipos distintos: sin el
+                   CAST, un asesor que no se pudo leer PISABA con 0 al que ya estaba.
+                   Lo destapo la prueba 3 (Bitrix cae otra vez), no la lectura. */
+                cliente   = CASE WHEN :cli <> ''                THEN :cli  ELSE cliente   END,
+                proyecto  = CASE WHEN :proy <> ''               THEN :proy ELSE proyecto  END,
+                asesor_id = CASE WHEN CAST(:ase AS INTEGER) > 0 THEN CAST(:ase AS INTEGER)
+                                 ELSE asesor_id END");
         $st->execute([
             ':h'    => $huella,
             ':t'    => $ahora,
