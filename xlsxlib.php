@@ -31,6 +31,9 @@ final class Xlsx
     /** @var string[] rangos combinados, "A1:C1" */
     private array $unir = [];
     private array $altos = [];
+    private bool $oculta = false;
+    /** @var array<int,array{ref:string,tipo:string,op:string,f1:string,f2:string,titulo:string,msg:string}> */
+    private array $validaciones = [];
 
     /** @var array<int,array> hojas ya cerradas: {nombre, celdas, anchos, altos, unir, congelar, maxF, maxC} */
     private array $hojas = [];
@@ -42,11 +45,13 @@ final class Xlsx
         $this->hoja = mb_substr(str_replace([':', '\\', '/', '?', '*', '[', ']'], '-', $nombre), 0, 31);
         $this->celdas = []; $this->anchos = []; $this->altos = []; $this->unir = [];
         $this->maxFila = 0; $this->maxCol = 0; $this->congelar = 0;
+        $this->oculta = false; $this->validaciones = [];
     }
     private function guardarHoja(): void {
         $this->hojas[] = ['nombre' => $this->hoja, 'celdas' => $this->celdas, 'anchos' => $this->anchos,
             'altos' => $this->altos, 'unir' => $this->unir, 'congelar' => $this->congelar,
-            'maxF' => $this->maxFila, 'maxC' => $this->maxCol];
+            'maxF' => $this->maxFila, 'maxC' => $this->maxCol,
+            'oculta' => $this->oculta, 'val' => $this->validaciones];
     }
 
     public function __construct(string $nombreHoja = 'Hoja1') {
@@ -96,6 +101,23 @@ final class Xlsx
         $this->unir[] = self::ref($f1, $c1) . ':' . self::ref($f2, $c2);
     }
     public function alto(int $f, float $h): void { $this->altos[$f] = $h; }
+
+    /** Marca la hoja ACTUAL como oculta. Se puede volver a mostrar desde Excel con
+     *  clic derecho en las pestañas -> Mostrar. No es un candado, es quitarla de enmedio. */
+    public function ocultar(): void { $this->oculta = true; }
+
+    /**
+     * Limite para lo que se puede escribir en una celda. Excel RECHAZA el valor y
+     * muestra el mensaje: no es un aviso que se pueda ignorar como una formula de texto.
+     *
+     * @param string $tipo  'decimal' | 'whole' | 'date' | 'list'
+     * @param string $op    'between' | 'greaterThan' | 'greaterThanOrEqual' | ...
+     */
+    public function limite(int $f, int $c, string $tipo, string $op, string $f1, string $f2,
+                           string $titulo, string $msg): void {
+        $this->validaciones[] = ['ref' => self::ref($f, $c), 'tipo' => $tipo, 'op' => $op,
+            'f1' => $f1, 'f2' => $f2, 'titulo' => $titulo, 'msg' => $msg];
+    }
     public function congelarHasta(int $fila): void { $this->congelar = $fila; }
 
     private function set(int $f, int $c, string $t, $v, int $s): void {
@@ -157,7 +179,9 @@ final class Xlsx
           . ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
           . '<sheets>'
           . implode('', array_map(fn($i) => '<sheet name="' . self::esc($this->hojas[$i]['nombre'])
-                . '" sheetId="' . ($i + 1) . '" r:id="rId' . ($i + 1) . '"/>', array_keys($this->hojas)))
+                . '" sheetId="' . ($i + 1) . '"'
+                . (!empty($this->hojas[$i]['oculta']) ? ' state="hidden"' : '')
+                . ' r:id="rId' . ($i + 1) . '"/>', array_keys($this->hojas)))
           . '</sheets>'
           /* fullCalcOnLoad: obliga a Excel a calcular TODAS las formulas al abrir. Sin
              esto, como no escribimos valores cacheados, algunas versiones muestran 0
@@ -328,6 +352,16 @@ final class Xlsx
           . ($h['unir'] ? '<mergeCells count="' . count($h['unir']) . '">'
                 . implode('', array_map(fn($r) => '<mergeCell ref="' . $r . '"/>', $h['unir']))
                 . '</mergeCells>' : '')
+          . (empty($h['val']) ? '' : '<dataValidations count="' . count($h['val']) . '">'
+                . implode('', array_map(fn($v) =>
+                    '<dataValidation type="' . $v['tipo'] . '" operator="' . $v['op'] . '"'
+                    . ' allowBlank="0" showInputMessage="1" showErrorMessage="1" errorStyle="stop"'
+                    . ' errorTitle="' . self::esc($v['titulo']) . '" error="' . self::esc($v['msg']) . '"'
+                    . ' sqref="' . $v['ref'] . '">'
+                    . '<formula1>' . self::esc($v['f1']) . '</formula1>'
+                    . ($v['f2'] === '' ? '' : '<formula2>' . self::esc($v['f2']) . '</formula2>')
+                    . '</dataValidation>', $h['val']))
+                . '</dataValidations>')
           . '<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>'
           . '</worksheet>';
     }
