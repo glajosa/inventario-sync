@@ -19,6 +19,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/cotizarlib.php';
 require_once __DIR__ . '/cotizacioneslib.php';   // cothist_registrar()
+require_once __DIR__ . '/cotizarexcel.php';      // cot_excel_generar()
 
 // El catálogo se lee del MISMO archivo de caché que usa field.php. No se incluye
 // selector.php a propósito: ese módulo puede lanzar una reconstrucción completa
@@ -449,6 +450,34 @@ $plan = $bloques[0]['plan'];          // el primero manda para los avisos de pla
  * Se registra AL DIBUJAR, no al bajar el PDF: una tabla que ya se le mostro al
  * cliente circulo, se haya bajado el PDF o no. Repetir la misma no duplica -- sube
  * un contador. Ver cotizacioneslib.php. */
+/* ── DESCARGA EN EXCEL ────────────────────────────────────────────────────────
+ * Va ACA y no en un archivo aparte a proposito: usa EXACTAMENTE los mismos $bloques
+ * que dibuja la pantalla. Un generador de Excel con su propia copia del calculo
+ * acabaria dando otro numero que el PDF el dia que alguien toque una de las dos.
+ * Tiene que salir antes de cualquier HTML: por eso esta antes del <!doctype>. */
+if (($_GET['excel'] ?? '') === '1') {
+    $nombre = 'Plan de pagos - ' . codigos_comprimidos($codigos)
+            . ($cliente !== '' ? ' - ' . $cliente : '') . '.xlsx';
+    // El nombre viaja en una cabecera: sin esto un nombre con salto de linea deja
+    // meter cabeceras propias en la respuesta.
+    $nombre = preg_replace('/[\r\n"\\\\]/', ' ', $nombre);
+    $xlsx = cot_excel_generar($bloques, [
+        'cliente'  => $cliente,
+        'proyecto' => $proyecto,
+        'unidades' => implode(', ', $codigos),
+        /* En hora de Ecuador, no en la del contenedor: la hoja la abre un vendedor
+           de Guayaquil y despues de las 7 de la noche el reloj del servidor ya esta
+           en el dia siguiente. Y se calcula aca porque $hoy se define mas abajo. */
+        'fecha'    => (new DateTimeImmutable('now', new DateTimeZone('America/Guayaquil')))->format('d/m/Y'),
+    ]);
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="' . $nombre . '"');
+    header('Content-Length: ' . strlen($xlsx));
+    header('Cache-Control: no-store');
+    echo $xlsx;
+    exit;
+}
+
 $cotHuella = cothist_registrar($_GET, $plan, [
     'dealId'    => $dealId,
     'asesorId'  => $asesorId,
@@ -528,13 +557,20 @@ $hoy  = new DateTimeImmutable('now');
   .barra h1{font-size:13px;margin:0;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
             color:oklch(78% 0.04 259);position:relative;z-index:1}
   .barra .sp{margin-left:auto;display:flex;gap:var(--space-xs);position:relative;z-index:1}
-  .barra button{border:1.5px solid oklch(100% 0 0 / .28);border-radius:var(--radius-pill);
+  .barra button, .barra a.imprimir{border:1.5px solid oklch(100% 0 0 / .28);border-radius:var(--radius-pill);
                 padding:9px 20px;font-size:13.5px;font-weight:600;font-family:var(--font);
                 cursor:pointer;transition:background var(--dur-fast,140ms) var(--ease-out),
                 border-color var(--dur-fast,140ms) var(--ease-out);background:transparent;color:#fff}
-  .barra button:hover{background:oklch(100% 0 0 / .08);border-color:oklch(100% 0 0 / .5)}
-  .barra button:focus-visible{outline:2px solid oklch(70% 0.15 259);outline-offset:2px}
+  .barra button:hover, .barra a.imprimir:hover{background:oklch(100% 0 0 / .08);border-color:oklch(100% 0 0 / .5)}
+  .barra button:focus-visible, .barra a.imprimir:focus-visible{outline:2px solid oklch(70% 0.15 259);outline-offset:2px}
   .imprimir{background:#fff !important;color:var(--accent-ink) !important;border-color:#fff !important}
+  /* El de Excel es un <a> (descarga directa) y el de PDF un <button>. No basta con
+     copiarle el color: hay que meterlo en las MISMAS reglas de .barra button, o sale
+     sin relleno, sin borde redondeado y con otra altura -- se ven como dos cosas
+     distintas. Comprobado mirando la barra, no el CSS. */
+  a.imprimir{text-decoration:none;display:inline-flex;align-items:center;justify-content:center;
+             line-height:1;box-sizing:border-box}
+  .sp{display:flex;gap:8px;align-items:center}
   .imprimir:hover{background:oklch(93% 0.015 259) !important}
 
   /* Dos columnas: opciones a la izquierda, plan de pagos a la derecha — así se ve
@@ -821,7 +857,23 @@ $hoy  = new DateTimeImmutable('now');
   <img class="logo-barra" src="assets/logo_galjosa_transparente.png" alt="Galjosa"
        onerror="this.style.display='none'">
   <h1><span style="color:#fff;font-weight:700;letter-spacing:.02em">GALJOSA</span> · Cotización</h1>
-  <div class="sp"><button class="imprimir" onclick="window.print()">Descargar PDF</button></div>
+  <?php /* El Excel se descarga con la MISMA query que esta viendo el asesor, mas
+           `excel=1`: lo que baja es exactamente lo que tiene en pantalla, no una
+           cotizacion por defecto. Se arma en JS desde la URL actual para no tener
+           que repetir aca los 20 parametros del plan y que se desincronicen. */ ?>
+  <div class="sp">
+    <a class="imprimir excel" id="bajar-excel" href="#" title="La misma tabla, pero con fórmulas: el vendedor puede cambiar el precio o los porcentajes y se recalcula sola.">Descargar Excel</a>
+    <button class="imprimir" onclick="window.print()">Descargar PDF</button>
+  </div>
+  <script>
+  (function(){
+    var a = document.getElementById('bajar-excel');
+    if (!a) return;
+    var u = new URL(window.location.href);
+    u.searchParams.set('excel', '1');
+    a.href = u.pathname + u.search;
+  })();
+  </script>
 </div>
 
 <div class="envoltura"><div class="tarjeta-opciones">
