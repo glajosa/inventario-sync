@@ -40,341 +40,400 @@ require_once __DIR__ . '/xlsxlib.php';
 function cot_excel_generar(array $bloques, array $meta): string
 {
     $x = new Xlsx('Plan de pagos');
-    $x->ancho(1, 7); $x->ancho(2, 16); $x->ancho(3, 30); $x->ancho(4, 16);
-    $x->ancho(5, 16); $x->ancho(6, 16); $x->ancho(7, 14);
+    /* Los anchos copian la proporcion del documento: Nº angosto, vencimiento medio,
+       concepto ancho, valor. De la F en adelante viven los SUPUESTOS -- fuera de la
+       cotizacion, para que lo que se imprime sea el documento y nada mas. */
+    $x->ancho(1, 6); $x->ancho(2, 15); $x->ancho(3, 34); $x->ancho(4, 17);
+    $x->ancho(5, 3);
+    $x->ancho(6, 32); $x->ancho(7, 16);      // SUPUESTOS: rotulo y valor
+    $x->ancho(8, 3);
+    $x->ancho(9, 15); $x->ancho(10, 15); $x->ancho(11, 13);  // columnas de trabajo de la tabla
 
     $f = 1;
-    $x->texto($f, 1, 'GALJOSA · PLAN DE PAGOS', Xlsx::TITULO); $f++;
-    $linea = array_filter([
-        $meta['cliente'] ?? '', $meta['unidades'] ?? '', $meta['proyecto'] ?? '',
-    ]);
-    $x->texto($f, 1, implode('  ·  ', $linea), Xlsx::PIE); $f++;
-    $x->texto($f, 1, 'Generado el ' . (string)($meta['fecha'] ?? date('d/m/Y'))
-        . '  ·  Las celdas AMARILLAS se pueden cambiar; el resto se recalcula solo.', Xlsx::PIE); $f++;
-    $x->texto($f, 1, 'Lo OFICIAL es lo que emite el cotizador. Esta hoja sirve para simular: '
-        . 'avisa si la tabla deja de cuadrar, pero no sabe si el trato es vendible.', Xlsx::PIE);
+    $x->alto($f, 26);
+    $x->texto($f, 1, 'GALJOSA · COTIZACIÓN', Xlsx::LOGO);
+    $x->unir($f, 1, $f, 4); $f += 2;
+
+    // ── datos del cliente, como en el documento ──────────────────────────────
+    foreach ([['Cliente', (string)($meta['cliente'] ?? '')],
+              ['Proyecto', (string)($meta['proyecto'] ?? '')],
+              ['Unidad',   (string)($meta['unidades'] ?? '')]] as [$r, $v]) {
+        if ($v === '') continue;
+        $x->texto($f, 1, $r, Xlsx::DATO_R);
+        $x->texto($f, 2, $v, Xlsx::DATO_V);
+        $x->unir($f, 2, $f, 4);
+        $f++;
+    }
+    $x->texto($f, 1, 'Generado el ' . (string)($meta['fecha'] ?? date('d/m/Y')), Xlsx::NOTA);
+    $x->unir($f, 1, $f, 4);
     $f += 2;
 
+    $GLOBALS['COT_EXCEL_MAPA'] = [];
     foreach ($bloques as $i => $b) {
         $f = cot_excel_bloque($x, $f, $b, count($bloques) > 1 ? ($i + 1) : 0);
         $f += 2;
     }
+    cot_excel_hoja_limpia($x, $bloques, $meta);
     return $x->salida();
 }
 
-/** Escribe UN bloque (una unidad o la fusion) y devuelve la primera fila libre. */
+/**
+ * Escribe UN bloque: el DOCUMENTO en las columnas A-D y los SUPUESTOS en F-I.
+ *
+ * 🔴 ESA SEPARACION ES EL PUNTO. La primera version puso los supuestos arriba de todo
+ * y el usuario lo dijo sin rodeos: "ahi lo hiciste a tu forma y no se entiende nada".
+ * Tenia razon -- una cotizacion que empieza con un bloque de parametros no se parece
+ * a la cotizacion. Ahora A-D es el documento tal cual, con sus mismos colores, y lo
+ * que se puede mover vive a la derecha, separado por una columna angosta.
+ */
 function cot_excel_bloque(Xlsx $x, int $f, array $b, int $n): int
 {
     $plan  = $b['plan'];
     $filas = array_values((array)($plan['filas'] ?? []));
     $cods  = implode(', ', (array)($b['cods'] ?? []));
+    $col   = Xlsx::col(7);          // los supuestos editables viven en la G
 
-    if ($n > 0) { $x->texto($f, 1, "Unidad $n · $cods", Xlsx::SUBTITULO); $f++; }
+    if ($n > 0) { $x->texto($f, 1, "Unidad $n · $cods", Xlsx::SUBTITULO); $x->unir($f, 1, $f, 4); $f++; }
 
-    // ── supuestos: lo que el vendedor puede tocar ──────────────────────────
-    $x->texto($f, 1, 'SUPUESTOS', Xlsx::SUBTITULO);
-    $x->texto($f, 3, 'se pueden cambiar', Xlsx::PIE); $f++;
-    /* 🔴 LA ENTRADA Y LA CONTRAENTREGA VAN POR PORCENTAJE, NO POR MONTO FIJO. Primero
-       las puse como montos y estaba mal: al bajar el precio de 111.000 a 90.000 la
-       firma y la contraentrega se quedaban clavadas y la cuota mensual se desplomaba
-       a $22,22. En el negocio son porcentajes del precio (10% de entrada, 60% contra
-       entrega), asi que moviendo el precio se mueve todo con el, que es lo que el
-       vendedor espera. Si quiere otra reparticion, cambia el PORCENTAJE. */
+    /* ── los SUPUESTOS, a la derecha ──────────────────────────────────────── */
+    $fs = $f;
+    $x->texto($fs, 6, 'SUPUESTOS — lo amarillo se puede cambiar', Xlsx::SUBTITULO);
+    $x->unir($fs, 6, $fs, 7); $fs++;
+
     $sup = [];
-    $col = Xlsx::col(4);
-    $x->texto($f, 1, 'Precio de venta', Xlsx::ETIQUETA);
-    $x->numero($f, 4, round((float)($plan['valor'] ?? 0), 2), Xlsx::EDITABLE);
-    $sup['precio'] = '$' . $col . '$' . $f; $f++;
+    $x->texto($fs, 6, 'Precio de venta', Xlsx::ETIQUETA);
+    $x->numero($fs, 7, round((float)($plan['valor'] ?? 0), 2), Xlsx::EDITABLE);
+    $sup['precio'] = '$' . $col . '$' . $fs; $fs++;
 
-    /* 🔴 EL PORCENTAJE SE SACA DEL DINERO, NO DEL CAMPO `reservaPct`. Ese campo
-       cambia de significado segun el modo: con la firma pagada SOLA antes de las
-       cuotas vale 0,009009 -- porque ahi lo unico que se cobra "a la reserva" son los
-       $1.000 de separacion y el resto de la entrada vive en las filas de firma.
-       Confiar en el daba un Excel con la entrada en $1.000 y las filas de firma en
-       CERO. Se calcula de lo que de verdad se cobra antes de las cuotas. */
-    $sumFirmaSola = 0.0; $sumFirmaEnCuota = 0.0; $nFirmaEnCuota = 0;
+    $sumFirmaSola = 0.0; $sumFirmaEnCuota = 0.0; $nFirmaEnCuota = 0; $nFirmaSola = 0;
     foreach ($filas as $fila) {
-        if (!empty($fila['soloFirma'])) { $sumFirmaSola += (float)$fila['monto']; continue; }
+        if (!empty($fila['soloFirma'])) { $sumFirmaSola += (float)$fila['monto']; $nFirmaSola++; continue; }
         if ((float)($fila['firma'] ?? 0) > 0) { $sumFirmaEnCuota += (float)$fila['firma']; $nFirmaEnCuota++; }
     }
     $valor = (float)($plan['valor'] ?? 0);
+    /* 🔴 El porcentaje se saca del DINERO, no de `reservaPct`: ese campo vale 0,009009
+       cuando la firma se paga sola, porque ahi lo unico que se cobra "a la reserva" son
+       los $1.000. Confiar en el dejaba las filas de firma en cero. */
     $entradaMonto = (float)($plan['separacion'] ?? 0) + (float)($plan['firma'] ?? 0)
                   + $sumFirmaSola + $sumFirmaEnCuota;
-    $x->texto($f, 1, '% de entrada (incluye separación)', Xlsx::ETIQUETA);
-    /* 10 decimales y no 6: con 6, una entrada de 11.100,01 sobre 111.000 se
-       redondeaba a 0,100000 y la ultima fila de firma salia UN CENTAVO por debajo
-       de la del cotizador. Medido. */
-    $x->numero($f, 4, $valor > 0 ? round($entradaMonto / $valor, 10) : 0.1, Xlsx::PORCENTAJE);
-    $pctEntrada = '$' . $col . '$' . $f; $f++;
+    $x->texto($fs, 6, '% de entrada (incluye separación)', Xlsx::ETIQUETA);
+    $x->numero($fs, 7, $valor > 0 ? round($entradaMonto / $valor, 10) : 0.1, Xlsx::PORCENTAJE);
+    $pctEntrada = '$' . $col . '$' . $fs; $fs++;
 
-    $x->texto($f, 1, 'Separación', Xlsx::ETIQUETA);
-    $x->numero($f, 4, round((float)($plan['separacion'] ?? 0), 2), Xlsx::EDITABLE);
-    $sup['sep'] = '$' . $col . '$' . $f; $f++;
+    $x->texto($fs, 6, 'Separación', Xlsx::ETIQUETA);
+    $x->numero($fs, 7, round((float)($plan['separacion'] ?? 0), 2), Xlsx::EDITABLE);
+    $sup['sep'] = '$' . $col . '$' . $fs; $fs++;
 
-    /* 🔴 CUANDO LA FIRMA SE PAGA SOLA ANTES DE LAS CUOTAS NO HAY FILA "A LA FIRMA".
-       El motor pone `firma = 0` en ese modo porque esa plata pasa a filas propias, y
-       la pantalla por eso no la dibuja. Mi formula la inventaba igual y la firma se
-       contaba DOS VECES: medido, la hoja sumaba 121.100,01 sobre un precio de
-       111.000 -- exactamente los 10.100 de la entrada repetidos. Lo destapo comparar
-       el cuadre calculado contra el precio, no leer el codigo. */
-    $nFirmaSola = 0;
-    foreach ($filas as $fila) if (!empty($fila['soloFirma'])) $nFirmaSola++;
+    $x->texto($fs, 6, '% contra entrega', Xlsx::ETIQUETA);
+    $x->numero($fs, 7, $valor > 0 ? round((float)($plan['contraentrega'] ?? 0) / $valor, 10)
+                                  : round((float)($plan['contraPct'] ?? 0.6), 10), Xlsx::PORCENTAJE);
+    $pctContra = '$' . $col . '$' . $fs; $fs++;
+
     $entrada = 'ROUND(' . $sup['precio'] . '*' . $pctEntrada . ',2)';
-    $sup['firma'] = null;
-    if ($nFirmaSola === 0) {
-        $x->texto($f, 1, 'A la firma', Xlsx::ETIQUETA);
-        $x->formula($f, 4, "$entrada-{$sup['sep']}", Xlsx::DINERO_B);
-        $sup['firma'] = '$' . $col . '$' . $f; $f++;
-    }
+    $x->texto($fs, 6, 'Contra entrega', Xlsx::ETIQUETA);
+    $x->formula($fs, 7, "ROUND({$sup['precio']}*$pctContra,2)", Xlsx::DINERO_B);
+    $sup['contra'] = '$' . $col . '$' . $fs; $fs++;
 
-    $x->texto($f, 1, '% contra entrega', Xlsx::ETIQUETA);
-    $x->numero($f, 4, $valor > 0 ? round((float)($plan['contraentrega'] ?? 0) / $valor, 10)
-                                 : round((float)($plan['contraPct'] ?? 0.6), 6), Xlsx::PORCENTAJE);
-    $pctContra = '$' . $col . '$' . $f; $f++;
-
-    $x->texto($f, 1, 'Contra entrega', Xlsx::ETIQUETA);
-    $x->formula($f, 4, "ROUND({$sup['precio']}*$pctContra,2)", Xlsx::DINERO_B);
-    $sup['contra'] = '$' . $col . '$' . $f; $f++;
-
-    /* 🔴 LAS EXTRAORDINARIAS TAMBIEN ESCALAN. Medido: con las extraordinarias fijas,
-       bajar el precio de 111.000 a 90.000 daba una cuota de $294,44 en el Excel y el
-       cotizador decia $333,33 -- porque el motor las recalcula al 10% del precio
-       nuevo (9.000) y la hoja las dejaba en 11.100. Un Excel que contradice al
-       cotizador por $39 en cada cuota es peor que no tenerlo. */
     $extras = [];
     foreach ($filas as $fila) {
         if (!empty($fila['soloFirma']) || empty($fila['extra'])) continue;
         $extras[] = round((float)$fila['monto'] - (float)($plan['mensual'] ?? 0) - (float)($fila['firma'] ?? 0), 2);
     }
     $nExtra = count($extras);
-    /* Solo se convierten en formula si son TODAS IGUALES, que es el caso normal. Si el
-       asesor las repartio a mano con montos distintos, escalarlas las aplanaria: ahi
-       se dejan como numeros y la hoja lo dice. */
+    /* Solo se vuelven formula si son TODAS IGUALES. Repartidas a mano con montos
+       distintos, escalarlas las aplanaria: ahi quedan como numeros. */
     $extraParejas = $nExtra > 0 && count(array_unique($extras)) === 1;
-    $pctExtra = ''; $totalExtra = '';
+    $totalExtra = '';
     if ($extraParejas) {
-        $x->texto($f, 1, '% extraordinarias', Xlsx::ETIQUETA);
-        $x->numero($f, 4, $valor > 0 ? round(array_sum($extras) / $valor, 10)
-                                     : round((float)($plan['extraPct'] ?? 0.1), 6), Xlsx::PORCENTAJE);
-        $pctExtra = '$' . $col . '$' . $f; $f++;
-        $x->texto($f, 1, 'Total extraordinarias', Xlsx::ETIQUETA);
-        $x->formula($f, 4, "ROUND({$sup['precio']}*$pctExtra,2)", Xlsx::DINERO_B);
-        $totalExtra = '$' . $col . '$' . $f; $f++;
-    } elseif ($nExtra > 0) {
-        $x->texto($f, 1, 'Extraordinarias', Xlsx::ETIQUETA);
-        $x->texto($f, 3, 'repartidas a mano: no escalan si cambiás el precio', Xlsx::PIE);
-        $f++;
+        $x->texto($fs, 6, '% extraordinarias', Xlsx::ETIQUETA);
+        $x->numero($fs, 7, $valor > 0 ? round(array_sum($extras) / $valor, 10)
+                                      : round((float)($plan['extraPct'] ?? 0.1), 10), Xlsx::PORCENTAJE);
+        $pctExtra = '$' . $col . '$' . $fs; $fs++;
+        $x->texto($fs, 6, 'Total extraordinarias', Xlsx::ETIQUETA);
+        $x->formula($fs, 7, "ROUND({$sup['precio']}*$pctExtra,2)", Xlsx::DINERO_B);
+        $totalExtra = '$' . $col . '$' . $fs; $fs++;
     }
-    /* Las CUOTAS y la FECHA no son dinero: van sin el formato de moneda. Un "$56"
-       en el numero de cuotas hace dudar de toda la hoja.
 
-       🔴 EL NUMERO DE CUOTAS NO ES EDITABLE, Y ES A PROPOSITO. Primero lo puse
-       editable y estaba mal: las filas de la tabla son fijas, asi que bajarlo a 40
-       no quitaba 14 filas -- repartia sobre 40 y la ultima fila se comia la
-       diferencia, quedando una cuota monstruosa sin que nada avisara. Ahora se
-       CUENTA de la tabla, asi que no puede desincronizarse. Cambiar el plazo es
-       trabajo del cotizador: ahi se sabe cuantas cuotas caben antes de la entrega. */
-    $x->texto($f, 1, 'Número de cuotas', Xlsx::ETIQUETA);
-    $nCuotas = 0;
-    foreach ($filas as $fila) if (empty($fila['soloFirma'])) $nCuotas++;
-    $filaN = $f;
-    $sup['n'] = '$' . Xlsx::col(4) . '$' . $f; $f++;
+    $filaN = $fs;
+    $x->texto($fs, 6, 'Número de cuotas', Xlsx::ETIQUETA);
+    $sup['n'] = '$' . $col . '$' . $fs; $fs++;
 
-    $x->texto($f, 1, 'Primera cuota', Xlsx::ETIQUETA);
+    $x->texto($fs, 6, 'Primera cuota', Xlsx::ETIQUETA);
     $prim = null;
     foreach ($filas as $fila) if (empty($fila['soloFirma'])) { $prim = $fila['fecha']; break; }
-    $x->numero($f, 4, $prim ? Xlsx::fecha(DateTimeImmutable::createFromFormat('!d/m/Y', $prim)) : 0, Xlsx::FECHA);
-    $sup['ini'] = '$' . Xlsx::col(4) . '$' . $f; $f++;
+    $x->numero($fs, 7, $prim ? Xlsx::fecha(DateTimeImmutable::createFromFormat('!d/m/Y', $prim)) : 0, Xlsx::FECHA);
+    $sup['ini'] = '$' . $col . '$' . $fs; $fs++;
 
-    // ── calculado ──────────────────────────────────────────────────────────
-    /* La entrada es SIEMPRE el porcentaje del precio, se pague a la firma o repartida
-       en abonos: por eso estas dos salen de `$entrada` y no de la celda "A la firma",
-       que en el modo de firma sola ni existe. */
-    $x->texto($f, 1, 'Total cuota inicial', Xlsx::ETIQUETA);
-    $x->formula($f, 4, $entrada, Xlsx::DINERO_B);
+    $x->texto($fs, 6, 'A financiar en cuotas', Xlsx::ETIQUETA);
+    $x->formula($fs, 7, "{$sup['precio']}-$entrada-{$sup['contra']}", Xlsx::DINERO_B);
+    $financiado = '$' . $col . '$' . $fs; $fs++;
+
+    $filaCuotaMensual = $fs;
+    $x->texto($fs, 6, 'Cuota mensual', Xlsx::ETIQUETA);
+    $mensual = '$' . $col . '$' . $fs; $fs++;
+
+    /* ── el DOCUMENTO, columnas A-D ───────────────────────────────────────── */
+    $x->alto($f, 22);
+    $x->texto($f, 1, 'Precio final', Xlsx::BANDA_AMA_T);
+    $x->texto($f, 2, '', Xlsx::BANDA_AMA_T); $x->texto($f, 3, '', Xlsx::BANDA_AMA_T);
+    $x->unir($f, 1, $f, 3);
+    $x->formula($f, 4, $sup['precio'], Xlsx::BANDA_AMA_N); $f++;
+
+    if ((float)($plan['legal'] ?? 0) > 0) {
+        $x->alto($f, 20);
+        $x->texto($f, 1, 'Valores legales promesa C/V', Xlsx::BANDA_VER_T);
+        $x->texto($f, 2, '', Xlsx::BANDA_VER_T); $x->texto($f, 3, '', Xlsx::BANDA_VER_T);
+        $x->unir($f, 1, $f, 3);
+        $x->numero($f, 4, round((float)$plan['legal'], 2), Xlsx::BANDA_VER_N); $f++;
+        $x->texto($f, 1, 'Pago directo para el notario. Se da al momento de la firma del contrato.', Xlsx::NOTA);
+        $x->unir($f, 1, $f, 4); $f++;
+    }
     $f++;
-    $x->texto($f, 1, 'A financiar en cuotas', Xlsx::ETIQUETA);
-    /* `- $entrada` ya descuenta TODA la entrada, se pague a la firma, en abonos
-       propios o montada sobre las primeras cuotas: lo que queda es cuota pura. */
-    $x->formula($f, 4, "{$sup['precio']}-$entrada-{$sup['contra']}", Xlsx::DINERO_B);
-    $financiado = '$' . Xlsx::col(4) . '$' . $f; $f++;
 
-    // las extraordinarias se suman aparte: se escriben en la columna E de la tabla
-    $filaCuotaMensual = $f;
-    $x->texto($f, 1, 'Cuota mensual', Xlsx::ETIQUETA);
-    $f++;   // la formula se escribe abajo, cuando se sabe el rango de la columna E
+    // los cuadros de arriba del documento
+    $x->texto($f, 1, 'RESERVA', Xlsx::FICHA_R); $x->texto($f, 2, '', Xlsx::FICHA_R); $x->unir($f, 1, $f, 3);
+    $x->formula($f, 4, $sup['sep'], Xlsx::FICHA_V); $f++;
+    $hayFirmaHito = $nFirmaSola === 0 && (float)($plan['firma'] ?? 0) > 0;
+    $x->texto($f, 1, $nFirmaSola > 0 ? 'FIRMA (en ' . $nFirmaSola . ' pagos)' : 'A LA FIRMA', Xlsx::FICHA_R);
+    $x->texto($f, 2, '', Xlsx::FICHA_R); $x->unir($f, 1, $f, 3);
+    $x->formula($f, 4, "$entrada-{$sup['sep']}", Xlsx::FICHA_V); $f++;
+    $x->texto($f, 1, 'CRÉDITO DIRECTO', Xlsx::FICHA_DR); $x->texto($f, 2, '', Xlsx::FICHA_DR); $x->unir($f, 1, $f, 3);
+    $x->formula($f, 4, "$entrada+$financiado", Xlsx::FICHA_DV); $f++;
+    $x->texto($f, 1, 'CONTRA ENTREGA', Xlsx::FICHA_R); $x->texto($f, 2, '', Xlsx::FICHA_R); $x->unir($f, 1, $f, 3);
+    $x->formula($f, 4, $sup['contra'], Xlsx::FICHA_V); $f++;
+    $x->texto($f, 1, 'CUOTA MENSUAL', Xlsx::FICHA_R); $x->texto($f, 2, '', Xlsx::FICHA_R); $x->unir($f, 1, $f, 3);
+    $x->formula($f, 4, $mensual, Xlsx::FICHA_V); $f += 2;
 
-    $f++;
-    // ── la tabla ───────────────────────────────────────────────────────────
-    $x->texto($f, 1, 'Nº', Xlsx::CABECERA);
+    // la tabla, con la cabecera azul marino del documento
+    $x->alto($f, 20);
+    $x->texto($f, 1, 'N°', Xlsx::CABECERA);
     $x->texto($f, 2, 'VENCIMIENTO', Xlsx::CABECERA);
     $x->texto($f, 3, 'CONCEPTO', Xlsx::CABECERA);
     $x->texto($f, 4, 'VALOR CUOTA', Xlsx::CABECERA);
-    $x->texto($f, 5, 'EXTRAORDINARIA', Xlsx::CABECERA);
-    if ($nFirmaEnCuota > 0) $x->texto($f, 6, 'FIRMA DIFERIDA', Xlsx::CABECERA);
-    $x->texto($f, 7, 'CUOTA BASE', Xlsx::CABECERA);
+    /* 🔴 EN LA I, NO EN LA F. Primero las puse en F-H y se pisaron con los SUPUESTOS,
+       que ocupan F-G: la cabecera de la tabla cayo justo encima de "A financiar en
+       cuotas" y ese rotulo desaparecio. Lo vi al abrir la hoja, no al escribirla. */
+    $x->texto($f, 9, 'EXTRAORDINARIA', Xlsx::CABECERA);
+    if ($nFirmaEnCuota > 0) $x->texto($f, 10, 'FIRMA DIFERIDA', Xlsx::CABECERA);
+    $x->texto($f, 11, 'CUOTA BASE', Xlsx::CABECERA);
     $x->congelarHasta($f);
     $f++;
 
-    // separacion y firma: son hitos, no cuotas
     $primeraSuma = $f;
     if (!empty($plan['fechaReserva'])) {
         $x->numero($f, 2, Xlsx::fecha(DateTimeImmutable::createFromFormat('!d/m/Y', $plan['fechaReserva'])), Xlsx::FECHA);
-        $x->texto($f, 3, 'SEPARACIÓN', Xlsx::NORMAL);
-        $x->formula($f, 4, $sup['sep'], Xlsx::DINERO);
+        $x->texto($f, 1, '', Xlsx::HITO_T);
+        $x->texto($f, 3, 'SEPARACIÓN', Xlsx::HITO_T);
+        $x->formula($f, 4, $sup['sep'], Xlsx::HITO_N);
         $f++;
     }
-    if ($sup['firma'] !== null && (float)($plan['firma'] ?? 0) > 0 && !empty($plan['fechaFirma'])) {
+    if ($hayFirmaHito && !empty($plan['fechaFirma'])) {
         $x->numero($f, 2, Xlsx::fecha(DateTimeImmutable::createFromFormat('!d/m/Y', $plan['fechaFirma'])), Xlsx::FECHA);
-        $x->texto($f, 3, 'A LA FIRMA', Xlsx::NORMAL);
-        $x->formula($f, 4, $sup['firma'], Xlsx::DINERO);
+        $x->texto($f, 1, '', Xlsx::HITO_T);
+        $x->texto($f, 3, 'A LA FIRMA', Xlsx::HITO_T);
+        $x->formula($f, 4, "$entrada-{$sup['sep']}", Xlsx::HITO_N);
         $f++;
     }
-    /* Los abonos de la firma sola tambien son FORMULA y reparten (entrada - separacion):
-       asi escalan con el precio como todo lo demas. El ultimo es el residuo, para que
-       los N sumen la entrada al centavo. */
     $kf = 0;
     foreach ($filas as $fila) {
         if (empty($fila['soloFirma'])) continue;
         $kf++;
+        $x->texto($f, 1, '', Xlsx::HITO_T);
         $x->numero($f, 2, Xlsx::fecha(DateTimeImmutable::createFromFormat('!d/m/Y', $fila['fecha'])), Xlsx::FECHA);
-        $x->texto($f, 3, 'FIRMA', Xlsx::NORMAL);
+        $x->texto($f, 3, 'FIRMA', Xlsx::HITO_T);
         $x->formula($f, 4, $kf < $nFirmaSola
             ? "ROUND(($entrada-{$sup['sep']})/$nFirmaSola,2)"
             : "$entrada-{$sup['sep']}-ROUND(($entrada-{$sup['sep']})/$nFirmaSola,2)*" . ($nFirmaSola - 1),
-            Xlsx::DINERO);
+            Xlsx::HITO_N);
         $f++;
     }
 
-    $priCuota = $f;
+    $priCuota = $f; $k = 0; $kx = 0; $kfc = 0;
+    $colD = Xlsx::col(4); $colE = Xlsx::col(9); $colF = Xlsx::col(10); $colG = Xlsx::col(11); $colA = Xlsx::col(1);
+    foreach ($filas as $fila) {
+        if (!empty($fila['soloFirma'])) continue;
+        $k++;
+        $esX = !empty($fila['extra']);
+        $x->numero($f, 1, $k, $esX ? Xlsx::EXTRA_T : Xlsx::CUOTA_T);
+        $x->formula($f, 2, "EDATE({$sup['ini']}," . ($k - 1) . ')', Xlsx::FECHA);
+        $x->texto($f, 3, $esX ? 'EXTRAORDINARIA' : '', $esX ? Xlsx::EXTRA_T : Xlsx::CUOTA_T);
+        $f++;
+    }
+    $ultCuota = $f - 1;
+    $rangoE = "\${$colE}\${$priCuota}:\${$colE}\${$ultCuota}";
+
+    $x->formula($filaN, 7, "COUNT(\$$colA\$$priCuota:\$$colA\$$ultCuota)", Xlsx::CENTRO);
+    $x->formula($filaCuotaMensual, 7, "ROUND(($financiado-SUM($rangoE))/{$sup['n']},2)", Xlsx::DINERO_B);
+
+    $ff = $priCuota;
+    foreach ($filas as $fila) {
+        if (!empty($fila['soloFirma'])) continue;
+        $esX = !empty($fila['extra']);
+        /* La FIRMA DIFERIDA va en su columna y NO sumada dentro de la cuota: si se suma,
+           el residuo de la ultima se come la de las anteriores y sale en negativo. */
+        if (empty($fila['soloFirma']) && (float)($fila['firma'] ?? 0) > 0 && $nFirmaEnCuota > 0) {
+            $peso = $sumFirmaEnCuota > 0 ? round((float)$fila['firma'] / $sumFirmaEnCuota, 10) : 0;
+            $x->formula($ff, 10, "ROUND(($entrada-{$sup['sep']})*$peso,2)", Xlsx::NORMAL);
+        }
+        if ($esX) {
+            if ($extraParejas) {
+                $kx++;
+                $x->formula($ff, 9, $kx < $nExtra
+                    ? "ROUND($totalExtra/$nExtra,2)"
+                    : "$totalExtra-ROUND($totalExtra/$nExtra,2)*" . ($nExtra - 1), Xlsx::NORMAL);
+            } else {
+                $e = round((float)$fila['monto'] - (float)($plan['mensual'] ?? 0) - (float)($fila['firma'] ?? 0), 2);
+                $x->numero($ff, 9, max(0.0, $e), Xlsx::EDITABLE);
+            }
+        }
+        if ($ff === $ultCuota && $ultCuota > $priCuota) {
+            $ajusteFirma = $nFirmaEnCuota > 0
+                ? "-(SUM(\$$colF\$$priCuota:\$$colF\$$ultCuota)-($entrada-{$sup['sep']}))" : '';
+            $x->formula($ff, 11, "$financiado-SUM($rangoE)-SUM(\$$colG\$$priCuota:\$$colG\$" . ($ultCuota - 1) . ')' . $ajusteFirma, Xlsx::NORMAL);
+        } else {
+            $x->formula($ff, 11, $mensual, Xlsx::NORMAL);
+        }
+        $x->formula($ff, 4, "\$$colG\$$ff+\$$colE\$$ff" . ($nFirmaEnCuota > 0 ? "+\$$colF\$$ff" : ''),
+                    $esX ? Xlsx::EXTRA_N : Xlsx::CUOTA_N);
+        $ff++;
+    }
+
+    // los cierres del documento
+    $x->texto($f, 1, '', Xlsx::TOTINI_T); $x->texto($f, 2, '', Xlsx::TOTINI_T);
+    $x->texto($f, 3, 'TOTAL CUOTA INICIAL', Xlsx::TOTINI_T);
+    $x->formula($f, 4, "$entrada+$financiado", Xlsx::TOTINI_N); $f++;
+    $x->texto($f, 1, '', Xlsx::HITO_T); $x->texto($f, 2, '', Xlsx::HITO_T);
+    $x->texto($f, 3, 'CONTRA ENTREGA', Xlsx::HITO_T);
+    $x->formula($f, 4, $sup['contra'], Xlsx::HITO_N);
+    $filaContra = $f; $f++;
+    $x->alto($f, 22);
+    $x->texto($f, 1, '', Xlsx::GRAN_T); $x->texto($f, 2, '', Xlsx::GRAN_T);
+    $x->texto($f, 3, 'TOTAL', Xlsx::GRAN_T);
+    /* 🔴 LA SUMA SALTA "TOTAL CUOTA INICIAL". Esa fila es un SUBTOTAL del documento
+       -- separacion + firma + cuotas -- no un pago mas. Sumarla daba 155.400 sobre un
+       precio de 111.000: 44.400 de mas, justo el subtotal contado dos veces. Por eso
+       el rango llega hasta la ULTIMA CUOTA y despues se agrega la contraentrega
+       sola, saltandose el subtotal que queda en el medio. */
+    $x->formula($f, 4, "SUM(\$$colD\$$primeraSuma:\$$colD\$$ultCuota)+\$$colD\$$filaContra", Xlsx::GRAN_N);
+    $suma = '$' . $colD . '$' . $f; $f++;
+
+    /* ── las guardas, a la derecha con los supuestos ──────────────────────── */
+    $x->texto($fs, 6, '¿CUADRA?', Xlsx::ETIQUETA);
+    $x->formula($fs, 7, "IF(ABS($suma-{$sup['precio']})<0.005,\"CUADRA\",\"NO CUADRA — revisar\")", Xlsx::AVISO_OK);
+    $fs++;
+    /* 🔴 El cuadre SOLO no alcanza: la ultima cuota es el residuo, asi que la suma da el
+       precio siempre y ese aviso nunca podria decir que no. Sirve para lo unico que si
+       lo rompe -- que alguien pise una formula con un numero, que es lo que hace un
+       vendedor. Estos tres cubren lo que el cuadre no ve. */
+    $ultCel = '$' . $colG . '$' . $ultCuota;
+    $x->texto($fs, 6, 'AVISOS', Xlsx::ETIQUETA);
+    $x->formula($fs, 7,
+        "IF($financiado<0,\"La entrada y la contraentrega superan el precio\","
+      . "IF({$mensual}<=0,\"Las extraordinarias no dejan cuota mensual\","
+      . "IF(ABS($ultCel-{$mensual})>1,\"La última cuota quedó en \"&TEXT($ultCel,\"$#,##0.00\")&\", muy distinta\","
+      . "\"sin avisos\")))", Xlsx::AVISO_OK);
+    $fs++;
+    $x->texto($fs, 6, 'Lo OFICIAL es lo que emite el cotizador. Esta hoja sirve para simular: '
+        . 'avisa si la tabla deja de cuadrar, pero no sabe si el trato es vendible.', Xlsx::NOTA);
+    $x->unir($fs, 6, $fs, 7);
+
+    /* Lo que la hoja LIMPIA necesita saber de este bloque: donde vive cada fila de la
+       tabla, para apuntarle con una formula en vez de copiar numeros. */
+    $mapa = ['cods' => $cods, 'filas' => []];
+    for ($r = $primeraSuma; $r <= $filaContra; $r++) $mapa['filas'][] = $r;
+    $GLOBALS['COT_EXCEL_MAPA'][] = $mapa;
+
+    return max($f, $fs) + 2;
+}
+
+/**
+ * LA HOJA PARA SUBIR: solo la tabla de pagos, sin un solo mando.
+ *
+ * Pedido del usuario (23-sep-2026): "al momento de descargarlo y subirlo, que no
+ * aparezca eso, sino solamente la tabla de pagos, para que el PHP que lo lea la pueda
+ * leer correctamente".
+ *
+ * Tres columnas y nada mas: N°, VENCIMIENTO, VALOR CUOTA. Sin supuestos, sin columnas
+ * de trabajo, sin avisos. Quien la lea encuentra una tabla y ya.
+ *
+ * 🔴 CADA CELDA ES UNA FORMULA QUE APUNTA A LA HOJA 1, PERO LLEVA SU VALOR ESCRITO.
+ * Las dos cosas, y por motivos distintos:
+ *   - la formula, para que si el vendedor cambia el precio esta hoja cambie con el y
+ *     no le suba al sistema una tabla vieja;
+ *   - el valor, porque un programa que lee un .xlsx lee el valor cacheado, NO la
+ *     formula. Sin el, el importador veria la hoja vacia y no daria ningun error.
+ */
+function cot_excel_hoja_limpia(Xlsx $x, array $bloques, array $meta): void
+{
+    $x->nuevaHoja('TABLA PARA SUBIR');
+    $x->ancho(1, 8); $x->ancho(2, 16); $x->ancho(3, 18); $x->ancho(4, 30);
+
+    $f = 1;
+    $linea = array_filter([(string)($meta['cliente'] ?? ''), (string)($meta['unidades'] ?? ''),
+                           (string)($meta['proyecto'] ?? '')]);
+    $x->texto($f, 1, 'PLAN DE PAGOS', Xlsx::TITULO); $x->unir($f, 1, $f, 4); $f++;
+    $x->texto($f, 1, implode('  ·  ', $linea), Xlsx::NOTA); $x->unir($f, 1, $f, 4); $f++;
+    $x->texto($f, 1, 'Esta hoja es la que se sube al sistema. Se actualiza sola con lo que '
+        . 'se cambie en la hoja anterior — no se edita aquí.', Xlsx::NOTA);
+    $x->unir($f, 1, $f, 4); $f += 2;
+
+    $x->alto($f, 20);
+    $x->texto($f, 1, 'N°', Xlsx::CABECERA);
+    $x->texto($f, 2, 'VENCIMIENTO', Xlsx::CABECERA);
+    $x->texto($f, 3, 'VALOR CUOTA', Xlsx::CABECERA);
+    $x->texto($f, 4, 'CONCEPTO', Xlsx::CABECERA);
+    $x->congelarHasta($f); $f++;
+
+    $hoja1 = "'Plan de pagos'!";
+    foreach (($GLOBALS['COT_EXCEL_MAPA'] ?? []) as $i => $m) {
+        if (count($bloques) > 1) {
+            $x->texto($f, 1, 'Unidad ' . ($i + 1) . ' · ' . $m['cods'], Xlsx::SUBTITULO);
+            $x->unir($f, 1, $f, 4); $f++;
+        }
+        $b = $bloques[$i] ?? null;
+        $vals = $b ? cot_excel_valores($b['plan']) : [];
+        foreach ($m['filas'] as $k => $r) {
+            $v = $vals[$k] ?? null;
+            $x->formula($f, 1, "IF({$hoja1}A$r=\"\",\"\",{$hoja1}A$r)", Xlsx::CENTRO, $v['n'] ?? '');
+            $x->formula($f, 2, "{$hoja1}B$r", Xlsx::FECHA,   $v['fecha'] ?? null);
+            $x->formula($f, 3, "{$hoja1}D$r", Xlsx::CUOTA_N, $v['monto'] ?? null);
+            $x->formula($f, 4, "{$hoja1}C$r", Xlsx::CUOTA_T, $v['concepto'] ?? '');
+            $f++;
+        }
+        $f++;
+    }
+}
+
+/** Los MISMOS valores que la hoja 1 muestra hoy, en el orden en que los escribio.
+ *  Sirven de valor cacheado para quien lee el archivo sin abrir Excel. */
+function cot_excel_valores(array $plan): array
+{
+    $out = [];
+    $filas = array_values((array)($plan['filas'] ?? []));
+    if (!empty($plan['fechaReserva']))
+        $out[] = ['n' => '', 'fecha' => Xlsx::fecha(DateTimeImmutable::createFromFormat('!d/m/Y', $plan['fechaReserva'])),
+                  'monto' => round((float)$plan['separacion'], 2), 'concepto' => 'SEPARACIÓN'];
+    $soloFirma = 0;
+    foreach ($filas as $fila) if (!empty($fila['soloFirma'])) $soloFirma++;
+    if ($soloFirma === 0 && (float)($plan['firma'] ?? 0) > 0 && !empty($plan['fechaFirma']))
+        $out[] = ['n' => '', 'fecha' => Xlsx::fecha(DateTimeImmutable::createFromFormat('!d/m/Y', $plan['fechaFirma'])),
+                  'monto' => round((float)$plan['firma'], 2), 'concepto' => 'A LA FIRMA'];
+    foreach ($filas as $fila) {
+        if (empty($fila['soloFirma'])) continue;
+        $out[] = ['n' => '', 'fecha' => Xlsx::fecha(DateTimeImmutable::createFromFormat('!d/m/Y', $fila['fecha'])),
+                  'monto' => round((float)$fila['monto'], 2), 'concepto' => 'FIRMA'];
+    }
     $k = 0;
     foreach ($filas as $fila) {
         if (!empty($fila['soloFirma'])) continue;
         $k++;
-        $x->numero($f, 1, $k, Xlsx::CENTRO);
-        /* La fecha es EDATE desde la primera cuota: si el vendedor corre la primera,
-           se corren TODAS solas y respetan el mismo dia del mes. */
-        $x->formula($f, 2, "EDATE({$sup['ini']}," . ($k - 1) . ')', Xlsx::FECHA);
-        $x->texto($f, 3, !empty($fila['extra']) ? 'Cuota + extraordinaria' : 'Cuota', Xlsx::NORMAL);
-        $f++;
+        $out[] = ['n' => $k, 'fecha' => Xlsx::fecha(DateTimeImmutable::createFromFormat('!d/m/Y', $fila['fecha'])),
+                  'monto' => round((float)$fila['monto'], 2),
+                  'concepto' => !empty($fila['extra']) ? 'EXTRAORDINARIA' : ''];
     }
-    $ultCuota = $f - 1;
-    /* Las cuatro columnas de la derecha, y por que son cuatro y no una:
-         D VALOR CUOTA   lo que el cliente paga ese mes = base + extra + firma
-         E EXTRAORDINARIA  entrada del vendedor
-         F FIRMA DIFERIDA  la parte de la entrada montada sobre esa cuota
-         G CUOTA BASE      la cuota pura, que es la que tiene que sumar el financiado
-       Tenerlas separadas es lo que permite que el RESIDUO de la ultima cuota cuadre:
-       si la firma va sumada dentro, el residuo la resta y sale en negativo. */
-    $colD = Xlsx::col(4); $colE = Xlsx::col(5); $colF = Xlsx::col(6); $colG = Xlsx::col(7);
-    $rangoE = "\${$colE}\${$priCuota}:\${$colE}\${$ultCuota}";
-
-    // ahora si: las dos formulas que necesitaban conocer el rango de la tabla
-    $colA = Xlsx::col(1);
-    $x->formula($filaN, 4, "COUNT(\$$colA\$$priCuota:\$$colA\$$ultCuota)", Xlsx::CENTRO);
-    $x->formula($filaCuotaMensual, 4,
-        "ROUND(($financiado-SUM($rangoE))/{$sup['n']},2)", Xlsx::DINERO_B);
-    $mensual = '$' . $colD . '$' . $filaCuotaMensual;
-
-    // los montos de cada cuota, ya con la referencia a la mensual
-    $k = 0; $kx = 0; $kfc = 0; $ff = $priCuota;
-    foreach ($filas as $fila) {
-        if (!empty($fila['soloFirma'])) continue;
-        $k++;
-        /* FIRMA DIFERIDA: cuando NO va sola, el motor la monta encima de las primeras
-           cuotas. La pantalla muestra 3.777,78 donde la cuota vale 411,11 -- el resto
-           es firma.
-           🔴 VA EN SU PROPIA COLUMNA (F) Y NO SUMADA DENTRO DE LA CUOTA. Primero la
-           sume dentro y la ultima cuota -- que es el residuo -- se comia la firma de
-           las anteriores y salia en -9.688,83. Separada, la columna de cuota pura
-           sigue sumando el financiado y el residuo cuadra solo.
-           Y el reparto respeta los PESOS originales: con un plan a la medida
-           (3.000 y 2.000) dividir en partes iguales daba 3.005,56 donde el cotizador
-           dice 3.505,56. */
-        $conFirma = empty($fila['soloFirma']) && (float)($fila['firma'] ?? 0) > 0;
-        if ($conFirma && $nFirmaEnCuota > 0) {
-            $kfc++;
-            /* 🔴 CADA PARTE SE REDONDEA SOLA, SIN RESIDUO -- igual que el motor. Puse
-               la ultima como residuo y quedaba en 3.366,66 donde el PDF dice 3.366,67:
-               el motor redondea las tres a 3.366,67 (suman 10.100,01) y compensa ese
-               centavo en la cuota de AJUSTE, no en la firma. Un centavo de diferencia
-               entre el Excel y el PDF del mismo cliente es un documento que no cuadra,
-               aunque el total coincida. El centavo se descuenta abajo, en la ultima
-               cuota, que es donde el cotizador lo pone. */
-            $peso = $sumFirmaEnCuota > 0 ? round((float)$fila['firma'] / $sumFirmaEnCuota, 10) : 0;
-            $x->formula($ff, 6, "ROUND(($entrada-{$sup['sep']})*$peso,2)", Xlsx::NORMAL);
-        }
-        if ($ff === $ultCuota && $ultCuota > $priCuota) {
-            /* LA ULTIMA ES EL RESIDUO, no otra vez el valor redondeado. Es lo que hace
-               el motor para que la columna sume el precio exacto: sin esto quedan
-               centavos sueltos y el CUADRE de abajo diria NO CUADRA por 24 centavos. */
-            /* El `-(SUM(F)-(entrada-sep))` es el centavo del reparto de la firma: si las
-               partes redondeadas suman un centavo de mas, sale de aca. Es exactamente
-               lo que hace el motor con su cuota de ajuste. */
-            $ajusteFirma = $nFirmaEnCuota > 0
-                ? "-(SUM(\$$colF\$$priCuota:\$$colF\$$ultCuota)-($entrada-{$sup['sep']}))" : '';
-            $x->formula($ff, 7, "$financiado-SUM($rangoE)-SUM(\$$colG\$$priCuota:\$$colG\$" . ($ultCuota - 1) . ')' . $ajusteFirma, Xlsx::NORMAL);
-        } else {
-            $x->formula($ff, 7, $mensual, Xlsx::NORMAL);
-        }
-        // lo que el cliente paga ese mes: base + extraordinaria + firma diferida
-        $x->formula($ff, 4, "\$$colG\$$ff+\$$colE\$$ff" . ($nFirmaEnCuota > 0 ? "+\$$colF\$$ff" : ''), Xlsx::DINERO);
-        // la extraordinaria de esa fila
-        if (!empty($fila['extra'])) {
-            if ($extraParejas) {
-                $kx++;
-                /* La ULTIMA extraordinaria es el residuo, por lo mismo que la ultima
-                   cuota: asi las N suman exactamente el total y no quedan centavos. */
-                $x->formula($ff, 5, $kx < $nExtra
-                    ? "ROUND($totalExtra/$nExtra,2)"
-                    : "$totalExtra-ROUND($totalExtra/$nExtra,2)*" . ($nExtra - 1), Xlsx::DINERO);
-            } else {
-                $e = round((float)$fila['monto'] - (float)($plan['mensual'] ?? 0) - (float)($fila['firma'] ?? 0), 2);
-                $x->numero($ff, 5, max(0.0, $e), Xlsx::EDITABLE);
-            }
-        }
-        $ff++;
-    }
-
-    $x->numero($f, 2, 0, Xlsx::NORMAL);   // celda vacia para cerrar el borde
-    $x->texto($f, 3, 'CONTRA ENTREGA', Xlsx::ETIQUETA);
-    $x->formula($f, 4, $sup['contra'], Xlsx::DINERO_B);
-    $ultima = $f; $f++;
-
-    // ── el cuadre: la guarda que hace util a esta hoja ─────────────────────
-    $x->texto($f, 3, 'SUMA DE TODO', Xlsx::ETIQUETA);
-    /* SIN sumar E ni F aparte: ya estan DENTRO de la columna D de cada cuota. Sumarlos
-       otra vez contaria las extraordinarias dos veces. */
-    $x->formula($f, 4, "SUM(\$$colD\$$primeraSuma:\$$colD\$$ultima)", Xlsx::DINERO_B);
-    $suma = '$' . $colD . '$' . $f; $f++;
-    $x->texto($f, 3, 'PRECIO DE VENTA', Xlsx::ETIQUETA);
-    $x->formula($f, 4, $sup['precio'], Xlsx::DINERO_B); $f++;
-    $x->texto($f, 3, '¿CUADRA?', Xlsx::ETIQUETA);
-    /* El 0,005 no es capricho: con centavos, comparar por igualdad exacta marca
-       NO CUADRA por un error de coma flotante que nadie puede ver ni corregir. */
-    $x->formula($f, 4, "IF(ABS($suma-{$sup['precio']})<0.005,\"CUADRA\",\"NO CUADRA — revisar\")", Xlsx::AVISO_OK);
-    $f++;
-
-    /* 🔴 EL CUADRE SOLO NO ALCANZA, Y CASI LO DEJO ASI. Por como esta armada la hoja
-       la ultima cuota es el RESIDUO, asi que la suma da el precio SIEMPRE: el
-       "¿CUADRA?" nunca podria decir que no. Serviria de adorno.
-       Solo se rompe si alguien PISA una formula escribiendo un numero encima -- que
-       es justo lo que va a hacer un vendedor -- y para eso si sirve.
-       Estos otros tres avisos cubren lo que el cuadre no puede ver: */
-    /* Mira la CUOTA BASE y no el total: la ultima fila podria llevar una
-       extraordinaria legitima y el aviso saltaria sin motivo. */
-    $ultCel = '$' . $colG . '$' . $ultCuota;
-    $x->texto($f, 3, 'AVISOS', Xlsx::ETIQUETA);
-    $x->formula($f, 4,
-        // a financiar negativo: se pidio mas de entrada y contraentrega que el precio
-        "IF($financiado<0,\"La entrada y la contraentrega superan el precio\","
-        // cuota negativa o cero: las extraordinarias se comieron el financiamiento
-      . "IF({$mensual}<=0,\"Las extraordinarias no dejan cuota mensual\","
-        // la ultima cuota deberia diferir en CENTAVOS, no en dolares
-      . "IF(ABS($ultCel-{$mensual})>1,\"La última cuota quedó en \"&TEXT($ultCel,\"$#,##0.00\")&\", muy distinta de las demás\","
-      . "\"sin avisos\")))", Xlsx::AVISO_OK);
-    $f++;
-    $x->texto($f, 1, 'Si dice NO CUADRA o aparece un aviso, la tabla dejó de ser válida: '
-        . 'no se la mandes al cliente hasta rehacerla en el cotizador.', Xlsx::PIE);
-    return $f + 1;
+    $out[] = ['n' => '', 'fecha' => null, 'monto' => round((float)($plan['totalInicial'] ?? 0), 2),
+              'concepto' => 'TOTAL CUOTA INICIAL'];
+    $out[] = ['n' => '', 'fecha' => null, 'monto' => round((float)($plan['contraentrega'] ?? 0), 2),
+              'concepto' => 'CONTRA ENTREGA'];
+    return $out;
 }
