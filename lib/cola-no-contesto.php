@@ -218,6 +218,50 @@ function cola_nc_conteo(SQLite3 $db): array {
  * @param callable|null $log    recibe una línea de texto; null = silencio
  * @return array{hechas:int,fallidas:int,cortado:bool,vistas:int}
  */
+/**
+ * ¿Esta pulsacion YA dejo su actividad en Bitrix?
+ *
+ * 🔴 ES LO QUE CIERRA EL AGUJERO DE LOS DUPLICADOS, y subir el arriendo no lo cierra:
+ * subirlo solo baja la probabilidad. Medido el 23-sep-2026 sobre 858 pulsaciones: 71
+ * tardaron mas que el arriendo de 60 s y 38 dejaron actividad DUPLICADA (38 deals, 6
+ * asesores). La peor tardo 3.015 s, o sea que ni 600 s cubren todo. Lo unico que lo
+ * cierra es PREGUNTAR antes de escribir.
+ *
+ * Devuelve:
+ *   true   ya existe -> la fila se marca hecha SIN volver a escribir
+ *   false  no existe -> se reproduce, que es lo que corresponde
+ *   null   NO SE PUDO COMPROBAR (Bitrix caido o 503)
+ *
+ * 🔴 EL `null` NO ES `false`. Si no se puede comprobar, NO se escribe en ese ciclo: se
+ * espera al siguiente. Un guardia que no puede comprobar no puede dejar pasar -- si
+ * ante la duda escribiera, volveriamos exactamente al duplicado que esto evita.
+ *
+ * LA VENTANA ES ESTRECHA A PROPOSITO. Se busca una actividad DEL MISMO ASESOR creada
+ * entre 30 s antes de la pulsacion y el arriendo mas 5 minutos. Mas ancha y una llamada
+ * legitima posterior al mismo deal se confundiria con esta, y nos saltariamos un
+ * registro de trabajo real -- que es peor que un duplicado: al vendedor le borra una
+ * llamada que si hizo.
+ */
+function cola_nc_ya_tiene_actividad(callable $bx, int $dealId, int $asesor, int $pulsada, int $arriendo = 600): ?bool
+{
+    if ($dealId <= 0) return false;
+    $desde = $pulsada - 30;
+    $hasta = $pulsada + $arriendo + 300;
+    $r = $bx('crm.activity.list', [
+        'filter' => ['OWNER_TYPE_ID' => 2, 'OWNER_ID' => $dealId],
+        'select' => ['ID', 'CREATED', 'RESPONSIBLE_ID', 'TYPE_ID'],
+        'order'  => ['ID' => 'DESC'],
+    ]);
+    if (empty($r['ok'])) return null;                  // no se pudo comprobar
+    foreach ((array)($r['result'] ?? []) as $a) {
+        $c = strtotime((string)($a['CREATED'] ?? ''));
+        if (!$c || $c < $desde || $c > $hasta) continue;
+        if ($asesor > 0 && (int)($a['RESPONSIBLE_ID'] ?? 0) !== $asesor) continue;
+        return true;
+    }
+    return false;
+}
+
 function cola_nc_drenar(
     SQLite3 $db, callable $bx, object $store, string $stageEnv,
     int $lote = 10, ?callable $log = null
@@ -238,6 +282,25 @@ function cola_nc_drenar(
             continue;
         }
         $stage = (string)$p['stage'] !== '' ? (string)$p['stage'] : $stageEnv;
+
+        /* ── ¿YA ESTA? ────────────────────────────────────────────────────────
+         * Antes de reproducir, se pregunta. Cuesta UNA lectura por pulsacion
+         * pendiente -- y las pendientes son pocas -- y evita cobrarle al asesor una
+         * llamada que no hizo. */
+        $yaEsta = cola_nc_ya_tiene_actividad(
+            $bx, (int)($input['dealId'] ?? 0), (int)($input['bitrixUserId'] ?? 0), $pulsada);
+        if ($yaEsta === true) {
+            cola_nc_hecha($db, $rid);
+            $hechas++;
+            $decir("  ✔ $rid · pulsada $cuando · ya estaba en Bitrix, no se reescribe");
+            continue;
+        }
+        if ($yaEsta === null) {
+            $bloqueadas++;
+            $decir("  ⏸ $rid · no se pudo comprobar si ya estaba: se espera al proximo ciclo");
+            continue;
+        }
+
         try {
             $r = llamada_procesar_resultado(
                 $input, $bx, $store,

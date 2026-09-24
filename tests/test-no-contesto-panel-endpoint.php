@@ -9,6 +9,17 @@ if (is_file($endpointPath)) require_once $endpointPath;
 final class PanelEndpointFakeBitrix {
     public array $calls = [];
     public array $errors = [];
+    /** Actividades que Bitrix ya tiene en el deal, para el chequeo anti-duplicado. */
+    public array $yaCreadas = [];
+    /** Hace fallar SOLO la PRIMERA consulta de actividades, que es la del chequeo
+     *  anti-duplicado: el guardia pregunta antes que nadie. Las siguientes -- las del
+     *  servicio -- contestan normal.
+     *  🔴 Se separa por ORDEN y no por la forma del filtro porque el servicio usa una
+     *  consulta de la misma forma: cegando "OWNER_ID sin COMPLETED" se cegaban las dos,
+     *  y entonces la prueba de "Bitrix a ciegas" pasaba porque fallaba el SERVICIO, no
+     *  porque el guardia frenara. Verde por el motivo equivocado. */
+    public bool $cegarChequeo = false;
+    private int $listas = 0;
     public array $deal = [
         'ID' => '77',
         'ASSIGNED_BY_ID' => '42',
@@ -55,8 +66,20 @@ final class PanelEndpointFakeBitrix {
                     'VALUE_TYPE' => 'MOBILE',
                 ]],
             ]],
-            'crm.activity.list' => ['ok' => true, 'result' =>
-                ($params['filter']['COMPLETED'] ?? null) === 'N' ? $this->pending : []],
+            /* 🔴 RESPETA EL FILTRO, y no es un detalle de la prueba. El drenador
+               pregunta "¿esta pulsacion ya dejo su actividad en ESTE deal?" con un
+               filtro por OWNER_ID. Si el falso devolviera siempre `pending` -- como
+               hacia -- el chequeo veria una actividad que no es y se saltaria una
+               escritura legitima: le borrariamos al vendedor una llamada que si hizo.
+               Es la misma trampa que el Bitrix de verdad: devolver TODO cuando el
+               filtro no se entiende. `$yaCreadas` es lo que contesta a esa pregunta. */
+            'crm.activity.list' => (($this->cegarChequeo && ++$this->listas === 1)
+                ? ['ok' => false, 'error' => 'QUERY_LIMIT_EXCEEDED']
+                : ['ok' => true, 'result' => (function () use ($params) {
+                    if (($params['filter']['COMPLETED'] ?? null) === 'N') return $this->pending;
+                    if (isset($params['filter']['OWNER_ID']))           return $this->yaCreadas;
+                    return [];
+                })()]),
             'crm.activity.update' => ['ok' => true, 'result' => true],
             'crm.activity.add' => ['ok' => true, 'result' => 901],
             'crm.timeline.comment.add' => ['ok' => true, 'result' => 801],

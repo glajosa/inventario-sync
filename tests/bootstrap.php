@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 function test_same(mixed $expected, mixed $actual, string $name): void {
+    // se cuentan para poder distinguir "todas pasaron" de "ninguna corrio"
+    $GLOBALS['TEST_N'] = ($GLOBALS['TEST_N'] ?? 0) + 1;
     if ($expected !== $actual) {
         throw new RuntimeException($name . "\nexpected=" . var_export($expected, true) . "\nactual=" . var_export($actual, true));
     }

@@ -665,13 +665,19 @@ try {
     llamada_test_cleanup($directory);
 }
 
+/* 🔴 EL ARRIENDO YA NO ES 60 s. Esta prueba avanzaba el reloj a 1.061 -- 1.000 + 60 + 1 --
+   porque el arriendo duraba un minuto. El 23-sep-2026 se subio a 600 s para cerrar los
+   duplicados del boton "No contesto" (38 medidos sobre 858 pulsaciones) y esto empezo a
+   fallar, con razon: a los 61 s el arriendo ya NO esta vencido. Se lee de la MISMA
+   perilla que usa produccion, para que no se vuelvan a separar. */
+$leaseSeg = (int)(getenv('LLAMADA_LEASE_SEG') ?: 600);
 $leaseClock = 1_000;
 [$store, $directory] = llamada_test_store_with_clock($leaseClock);
 try {
     $firstLease = $store->begin('lease-cas', 'same-hash', $leaseClock);
     test_same(true, is_string($firstLease['lease_token'] ?? null) && $firstLease['lease_token'] !== '', 'first reservation receives lease token');
 
-    $leaseClock = 1_061;
+    $leaseClock = 1_000 + $leaseSeg + 1;
     $secondLease = $store->begin('lease-cas', 'same-hash', $leaseClock);
     test_same(true, $secondLease['is_new'], 'expired reservation can be recovered after crash');
     test_same(true, $secondLease['lease_token'] !== $firstLease['lease_token'], 'recovered reservation receives a new token');
@@ -715,7 +721,8 @@ try {
     ): void {
         if ($method !== 'crm.timeline.comment.add' || $raceTriggered) return;
         $raceTriggered = true;
-        $raceClock += 61;
+        // el salto tiene que PASAR el arriendo: era 61 cuando el arriendo era 60
+        $raceClock += (int)(getenv('LLAMADA_LEASE_SEG') ?: 600) + 1;
         $nestedResult = llamada_procesar_resultado($input, $fake, $store, $now, $noInterestStage);
     };
 

@@ -5,7 +5,33 @@ final class LlamadaIdempotenciaConflict extends RuntimeException {}
 final class LlamadaLeaseLost extends RuntimeException {}
 
 final class LlamadaIdempotenciaStore {
-    private const LEASE_SECONDS = 60;
+    /**
+     * CUANTO DURA EL "OCUPADO" de una pulsacion mientras se escribe en Bitrix.
+     *
+     * 🔴 ERA 60 s Y ESE ERA EL BUG. Mientras el arriendo vive, el drenado no vuelve a
+     * escribir: es lo UNICO que impide dos actividades por una sola pulsacion. Pero se
+     * mide con el reloj del sistema, no con el trabajo: si Bitrix esta saturado y la
+     * escritura tarda mas de 60 s, el arriendo vence CON LA ESCRITURA TODAVIA EN VUELO,
+     * el drenado ve el camino libre y crea la actividad de nuevo.
+     *
+     * Medido el 23-sep-2026 sobre 858 pulsaciones reales: 71 tardaron mas de 60 s y 38
+     * de esas dejaron actividad DUPLICADA en Bitrix (38 deals, 6 asesores, la peor de
+     * 3.015 s). Para la pestaña la actividad planificada ES el registro de la llamada,
+     * asi que cada duplicado cuenta una no-contestada de mas y mueve la escalera que
+     * califica a los asesores.
+     *
+     * Ahora son 600 s (10 min), por encima del peor caso razonable de saturacion, y sale
+     * de una perilla para poder moverlo sin redesplegar.
+     *
+     * 🔴 SUBIRLO NO ALCANZA, Y HAY QUE DECIRLO: solo baja la probabilidad. Con 3.015 s
+     * medidos, 600 tampoco cubren todo. Lo que CIERRA el agujero es la comprobacion de
+     * idempotencia del drenador (ver drenar-no-contesto.php): antes de reproducir,
+     * preguntar si esa pulsacion ya dejo su actividad.
+     */
+    private static function leaseSeconds(): int {
+        $v = (int)(getenv('LLAMADA_LEASE_SEG') ?: 0);
+        return $v > 0 ? max(60, min(3600, $v)) : 600;
+    }
 
     private PDO $pdo;
     private Closure $clock;
@@ -121,7 +147,7 @@ final class LlamadaIdempotenciaStore {
                     ':request_hash' => $requestHash,
                     ':state' => 'processing',
                     ':lease_token' => $leaseToken,
-                    ':lease_until' => $now + self::LEASE_SECONDS,
+                    ':lease_until' => $now + self::leaseSeconds(),
                     ':created_at' => $now,
                     ':updated_at' => $now,
                 ]);
@@ -132,7 +158,7 @@ final class LlamadaIdempotenciaStore {
             } elseif ((string)$record['state'] === 'retryable'
                 || ((string)$record['state'] === 'processing'
                     && (string)($record['comment_state'] ?? '') !== 'in_progress'
-                    && (int)($record['lease_until'] ?? ((int)$record['updated_at'] + self::LEASE_SECONDS)) < $now)) {
+                    && (int)($record['lease_until'] ?? ((int)$record['updated_at'] + self::leaseSeconds())) < $now)) {
                 $leaseToken = bin2hex(random_bytes(16));
                 $statement = $this->pdo->prepare('UPDATE result_operations
                     SET state = :state, lease_token = :lease_token, lease_until = :lease_until,
@@ -141,7 +167,7 @@ final class LlamadaIdempotenciaStore {
                 $statement->execute([
                     ':state' => 'processing',
                     ':lease_token' => $leaseToken,
-                    ':lease_until' => $now + self::LEASE_SECONDS,
+                    ':lease_until' => $now + self::leaseSeconds(),
                     ':updated_at' => $now,
                     ':idempotency_key' => $idempotencyKey,
                 ]);
@@ -342,7 +368,7 @@ final class LlamadaIdempotenciaStore {
         ];
         if (!$retryable) {
             $parameters[':next_lease_token'] = $leaseToken;
-            $parameters[':lease_until'] = $now + self::LEASE_SECONDS;
+            $parameters[':lease_until'] = $now + self::leaseSeconds();
         }
         $statement->execute($parameters);
 

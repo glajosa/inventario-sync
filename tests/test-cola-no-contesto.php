@@ -123,6 +123,99 @@ function cola_nc_test_deadline(PanelEndpointFakeBitrix $fake): string {
  * de la hora en que la cola se drena. Si algun dia alguien cambia el drenador
  * para pasar `new DateTimeImmutable('now')`, esta prueba se cae.
  */
+/**
+ * EL CHEQUEO ANTI-DUPLICADO: antes de reproducir, se pregunta si ya esta.
+ *
+ * Nace de un fallo medido el 23-sep-2026: de 858 pulsaciones, 71 tardaron mas que el
+ * arriendo y 38 dejaron actividad DUPLICADA en Bitrix (38 deals, 6 asesores). Para la
+ * pestaña la actividad planificada ES el registro de la llamada, asi que cada
+ * duplicado cuenta una no-contestada de mas.
+ */
+function test_cola_nc_no_reescribe_si_ya_esta(): void {
+    $dir = cola_nc_test_dir();
+    $db  = cola_nc_db($dir);
+    $arriendo = (int)(getenv('LLAMADA_LEASE_SEG') ?: 600);
+    $pulsada = time() - 1200;
+    /* Los mismos campos que usa el resto del archivo. El bitrixUserId tiene que
+       coincidir con el RESPONSIBLE_ID de la actividad falsa: el chequeo compara el
+       asesor, justamente para no confundirse con la llamada de otro. */
+    /* 🔴 UUID de verdad: el servicio valida el formato y con 'req-YA' respondia
+       "invalid callRequestId". El caso A pasaba igual porque el chequeo corta antes
+       de validar -- o sea que la prueba se veia verde sin ejercitar nada. */
+    $uuid = static fn(string $x): string => "00000000-0000-4000-8000-00000000000$x";
+    $entrada = ['dealId' => 77, 'bitrixUserId' => 42, 'outcome' => 'no_answer',
+                'memberId' => 'panel-42', 'selectedPhone' => '+593991234567',
+                'bitrixActivityId' => null, 'nextActivityAt' => null, 'comment' => ''];
+
+    // ── A · Bitrix YA tiene la actividad de esta pulsacion -> NO se reescribe ──
+    cola_nc_encolar($db, $uuid('1'), $entrada + ['callRequestId' => $uuid('1')], $pulsada, 'panel', 'C28:INTERESADO', 'prueba');
+    $ya = new PanelEndpointFakeBitrix();
+    $ya->yaCreadas = [[
+        'ID' => '555', 'CREATED' => date('c', $pulsada + 5),
+        'RESPONSIBLE_ID' => (string)($entrada['bitrixUserId'] ?? 42), 'TYPE_ID' => '2', 'DIRECTION' => '2',
+    ]];
+    $r = cola_nc_drenar($db, $ya, new LlamadaIdempotenciaStore($dir,
+        static fn(): int => time() + $arriendo + 60), 'C28:NO_INTERESADO', 10);
+    test_same(1, (int)$r['hechas'], 'ya estaba: la fila se cierra');
+    $escrituras = count(array_filter($ya->calls, fn($c) => $c[0] === 'crm.activity.add'));
+    test_same(0, $escrituras, 'ya estaba: NO se creo una segunda actividad');
+    test_same(0, cola_nc_conteo($db)['encolada'], 'ya estaba: no queda esperando');
+
+    // ── B · NO se puede comprobar (Bitrix caido) -> NO se escribe, se espera ──
+    $dir2 = cola_nc_test_dir(); $db2 = cola_nc_db($dir2);
+    cola_nc_encolar($db2, $uuid('2'), $entrada + ['callRequestId' => $uuid('2')], $pulsada, 'panel', 'C28:INTERESADO', 'prueba');
+    $ciego = new PanelEndpointFakeBitrix();
+    /* Se ciega SOLO el chequeo, no el servicio: si se rompiera crm.activity.list
+       entero, la prueba pasaria porque falla el servicio y no porque el guardia
+       frene -- verde por el motivo equivocado. */
+    $ciego->cegarChequeo = true;
+    $r2 = cola_nc_drenar($db2, $ciego, new LlamadaIdempotenciaStore($dir2,
+        static fn(): int => time() + $arriendo + 60), 'C28:NO_INTERESADO', 10);
+    test_same(0, (int)$r2['hechas'], 'a ciegas: no se da por hecha');
+    $esc2 = count(array_filter($ciego->calls, fn($c) => $c[0] === 'crm.activity.add'));
+    test_same(0, $esc2, 'a ciegas: NO escribe -- un guardia que no puede comprobar no deja pasar');
+
+    // ── B2 · una actividad FUERA DE LA VENTANA no cuenta ─────────────────────
+    $dirV = cola_nc_test_dir(); $dbV = cola_nc_db($dirV);
+    cola_nc_encolar($dbV, $uuid('4'), $entrada + ['callRequestId' => $uuid('4')], $pulsada,
+        'panel', 'C28:INTERESADO', 'prueba');
+    $viejo = new PanelEndpointFakeBitrix();
+    $viejo->yaCreadas = [[  // de hace 3 dias: es OTRA llamada, no esta
+        'ID' => '556', 'CREATED' => date('c', $pulsada - 3 * 86400),
+        'RESPONSIBLE_ID' => '42', 'TYPE_ID' => '2', 'DIRECTION' => '2',
+    ]];
+    $rV = cola_nc_drenar($dbV, $viejo, new LlamadaIdempotenciaStore($dirV,
+        static fn(): int => time() + $arriendo + 60), 'C28:NO_INTERESADO', 10);
+    test_same(1, (int)$rV['hechas'], 'fuera de ventana: se crea igual');
+    test_same(true, count(array_filter($viejo->calls, fn($c) => $c[0] === 'crm.activity.add')) >= 1,
+        'fuera de ventana: SI escribio -- una llamada vieja no puede tapar esta');
+
+    // ── B3 · una actividad de OTRO asesor no cuenta ──────────────────────────
+    $dirO = cola_nc_test_dir(); $dbO = cola_nc_db($dirO);
+    cola_nc_encolar($dbO, $uuid('5'), $entrada + ['callRequestId' => $uuid('5')], $pulsada,
+        'panel', 'C28:INTERESADO', 'prueba');
+    $otro = new PanelEndpointFakeBitrix();
+    $otro->yaCreadas = [[  // misma hora, pero la llamo otra persona
+        'ID' => '557', 'CREATED' => date('c', $pulsada + 5),
+        'RESPONSIBLE_ID' => '99999', 'TYPE_ID' => '2', 'DIRECTION' => '2',
+    ]];
+    $rO = cola_nc_drenar($dbO, $otro, new LlamadaIdempotenciaStore($dirO,
+        static fn(): int => time() + $arriendo + 60), 'C28:NO_INTERESADO', 10);
+    test_same(1, (int)$rO['hechas'], 'otro asesor: se crea igual');
+    test_same(true, count(array_filter($otro->calls, fn($c) => $c[0] === 'crm.activity.add')) >= 1,
+        'otro asesor: SI escribio -- la llamada de otro no es esta');
+
+    // ── C · NO esta -> se reproduce, que es lo que corresponde ────────────────
+    $dir3 = cola_nc_test_dir(); $db3 = cola_nc_db($dir3);
+    cola_nc_encolar($db3, $uuid('3'), $entrada + ['callRequestId' => $uuid('3')], $pulsada, 'panel', 'C28:INTERESADO', 'prueba');
+    $vacio = new PanelEndpointFakeBitrix();      // yaCreadas queda vacio
+    $r3 = cola_nc_drenar($db3, $vacio, new LlamadaIdempotenciaStore($dir3,
+        static fn(): int => time() + $arriendo + 60), 'C28:NO_INTERESADO', 10);
+    test_same(1, (int)$r3['hechas'], 'no estaba: se creo');
+    $esc3 = count(array_filter($vacio->calls, fn($c) => $c[0] === 'crm.activity.add'));
+    test_same(true, $esc3 >= 1, 'no estaba: SI escribio la actividad');
+}
+
 function test_cola_no_contesto_se_hace_sola(): void {
     $tzEc = new DateTimeZone('America/Guayaquil');
     // miercoles laborable, 13:55 de Ecuador: la hora real de las 4 pulsaciones
@@ -167,8 +260,14 @@ function test_cola_no_contesto_se_hace_sola(): void {
     // ── B2 · dos minutos despues (turno normal del cron) SI se crea ──────────
     // ⚠ el reloj del arriendo es el del sistema, NO el `now_ts` de la pulsacion:
     // por eso hace falta inyectarle un reloj adelantado para simular el turno.
+    /* 🔴 EL SALTO TIENE QUE PASAR EL ARRIENDO, Y EL ARRIENDO YA NO ES 60 s. Esta
+       prueba saltaba 300 s porque el arriendo duraba 60; al subirlo a 600 (el arreglo
+       de los duplicados del 23-sep) empezo a fallar, y con razon: con el arriendo vivo
+       NO tiene que escribir. Se lee de la misma perilla que usa produccion en vez de
+       escribir un numero aca, para que no se vuelvan a separar. */
+    $arriendo = (int)(getenv('LLAMADA_LEASE_SEG') ?: 600);
     $sano = new PanelEndpointFakeBitrix();
-    $reloj = static fn(): int => time() + 300;
+    $reloj = static fn(): int => time() + $arriendo + 60;
     $r = cola_nc_drenar($db, $sano, new LlamadaIdempotenciaStore($dirCola, $reloj), 'C28:NO_INTERESADO', 10);
     test_same(1, (int)$r['hechas'], 'sola: el drenado la creo');
     test_same(0, (int)$r['fallidas'], 'sola: sin fallos');
@@ -370,6 +469,7 @@ function test_cola_no_contesto_guarda_antes_de_intentar(): void {
 
 test_cola_no_contesto();
 test_cola_no_contesto_se_hace_sola();
+test_cola_nc_no_reescribe_si_ya_esta();
 test_cola_no_contesto_guarda_antes_de_intentar();
 test_cola_no_contesto_permisos();
 test_cola_no_contesto_enchufada();
@@ -422,3 +522,9 @@ function test_cola_nc_veredicto(): void {
     }
 }
 test_cola_nc_veredicto();
+
+/* 🔴 DECIR CUANTAS CORRIERON. Un "OK" pelado no distingue "20 comprobaciones pasaron"
+   de "la funcion no se llamo nunca" -- que es exactamente lo que me acaba de pasar:
+   agregue una prueba, quedo definida y sin invocar, y el archivo siguio diciendo OK
+   mientras yo saboteaba el codigo de tres formas distintas y las tres pasaban. */
+printf("cola-no-contesto: %d comprobaciones\n", $GLOBALS['TEST_N'] ?? 0);
