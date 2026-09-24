@@ -495,9 +495,25 @@ $hoy  = new DateTimeImmutable('now');
 <html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cotización<?= $cliente !== '' ? ' · ' . h($cliente) : '' ?> · <?= h(codigos_comprimidos($codigos)) ?></title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* LA LETRA VIAJA CON EL DOCUMENTO, NO SE PIDE PRESTADA (24-sep-2026).
+   Antes se bajaba de Google y el cuerpo del documento ni la usaba: salia con la letra que
+   tuviera la maquina del asesor (Segoe UI en Windows). Consecuencias medidas:
+   1. El PDF se veia distinto segun quien lo bajara.
+   2. 🔴 Firefox + cairo NO deja leer los montos escritos en Segoe UI SEMIBOLD. Medido en el
+      PDF del deal 409475: 54 montos ilegibles ($???.??) contra 15 legibles, y los 54 rotos
+      son EXACTAMENTE los que usan Semibold; los 15 buenos usan Bold o Regular. No es
+      tabular-nums ni es Firefox: es esa variante de esa letra. Por eso los deals 409471 y
+      409475 se quedaron sin cronograma y hubo que cargarlos a mano.
+   Geist es una fuente VARIABLE: un solo archivo por subconjunto cubre del 400 al 700.
+   45 KB los dos juntos, y ya no depende de que Google responda. */
+@font-face{font-family:'Geist';font-style:normal;font-weight:400 700;font-display:swap;
+  src:url(assets/fonts/geist-latin.woff2) format('woff2');
+  unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+@font-face{font-family:'Geist';font-style:normal;font-weight:400 700;font-display:swap;
+  src:url(assets/fonts/geist-latin-ext.woff2) format('woff2');
+  unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF}
+</style>
 <style>
 /* Hallmark · genre: modern-minimal · theme: Quiet (custom, anclado en el AZUL MARINO
    real de Galjosa — el mismo #1A52A8 que usa el Sales War Room dashboard, oklch(45.4%
@@ -532,7 +548,7 @@ $hoy  = new DateTimeImmutable('now');
   --ease-out: cubic-bezier(.16,1,.3,1);
 }
   *{box-sizing:border-box}
-  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--tinta);background:#eef2f6}
+  body{margin:0;font-family:var(--font);color:var(--tinta);background:#eef2f6}   /* 24-sep: era system-ui -> el documento salia con la letra de cada maquina */
 
   /* ---------- Chrome de página (barra superior) ---------- */
   /* Pegajoso: al hacer scroll se queda arriba, para no tener que subir de
@@ -703,7 +719,11 @@ $hoy  = new DateTimeImmutable('now');
            letter-spacing:1px;text-transform:uppercase}
   thead th:last-child{text-align:right}
   td{padding:8px 12px;border-bottom:1px solid #eef2f6}
-  td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  /* 🔴 700 Y NO 600, A PROPOSITO. Con 600 el navegador pide la SEMIBOLD, y en Firefox los
+     montos salen ilegibles en el PDF (medido: 54 de 54). Las filas de totales usan
+     tr.hito td{font-weight:700} y esas SI se leen, en ese mismo archivo. Los dos grupos
+     llevan tabular-nums, asi que la diferencia era el grosor, no el rasgo numerico. */
+  td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
   tr.hito td{background:#f5f8fa;font-weight:700}
   /* El total a la empresa se destaca: es la cifra que el cliente compara contra lo
      que le pide el banco, y en la tabla de pagos del equipo va resaltada. */
