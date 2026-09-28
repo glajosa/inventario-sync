@@ -1006,12 +1006,22 @@ function llamada_ultimo_reingreso(callable $bx, array $deal, int $dealId): ?stri
     /* ⭐ Todo el historial de etapas del deal (el más nuevo primero) y la regla en
      * llamada_elegir_reingreso(): RECONTACTAR con contador, o una RECONTACTAR de la
      * automatización (28-sep-2026). Sigue siendo UNA consulta. */
-    $history = llamada_bx_array($bx, 'crm.stagehistory.list', [
+    $params = [
         'entityTypeId' => 2,
         'filter' => ['OWNER_ID' => $dealId],
         'select' => ['ID', 'STAGE_ID', 'CREATED_TIME'],
         'order' => ['ID' => 'DESC'],
-    ]);
+    ];
+    if ($hasRealReentry) {
+        // con contador, como siempre: sin el historial no se sabe la fecha y se reintenta
+        $history = llamada_bx_array($bx, 'crm.stagehistory.list', $params);
+    } else {
+        /* Sin contador, antes no se consultaba nada y la pulsación nunca dependía del
+         * historial. Si Bitrix no lo da (saturado), se sigue SIN reinicio —lo mismo que
+         * antes del 28-sep— en vez de mandar la pulsación a la cola. */
+        try { $history = llamada_bx_array($bx, 'crm.stagehistory.list', $params); }
+        catch (Throwable $e) { return null; }
+    }
     $items = isset($history['items']) && is_array($history['items'])
         ? $history['items']
         : $history;

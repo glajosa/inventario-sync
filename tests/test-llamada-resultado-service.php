@@ -706,6 +706,26 @@ foreach (['C28:UC_DUS7OV' => 'RECONTACTAR AUTOM', 'C28:UC_PYK25X' => 'RECONTACTA
         llamada_test_cleanup($directory);
     }
 }
+/* Sin contador y con Bitrix sin dar el historial: la pulsacion se crea igual, sin
+   reinicio (lo mismo que antes del 28-sep), en vez de ir a la cola. */
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->historyPages = [0 => [
+        fake_activity(701, 'Llamada saliente Ana Pérez', '2026-08-10T09:00:00-05:00'),
+        fake_activity(702, 'Llamada saliente Ana Pérez', '2026-08-11T09:00:00-05:00'),
+        fake_activity(703, 'Llamada saliente Ana Pérez', '2026-08-12T09:00:00-05:00'),
+        fake_activity(731, 'Llamada saliente Ana Pérez', '2026-08-20T16:00:00-05:00'),
+    ]];
+    $fake->errors['crm.stagehistory.list'] = ['ok' => false, 'error' => 'QUERY_LIMIT_EXCEEDED', 'desc' => 'saturado'];
+    llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '18181818-1818-4181-8181-181818181818',
+    ]), $fake, $store, $now, $noInterestStage);
+    test_same('2026-11-27T19:00:00-05:00', llamada_campos_planificada($fake)['START_TIME'],
+        'without the counter a failing stage history does not block the press');
+} finally {
+    llamada_test_cleanup($directory);
+}
 test_same('2026-09-20T10:00:00', llamada_elegir_reingreso([
     ['STAGE_ID' => 'C28:PREPARATION', 'CREATED_TIME' => '2026-09-25T10:00:00'],
     ['STAGE_ID' => 'C28:UC_DUS7OV', 'CREATED_TIME' => '2026-09-20T10:00:00'],

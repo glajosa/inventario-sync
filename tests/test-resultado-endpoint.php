@@ -15,6 +15,8 @@ final class EndpointFakeBitrix {
         if (isset($this->errors[$method])) return $this->errors[$method];
 
         return match ($method) {
+            // desde el 28-sep-2026 el reingreso mira el historial de etapas (51b9aa3)
+            'crm.stagehistory.list' => ['ok' => true, 'result' => ['items' => []]],
             'crm.deal.get' => ['ok' => true, 'result' => [
                 'ID' => '77',
                 'ASSIGNED_BY_ID' => '42',
