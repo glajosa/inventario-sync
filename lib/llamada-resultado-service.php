@@ -1002,24 +1002,20 @@ function llamada_ultimo_reingreso(callable $bx, array $deal, int $dealId): ?stri
         || $counter === 0
         || $counter === 0.0
         || $counter === '');
-    if (!$hasRealReentry) return null;
 
+    /* ⭐ Todo el historial de etapas del deal (el más nuevo primero) y la regla en
+     * llamada_elegir_reingreso(): RECONTACTAR con contador, o una RECONTACTAR de la
+     * automatización (28-sep-2026). Sigue siendo UNA consulta. */
     $history = llamada_bx_array($bx, 'crm.stagehistory.list', [
         'entityTypeId' => 2,
-        'filter' => [
-            'OWNER_ID' => $dealId,
-            'STAGE_ID' => (string)$config['reentry_stage_id'],
-        ],
-        'select' => ['ID', 'CREATED_TIME'],
+        'filter' => ['OWNER_ID' => $dealId],
+        'select' => ['ID', 'STAGE_ID', 'CREATED_TIME'],
         'order' => ['ID' => 'DESC'],
     ]);
     $items = isset($history['items']) && is_array($history['items'])
         ? $history['items']
         : $history;
-    $created = isset($items[0]) && is_array($items[0])
-        ? substr((string)($items[0]['CREATED_TIME'] ?? ''), 0, 19)
-        : '';
-    return $created !== '' ? $created : null;
+    return llamada_elegir_reingreso(is_array($items) ? $items : [], $hasRealReentry, $config);
 }
 
 function llamada_campos_registro_tecnico(string $outcome): array {

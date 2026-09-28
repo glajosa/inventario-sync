@@ -577,6 +577,8 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
   var F_PROTOCOLO = 'UF_CRM_1786279719022';   // ESTADO DE PROTOCOLO
   var F_VECES     = LLAMADA_CONFIG.reentry_count_field; // VECES QUE DEJO EL NUMERO
   var ETAPA_REING = LLAMADA_CONFIG.reentry_stage_id;    // RECONTACTAR
+  // las RECONTACTAR de la automatizacion: reinician SIEMPRE (28-sep-2026)
+  var ETAPAS_REING_AUTO = LLAMADA_CONFIG.reentry_auto_stage_ids || [];
   /**
    * ⚠ NO USAR ORIGINATOR_ID PARA MARCAR NUESTRAS LLAMADAS.
    *
@@ -758,10 +760,13 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
       // Va en el MISMO batch: un comando mas, cero viajes mas.
       // (Verificado el 22-ago: crm.stagehistory.list acepta OWNER_ID y
       //  STAGE_ID juntos y no devuelve filas de otros deals ni de otras etapas.)
+      // Todo el historial de etapas: la regla (RECONTACTAR con contador, o una
+      // RECONTACTAR de la automatizacion) se aplica abajo, igual que
+      // llamada_elegir_reingreso() del servicio.
       reing: ['crm.stagehistory.list', {
         entityTypeId: 2,
-        filter: { OWNER_ID: dealId, STAGE_ID: ETAPA_REING },
-        select: ['ID','CREATED_TIME'], order: { ID:'DESC' }
+        filter: { OWNER_ID: dealId },
+        select: ['ID','STAGE_ID','CREATED_TIME'], order: { ID:'DESC' }
       }]
     }, function (r) {
       // ── historial → escalón
@@ -794,14 +799,19 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
           // NUMERO", que prospectosventas.php escribe en el mismo update que
           // mueve la etapa. Es el MISMO filtro que usa bin/reingresos.php del
           // motor; si aca se relaja, el panel y el puntaje vuelven a diverger.
-          if (deal[F_VECES]) {
-            try {
-              var rh = (r.reing && !r.reing.error()) ? (r.reing.data() || []) : [];
-              var it = rh.items || rh;                    // segun version del API
-              if (it && it.length)
-                reingreso = String(it[0].CREATED_TIME || '').substr(0,19);
-            } catch (e2) {}
-          }
+          // ⭐ Y las RECONTACTAR de la automatizacion cuentan SIEMPRE: ahi el
+          // cliente respondio a una reactivacion/seguimiento (28-sep-2026).
+          try {
+            var rh = (r.reing && !r.reing.error()) ? (r.reing.data() || []) : [];
+            var it = rh.items || rh;                      // segun version del API
+            var conContador = !!deal[F_VECES];
+            for (var k = 0; it && k < it.length; k++) {
+              var st = String(it[k].STAGE_ID || '');
+              var vale = (st === ETAPA_REING && conContador) || ETAPAS_REING_AUTO.indexOf(st) >= 0;
+              var t = String(it[k].CREATED_TIME || '').substr(0,19);
+              if (vale && t > reingreso) reingreso = t;
+            }
+          } catch (e2) {}
         }
       } catch (e) {}
       protocolo = calcularProtocolo(llamadas, reingreso);

@@ -625,6 +625,7 @@ try {
     ]];
     $fake->reentryHistory = ['items' => [[
         'ID' => '900',
+        'STAGE_ID' => 'C28:PREPARATION',
         'CREATED_TIME' => '2026-08-20T15:00:00-05:00',
     ]]];
 
@@ -660,10 +661,60 @@ try {
         llamada_campos_planificada($fake)['START_TIME'],
         'same three attempts without real reentry keep maintenance schedule'
     );
-    test_same([], llamada_calls($fake, 'crm.stagehistory.list'), 'no reentry counter avoids stage-history lookup');
 } finally {
     llamada_test_cleanup($directory);
 }
+
+/* ⭐ 28-sep-2026: sin contador, RECONTACTAR (la del formulario repetido) NO reinicia
+   -- el 19% la mete una integracion externa --, pero una RECONTACTAR de la
+   automatizacion SI: el cliente respondio a una reactivacion/seguimiento. */
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->historyPages = [0 => [
+        fake_activity(701, 'Llamada saliente Ana Pérez', '2026-08-10T09:00:00-05:00'),
+        fake_activity(702, 'Llamada saliente Ana Pérez', '2026-08-11T09:00:00-05:00'),
+        fake_activity(703, 'Llamada saliente Ana Pérez', '2026-08-12T09:00:00-05:00'),
+        fake_activity(731, 'Llamada saliente Ana Pérez', '2026-08-20T16:00:00-05:00'),
+    ]];
+    $fake->reentryHistory = ['items' => [['ID' => '910', 'STAGE_ID' => 'C28:PREPARATION', 'CREATED_TIME' => '2026-08-20T15:00:00-05:00']]];
+    llamada_procesar_resultado(llamada_test_input([
+        'callRequestId' => '15151515-1515-4151-8151-151515151515',
+    ]), $fake, $store, $now, $noInterestStage);
+    test_same('2026-11-27T19:00:00-05:00', llamada_campos_planificada($fake)['START_TIME'],
+        'RECONTACTAR without the counter still does not restart the ladder');
+} finally {
+    llamada_test_cleanup($directory);
+}
+foreach (['C28:UC_DUS7OV' => 'RECONTACTAR AUTOM', 'C28:UC_PYK25X' => 'RECONTACTAR NO INT'] as $stAuto => $nomAuto) {
+    [$store, $directory] = llamada_test_store();
+    try {
+        $fake = new FakeBitrix();
+        $fake->historyPages = [0 => [
+            fake_activity(701, 'Llamada saliente Ana Pérez', '2026-08-10T09:00:00-05:00'),
+            fake_activity(702, 'Llamada saliente Ana Pérez', '2026-08-11T09:00:00-05:00'),
+            fake_activity(703, 'Llamada saliente Ana Pérez', '2026-08-12T09:00:00-05:00'),
+            fake_activity(731, 'Llamada saliente Ana Pérez', '2026-08-20T16:00:00-05:00'),
+        ]];
+        $fake->reentryHistory = ['items' => [['ID' => '920', 'STAGE_ID' => $stAuto, 'CREATED_TIME' => '2026-08-20T15:00:00-05:00']]];
+        llamada_procesar_resultado(llamada_test_input([
+            'callRequestId' => ($stAuto === 'C28:UC_DUS7OV' ? '16161616-1616-4161-8161-161616161616' : '17171717-1717-4171-8171-171717171717'),
+        ]), $fake, $store, $now, $noInterestStage);
+        test_same('2026-08-21T19:00:00-05:00', llamada_campos_planificada($fake)['START_TIME'],
+            "$nomAuto restarts the ladder even without the counter");
+    } finally {
+        llamada_test_cleanup($directory);
+    }
+}
+test_same('2026-09-20T10:00:00', llamada_elegir_reingreso([
+    ['STAGE_ID' => 'C28:PREPARATION', 'CREATED_TIME' => '2026-09-25T10:00:00'],
+    ['STAGE_ID' => 'C28:UC_DUS7OV', 'CREATED_TIME' => '2026-09-20T10:00:00'],
+    ['STAGE_ID' => 'C28:NEW', 'CREATED_TIME' => '2026-09-27T10:00:00'],
+], false), 'without the counter only the automation stage counts, and other stages never');
+test_same('2026-09-25T10:00:00', llamada_elegir_reingreso([
+    ['STAGE_ID' => 'C28:PREPARATION', 'CREATED_TIME' => '2026-09-25T10:00:00'],
+    ['STAGE_ID' => 'C28:UC_DUS7OV', 'CREATED_TIME' => '2026-09-20T10:00:00'],
+], true), 'with the counter the newest of the two wins');
 
 /* 🔴 EL ARRIENDO YA NO ES 60 s. Esta prueba avanzaba el reloj a 1.061 -- 1.000 + 60 + 1 --
    porque el arriendo duraba un minuto. El 23-sep-2026 se subio a 600 s para cerrar los

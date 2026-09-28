@@ -84,6 +84,9 @@ final class PanelEndpointFakeBitrix {
             'crm.activity.add' => ['ok' => true, 'result' => 901],
             'crm.timeline.comment.add' => ['ok' => true, 'result' => 801],
             'crm.deal.update' => ['ok' => true, 'result' => true],
+            // desde el 28-sep-2026 el reingreso mira todo el historial de etapas
+            // (las RECONTACTAR de la automatizacion no exigen el contador)
+            'crm.stagehistory.list' => ['ok' => true, 'result' => ['items' => []]],
             default => ['ok' => false, 'error' => 'unexpected-method', 'desc' => $method],
         };
     }

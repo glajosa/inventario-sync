@@ -13,7 +13,34 @@ function llamada_config(): array {
         'provider_type_id' => 'CALL',
         'reentry_stage_id' => 'C28:PREPARATION',
         'reentry_count_field' => 'UF_CRM_1781115254387',
+        /* ⭐ Las dos RECONTACTAR de la automatización (28-sep-2026): el cliente
+         * RESPONDIÓ a una reactivación/seguimiento. Entrar reinicia la escalera
+         * SIEMPRE, sin exigir el contador (casi nunca lo tienen). Misma lista que
+         * dashboardbitrix/lib/recalcular.php → RC_ETAPAS_REINGRESO_AUTO: dos
+         * servidores, sin archivo común; si se cambia una, se cambia la otra. */
+        'reentry_auto_stage_ids' => ['C28:UC_DUS7OV', 'C28:UC_PYK25X'],   // RECONTACTAR AUTOM · RECONTACTAR NO INT
     ];
+}
+
+/**
+ * PURA. La fecha del último reingreso del deal, sacada de su historial de etapas.
+ *   RECONTACTAR (reentry_stage_id) cuenta solo si el deal tiene el contador "VECES QUE
+ *   DEJÓ EL NÚMERO" (el 19% de esas entradas las mete una integración externa).
+ *   Las RECONTACTAR de la automatización cuentan siempre.
+ * $historial: filas de crm.stagehistory.list con STAGE_ID y CREATED_TIME (cualquier orden).
+ */
+function llamada_elegir_reingreso(array $historial, bool $tieneContador, ?array $config = null): ?string {
+    $config = $config ?? llamada_config();
+    $auto = (array)($config['reentry_auto_stage_ids'] ?? []);
+    $mejor = '';
+    foreach ($historial as $h) {
+        $st = (string)($h['STAGE_ID'] ?? '');
+        $ok = ($st === (string)$config['reentry_stage_id'] && $tieneContador) || in_array($st, $auto, true);
+        if (!$ok) continue;
+        $t = substr((string)($h['CREATED_TIME'] ?? ''), 0, 19);
+        if ($t > $mejor) $mejor = $t;
+    }
+    return $mejor !== '' ? $mejor : null;
 }
 
 function llamada_calcular_protocolo(
