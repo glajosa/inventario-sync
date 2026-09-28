@@ -1018,9 +1018,16 @@ function llamada_ultimo_reingreso(callable $bx, array $deal, int $dealId): ?stri
     } else {
         /* Sin contador, antes no se consultaba nada y la pulsación nunca dependía del
          * historial. Si Bitrix no lo da (saturado), se sigue SIN reinicio —lo mismo que
-         * antes del 28-sep— en vez de mandar la pulsación a la cola. */
+         * antes del 28-sep— en vez de mandar la pulsación a la cola. Un permiso negado
+         * NO se tapa (misma regla que el resto del servicio): si el webhook pierde
+         * stagehistory, el reinicio moriría callado para todos. Y la saturación deja
+         * rastro en el log del contenedor. */
         try { $history = llamada_bx_array($bx, 'crm.stagehistory.list', $params); }
-        catch (Throwable $e) { return null; }
+        catch (LlamadaForbidden $e) { throw $e; }
+        catch (Throwable $e) {
+            error_log('llamada_ultimo_reingreso: sin reinicio, historial de etapas caido: ' . substr($e->getMessage(), 0, 160));
+            return null;
+        }
     }
     $items = isset($history['items']) && is_array($history['items'])
         ? $history['items']

@@ -726,6 +726,25 @@ try {
 } finally {
     llamada_test_cleanup($directory);
 }
+/* Pero un PERMISO NEGADO del historial no se traga: sale como forbidden, igual que
+   cualquier otra lectura de este servicio. */
+[$store, $directory] = llamada_test_store();
+try {
+    $fake = new FakeBitrix();
+    $fake->historyPages = [0 => [
+        fake_activity(701, 'Llamada saliente Ana Pérez', '2026-08-10T09:00:00-05:00'),
+    ]];
+    $fake->errors['crm.stagehistory.list'] = ['ok' => false, 'error' => 'ACCESS_DENIED', 'desc' => 'Access denied'];
+    test_throws(
+        fn() => llamada_procesar_resultado(llamada_test_input([
+            'callRequestId' => '19191919-1919-4191-8191-191919191919',
+        ]), $fake, $store, $now, $noInterestStage),
+        LlamadaForbidden::class,
+        'without the counter a denied stage history is still forbidden, never hidden'
+    );
+} finally {
+    llamada_test_cleanup($directory);
+}
 test_same('2026-09-20T10:00:00', llamada_elegir_reingreso([
     ['STAGE_ID' => 'C28:PREPARATION', 'CREATED_TIME' => '2026-09-25T10:00:00'],
     ['STAGE_ID' => 'C28:UC_DUS7OV', 'CREATED_TIME' => '2026-09-20T10:00:00'],
