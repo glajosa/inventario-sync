@@ -357,7 +357,21 @@ function test_cola_no_contesto_permisos(): void {
 }
 
 function test_cola_no_contesto_enchufada(): void {
-    $ep = (string)file_get_contents(__DIR__ . '/../entrypoint.sh');
+    /* El entrypoint vive en DOS sitios segun donde se corra la prueba: en el repo esta
+       junto al codigo, pero el Dockerfile lo COPIA a /usr/local/bin y BORRA la copia de
+       la raiz web (Dockerfile:85-88). Leyendo solo la del repo, dentro de la imagen
+       esto reventaba siempre — y como run.php corre en orden, las 7 pruebas de despues
+       nunca llegaban a correr ahi. Si no esta en ninguno de los dos, se FRENA diciendo
+       que no pudo comprobar: un "" leido como archivo vacio fallaria con un mensaje que
+       parece un bug del entrypoint. */
+    $ep = false;
+    foreach ([__DIR__ . '/../entrypoint.sh', '/usr/local/bin/entrypoint.sh'] as $donde) {
+        if (is_file($donde)) { $ep = (string)file_get_contents($donde); break; }
+    }
+    if ($ep === false) {
+        throw new RuntimeException('NO PUDE COMPROBAR el entrypoint: no esta ni en el repo '
+            . 'ni en /usr/local/bin. Correr desde el repo o dentro de la imagen.');
+    }
     $vivas = implode("\n", array_filter(
         explode("\n", $ep),
         static fn(string $l): bool => !str_starts_with(ltrim($l), '#')
