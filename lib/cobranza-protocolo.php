@@ -106,6 +106,13 @@ function cobranza_config(): array {
         // Ab. Jose Barek, Jefe del Area Legal (verificado por user.search el 7-sep-2026).
         // En ABOGADO el 2o contacto del primer mes es suyo, y desde el 2o mes todos.
         'abogado_user_id' => 8007,
+        // 🔴 Jesua 1-oct-2026: en ABOGADO TODAS las llamadas son de la Ab. Viviana Trivino (149407),
+        // que hace el trabajo de llamadas del area legal. Caso: deal 2673, ella apreto "No contesto"
+        // 4 veces y las 4 llamadas nuevas quedaron a nombre de la asesora (44502).
+        // Perilla: env ABOGADA_LLAMADAS_USER_ID (0 = como antes: asesora / reintento de Barek).
+        // Gemela en cobranza2 lib_campos_cob.php cc_dueno_llamada (cfg abogada_llamadas_user_id).
+        'abogada_llamadas_user_id' => (getenv('ABOGADA_LLAMADAS_USER_ID') !== false && getenv('ABOGADA_LLAMADAS_USER_ID') !== '')
+                                      ? (int)getenv('ABOGADA_LLAMADAS_USER_ID') : 149407,
         // los 5 ids de la lista ESTADO EN GESTION, leidos de Bitrix el 7-sep-2026
         'gestion_cumplido'       => 2105,
         'gestion_no_contesta'    => 2107,
@@ -604,6 +611,10 @@ function cobranza_hora_alterna(DateTimeImmutable $ahora): array {
  * (crm.item.get), porque los dos caminos existen en este codigo.
  */
 function cobranza_responsable(array $deal, int $usuarioQueApreto, int $duenoAnterior = 0): int {
+    // En ABOGADO manda la abogada de llamadas, sin excepcion (ver abogada_llamadas_user_id).
+    $etapa = (string)($deal['STAGE_ID'] ?? $deal['stageId'] ?? '');
+    $abogada = (int)(cobranza_config()['abogada_llamadas_user_id'] ?? 0);
+    if ($abogada > 0 && $etapa === 'C48:FINAL_INVOICE') return $abogada;
     // 🔴 Si la llamada que se cierra era del ABOGADO, el reintento sigue siendo suyo.
     // El documento reparte los contactos de la etapa ABOGADO: "Contacto 1 · COBRANZAS
     // D+10 ... lo hace la ASESORA" y "Contacto 2 · ABOGADO D+16 ... lo hace el Ab. Jose

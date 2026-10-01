@@ -452,6 +452,16 @@ test_same(999, cobranza_responsable([], 999, 0),
     'sin campo y sin dueño anterior: quien apreto el boton');
 test_same($ABOG, cobranza_responsable([], 999, $ABOG),
     'y el abogado gana incluso si el deal no tiene responsable de cobranza');
+// Jesua 1-oct-2026: en ABOGADO TODAS las llamadas son de la Ab. Viviana Trivino (149407).
+$ABOGADA = 149407;
+test_same($ABOGADA, cobranza_responsable(['STAGE_ID'=>'C48:FINAL_INVOICE'] + $dealCob, 999),
+    '🔴 en ABOGADO la abogada de llamadas, no la asesora (deal 2673)');
+test_same($ABOGADA, cobranza_responsable(['STAGE_ID'=>'C48:FINAL_INVOICE'] + $dealCob, 999, $ABOG),
+    '🔴 en ABOGADO tambien el reintento que era de Barek');
+test_same($ABOGADA, cobranza_responsable(['stageId'=>'C48:FINAL_INVOICE'], 999),
+    'en ABOGADO con la forma de crm.item.get');
+test_same(49234, cobranza_responsable(['STAGE_ID'=>'C48:UC_1WHC5Q'] + $dealCob, 999),
+    'fuera de ABOGADO todo sigue igual');
 
 // ══════════════════════════════════════════════════════════════════════════
 // CONTACTOS EXIGIDOS: tabla del documento, no una division (8-sep-2026).
