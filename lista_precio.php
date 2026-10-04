@@ -166,7 +166,14 @@ if ($DER) {
         return (string)($DER['categoria_por_defecto_por_bloque'][$blq]
                      ?? $DER['categoria_por_defecto'] ?? '');
     };
-    $caraDe = function (int $pos) use ($DER): string {
+    /* Una cara propia de un EDIFICIO manda sobre la general. Hizo falta el 3-oct-2026:
+       en el D, del 7 al 12 (pisos 2-4) valen $4.000 mas que del 1 al 6 porque dan de
+       frente al parque central —el director lo llama "vista al infinito"—, y con una
+       sola cara para todos salian dos filas "VISTA PARQUE CENTRAL" a distinto precio
+       sin que nadie pudiera explicar la diferencia. El E y el F no cambian. */
+    $caraDe = function (int $pos, string $ed = '') use ($DER): string {
+        foreach ((array)($DER['caras_edificio'][$ed] ?? []) as $nom => $r)
+            if (lp_en_rango($pos, $r)) return (string)$nom;
         foreach ((array)($DER['caras'] ?? []) as $nom => $r)
             if (lp_en_rango($pos, $r)) return (string)$nom;
         return '';
@@ -176,8 +183,8 @@ if ($DER) {
         $cats = []; $caras = [];
         foreach ($g['cods'] as $cod) {
             if (!preg_match('/^[A-Z]-\d+-(\d+)$/', $cod, $mm)) continue;
-            $caraU = $caraDe((int)$mm[1]);
             $edU   = preg_match('/^([A-Z])/', $cod, $me) ? $me[1] : '';
+            $caraU = $caraDe((int)$mm[1], $edU);
             $cats[$catDe((int)$mm[1], $caraU, (string)$g['bloque'], $edU)] = true;
             $caras[$caraU] = true;
         }

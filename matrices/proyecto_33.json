@@ -1569,7 +1569,18 @@
           }
         },
         "_dos_pasos_nota": "Modelo de DOS pasos porque la categoria NO es la misma en los tres edificios: en D la posicion 13 es el extremo libre (ESQ. 3) y en E y F colinda con un edificio vecino (ESQ. 2). El mapa plano `categorias_por_cara` que habia antes fusionaba 13 y 24 en un solo 'ESQUINERO' -- correcto mientras D estaba fuera, incorrecto ahora: el PDF oficial del lanzamiento saca ESQ. 2 y ESQ. 3 por separado en la cara lineal, a 85.282 y 88.282. Los rotulos son los del ETIQUETA de motor.py del director.",
-        "_u25_nota": "La posicion 25 va con vista al parque CENTRAL. La direccion lo dijo el 02-sep-2026: su matriz la tenia bajo 'lineal' y el PDF oficial la rotula 'VISTA PARQUE LINEAL - 35 m2'. Manda CENTRAL, que es lo que ya declaraba nuestro bloque `caras`."
+        "_u25_nota": "La posicion 25 va con vista al parque CENTRAL. La direccion lo dijo el 02-sep-2026: su matriz la tenia bajo 'lineal' y el PDF oficial la rotula 'VISTA PARQUE LINEAL - 35 m2'. Manda CENTRAL, que es lo que ya declaraba nuestro bloque `caras`.",
+        "_caras_edificio_nota": "Regla del director comercial, 3-oct-2026 (audio en memory/documentos/director-precios-2026-10): en el edificio D, pisos 2-4, del 7 al 12 valen $4.000 mas que del 1 al 6 porque dan de frente al parque central ('vista al infinito'). Se rotulan VISTA PANORAMICA para que la diferencia de precio se lea en la lista. E y F no cambian.",
+        "caras_edificio": {
+          "D": {
+            "PANORÁMICA PARQUE CENTRAL": [
+              [
+                7,
+                12
+              ]
+            ]
+          }
+        }
       },
       "uniones": {
         "_nota": "Dos o tres contiguos = un departamento de 2 o 3 dormitorios. Precio = suma - 20.000, UNA sola vez: al unirse viene un parqueo menos, y con tres vienen dos parqueos, asi que tambien se resta una vez. Se muestra la combinacion MAS BARATA de cada tamaño y cara: es un 'desde'.",
