@@ -304,9 +304,13 @@ function unidad_evento(string $event, int $unitId, int $etid): string {
     // caché lo refresque el evento de la corrección con el valor definitivo.
     // El stage ANTERIOR sale del caché: así se distingue un cambio de stage de un
     // cambio de cualquier otro campo, sin gastar ni una llamada al API.
-    $stageAntes = '';
+    $stageAntes = ''; $dealAntes = -1;     // -1 = la unidad no estaba en el catalogo
     foreach ($cache['units'] as $vu) {
-        if ((int)($vu['id'] ?? 0) === $unitId) { $stageAntes = (string)($vu['stage'] ?? ''); break; }
+        if ((int)($vu['id'] ?? 0) === $unitId) {
+            $stageAntes = (string)($vu['stage'] ?? '');
+            $dealAntes  = (int)($vu['dealId'] ?? 0);
+            break;
+        }
     }
     guardian_estado($unitId, $nueva, $stageAntes, $st['result'] ?? []);
 
@@ -322,5 +326,17 @@ function unidad_evento(string $event, int $unitId, int $etid): string {
 
     @file_put_contents($cache_path, json_encode($cache), LOCK_EX);
     ulog(($reemplazada ? 'ACTUALIZADA' : 'AGREGADA') . " u=$unitId {$nueva['codigo']} cat=$cid stage=$stage");
+
+    // ---- COTIZARON Y NO COMPRARON (vendidaslib.php) ----------------------------
+    // DESPUES de guardar el catalogo y en su propio try: si esto falla, la unidad ya
+    // quedo bien. Solo escribe en la base local; no llama a Bitrix ni manda nada.
+    try {
+        require_once __DIR__ . '/vendidaslib.php';
+        $lv = vend_desde_cambio(vend_db(), (string)$nueva['codigo'], $stageAntes, $stage,
+                                (int)$nueva['dealId'], 'aviso', $dealAntes);
+        if ($lv !== '') ulog($lv);
+    } catch (Throwable $e) {
+        ulog("u=$unitId vendidas FALLO: " . $e->getMessage());
+    }
     return $reemplazada ? 'ok-update' : 'ok-add';
 }

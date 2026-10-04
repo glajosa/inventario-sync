@@ -351,6 +351,16 @@ function catalogo(bool $force = false): array {
     // evento: era 1 llamada por evento y, cuando fallaba, dejaba la unidad sin etapa.
     $out = ['units' => $units, 'proyectos' => $proyectos, 'enum' => $enum,
             'stages' => $stageName, 'built' => time()];
+    /* Recuperacion de ventas que NO llegaron por aviso: se compara el catalogo anterior
+       con el nuevo antes de pisarlo. Un aviso perdido es una venta perdida y la libreta
+       no copia el SPA 1072 para fabricarlo. Solo base local; si falla, no frena nada. */
+    try {
+        require_once __DIR__ . '/vendidaslib.php';
+        $anterior = cache_leer();
+        foreach (vend_comparar_catalogos(vend_db(), $anterior['units'] ?? [], $units) as $lv) sellog($lv);
+    } catch (Throwable $e) {
+        sellog('vendidas FALLO en el barrido: ' . $e->getMessage());
+    }
     @file_put_contents($path, json_encode($out));
     flock($fh, LOCK_UN); fclose($fh);
     return $out;
