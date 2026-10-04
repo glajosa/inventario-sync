@@ -32,6 +32,11 @@ const UH_M2  = 'ufCrm25_1782615822688';
 const UH_PVP = 'ufCrm25_1784563253861';
 const UH_TOR = 'ufCrm25_1784314119';
 const UH_PIS = 'ufCrm25_1784313244';
+/* El TIPO de bien (1791 Local · 1793 Departamento · 1951 Oficina) separa las listas de
+   precios. Faltaba en el rearmado por evento: cualquier cambio de una unidad la dejaba
+   con tipo 0 en el catalogo y la lista la escondia ("Sin lista de precios: Tipo 0")
+   hasta el proximo rebuild completo. Paso el 3-oct-2026 con D-2/3/4-12. */
+const UH_TIPO = 'ufCrm25_1782616418179';
 
 function ulog(string $msg): void {
     $dir = getenv('DATA_DIR') ?: '/data';
@@ -269,6 +274,16 @@ function unidad_evento(string $event, int $unitId, int $etid): string {
         ulog("u=$unitId etapa sin resolver (sid=$sid) -> se conserva '" . $stage . "'");
     }
 
+    /* El tipo que la unidad YA tenia en el catalogo. Si el get viene sin el campo, se
+       conserva ese y no se escribe 0: un 0 la saca de su lista de precios en silencio,
+       que es justo el error que se arreglo el 3-oct-2026. */
+    $tipoAntes = 0;
+    foreach (($cache['units'] ?? []) as $vu) {
+        if ((int)($vu['id'] ?? 0) === $unitId) { $tipoAntes = (int)($vu['tipo'] ?? 0); break; }
+    }
+    $tipoGet = (int)($it[UH_TIPO] ?? 0);
+    if ($tipoGet <= 0 && $tipoAntes > 0) ulog("u=$unitId el get no trajo tipo -> se conserva $tipoAntes");
+
     $enum  = $cache['enum'] ?? [];
     $title = (string)($it['title'] ?? '');
     $nueva = [
@@ -281,6 +296,7 @@ function unidad_evento(string $event, int $unitId, int $etid): string {
         'torre'  => $enum[UH_TOR][(string)($it[UH_TOR] ?? '')] ?? '',
         'piso'   => $enum[UH_PIS][(string)($it[UH_PIS] ?? '')] ?? '',
         'dealId' => (int)($it['parentId2'] ?? 0),
+        'tipo'   => $tipoGet > 0 ? $tipoGet : $tipoAntes,
     ];
 
     // ---- GUARDIÁN DE ESTADO --------------------------------------------------
