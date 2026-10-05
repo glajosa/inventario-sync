@@ -267,6 +267,9 @@ function reub_etapa_44(): ?string {
     return $v !== '' ? $v : 'C44:UC_Z3GY5H';   // ELABORACION PROMESA DE COMPRAVENTA
 }
 
+/** Campo de texto que la ficha de CLIENTES muestra como "PRECIO ACTIVO NO. 1 (1ra Compra)". */
+const REUB_PRECIO_TEXTO_44 = 'UF_CRM_1783975599567';
+
 /** Etapas del 44 en las que el deal está caído: atar ahí deja la unidad DISPONIBLE. */
 const REUB_44_CAIDO = ['C44:APOLOGY', 'C44:LOSE'];
 /** Etapas de cualquier embudo que ya no cuentan como dueño vivo. */
@@ -681,6 +684,10 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
             $c44['CURRENCY_ID'] = 'USD';
         }
         if ($proyId > 0) $c44[D_PROYECTO] = $proyId;
+        // La ficha de CLIENTES dibuja "PRECIO ACTIVO NO. 1" con el campo VIEJO de texto
+        // (UF_CRM_1783975599567, rotulado así solo en esa ficha; medido en el DOM del
+        // 5788 el 5-oct). La de COBRANZAS usa el de dinero. Se llenan los dos.
+        if ($ocasion === 1 && $precioViejo > 0) $c44[REUB_PRECIO_TEXTO_44] = '$' . number_format($precioViejo, 2, '.', ',');
         $etapa44 = reub_etapa_44();
         if ($etapa44 !== null) $c44['STAGE_ID'] = $etapa44;
         $t44 = titulo_reubicado((string)($h['TITLE'] ?? ''), $proyTxt, $codNuevo);
