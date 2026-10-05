@@ -8,9 +8,14 @@ Pedido: Jesua, 5-oct-2026. Revisado por VIGILANTE. Código en cobranza2 (`lib_tr
    transitoria dd/mm/aaaa -($1,000.00)") y el ANTICIPO CLIENTE se actualizan por el
    camino de siempre (trans_evento_item).
    - **De dónde sale el monto:** en los 44 NO hay ningún campo con la reserva
-     (medido en 12 deals el 5-oct). Primero la fila de Reserva/Separación de la
-     tabla del 44, si existe. Si no, `cfg('trans_reserva_monto', 1000)` (la regla de
-     Jesua). Si no se puede determinar, no se escribe y se avisa a falla.php.
+     (medido en 12 deals el 5-oct). Se usa la fila de Reserva/Separación de la tabla
+     del 44. Medido en los 27 del relleno: 1000 en 23, 2000 en 2, 500 en 1, y 1 sin
+     fila. Un 1000 fijo se equivocaría en el ~11 % de los casos (VIGILANTE).
+   - **DECISIÓN ABIERTA (Jesua):** en RESERVA, 34 de 42 deals todavía NO tienen
+     tabla (medido el 5-oct), y ese es el momento en que se crean las cuotas. Opciones:
+     (a) poner 1000 igual (la regla dicha por Jesua) y corregir cuando llegue la tabla;
+     (b) esperar: la cuota 1 se llena sola cuando aparece la tabla.
+     Sin tabla ni decisión: no se escribe y se avisa.
    - Qué cuota recibió el automático queda en `.bxstate/trans_auto_reserva_<item>`
      con el monto.
 2. **Traspaso al 48:** el automático NO se suma (ya viene en la RESERVA de la tabla).
