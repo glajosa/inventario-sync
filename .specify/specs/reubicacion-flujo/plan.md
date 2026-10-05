@@ -89,3 +89,32 @@ llamada que corresponda. Esto hay que verificarlo en la prueba real.
 ## Orden obligatorio
 T3 (reubicalib mueve el 48 a REUBICACIÓN) NO se enciende antes de T2 (el botón
 "No contestó" en inventario-sync tiene que conocer la etapa).
+
+## DECISIONES DE JESUA (5-oct, tarde) — mandan sobre los supuestos [D1]/[D2]
+- **D1 = FUSIONAR**: sobrevive el viejo y el nuevo se BORRA. Es la vía probada de
+  prospectosventas `fusionar_duplicado_en_madre` (reparent); `crm.entity.mergeBatch`
+  NO sirve (STATUS CONFLICT). Antes de borrar el nuevo (VIGILANTE):
+  - en `reubica_fusiones.jsonl` se guarda el deal completo (get), sus actividades y
+    los comentarios de la línea de tiempo;
+  - `crm.activity.binding.add` mueve las ACTIVIDADES; los comentarios
+    (`crm.timeline.comment`) NO son actividades: se copian al viejo;
+  - se comprueba que el nuevo tiene 0 cuotas y 0 ítems SPA atados. Si tiene alguno,
+    NO se borra y se avisa a falla.php.
+- **D2 = B1**: los 8 campos se vacían y las cuotas se borran AL CAMBIAR LA UNIDAD
+  (con el paso a REUBICACIÓN). El 48 queda vacío hasta la fusión, protegido por
+  v269. El vigilante es obligatorio.
+- **Llamadas**: OK cerrarlas al entrar. REUBICACIÓN cumple el papel que hoy, a mano,
+  cumple DADO DE BAJA (soltar la unidad vieja antes de cambiarla).
+- **Cuenta como venta**: sí.
+
+## CAMINO DE VUELTA (reubicación cancelada o hecha por error, como el 9610)
+1. Volver la unidad en Inventario a la vieja. Eso es otra reubicación al revés y la
+   hace reubicalib (el trío 2 guarda el paso).
+2. Restaurar los 8 campos desde la línea `antes` de `/data/reubicaciones.jsonl`
+   (inventario-sync) o desde `reubica_fusiones.jsonl` (cobranza2):
+   `php ~/diag/reubica_restaurar.php <deal48> --campos` (se escribe en T5; lee la
+   foto y hace 1 update).
+3. Restaurar las cuotas desde `.bxstate/respaldo_deps/<deal>-reubica-*.json` con el
+   mismo restaurador de v267 (`--cuotas`). Recrea los ítems con su presupuestado y su
+   ejecutado.
+4. Sacar el 48 de REUBICACIÓN: el motor lo pone en su etapa por el dinero.
