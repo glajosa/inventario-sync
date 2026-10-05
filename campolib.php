@@ -276,14 +276,32 @@ function cache_unidad(int $unitId, ?string $stage, ?int $dealId): void {
     $path = $DATA_DIR . '/selector_cache.json';
     $j = json_decode((string)@file_get_contents($path), true);
     if (!is_array($j) || empty($j['units'])) return;
-    $toco = false;
+    $toco = false; $antes = null; $despues = null;
     foreach ($j['units'] as $i => $u) {
         if ((int)($u['id'] ?? 0) !== $unitId) continue;
+        $antes = $u;
         if ($stage  !== null) { $j['units'][$i]['stage']  = $stage;  $toco = true; }
         if ($dealId !== null) { $j['units'][$i]['dealId'] = $dealId; $toco = true; }
+        $despues = $j['units'][$i];
         break;
     }
-    if ($toco) @file_put_contents($path, json_encode($j), LOCK_EX);
+    if (!$toco) return;
+    @file_put_contents($path, json_encode($j), LOCK_EX);
+
+    /* COTIZARON Y NO COMPRARON. Este camino cambia la etapa del catalogo ANTES de que
+       llegue el aviso de Bitrix (aparta, sincroniza, reubica, libera), asi que cuando el
+       aviso llega ya no ve ningun cambio. Medido el 5-oct-2026: D-3-15 se reservo por
+       nuestro propio flujo despues de desplegar la deteccion y no se registro. La regla
+       va aca, donde pasan todos los caminos propios. Solo base local; si falla, no frena. */
+    try {
+        require_once __DIR__ . '/vendidaslib.php';
+        $lv = vend_desde_cambio(vend_db(), (string)($despues['codigo'] ?? ''), (string)($antes['stage'] ?? ''),
+                                (string)($despues['stage'] ?? ''), (int)($despues['dealId'] ?? 0), 'propio',
+                                (int)($antes['dealId'] ?? 0), (int)($antes['cat'] ?? 0));
+        if ($lv !== '') logline("u=$unitId $lv");
+    } catch (Throwable $e) {
+        logline("u=$unitId vendidas FALLO en cache_unidad: " . $e->getMessage());
+    }
 }
 
 /** Apartados del 28 leídos de disco: unitId => dealId. Cero llamadas al API. */
