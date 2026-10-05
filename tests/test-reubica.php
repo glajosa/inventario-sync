@@ -100,3 +100,9 @@ test_same(true, reub_estricto(), 'estricto por defecto');
 putenv('REUBICA_ESTRICTO=0');
 test_same(false, reub_estricto(), 'REUBICA_ESTRICTO=0 vuelve al camino viejo');
 putenv('REUBICA_ESTRICTO');
+
+// FAMILIA: solo la ficha de ESA unidad (código y proyecto)
+test_same(true,  reub_familia_es([D_ACTIVO => 'G-4-2', D_PROYECTO => '142'], 'G-4-2', '142'), 'FAMILIA de la G-4-2 de Barranca: se actualiza');
+test_same(false, reub_familia_es([D_ACTIVO => 'G-4-2', D_PROYECTO => '516'], 'G-4-2', '142'), '🔴 mismo código, OTRO proyecto: no se toca');
+test_same(false, reub_familia_es([D_ACTIVO => 'E-1-21', D_PROYECTO => '162'], 'G-4-3', '142'), 'la ficha de otra compra no se toca (lo que pisó el 9610)');
+test_same(true,  reub_familia_es([D_ACTIVO => 'G-4-2', D_PROYECTO => ''], 'G-4-2', '142'), 'ficha sin proyecto: alcanza el código');

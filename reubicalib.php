@@ -249,6 +249,17 @@ function reub_unidad_es(array $u, string $codigo, string $proyecto): bool {
     return reub_cod(codigo_activo($t)) === $codigo && reub_mismo_proyecto($proyecto, $t);
 }
 
+/**
+ * ¿Esta ficha de FAMILIA es la de la unidad que se deja? Mismo código Y mismo
+ * proyecto (Proyectos 1): los códigos se repiten entre proyectos. Si la ficha no
+ * tiene proyecto cargado, alcanza con el código (no hay con qué más comparar).
+ */
+function reub_familia_es(array $f, string $codViejo, string $proyIdViejo): bool {
+    if (reub_cod((string)($f[D_ACTIVO] ?? '')) !== reub_cod($codViejo)) return false;
+    $pf = trim((string)($f[D_PROYECTO] ?? ''));
+    return $pf === '' || trim($proyIdViejo) === '' || $pf === trim($proyIdViejo);
+}
+
 /** Etapa a la que va el 44 en TODA reubicación (Jesua, 5-oct). REUBICA_ETAPA_44=0 la apaga. */
 function reub_etapa_44(): ?string {
     $v = trim((string)getenv('REUBICA_ETAPA_44'));
@@ -791,14 +802,14 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
     // 4) FAMILIA(58) — solo los tres campos de ficha, sin renombrar
     $r = bx('crm.deal.list', [
         'filter' => ['CONTACT_ID' => $contacto, 'CATEGORY_ID' => FAMILIA_CAT],
-        'select' => ['ID', 'TITLE', D_ACTIVO],
+        'select' => ['ID', 'TITLE', D_ACTIVO, D_PROYECTO],
     ]);
     $nFam = 0;
     foreach (($r['result'] ?? []) as $f) {
         // Un cliente con varias compras tiene UNA ficha de FAMILIA por compra (o una
         // sola para todas). Pisarlas todas con la unidad nueva mezcla compras: en el
         // 9610 la de Marcel Salvador quedó diciendo E-1-21. Solo la que nombraba la vieja.
-        if ($estricto && reub_cod((string)($f[D_ACTIVO] ?? '')) !== reub_cod($codViejo)) continue;
+        if ($estricto && !reub_familia_es($f, $codViejo, (string)($deal[D_PROYECTO] ?? ''))) continue;
         $cf = [D_ACTIVO => $codNuevo];
         if ($pvpNuevo > 0) $cf[D_VALOR] = money_fmt($pvpNuevo);
         if ($proyId > 0)   $cf[D_PROYECTO] = $proyId;
