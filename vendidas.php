@@ -45,7 +45,13 @@ $admin = false; $amigo = false;
 $outbound = (string)getenv('OUTBOUND_TOKEN');
 $xtok = (string)($_SERVER['HTTP_X_TOKEN'] ?? '');
 if ($outbound !== '' && $xtok !== '' && hash_equals($outbound, $xtok)) $admin = true;
-$auth = (string)($_SERVER['HTTP_AUTHORIZATION'] ?? '');
+/* Apache con mod_php NO siempre pasa la cabecera Authorization a $_SERVER (con el
+   servidor de PHP en local si, por eso en la primera prueba funciono y en produccion
+   dio 403). Se busca en los tres lugares donde puede quedar. */
+$auth = (string)($_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
+if ($auth === '' && function_exists('getallheaders')) {
+    foreach ((array)getallheaders() as $k => $v) if (strcasecmp((string)$k, 'Authorization') === 0) { $auth = (string)$v; break; }
+}
 if (!$admin && preg_match('/^Bearer\s+(\S+)$/', $auth, $m)) {
     $guardado = json_decode((string)@file_get_contents("$DIR/vendidas_token.json"), true);
     $hash = (string)($guardado['sha256'] ?? '');
