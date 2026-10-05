@@ -333,7 +333,7 @@ function unidad_evento(string $event, int $unitId, int $etid): string {
     try {
         require_once __DIR__ . '/vendidaslib.php';
         $lv = vend_desde_cambio(vend_db(), (string)$nueva['codigo'], $stageAntes, $stage,
-                                (int)$nueva['dealId'], 'aviso', $dealAntes);
+                                (int)$nueva['dealId'], 'aviso', $dealAntes, (int)$cid);
         if ($lv !== '') ulog($lv);
     } catch (Throwable $e) {
         ulog("u=$unitId vendidas FALLO: " . $e->getMessage());

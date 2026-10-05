@@ -93,6 +93,11 @@ function vend_migrar(PDO $d): void {
         estado            TEXT NOT NULL DEFAULT 'pendiente', -- 'pendiente' | 'enviado' | 'anulado'
         enviado_en        INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (unidad, comprador_deal, deal_id))");
+    /* El PROYECTO de la unidad. Hizo falta despues del primer despliegue: el mismo codigo
+       ("D-2-12") puede existir en dos proyectos, y sin esto se mezclaban cotizaciones. */
+    $cols = array_column($d->query("PRAGMA table_info(vendidas)")->fetchAll(PDO::FETCH_ASSOC), 'name');
+    if (!in_array('categoria', $cols, true))
+        $d->exec("ALTER TABLE vendidas ADD COLUMN categoria INTEGER NOT NULL DEFAULT 0");
 }
 
 /** La base del historial. Para pruebas se le pasa la ruta. Null si no se puede abrir. */
@@ -123,14 +128,14 @@ function vend_db(?string $ruta = null): ?PDO {
  * necesitan leer la libreta y se aplican al ENTREGAR la lista, no aqui.
  */
 function vend_registrar(PDO $d, string $unidad, int $comprador, string $etapa,
-                        string $origen, ?int $ahora = null): int {
+                        string $origen, ?int $ahora = null, int $categoria = 0): int {
     $ahora   = $ahora ?? time();
     $unidad  = strtoupper(trim($unidad));
     $ventana = max(1, (int)inv_cfg('avisos_ventana_dias', 90)) * 86400;
 
-    $ins = $d->prepare('INSERT OR IGNORE INTO vendidas (unidad, comprador_deal, etapa, cuando, origen)
-                        VALUES (?, ?, ?, ?, ?)');
-    $ins->execute([$unidad, $comprador, strtoupper($etapa), $ahora, $origen]);
+    $ins = $d->prepare('INSERT OR IGNORE INTO vendidas (unidad, comprador_deal, etapa, cuando, origen, categoria)
+                        VALUES (?, ?, ?, ?, ?, ?)');
+    $ins->execute([$unidad, $comprador, strtoupper($etapa), $ahora, $origen, $categoria]);
     /* El momento de la venta es el de la PRIMERA vez que se registro: si se vuelve a
        llamar (barrido, re-reserva), los candidatos siguen siendo los de ANTES de vender. */
     $c = $d->prepare('SELECT cuando FROM vendidas WHERE unidad = ? AND comprador_deal = ?');
@@ -146,9 +151,11 @@ function vend_registrar(PDO $d, string $unidad, int $comprador, string $etapa,
     // Candidatos: cotizaciones dentro de la ventana que incluyen la unidad, por deal.
     $q = $d->prepare("SELECT deal_id, asesor_id, cliente, unidades, ultima_vez, veces
                       FROM cotizaciones
-                      WHERE unidades LIKE ? AND ultima_vez >= ? AND creada <= ? AND deal_id > 0");
+                      WHERE unidades LIKE ? AND ultima_vez >= ? AND creada <= ? AND deal_id > 0
+                        AND (? = 0 OR categoria = 0 OR categoria = ?)");
     // creada <= cuando: quien la cotizo DESPUES de venderse no "se la perdio".
-    $q->execute(['%' . $unidad . '%', $cuando - $ventana, $cuando]);
+    // categoria: el mismo codigo en OTRO proyecto es otra unidad.
+    $q->execute(['%' . $unidad . '%', $cuando - $ventana, $cuando, $categoria, $categoria]);
     $porDeal = [];
     foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
         if (!vend_cotizo_unidad((string)$r['unidades'], $unidad)) continue;   // D-2-1 no es D-2-12
@@ -204,7 +211,8 @@ function vend_anular(PDO $d, string $unidad, ?int $ahora = null): array {
  * Devuelve un texto corto para el log, o '' si no habia nada que hacer.
  */
 function vend_desde_cambio(?PDO $d, string $unidad, string $antes, string $ahora,
-                           int $comprador, string $origen, int $compradorAntes = -1): string {
+                           int $comprador, string $origen, int $compradorAntes = -1,
+                           int $categoria = 0): string {
     if (!$d) return '';
     $etapas = vend_etapas_venta();
     /* Venta en DOS pasos: Bitrix puede cambiar primero la etapa y en otro aviso atar el
@@ -217,7 +225,7 @@ function vend_desde_cambio(?PDO $d, string $unidad, string $antes, string $ahora
                && $compradorAntes === 0 && $comprador > 0;
     if (vend_es_venta($antes, $ahora, $etapas) || $atadaAhora) {
         if ($comprador <= 0) return "vendidas: $unidad entro a $ahora SIN deal comprador -> no se arma lista";
-        $n = vend_registrar($d, $unidad, $comprador, $ahora, $origen);
+        $n = vend_registrar($d, $unidad, $comprador, $ahora, $origen, null, $categoria);
         return "vendidas: $unidad vendida a deal $comprador ($antes -> $ahora, $origen) · $n posibles avisos nuevos";
     }
     if (vend_es_caida($antes, $ahora, $etapas)) {
@@ -246,8 +254,182 @@ function vend_comparar_catalogos(?PDO $d, array $viejas, array $nuevas): array {
         $id = (int)($u['id'] ?? 0);
         if (!isset($antes[$id])) continue;
         $l = vend_desde_cambio($d, (string)($u['codigo'] ?? ''), $antes[$id], (string)($u['stage'] ?? ''),
-                               (int)($u['dealId'] ?? 0), 'barrido', $dealAntes[$id]);
+                               (int)($u['dealId'] ?? 0), 'barrido', $dealAntes[$id], (int)($u['cat'] ?? 0));
         if ($l !== '') $log[] = $l;
     }
     return $log;
+}
+
+/* ── Alternativas para el mensaje ─────────────────────────────────────────────────── */
+
+/** Precio de la unidad: el PVP viene como "99582.5|USD". */
+function vend_precio($pvp): float {
+    return (float)explode('|', (string)$pvp)[0];
+}
+
+/**
+ * Lo que todavia se puede ofrecer: mismo PROYECTO y mismo TIPO que la vendida (un
+ * departamento no se reemplaza con un local), DISPONIBLE, con precio, y las de precio
+ * mas cercano primero. PURA: trabaja sobre el catalogo que ya esta en disco, cero
+ * llamadas. Si la vendida no esta en el catalogo, devuelve [] (no se inventa).
+ */
+function vend_alternativas(array $units, string $codigo, int $cat, int $limite = 5): array {
+    $codigo = strtoupper(trim($codigo));
+    $vendida = null;
+    foreach ($units as $u)
+        if (strtoupper((string)($u['codigo'] ?? '')) === $codigo && (int)($u['cat'] ?? 0) === $cat) { $vendida = $u; break; }
+    if (!$vendida) return [];
+    $tipo = (int)($vendida['tipo'] ?? 0);
+    $ref  = vend_precio($vendida['pvp'] ?? '');
+    $c = [];
+    foreach ($units as $u) {
+        if ((int)($u['cat'] ?? 0) !== $cat || (int)($u['tipo'] ?? 0) !== $tipo) continue;
+        if (strtoupper((string)($u['stage'] ?? '')) !== 'DISPONIBLE' || !empty($u['dealId'])) continue;
+        if (strtoupper((string)($u['codigo'] ?? '')) === $codigo) continue;
+        $p = vend_precio($u['pvp'] ?? '');
+        if ($p <= 0) continue;
+        $c[] = ['codigo' => (string)$u['codigo'], 'm2' => (string)($u['m2'] ?? ''), 'precio' => $p,
+                'diferencia' => abs($p - $ref)];
+    }
+    usort($c, fn($a, $b) => [$a['diferencia'], $a['codigo']] <=> [$b['diferencia'], $b['codigo']]);
+    return array_map(fn($x) => ['codigo' => $x['codigo'], 'm2' => $x['m2'], 'precio' => $x['precio']],
+                     array_slice($c, 0, $limite));
+}
+
+/* ── Libreta: quien es cada cotizante, si ya compro, y su telefono ─────────────────── */
+
+/**
+ * Pedido a la libreta central. Devuelve ['status' => int, 'json' => ?array].
+ * 🔴 LIBRETA_TOKEN es la llave maestra de la libreta (tambien abre /admin): nunca se
+ * escribe en logs ni en respuestas. Si falta la configuracion, devuelve status 0.
+ */
+function vend_libreta_http(string $ruta): array {
+    $base = rtrim((string)getenv('LIBRETA_URL'), '/');
+    $tok  = (string)getenv('LIBRETA_TOKEN');
+    if ($base === '' || $tok === '') return ['status' => 0, 'json' => null];
+    $ch = curl_init($base . $ruta);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 12, CURLOPT_CONNECTTIMEOUT => 4,
+        CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $tok, 'X-Libreta-Cliente: inventario-vendidas'],
+    ]);
+    $body = curl_exec($ch);
+    $st = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    // sin curl_close(): no hace nada desde PHP 8.0 y en 8.5 avisa "deprecated" en la
+    // SALIDA, que en una API que otro sistema lee como JSON la rompe.
+    unset($ch);
+    $j = is_string($body) ? json_decode($body, true) : null;
+    return ['status' => $st, 'json' => is_array($j) ? $j : null];
+}
+
+/** Los `dato` de una respuesta de lista de la libreta. */
+function vend_items(?array $j): array {
+    $out = [];
+    foreach ((array)($j['items'] ?? []) as $i) if (is_array($i['dato'] ?? null)) $out[] = $i['dato'];
+    return $out;
+}
+
+/**
+ * Telefono a 593 + 9 digitos (celular de Ecuador). '' si no tiene esa forma: un fijo o un
+ * numero roto no sirve para WhatsApp y es mejor saberlo que mandarlo mal.
+ */
+function vend_tel_normalizado(string $v): string {
+    $n = preg_replace('/\D+/', '', $v) ?? '';
+    if (strlen($n) === 12 && str_starts_with($n, '5939')) return $n;
+    if (strlen($n) === 10 && str_starts_with($n, '09'))   return '593' . substr($n, 1);
+    if (strlen($n) === 9  && str_starts_with($n, '9'))    return '593' . $n;
+    return '';
+}
+
+/** De los telefonos del contacto, el MOVIL primero; normalizado. '' si ninguno sirve. */
+function vend_mejor_telefono(array $phones): string {
+    usort($phones, fn($a, $b) => ((string)($b['VALUE_TYPE'] ?? '') === 'MOBILE') <=> ((string)($a['VALUE_TYPE'] ?? '') === 'MOBILE'));
+    foreach ($phones as $p) { $t = vend_tel_normalizado((string)($p['VALUE'] ?? '')); if ($t !== '') return $t; }
+    return '';
+}
+
+/**
+ * ¿Ya compro? Tiene algun deal en CLIENTES (44) que no este caido (STAGE_SEMANTIC_ID 'F':
+ * RESERVAS CAIDAS, FIRMADOS - CAIDOS). Regla de Jesua: "ya compro una unidad aunque sea otra".
+ */
+function vend_ya_compro(array $dealsDelContacto): bool {
+    foreach ($dealsDelContacto as $dl)
+        if ((int)($dl['CATEGORY_ID'] ?? -1) === 44 && (string)($dl['STAGE_SEMANTIC_ID'] ?? '') !== 'F') return true;
+    return false;
+}
+
+/**
+ * Decide, para cada deal que cotizo, si se le avisa y con que datos.
+ * `$lib` es el mensajero de la libreta (vend_libreta_http en produccion; uno falso en pruebas).
+ *
+ * 🔴 "¿Ya compro?" se pregunta en CADA entrega, nunca se guarda: si alguien reserva otra
+ * unidad entre dos consultas, no le puede llegar "se vendio la tuya". Solo el nombre y
+ * el telefono se recuerdan 6 h (condicion del orquestador).
+ *
+ * Devuelve [deal_id => ['estado' => avisar|ya_compro|sin_contacto|sin_telefono|repetido,
+ *                       'nombre' => ..., 'telefono' => ...]].
+ */
+function vend_resolver(PDO $d, array $dealIds, callable $lib, ?int $ahora = null): array {
+    $ahora = $ahora ?? time();
+    $d->exec("CREATE TABLE IF NOT EXISTS vend_contacto_cache (
+        contact_id INTEGER PRIMARY KEY, nombre TEXT, telefono TEXT, hasta INTEGER)");
+    $dealIds = array_values(array_unique(array_map('intval', $dealIds)));
+    $out = [];
+
+    // 1) deal -> contacto, de a 50
+    $contacto = [];
+    foreach (array_chunk($dealIds, 50) as $lote) {
+        $r = $lib('/deals?ids=' . implode(',', $lote));
+        foreach (vend_items($r['json']) as $dl) $contacto[(int)$dl['ID']] = (int)($dl['CONTACT_ID'] ?? 0);
+    }
+
+    // 2) ¿ya compro? — por CONTACTO, en cada entrega
+    $compro = [];
+    foreach (array_unique(array_filter($contacto)) as $cid) {
+        $r = $lib('/deals?contact=' . $cid);
+        $compro[$cid] = vend_ya_compro(vend_items($r['json']));
+    }
+
+    // 3) nombre y telefono: cache de 6 h, luego lote, y los omitidos uno por uno ?fresco=1
+    $datos = [];
+    $faltan = [];
+    $q = $d->prepare('SELECT nombre, telefono FROM vend_contacto_cache WHERE contact_id = ? AND hasta > ?');
+    foreach (array_unique(array_filter($contacto)) as $cid) {
+        if ($compro[$cid] ?? false) continue;              // no hace falta su telefono
+        $q->execute([$cid, $ahora]);
+        $row = $q->fetch(PDO::FETCH_ASSOC); $q->closeCursor();
+        if ($row) $datos[$cid] = $row; else $faltan[] = $cid;
+    }
+    $guarda = $d->prepare('INSERT OR REPLACE INTO vend_contacto_cache (contact_id, nombre, telefono, hasta) VALUES (?, ?, ?, ?)');
+    $anotar = function (array $c) use (&$datos, $guarda, $ahora) {
+        $cid = (int)($c['ID'] ?? 0); if ($cid <= 0) return;
+        $nom = trim((string)($c['NAME'] ?? '') . ' ' . (string)($c['LAST_NAME'] ?? ''));
+        $tel = vend_mejor_telefono((array)($c['PHONE'] ?? []));
+        $datos[$cid] = ['nombre' => $nom, 'telefono' => $tel];
+        $guarda->execute([$cid, $nom, $tel, $ahora + 6 * 3600]);
+    };
+    foreach (array_chunk($faltan, 50) as $lote) {
+        $r = $lib('/contacts?ids=' . implode(',', $lote));
+        foreach (vend_items($r['json']) as $c) $anotar($c);
+    }
+    foreach ($faltan as $cid) {
+        if (isset($datos[$cid])) continue;
+        $r = $lib('/contact/' . $cid . '?fresco=1');        // la libreta lo trae de Bitrix
+        $c = $r['json']['dato'] ?? $r['json'] ?? null;
+        if ($r['status'] === 200 && is_array($c) && isset($c['ID'])) $anotar($c);
+        else $datos[$cid] = ['nombre' => '', 'telefono' => ''];   // 404: sin telefono, contado
+    }
+
+    // 4) estado de cada deal; los telefonos repetidos se avisan UNA vez
+    $vistos = [];
+    foreach ($dealIds as $dl) {
+        $cid = $contacto[$dl] ?? 0;
+        if ($cid <= 0) { $out[$dl] = ['estado' => 'sin_contacto', 'nombre' => '', 'telefono' => '']; continue; }
+        if ($compro[$cid] ?? false) { $out[$dl] = ['estado' => 'ya_compro', 'nombre' => '', 'telefono' => '']; continue; }
+        $x = $datos[$cid] ?? ['nombre' => '', 'telefono' => ''];
+        if ((string)$x['telefono'] === '') { $out[$dl] = ['estado' => 'sin_telefono', 'nombre' => $x['nombre'], 'telefono' => '']; continue; }
+        if (isset($vistos[$x['telefono']])) { $out[$dl] = ['estado' => 'repetido', 'nombre' => $x['nombre'], 'telefono' => $x['telefono']]; continue; }
+        $vistos[$x['telefono']] = true;
+        $out[$dl] = ['estado' => 'avisar', 'nombre' => $x['nombre'], 'telefono' => $x['telefono']];
+    }
+    return $out;
 }
