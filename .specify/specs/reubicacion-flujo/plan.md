@@ -28,6 +28,10 @@ son las decisiones pendientes de Jesua. Mientras no contesta, se usa lo recomend
 
 ## Tramo 3 — cobranza2: fusión, perilla `reubica_fusion_on`
 Disparo: evento ADD (o primer UPDATE) de un 48 en `C48:NEW` (RESERVA) con tabla.
+🔴 **Sin carrera (VIGILANTE, ajuste 1):** en el MISMO handler va primero el
+emparejamiento y después el import. Si hay un antiguo en REUBICACIÓN, el import
+del NUEVO no corre y las cuotas se crean en el antiguo.
+Prueba: ADD del nuevo con un antiguo en REUBICACIÓN → 0 cuotas creadas en el nuevo.
 1. Buscar el antiguo: los 48 del mismo contacto (libreta `/deals?contact=`) en
    REUBICACIÓN con el mismo (proyecto, código) en ACTIVO COMPRADO / título. Exactamente
    uno → sigue. Cero → import normal. Dos o más → no fusiona y avisa a falla.php.
@@ -37,13 +41,17 @@ Disparo: evento ADD (o primer UPDATE) de un 48 en `C48:NEW` (RESERVA) con tabla.
    cuadra → no fusiona y avisa (lección del 2525).
 3. **[D2] Vaciar y borrar en el antiguo:**
    - copia en `respaldo_deps` y se comprueba que existe (sin copia no se borra);
-   - se marcan como propios SOLO esos IDs de cuota, más la marca `reubicando_<deal>`
-     que vence en 15 min;
+   - anti-eco: se marcan como propios SOLO esos IDs de cuota. La marca
+     `reubicando_<deal>` (15 min) tapa SOLO los eventos de cuotas de ese deal
+     (ONCRMDYNAMICITEMDELETE/ADD), NUNCA el ONCRMDEALUPDATE: una marca a nivel de
+     deal se come el cambio de una persona (ya pasó el 1-oct). Para el deal alcanza
+     con el mark_self de cada escritura propia (ajuste 3);
    - se borra a 2-3 cuotas por segundo, sin anunciar barrido;
    - se vacían los 8 campos (spec §8).
 4. Copiar la TABLA DE PAGOS del nuevo al antiguo (las mismas dos formas de
-   `refi_cerrar`) y mover el antiguo a `C48:NEW`. El import normal crea las cuotas
-   nuevas (lo pagado entra por la RESERVA de la tabla).
+   `refi_cerrar`). El import crea las cuotas nuevas EN EL ANTIGUO (lo pagado entra
+   por la RESERVA de la tabla). Recién **cuando ya existen las cuotas**, el antiguo
+   sale de REUBICACIÓN: lo pone el motor FIFO; nunca se sale con 0 cuotas (ajuste 2).
 5. **[D1]** El nuevo a `C48:LOSE` con el título `FUSIONADO → <antiguo>`, con mark_self.
 6. Libreta de fusiones: `.bxstate/reubica_fusiones.jsonl` con el antes y el después.
 
@@ -64,3 +72,9 @@ Disparo: evento ADD (o primer UPDATE) de un 48 en `C48:NEW` (RESERVA) con tabla.
   decisión de vaciar, el título FUSIONADO y la combinación base + nuevo del puntaje.
 - Cada guarda rota a propósito → la prueba en rojo.
 - Prueba real con un deal de prueba de Jesua antes de encender `reubica_fusion_on`.
+
+## Interacción con "cotizaron y no compraron" (inventario, ajuste 4)
+Una reubicación reserva la unidad nueva y para `vendidas` cuenta como VENTA: a
+quienes la cotizaron les llega "se vendió", y la vieja vuelve a DISPONIBLE.
+**Por confirmar con la sesión de inventario y con Jesua**: si debe contar como
+venta o excluirse por origen (reubicación).
