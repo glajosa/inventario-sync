@@ -76,8 +76,8 @@ Prueba: ADD del nuevo con un antiguo en REUBICACIÓN → 0 cuotas creadas en el 
 ## Interacción con "cotizaron y no compraron" (inventario, ajuste 4)
 Una reubicación reserva la unidad nueva y para `vendidas` cuenta como VENTA: a
 quienes la cotizaron les llega "se vendió", y la vieja vuelve a DISPONIBLE.
-**Por confirmar con la sesión de inventario y con Jesua**: si debe contar como
-venta o excluirse por origen (reubicación).
+Jesua (5-oct, a la sesión de inventario): "claro, porque es otra unidad como tal"
+→ **cuenta como venta** (en confirmación por inventario).
 
 ## Llamadas durante la reubicación (pregunta de negocio, VIGILANTE 5-oct)
 `cc_cierra_si_etapa_sin_gestion` CIERRA las llamadas pendientes de cobranza cuando
