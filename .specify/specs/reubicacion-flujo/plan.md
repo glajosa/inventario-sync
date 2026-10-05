@@ -78,3 +78,14 @@ Una reubicación reserva la unidad nueva y para `vendidas` cuenta como VENTA: a
 quienes la cotizaron les llega "se vendió", y la vieja vuelve a DISPONIBLE.
 **Por confirmar con la sesión de inventario y con Jesua**: si debe contar como
 venta o excluirse por origen (reubicación).
+
+## Llamadas durante la reubicación (pregunta de negocio, VIGILANTE 5-oct)
+`cc_cierra_si_etapa_sin_gestion` CIERRA las llamadas pendientes de cobranza cuando
+el deal entra a REUBICACIÓN.
+**Por confirmar con Jesua:** ¿es lo que quiere? Y después de la fusión, el deal
+vuelve a una etapa de mora y la gestión normal (evento + barrido de agenda) crea la
+llamada que corresponda. Esto hay que verificarlo en la prueba real.
+
+## Orden obligatorio
+T3 (reubicalib mueve el 48 a REUBICACIÓN) NO se enciende antes de T2 (el botón
+"No contestó" en inventario-sync tiene que conocer la etapa).
