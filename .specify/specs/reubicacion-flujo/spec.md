@@ -1,6 +1,6 @@
 # Spec — Flujo completo de REUBICACIÓN (cobranzas ↔ clientes)
 
-Autor del pedido: Jesua (5-oct-2026). Estado: **borrador, falta 1 decisión (ver §6)**.
+Autor del pedido: Jesua (5-oct-2026). Estado: **borrador, faltan 2 decisiones (§6 y §7-B)**. Revisado por VIGILANTE el 5-oct.
 
 ## 1. Qué se quiere (en palabras del negocio)
 
@@ -68,3 +68,54 @@ si hay 2 o más, no se fusiona y se avisa al monitor.
   cuenta en cartera. **Recomendado:** no se borra nada.
 - (b) Borrarlo. La "fusión" de Bitrix desde la API no deja elegir qué datos
   sobreviven, y un borrado no se puede deshacer.
+
+## 7. Riesgos de diseño (revisión de VIGILANTE, 5-oct) — obligatorios en el plan
+
+**A. La etapa vive en dos servidores.** El motor de cobranza2 mueve la etapa por
+el DINERO (FIFO). Un 48 en REUBICACIÓN, sin cuotas y sin montos, podría salir de
+ahí solo o leerse como mora. `C48:UC_1WR2BM` se excluye de:
+- el motor de etapas;
+- el puntaje;
+- las colas de llamadas;
+- el servicio del botón "No contestó" (inventario-sync, con sus propias listas).
+
+Antes, grepear el ID de una etapa hermana en LOS DOS repos y agregar la nueva en
+cada lista. El dashboard de cobranzas la cuenta aparte.
+
+**B. ¿Y si el 48 nuevo no llega o tarda?** El antiguo quedaría vacío y sin cuotas
+indefinidamente. Hace falta un vigilante: si un 48 lleva más de N horas en
+REUBICACIÓN sin fusión, avisa a falla.php con el deal.
+**Decisión de Jesua — el orden:**
+- (B1) vaciar y borrar al entrar a REUBICACIÓN (lo pedido), siempre con copia antes;
+- (B2) dejar todo intacto en REUBICACIÓN y vaciar/borrar recién cuando llega el
+  deal nuevo con su tabla, en el mismo paso de la fusión. Así el antiguo nunca
+  queda vacío esperando. **Recomendado.**
+
+**C. Emparejamiento nuevo↔antiguo:** contacto + (proyecto, código), igual que en
+reubica. Si el contacto tiene más de un 48 en REUBICACIÓN y no hay coincidencia
+exacta, NO fusiona y avisa (Marcel Salvador tiene ~25 deals: es el caso real).
+
+**D. Puntaje con base histórica:** tiene que ver TODA la plata del antiguo (pagos
+en meses sin cuota, reserva, notaría). Si no, marca crónico a alguien al día, como
+pasó con el 2525. Guarda: la deuda FIFO cuadra con el vencido del motor antes y
+después de la fusión.
+
+**Borrado de las ~50 cuotas:**
+- copia en respaldo_deps verificada antes de borrar; sin copia no se borra (v267);
+- pausa DENTRO del lote: 2 o 3 por segundo;
+- sin anunciar barrido (es un solo deal);
+- anti-eco: se marcan como propios SOLO esos IDs de cuota, más una marca
+  "reubicando <deal>" que vence sola.
+
+## 8. Campos que se vacían en el 48 (los llena la tabla)
+| Campo | ID |
+|---|---|
+| VALOR DEL ACTIVO | UF_CRM_1731969538 |
+| CRÉDITO DIRECTO GALJOSA | UF_CRM_1779732222181 |
+| ANTICIPO CLIENTE | UF_CRM_1731969633 |
+| CONTRA ENTREGA | UF_CRM_1780328666840 |
+| VALORES A PAGAR (corte) | UF_CRM_1780669843271 |
+| SALDO CRÉDITO DIRECTO | UF_CRM_1780669717963 |
+| SALDO DEL ACTIVO | UF_CRM_1780669392309 |
+| VALOR FINAL DEL ACTIVO | UF_CRM_1779893396954 |
+ESCRITORES: los declara VIGILANTE. STAGE_ID no se declara (lo mueven personas).
