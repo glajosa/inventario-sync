@@ -98,6 +98,11 @@ function vend_migrar(PDO $d): void {
     $cols = array_column($d->query("PRAGMA table_info(vendidas)")->fetchAll(PDO::FETCH_ASSOC), 'name');
     if (!in_array('categoria', $cols, true))
         $d->exec("ALTER TABLE vendidas ADD COLUMN categoria INTEGER NOT NULL DEFAULT 0");
+    /* POR QUE se anulo: 'caida' (la unidad volvio a DISPONIBLE) o 'cambio_comprador' (otro
+       deal tomo la unidad sin que se liberara). Solo una caida marca el piso de la reventa:
+       si contara un cambio de comprador, el nuevo dueno no avisaria a nadie. */
+    if (!in_array('motivo', $cols, true))
+        $d->exec("ALTER TABLE vendidas ADD COLUMN motivo TEXT NOT NULL DEFAULT ''");
 }
 
 /** La base del historial. Para pruebas se le pasa la ruta. Null si no se puede abrir. */
@@ -153,7 +158,7 @@ function vend_registrar(PDO $d, string $unidad, int $comprador, string $etapa,
        ya recibieron (o tuvieron) su aviso con la primera venta. */
     $piso = $cuando - $ventana;
     $cai = $d->prepare("SELECT MAX(anulada_en) FROM vendidas
-                        WHERE unidad = ? AND comprador_deal <> ? AND estado = 'anulada'
+                        WHERE unidad = ? AND comprador_deal <> ? AND estado = 'anulada' AND motivo = 'caida'
                           AND anulada_en > 0 AND anulada_en <= ?");
     $cai->execute([$unidad, $comprador, $cuando]);
     $piso = max($piso, (int)$cai->fetchColumn());
@@ -182,6 +187,15 @@ function vend_registrar(PDO $d, string $unidad, int $comprador, string $etapa,
     }
     $q->closeCursor();
 
+    /* A quien YA se le escribio por esta unidad (con cualquier comprador) no se le repite el
+       aviso, salvo que la haya vuelto a cotizar despues de ese aviso. */
+    $env = $d->prepare("SELECT deal_id, MAX(ultima_cotizacion) FROM vendidas_avisos
+                        WHERE unidad = ? AND estado = 'enviado' GROUP BY deal_id");
+    $env->execute([$unidad]);
+    foreach ($env->fetchAll(PDO::FETCH_KEY_PAIR) as $dl => $ult)
+        if (isset($porDeal[(int)$dl]) && $porDeal[(int)$dl]['ultima'] <= (int)$ult) unset($porDeal[(int)$dl]);
+    $env->closeCursor();
+
     $nuevos = 0;
     $a = $d->prepare('INSERT OR IGNORE INTO vendidas_avisos
         (unidad, comprador_deal, deal_id, asesor_id, cliente, ultima_cotizacion, veces)
@@ -205,7 +219,7 @@ function vend_registrar(PDO $d, string $unidad, int $comprador, string $etapa,
 function vend_anular(PDO $d, string $unidad, ?int $ahora = null): array {
     $ahora  = $ahora ?? time();
     $unidad = strtoupper(trim($unidad));
-    $d->prepare("UPDATE vendidas SET estado = 'anulada', anulada_en = ? WHERE unidad = ? AND estado = 'firme'")
+    $d->prepare("UPDATE vendidas SET estado = 'anulada', anulada_en = ?, motivo = 'caida' WHERE unidad = ? AND estado = 'firme'")
       ->execute([$ahora, $unidad]);
     $u = $d->prepare("UPDATE vendidas_avisos SET estado = 'anulado' WHERE unidad = ? AND estado = 'pendiente'");
     $u->execute([$unidad]);
@@ -215,6 +229,22 @@ function vend_anular(PDO $d, string $unidad, ?int $ahora = null): array {
     $yaEnviados = array_map('intval', $e->fetchAll(PDO::FETCH_COLUMN));
     $e->closeCursor();
     return ['anulados' => $anulados, 'ya_enviados' => $yaEnviados];
+}
+
+/**
+ * Otro deal tomo una unidad que ya estaba vendida, sin que pasara por DISPONIBLE (una
+ * reubicacion, o una correccion a mano). Se anula SOLO la venta del comprador viejo y sus
+ * avisos pendientes; la del nuevo la arma vend_registrar. No es una caida: no mueve el piso.
+ */
+function vend_anular_comprador(PDO $d, string $unidad, int $compradorViejo, ?int $ahora = null): int {
+    $unidad = strtoupper(trim($unidad));
+    $u = $d->prepare("UPDATE vendidas SET estado = 'anulada', anulada_en = ?, motivo = 'cambio_comprador'
+                      WHERE unidad = ? AND comprador_deal = ? AND estado = 'firme'");
+    $u->execute([$ahora ?? time(), $unidad, $compradorViejo]);
+    $d->prepare("UPDATE vendidas_avisos SET estado = 'anulado'
+                 WHERE unidad = ? AND comprador_deal = ? AND estado = 'pendiente'")
+      ->execute([$unidad, $compradorViejo]);
+    return $u->rowCount();
 }
 
 /**
@@ -234,6 +264,17 @@ function vend_desde_cambio(?PDO $d, string $unidad, string $antes, string $ahora
     $atadaAhora = in_array(strtoupper(trim($antes)), $etapas, true)
                && in_array(strtoupper(trim($ahora)), $etapas, true)
                && $compradorAntes === 0 && $comprador > 0;
+    /* Cambio de comprador (VIGILANTE + Jesua, 5-oct-2026): la unidad sigue vendida pero
+       ahora es de OTRO deal. Para el que la cotizo es otra venta: se la gano otro. */
+    $otroDueno = in_array(strtoupper(trim($antes)), $etapas, true)
+              && in_array(strtoupper(trim($ahora)), $etapas, true)
+              && $compradorAntes > 0 && $comprador > 0 && $compradorAntes !== $comprador;
+    if ($otroDueno) {
+        $x = vend_anular_comprador($d, $unidad, $compradorAntes);
+        $n = vend_registrar($d, $unidad, $comprador, $ahora, $origen, null, $categoria);
+        return "vendidas: $unidad cambio de comprador $compradorAntes -> $comprador ($origen)"
+             . " · $x venta vieja anulada · $n posibles avisos nuevos";
+    }
     if (vend_es_venta($antes, $ahora, $etapas) || $atadaAhora) {
         if ($comprador <= 0) return "vendidas: $unidad entro a $ahora SIN deal comprador -> no se arma lista";
         $n = vend_registrar($d, $unidad, $comprador, $ahora, $origen, null, $categoria);

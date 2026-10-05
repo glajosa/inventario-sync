@@ -85,6 +85,26 @@ test_same(['803', '804'], array_map('strval', $re),
 test_same(['801', '804'], array_map('strval', $d->query("SELECT deal_id FROM vendidas_avisos WHERE unidad='E-1-5' AND comprador_deal=900 ORDER BY deal_id")->fetchAll(PDO::FETCH_COLUMN)),
           'la primera venta avisa a ANTES y VOLVIO (ENTRE cotizo con la unidad ya vendida)');
 
+// ── cambio de comprador sin pasar por DISPONIBLE (reubicacion) ─────────────
+// VIGILANTE + Jesua (5-oct): A -> B en una unidad vendida anula (U, A) y registra (U, B).
+$cot->execute(['f1', 921, 7, 'YAAVISADO', 'F-1-1', $ahora - 2 * 86400, 1, $ahora - 2 * 86400]);
+$cot->execute(['f2', 922, 7, 'PENDIENTE', 'F-1-1', $ahora - 3 * 86400, 1, $ahora - 3 * 86400]);
+vend_registrar($d, 'F-1-1', 910, 'RESERVADO', 'aviso', $ahora, 33);
+$d->exec("UPDATE vendidas_avisos SET estado='enviado' WHERE unidad='F-1-1' AND deal_id=921");
+$l = vend_desde_cambio($d, 'F-1-1', 'RESERVADO', 'RESERVADO', 911, 'aviso', 910, 33);
+test_same(true, strpos($l, 'cambio de comprador 910 -> 911') !== false, 'detecta el cambio de comprador: ' . $l);
+$fila = fn($c) => $d->query("SELECT estado || '/' || motivo FROM vendidas WHERE unidad='F-1-1' AND comprador_deal=$c")->fetchColumn();
+test_same('anulada/cambio_comprador', $fila(910), 'la venta del comprador viejo queda anulada, con su motivo');
+test_same('firme/', $fila(911), 'la del comprador nuevo queda firme');
+$av = fn($c) => array_map('strval', $d->query("SELECT deal_id FROM vendidas_avisos WHERE unidad='F-1-1' AND comprador_deal=$c AND estado='pendiente' ORDER BY deal_id")->fetchAll(PDO::FETCH_COLUMN));
+test_same(['922'], $av(911), 'el nuevo dueno avisa al pendiente; al que YA se le escribio no se le repite');
+test_same([], $av(910), 'el pendiente del comprador viejo quedo anulado (no sale dos veces)');
+test_same('', vend_desde_cambio($d, 'F-1-1', 'RESERVADO', 'FIRMADO', 911, 'aviso', 911, 33),
+          'mismo comprador que firma NO es cambio de comprador');
+$cot->execute(['f3', 921, 7, 'YAAVISADO', 'F-1-1', time() - 60, 1, time() - 60]);   // la volvio a cotizar
+vend_desde_cambio($d, 'F-1-1', 'FIRMADO', 'FIRMADO', 912, 'aviso', 911, 33);
+test_same(['921', '922'], $av(912), 'si el ya avisado la volvio a cotizar despues, si se le avisa otra vez');
+
 // ── el barrido recupera la venta que no llego por aviso ─────────────────────
 $viejas = [['id' => 1, 'codigo' => 'D-2-11', 'stage' => 'DISPONIBLE', 'dealId' => 0],
            ['id' => 2, 'codigo' => 'D-2-1',  'stage' => 'DISPONIBLE', 'dealId' => 0]];
