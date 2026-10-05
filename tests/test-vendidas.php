@@ -69,6 +69,22 @@ test_same('pendiente', (string)$d->query("SELECT estado FROM vendidas_avisos WHE
 test_same('enviado', (string)$d->query("SELECT estado FROM vendidas_avisos WHERE deal_id=502")->fetchColumn(),
           'el ya enviado sigue enviado');
 
+// ── se cae y la compra OTRO: solo los que cotizaron despues de la caida ──────
+// Regla de Jesua (5-oct): a los de antes ya les toco el aviso de la primera venta.
+$cot->execute(['r1', 801, 7, 'ANTES',   'E-1-5', $ahora - 5 * 86400, 1, $ahora - 5 * 86400]);  // antes de la 1a venta
+$cot->execute(['r2', 802, 7, 'ENTRE',   'E-1-5', $ahora + 1000, 1, $ahora + 1000]);            // con la unidad reservada
+$cot->execute(['r3', 803, 7, 'NUEVO',   'E-1-5', $ahora + 5000, 1, $ahora + 5000]);            // despues de la caida
+$cot->execute(['r4', 804, 7, 'VOLVIO',  'E-1-5', $ahora + 5500, 2, $ahora - 4 * 86400]);       // cotizo antes Y otra vez despues
+vend_registrar($d, 'E-1-5', 900, 'RESERVADO', 'aviso', $ahora);
+vend_anular($d, 'E-1-5', $ahora + 4000);
+vend_registrar($d, 'E-1-5', 901, 'RESERVADO', 'aviso', $ahora + 6000);
+$re = $d->query("SELECT deal_id FROM vendidas_avisos WHERE unidad='E-1-5' AND comprador_deal=901 ORDER BY deal_id")
+        ->fetchAll(PDO::FETCH_COLUMN);
+test_same(['803', '804'], array_map('strval', $re),
+          'reventa: avisa al que cotizo despues de la caida y al que volvio a cotizar; no a los de antes');
+test_same(['801', '804'], array_map('strval', $d->query("SELECT deal_id FROM vendidas_avisos WHERE unidad='E-1-5' AND comprador_deal=900 ORDER BY deal_id")->fetchAll(PDO::FETCH_COLUMN)),
+          'la primera venta avisa a ANTES y VOLVIO (ENTRE cotizo con la unidad ya vendida)');
+
 // ── el barrido recupera la venta que no llego por aviso ─────────────────────
 $viejas = [['id' => 1, 'codigo' => 'D-2-11', 'stage' => 'DISPONIBLE', 'dealId' => 0],
            ['id' => 2, 'codigo' => 'D-2-1',  'stage' => 'DISPONIBLE', 'dealId' => 0]];

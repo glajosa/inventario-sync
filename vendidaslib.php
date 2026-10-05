@@ -148,6 +148,17 @@ function vend_registrar(PDO $d, string $unidad, int $comprador, string $etapa,
                  WHERE unidad = ? AND comprador_deal = ? AND estado = 'anulada'")
       ->execute([$ahora, $unidad, $comprador]);
 
+    /* Reventa (Jesua, 5-oct-2026): si la unidad ya se habia vendido y la reserva se cayo,
+       solo cuentan los que la cotizaron DESPUES de que volvio a disponible. Los de antes
+       ya recibieron (o tuvieron) su aviso con la primera venta. */
+    $piso = $cuando - $ventana;
+    $cai = $d->prepare("SELECT MAX(anulada_en) FROM vendidas
+                        WHERE unidad = ? AND comprador_deal <> ? AND estado = 'anulada'
+                          AND anulada_en > 0 AND anulada_en <= ?");
+    $cai->execute([$unidad, $comprador, $cuando]);
+    $piso = max($piso, (int)$cai->fetchColumn());
+    $cai->closeCursor();
+
     // Candidatos: cotizaciones dentro de la ventana que incluyen la unidad, por deal.
     $q = $d->prepare("SELECT deal_id, asesor_id, cliente, unidades, ultima_vez, veces
                       FROM cotizaciones
@@ -155,7 +166,7 @@ function vend_registrar(PDO $d, string $unidad, int $comprador, string $etapa,
                         AND (? = 0 OR categoria = 0 OR categoria = ?)");
     // creada <= cuando: quien la cotizo DESPUES de venderse no "se la perdio".
     // categoria: el mismo codigo en OTRO proyecto es otra unidad.
-    $q->execute(['%' . $unidad . '%', $cuando - $ventana, $cuando, $categoria, $categoria]);
+    $q->execute(['%' . $unidad . '%', $piso, $cuando, $categoria, $categoria]);
     $porDeal = [];
     foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
         if (!vend_cotizo_unidad((string)$r['unidades'], $unidad)) continue;   // D-2-1 no es D-2-12
