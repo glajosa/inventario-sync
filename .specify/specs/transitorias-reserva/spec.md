@@ -45,3 +45,9 @@ Pedido: Jesua, 5-oct-2026. Revisado por VIGILANTE. Código en cobranza2 (`lib_tr
 - Pruebas puras: monto de reserva (tabla, config, ninguno), el registro del
   automático, y el traspaso con un pago real de 1000 que NO se descuenta.
 - La corrida en seco de los 27, aprobada por Jesua antes de la noche.
+
+## Pendiente anotado (VIGILANTE, 5-oct): la corrección de tabla no compara contra el total
+En el camino de CORRECCIÓN (`corregir_tabla_deal` → `_reestructurar_desde_archivo`) no hay chequeo de la
+suma contra el "Total Cuota Inicial / Crédito Directo" de la tabla, ni para xlsx ni para xls. El import
+inicial sí lo tiene (`descuadre_vs_total_tabla`). Es la misma clase de error que el de Jamil: una lectura
+mala puede aplicarse sin aviso. A futuro: la misma guarda en la corrección; si no cuadra, no se aplica y se avisa.
