@@ -104,7 +104,7 @@ $cat    = json_decode((string)@file_get_contents("$DIR/selector_cache.json"), tr
 $units  = (array)($cat['units'] ?? []);
 $proyectos = (array)($cat['proyectos'] ?? []);
 
-$ventas = []; $resumen = ['ventas' => 0, 'candidatos' => 0, 'avisar' => 0, 'ya_compro' => 0,
+$ventas = []; $resumen = ['registradas' => 0, 'ventas' => 0, 'candidatos' => 0, 'avisar' => 0, 'ya_compro' => 0,
                           'sin_telefono' => 0, 'sin_contacto' => 0, 'repetido' => 0];
 foreach ($d->query("SELECT * FROM vendidas WHERE estado = 'firme' ORDER BY cuando DESC LIMIT 100")->fetchAll(PDO::FETCH_ASSOC) as $v) {
     if (time() - (int)$v['cuando'] < $espera) continue;          // todavia no esta firme
@@ -112,7 +112,11 @@ foreach ($d->query("SELECT * FROM vendidas WHERE estado = 'firme' ORDER BY cuand
                       WHERE unidad = ? AND comprador_deal = ?" . ($todo ? '' : " AND estado = 'pendiente'"));
     $a->execute([$v['unidad'], (int)$v['comprador_deal']]);
     $avisos = $a->fetchAll(PDO::FETCH_ASSOC); $a->closeCursor();
-    if (!$avisos) continue;
+    $resumen['registradas']++;
+    /* Al sistema de avisos no le sirve una venta sin nadie a quien escribir. A la
+       administracion SI (?todo=1): sin verlas no hay forma de saber si la deteccion anda
+       o si simplemente nadie habia cotizado esa unidad. */
+    if (!$avisos && !($admin && $todo)) continue;
 
     $res = $perilla ? vend_resolver($d, array_merge(array_column($avisos, 'deal_id'), [(int)$v['comprador_deal']]),
                                     'vend_libreta_http') : [];
