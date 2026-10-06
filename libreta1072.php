@@ -128,3 +128,26 @@ function l1072_de_deal(int $dealId, ?string &$motivo = null, ?callable $http = n
     $motivo = '';
     return $out;
 }
+
+/*
+ * ANTES DE ESCRIBIR, EL DATO FRESCO (orquestador + Jesua, 6-oct-2026).
+ * La copia va ~30 s atrasada. Si reconcile escribiera mirando solo la copia, podria
+ * reescribir en Bitrix un valor que ya esta bien (y ese aviso despierta a todos los
+ * handlers) o soltar una unidad que alguien acaba de atar. Por eso cada escritura de
+ * reconcile relee la unidad con crm.item.get y decide con ESE dato.
+ *   $fresco: parentId2 que devolvio Bitrix (0 = sin deal), o null si no se pudo leer.
+ */
+
+/** Atar la unidad al deal: 'escribir' | 'ya_estaba' | 'sin_dato'. */
+function l1072_decidir_set(?int $fresco, string $deal): string {
+    if ($fresco === null) return 'sin_dato';                 // sin dato fresco no se escribe
+    return (string)$fresco === $deal ? 'ya_estaba' : 'escribir';
+}
+
+/** Soltar la unidad que la copia ve atada a $dealCopia: 'escribir' | 'ya_suelta' | 'cambio' | 'sin_dato'.
+ *  'cambio' = en Bitrix ya es de OTRO deal: alguien la movio despues de la copia, no se toca. */
+function l1072_decidir_clear(?int $fresco, string $dealCopia): string {
+    if ($fresco === null) return 'sin_dato';
+    if ($fresco === 0) return 'ya_suelta';
+    return (string)$fresco === $dealCopia ? 'escribir' : 'cambio';
+}

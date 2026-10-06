@@ -79,4 +79,14 @@ test_same(1, (int)($hoy['libreta'] ?? 0), 'contador: 1 de libreta');
 test_same(1, (int)($hoy['bitrix'] ?? 0), 'contador: 1 a bitrix');
 test_same('http 503', (string)($hoy['ultimo_motivo'] ?? ''), 'contador: guarda el motivo');
 
+// antes de escribir, el dato fresco de Bitrix decide (la copia va ~30 s atrasada)
+test_same('escribir',  l1072_decidir_set(0, '700'),     'set: en Bitrix esta suelta -> se ata');
+test_same('escribir',  l1072_decidir_set(650, '700'),   'set: en Bitrix es de otro deal -> se corrige');
+test_same('ya_estaba', l1072_decidir_set(700, '700'),   'set: en Bitrix YA esta bien -> no se reescribe (no despierta handlers)');
+test_same('sin_dato',  l1072_decidir_set(null, '700'),  'set: sin dato fresco no se escribe');
+test_same('escribir',  l1072_decidir_clear(700, '700'), 'clear: sigue atada al mismo deal -> se suelta');
+test_same('ya_suelta', l1072_decidir_clear(0, '700'),   'clear: ya estaba suelta -> no se reescribe');
+test_same('cambio',    l1072_decidir_clear(800, '700'), 'clear: alguien la movio a otro deal despues de la copia -> no se toca');
+test_same('sin_dato',  l1072_decidir_clear(null, '700'),'clear: sin dato fresco no se escribe');
+
 echo "libreta1072: ok\n";

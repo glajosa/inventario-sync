@@ -175,9 +175,21 @@ foreach ($TODAS as $it) {
 
 // ---- DIFF y aplicar solo lo que difiere --------------------------------------
 $cambios = 0;
+/* La copia de la libreta va ~30 s atrasada: antes de CADA escritura se relee la unidad
+   en Bitrix y se decide con ese dato (l1072_decidir_set / _clear). Asi no se reescribe
+   un valor que ya esta bien ni se suelta una unidad que alguien acaba de mover. Solo
+   cuesta un get por diferencia, y normalmente no hay ninguna. */
+function parent_fresco(int $unit): ?int {
+    $g = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $unit]);
+    if (!$g['ok']) return null;
+    $it = $g['result']['item'] ?? $g['result'];
+    return is_array($it) ? (int)($it['parentId2'] ?? 0) : null;
+}
 // unidades que deben apuntar a un deal (o cambiar de deal)
 foreach ($desired as $unit => $deal) {
     if (!isset($actual[$unit]) || $actual[$unit] !== $deal) {
+        $dec = l1072_decidir_set(parent_fresco((int)$unit), (string)$deal);
+        if ($dec !== 'escribir') { logline("RECONCILE set u=$unit -> deal=$deal OMITIDO ($dec en Bitrix)"); continue; }
         $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $unit, 'fields' => ['parentId2' => $deal]]);
         if ($u['ok']) { $cambios++; logline("RECONCILE set u=$unit -> deal=$deal"); }
     }
@@ -185,6 +197,8 @@ foreach ($desired as $unit => $deal) {
 // unidades atadas que ya nadie desea -> soltar
 foreach ($actual as $unit => $deal) {
     if (!isset($desired[$unit])) {
+        $dec = l1072_decidir_clear(parent_fresco((int)$unit), (string)$deal);
+        if ($dec !== 'escribir') { logline("RECONCILE clear u=$unit OMITIDO ($dec en Bitrix; la copia decia deal=$deal)"); continue; }
         $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $unit, 'fields' => ['parentId2' => 0]]);
         if ($u['ok']) { $cambios++; logline("RECONCILE clear u=$unit (era deal=$deal)"); }
     }
