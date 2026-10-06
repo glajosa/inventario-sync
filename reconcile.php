@@ -57,7 +57,15 @@ if ($isHttp && isset($_GET['copia'])) $COPIA = $_GET['copia'] === '1';
 /* CANDADO: una sola corrida a la vez. Una corrida medida tardo 20 min y el cron es cada
    15: sin esto se pisan. flock lo suelta el sistema si el proceso muere, asi que no
    queda trabado; si la que corre lleva mas de 1 h se avisa en el log (no se mata). */
-$LOCK = @fopen($DATA_DIR . '/reconcile.lock', 'c+');
+/* El cron corre como root y la web como www-data: el archivo puede quedar de uno y el
+   otro no poder escribirlo. flock funciona igual sobre un archivo abierto solo para
+   leer, asi que si no se puede 'c+' se abre 'r' y el candado vale para los dos. Y al
+   crearlo se deja escribible por ambos. */
+$lockPath = $DATA_DIR . '/reconcile.lock';
+$lockNuevo = !is_file($lockPath);
+$LOCK = @fopen($lockPath, 'c+') ?: @fopen($lockPath, 'r');
+if ($LOCK && $lockNuevo) @chmod($lockPath, 0666);
+if (!$LOCK) logline('RECONCILE 🔴 sin candado: no se pudo abrir ' . $lockPath);
 if ($LOCK && !flock($LOCK, LOCK_EX | LOCK_NB)) {
     $info = json_decode((string)stream_get_contents($LOCK), true) ?: [];
     $edad = time() - (int)($info['desde'] ?? time());
@@ -66,7 +74,7 @@ if ($LOCK && !flock($LOCK, LOCK_EX | LOCK_NB)) {
     if ($isHttp) echo "ocupado\n";
     exit(0);
 }
-if ($LOCK) { ftruncate($LOCK, 0); fwrite($LOCK, json_encode(['pid' => getmypid(), 'desde' => time()])); fflush($LOCK); }
+if ($LOCK) { @ftruncate($LOCK, 0); @fwrite($LOCK, json_encode(['pid' => getmypid(), 'desde' => time()])); @fflush($LOCK); }
 
 /* CONTADOR de llamadas reales a Bitrix, por metodo (cada intento HTTP cuenta). Al
    terminar queda en el log y en /data/reconcile_llamadas.json (ultimas 30 corridas). */
