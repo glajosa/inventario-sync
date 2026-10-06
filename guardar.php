@@ -135,6 +135,14 @@ if ($cat === COBRANZAS_CAT && count($ids) === 1) {
     }
 }
 
+// Jesua 6-oct-2026: "no debe permitirle cambiar unidad, sino mencionarle ahi: la unidad se puede cambiar en la etapa
+// de reubicacion". El cambio de unidad de un 48 dispara la reubicacion entera: fuera de REUBICACION se RECHAZA antes
+// de guardar el campo (no queda nada cambiado). Perilla env REUBICA_SOLO_EN_ETAPA ('0' la apaga).
+if (guardar_reubica_bloqueada($cat, $stage)) {
+    logline("deal=$dealId RECHAZADO cambio de unidad en COBRANZAS fuera de REUBICACION (etapa $stage)");
+    echo json_encode(['ok' => false, 'error' => 'La unidad solo se puede cambiar con el deal en la etapa REUBICACIÓN']); exit;
+}
+
 // Las unidades deben existir y no estar tomadas por OTRA venta (anti doble-venta).
 // Se pasa el contacto para que la copia en CLIENTES pueda tomar la unidad que su
 // propio deal de Prospectos apartó.
@@ -166,17 +174,6 @@ $deal[CAMPO_NUEVO] = $limpio;
 // deal tal como estaba ANTES del update a propósito — necesita el ACTIVO COMPRADO
 // y el VALOR DEL ACTIVO viejos para saber de qué unidad se está saliendo.
 if ($cat === COBRANZAS_CAT) {
-    // Jesua 6-oct-2026: la reubicación arranca al ENTRAR a REUBICACIÓN, no al cambiar el campo ("un vendedor cambia
-    // la unidad sin culpa y se va todo en cadena"). El campo es obligatorio para entrar a esa etapa y la ventanita
-    // guarda ANTES de que la etapa cambie: la unidad queda PENDIENTE y la aplica hook48 cuando el deal entra
-    // (red: reconcile, que además devuelve el campo si nunca entra). Perilla env REUBICA_SOLO_EN_ETAPA ('0' = al instante).
-    if (guardar_reubica_bloqueada($cat, $stage)) {
-        reub_pend_guardar($dealId, $ids, (string)($g['result'][CAMPO_NUEVO] ?? ''), $g['result']);
-        logline("deal=$dealId REUBICACION PENDIENTE [$limpio]: se aplica al entrar a REUBICACION (etapa ahora $stage)");
-        echo json_encode(['ok' => true, 'guardado' => $limpio, 'pendiente' => true,
-            'nota' => 'La reubicación se aplica cuando el deal entre a la etapa REUBICACIÓN']);
-        exit;
-    }
     $r = reubicar($dealId, $g['result'], $ids);
     logline("deal=$dealId REUBICACION guardado=[$limpio] r=" . json_encode($r));
     if (empty($r['ok'])) {
