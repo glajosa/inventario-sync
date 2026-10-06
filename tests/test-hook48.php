@@ -15,6 +15,13 @@ test_same(10, h48_elegir($u, 'C-1-1')['id'] ?? null, '🔴 del 44 se elige la un
 test_same('sin_unidad', h48_elegir($u, 'C-9-9')['error'] ?? null, 'ninguna con ese codigo -> no escribe');
 test_same('varias_unidades', h48_elegir([['id'=>1,'title'=>'C1-1 (Galero Torre C)'],['id'=>2,'title'=>'C-1-1 (otra)']], 'C-1-1')['error'] ?? null, '🔴 dos con el mismo codigo -> no adivina');
 test_same('el_48_no_tiene_activo_comprado', h48_elegir($u, '')['error'] ?? null, 'sin ACTIVO COMPRADO -> no escribe');
+// el PROYECTO (orquestador): mismo contacto, mismo codigo, otro proyecto -> no toca
+$m = [['id' => 815, 'title' => 'C-3-7 (Noral Apartments)', '_proy' => 50], ['id' => 900, 'title' => 'C-3-7 (Barranca Apartments)', '_proy' => 142]];
+test_same('la_unidad_es_de_otro_proyecto', h48_elegir([$m[0]], 'C-3-7', 142)['error'] ?? null, '🔴 mismo contacto y codigo, OTRO proyecto -> no la toca (la C-3-7 de Marcel)');
+test_same(900, h48_elegir($m, 'C-3-7', 142)['id'] ?? null, '🔴 el mismo codigo en dos proyectos: gana el del proyecto del 48');
+test_same('varias_unidades', h48_elegir($m, 'C-3-7', 0)['error'] ?? null, 'el 48 sin proyecto y el codigo en dos proyectos -> no adivina');
+test_same(815, h48_elegir([$m[0]], 'C-3-7', 0)['id'] ?? null, 'el 48 sin proyecto: alcanza el codigo (como en FAMILIA)');
+test_same(10, h48_elegir([['id' => 10, 'title' => 'C1-1 (Galero Torre C)', '_proy' => 0]], 'C-1-1', 73)['id'] ?? null, 'unidad con proyecto desconocido: no se descarta por eso');
 // la accion
 test_same('aplicar', h48_accion('C48:LOSE', null, $T), 'DADO DE BAJA -> aplicar');
 test_same('aplicar', h48_accion('C48:WON', null, $T), 'PAGADO TOTALMENTE -> aplicar');

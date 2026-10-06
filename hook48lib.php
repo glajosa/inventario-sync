@@ -25,12 +25,18 @@ function h48_cod(string $s): string {
     return strtoupper(str_replace(' ', '', $c));
 }
 
-/** PURA. De las unidades candidatas, la ÚNICA cuyo código es el del 48. ['id'=>..] | ['error'=>sin_unidad|varias_unidades]. */
-function h48_elegir(array $items, string $activo48): array {
+/** PURA. De las unidades candidatas, la ÚNICA cuyo código es el del 48 y, si el 48 trae proyecto, de ESE proyecto
+ *  (orquestador 6-oct: un cliente con varias compras puede tener el mismo código en dos proyectos — la C-3-7 de Marcel).
+ *  Cada item trae '_proy' (proyecto_de_unidad, 0 = no se sabe). ['id'=>..] | ['error'=>...]. */
+function h48_elegir(array $items, string $activo48, int $proy48 = 0): array {
     $k = h48_cod($activo48);
     if ($k === '' || !preg_match('/\d/', $k)) return ['error' => 'el_48_no_tiene_activo_comprado'];
     $c = array_values(array_filter($items, fn($it) => h48_cod((string)($it['title'] ?? '')) === $k));
     if (!$c) return ['error' => 'sin_unidad'];
+    if ($proy48 > 0) {
+        $c = array_values(array_filter($c, fn($it) => (int)($it['_proy'] ?? 0) === 0 || (int)$it['_proy'] === $proy48));
+        if (!$c) return ['error' => 'la_unidad_es_de_otro_proyecto'];
+    }
     if (count($c) > 1) return ['error' => 'varias_unidades', 'ids' => array_map(fn($it) => (int)$it['id'], $c)];
     return ['id' => (int)$c[0]['id'], 'item' => $c[0]];
 }
@@ -92,19 +98,25 @@ function h48_deal(int $d): ?array {
     return $g['ok'] ? (array)$g['result'] : null;
 }
 
+/** A cada unidad le anota su proyecto ('_proy'), con la misma tabla que usa el campo (MAPA_PROYECTO). */
+function h48_con_proyecto(array $items): array {
+    foreach ($items as $i => $it) $items[$i]['_proy'] = proyecto_de_unidad((int)($it['categoryId'] ?? 0), $it[U_TIPO] ?? null);
+    return $items;
+}
+
 /** Las unidades candidatas: por el PAR (la unidad atada al 44); por código + contacto solo si el par está vacío. */
 function h48_candidatas(array $deal): array {
     $d44 = (int)($deal['UF_CRM_ID_DEAL_CLIENTES'] ?? 0);
     if ($d44 > 0) {
         $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => ['parentId2' => $d44]]);
         if (!$r['ok']) return ['error' => 'no_pude_leer_las_unidades_del_44'];
-        return ['por' => 'par', 'd44' => $d44, 'items' => (array)($r['result']['items'] ?? [])];
+        return ['por' => 'par', 'd44' => $d44, 'items' => h48_con_proyecto((array)($r['result']['items'] ?? []))];
     }
     $c = (int)($deal['CONTACT_ID'] ?? 0);
     if ($c <= 0) return ['error' => 'sin_par_y_sin_contacto'];
     $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => ['contactId' => $c]]);
     if (!$r['ok']) return ['error' => 'no_pude_leer_las_unidades_del_contacto'];
-    return ['por' => 'codigo+contacto', 'd44' => 0, 'items' => (array)($r['result']['items'] ?? [])];
+    return ['por' => 'codigo+contacto', 'd44' => 0, 'items' => h48_con_proyecto((array)($r['result']['items'] ?? []))];
 }
 
 /** El aviso de un 48. Idempotente: apply_unit_stage no escribe si la unidad ya está en el objetivo. */
@@ -144,7 +156,7 @@ function h48_procesar(int $d): array {
     if ($stage !== 'C48:LOSE' && $estado !== null) h48_estado_guardar($d, null);
     $cand = h48_candidatas($deal);
     if (isset($cand['error'])) return h48_frenar($d, $cand['error']);
-    $e = h48_elegir($cand['items'], (string)($deal[D_ACTIVO] ?? ''));
+    $e = h48_elegir($cand['items'], (string)($deal[D_ACTIVO] ?? ''), (int)($deal[D_PROYECTO] ?? 0));
     if (isset($e['error'])) return h48_frenar($d, $e['error'] . ' (por ' . $cand['por'] . ')' . (isset($e['ids']) ? ' ' . implode(',', $e['ids']) : ''));
     $uid = $e['id'];
     $g = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $uid]);           // guarda 2: se relee
