@@ -273,6 +273,12 @@ function reub_etapa_44(): ?string {
  * borrado los hace cobranza2 al recibir el aviso (lib_reubica_fusion.php, perilla reubica_vaciar_on); aquí solo la etapa,
  * en el MISMO update del 48. Env REUBICA_ETAPA_48: vacío o '0' = no se mueve (por defecto), '1' = REUBICACIÓN, o un stageId.
  */
+/** PURA. ¿Se rechaza el cambio de unidad? Solo en COBRANZAS y solo si el deal NO está ya en REUBICACIÓN (Jesua 6-oct). */
+function guardar_reubica_bloqueada(int $cat, string $stage): bool {
+    if ($cat !== 48 || getenv('REUBICA_SOLO_EN_ETAPA') === '0') return false;
+    return $stage !== 'C48:UC_1WR2BM';
+}
+
 function reub_etapa_48(): ?string {
     $v = trim((string)getenv('REUBICA_ETAPA_48'));
     if ($v === '' || $v === '0') return null;
@@ -481,6 +487,11 @@ function reub_frenar(int $dealId, string $motivo): array {
  * primera escritura.
  */
 function reubicar(int $dealId, array $deal, array $nuevas): array {
+    // 6-oct (Jesua + orquestador): la guarda va AQUI, no solo en guardar.php: cualquier puerta futura que llame a
+    // reubicar() con un 48 que no esta en REUBICACION se frena y avisa.
+    if (guardar_reubica_bloqueada((int)($deal['CATEGORY_ID'] ?? 48), (string)($deal['STAGE_ID'] ?? ''))) {
+        return reub_frenar($dealId, 'el 48 no esta en REUBICACION (etapa ' . (string)($deal['STAGE_ID'] ?? '?') . '): primero la etapa, despues la unidad');
+    }
     $contacto = (int)($deal['CONTACT_ID'] ?? 0);
     if (!$nuevas) {
         return ['ok' => false, 'error' => 'No hay unidad nueva en el campo'];

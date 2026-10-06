@@ -38,7 +38,7 @@ test_same(false, h48_es_suya(['parentId2' => 9348], 0), 'sin par: la del 44 herm
 test_same(1, substr_count((string)file_get_contents(__DIR__ . '/../hook48lib.php'), 'h48_dueno_es_hermano((int)$it[\'parentId2\'], (int)($deal[\'CONTACT_ID\'] ?? 0))'), '🔴 sin par, el 44 del MISMO cliente no es "otro deal" (caso 9350 -> unidad 759 -> 44 9348)');
 // el receptor: contesta antes de trabajar y respeta la perilla
 $src = (string)file_get_contents(__DIR__ . '/../hook48.php');
-test_same(true, strpos($src, "getenv('HOOK48_ON') !== '1'") < strpos($src, 'h48_procesar($dealId)'), 'la perilla se mira antes de trabajar');
-test_same(true, strpos($src, "echo 'ok'") < strpos($src, 'h48_procesar($dealId)'), '🔴 contesta 200 ANTES de trabajar (8 s de la libreta)');
+test_same(true, (($__a = strpos($src, "getenv('HOOK48_ON') !== '1'")) !== false) && (($__b = strpos($src, 'h48_procesar($dealId)')) !== false) && $__a < $__b, 'la perilla se mira antes de trabajar');
+test_same(true, (($__a = strpos($src, "echo 'ok'")) !== false) && (($__b = strpos($src, 'h48_procesar($dealId)')) !== false) && $__a < $__b, '🔴 contesta 200 ANTES de trabajar (8 s de la libreta)');
 $lib = (string)file_get_contents(__DIR__ . '/../hook48lib.php');
 test_same(0, preg_match("/crm\\.deal\\.(update|add|delete)/", $lib), '🔴 NUNCA escribe en el deal 48');

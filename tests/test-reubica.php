@@ -98,6 +98,17 @@ putenv('REUBICA_ETAPA_48');   test_same(null, reub_etapa_48(), 'sin perilla el 4
 putenv('REUBICA_ETAPA_48=0'); test_same(null, reub_etapa_48(), 'REUBICA_ETAPA_48=0 lo apaga');
 putenv('REUBICA_ETAPA_48=1'); test_same('C48:UC_1WR2BM', reub_etapa_48(), '🔴 REUBICA_ETAPA_48=1 -> REUBICACION');
 putenv('REUBICA_ETAPA_48');
+// 6-oct: el cambio de unidad en COBRANZAS solo con el deal YA en REUBICACION
+test_same(true,  guardar_reubica_bloqueada(48, 'C48:NEW'), '🔴 cobranzas AL DIA: no se puede cambiar la unidad');
+test_same(true,  guardar_reubica_bloqueada(48, 'C48:LOSE'), 'cobranzas DADO DE BAJA: tampoco');
+test_same(false, guardar_reubica_bloqueada(48, 'C48:UC_1WR2BM'), '🔴 cobranzas en REUBICACION: si');
+test_same(false, guardar_reubica_bloqueada(44, 'C44:NEW'), 'clientes: el freno no aplica');
+putenv('REUBICA_SOLO_EN_ETAPA=0'); test_same(false, guardar_reubica_bloqueada(48, 'C48:NEW'), 'perilla en 0: sin freno'); putenv('REUBICA_SOLO_EN_ETAPA');
+$srcRL = (string)file_get_contents(__DIR__ . '/../reubicalib.php');
+preg_match('/function reubicar\(int \$dealId.*?\n}\n/s', $srcRL, $mr);
+test_same(true, isset($mr[0]) && strpos($mr[0], 'guardar_reubica_bloqueada(') !== false && strpos($mr[0], 'guardar_reubica_bloqueada(') < strpos($mr[0], "crm.deal.update"), '🔴 reubicar() mismo frena un 48 fuera de REUBICACION, antes de escribir (todas las puertas)');
+$srcG = (string)file_get_contents(__DIR__ . '/../guardar.php');
+test_same(true, (($__a = strpos($srcG, 'guardar_reubica_bloqueada($cat, $stage)')) !== false) && (($__b = strpos($srcG, "\$up = bx('crm.deal.update'")) !== false) && $__a < $__b, '🔴 el freno va ANTES de guardar el campo (no queda el campo cambiado sin reubicar)');
 $srcR = (string)file_get_contents(__DIR__ . '/../reubicalib.php');
 test_same(1, preg_match("/\\\$etapa48 = reub_etapa_48\(\);\s*if \(\\\$etapa48 !== null\) \\\$c48\['STAGE_ID'\] = \\\$etapa48;\s*\\\$u = bx\('crm.deal.update', \['id' => \\\$dealId, 'fields' => \\\$c48\]\);/", $srcR), '🔴 la etapa va en el MISMO update del 48 (no en otra llamada)');
 putenv('REUBICA_ETAPA_44');

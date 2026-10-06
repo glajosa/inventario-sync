@@ -135,6 +135,16 @@ if ($cat === COBRANZAS_CAT && count($ids) === 1) {
     }
 }
 
+// Jesua 6-oct-2026: "solo se va a poder cambiar [la unidad en cobranzas] al momento de que esté primero en
+// reubicación... un vendedor cambia la unidad sin culpa y se va todo en cadena". El cambio de unidad de un 48 es
+// el disparador de la reubicación entera: sin la etapa REUBICACIÓN puesta A MANO antes, no se guarda nada.
+// Perilla env REUBICA_SOLO_EN_ETAPA ('0' la apaga).
+if (guardar_reubica_bloqueada($cat, $stage)) {
+    logline("deal=$dealId RECHAZADO cambio de unidad en COBRANZAS fuera de REUBICACION (etapa $stage)");
+    echo json_encode(['ok' => false,
+        'error' => 'Primero pasá el deal a la etapa REUBICACIÓN; recién ahí se puede cambiar la unidad']); exit;
+}
+
 // Las unidades deben existir y no estar tomadas por OTRA venta (anti doble-venta).
 // Se pasa el contacto para que la copia en CLIENTES pueda tomar la unidad que su
 // propio deal de Prospectos apartó.
