@@ -36,6 +36,7 @@ function cobranza_config(): array {
             'C48:UC_JW3G4N'    => 0,   // CANJE
             'C48:UC_RSP3F0'    => 0,   // ABOGADO DAR DE BAJA - solo el mail final
             'C48:UC_RIXTMH'    => 0,   // ERRORES O ANOMALIAS
+            'C48:UC_1WR2BM'    => 0,   // REUBICACION - espera la fusion con el deal nuevo (6-oct-2026)
             'C48:UC_1WHC5Q'    => 3,   // 1 MES VENCIDO   - 1 contacto x 3 (D+13,15,17)
             'C48:UC_LLUGGI'    => 3,   // 2 MESES VENCIDOS- igual que 1 MES
             'C48:UC_VXD8VQ'    => 6,   // 3 MESES VENCIDOS- 2 contactos x 3 (D+10,12,14 y D+20,22,24)

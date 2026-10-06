@@ -25,7 +25,7 @@ $CFG_JS = json_encode(cobranza_config(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_
     'C48:FINAL_INVOICE':'ABOGADO', 'C48:NEW':'AL DÍA',
     'C48:UC_TPE9QV':'ADELANTADO', 'C48:UC_JW3G4N':'CANJE',
     'C48:UC_RSP3F0':'ABOGADO DAR DE BAJA', 'C48:UC_RIXTMH':'ERRORES O ANOMALIAS',
-    'C48:PREPARATION':'RESERVA'
+    'C48:PREPARATION':'RESERVA', 'C48:UC_1WR2BM':'REUBICACIÓN'
   };
   var MOTIVOS = {
     'etapa_sin_llamadas': 'En esta etapa no se llama. El recordatorio lo manda el sistema.',
@@ -63,7 +63,9 @@ $CFG_JS = json_encode(cobranza_config(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_
     if (estado.status === 'rechazado') {
       var bl = {
         a:{ type:'text', properties:{ bold:true, value:'No se registró.' } },
-        c:{ type:'text', properties:{ value: MOTIVOS[estado.motivo] || estado.motivo } }
+        c:{ type:'text', properties:{ value: (estado.etapa === 'C48:UC_1WR2BM' && estado.motivo === 'etapa_sin_llamadas')
+              ? 'En reubicación: no se llama hasta que llegue la tabla nueva.'   // 6-oct: aqui no sale recordatorio, el deal espera la fusion
+              : (MOTIVOS[estado.motivo] || estado.motivo) } }
       };
       // Con un pacto vivo lo que importa es LA FECHA y de qué acuerdo salió:
       // "no se puede" sin decir hasta cuándo obliga a ir a buscarlo a mano.
