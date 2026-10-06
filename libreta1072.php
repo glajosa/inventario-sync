@@ -34,8 +34,17 @@ function l1072_on(): bool {
     return true;
 }
 
-/** GET a la libreta. Devuelve status, json y las cabeceras (en minuscula). */
+/** GET a la libreta con UN reintento si se corta por tiempo o falla la red: medido el
+ *  6-oct, la misma lista tardo 2 s y despues mas de 60. Caer a Bitrix por un corte
+ *  pasajero cuesta cientos de llamadas; reintentar cuesta 20 s. */
 function l1072_http(string $ruta): array {
+    $r = l1072_http_una($ruta);
+    if ($r['err'] !== '' || $r['status'] === 0 || $r['status'] >= 502) $r = l1072_http_una($ruta);
+    return $r;
+}
+
+/** Un solo GET a la libreta. Devuelve status, json y las cabeceras (en minuscula). */
+function l1072_http_una(string $ruta): array {
     $base = rtrim((string)getenv('LIBRETA_URL'), '/');
     $tok  = (string)getenv('LIBRETA_TOKEN');
     if ($base === '' || $tok === '') return ['status' => 0, 'json' => null, 'h' => [], 'err' => 'sin LIBRETA_URL/TOKEN'];
@@ -153,7 +162,7 @@ function l1072_decidir_clear(?int $fresco, string $dealCopia): string {
 }
 
 /**
- * Los deals de UN embudo y UNA etapa desde la libreta (dato = crm.deal.get), o null con
+ * Los deals de UN embudo (y de UNA etapa si se pide; '' = todas) desde la libreta (dato = crm.deal.get), o null con
  * $motivo. La copia de deals no trae copia_completa_at, asi que la prueba de que esta
  * entera es que las traidas cuadren con X-Libreta-Total.
  */
@@ -162,7 +171,7 @@ function l1072_deals(int $cat, string $stage, ?string &$motivo = null, ?callable
     if (!l1072_on()) { $motivo = 'apagada (perilla)'; return null; }
     $out = []; $total = null; $cursor = '';
     for ($p = 0; $p < 50; $p++) {
-        $r = $http('/deals?category=' . $cat . '&stage=' . rawurlencode($stage) . '&limit=200'
+        $r = $http('/deals?category=' . $cat . ($stage !== '' ? '&stage=' . rawurlencode($stage) : '') . '&limit=200'
                    . ($cursor !== '' ? '&cursor=' . rawurlencode($cursor) : ''));
         if ($r['status'] !== 200 || !is_array($r['json'])) {
             $motivo = 'http ' . $r['status'] . ($r['err'] ? ' ' . $r['err'] : '') . " en pagina $p"; return null;
@@ -170,7 +179,9 @@ function l1072_deals(int $cat, string $stage, ?string &$motivo = null, ?callable
         if ($total === null) $total = isset($r['h']['x-libreta-total']) ? (int)$r['h']['x-libreta-total'] : null;
         foreach ((array)($r['json']['items'] ?? []) as $i) {
             if (!empty($i['borrada_at']) || !is_array($i['dato'] ?? null)) continue;
-            if ((string)($i['dato']['STAGE_ID'] ?? '') !== $stage) { $motivo = 'la libreta devolvio otra etapa'; return null; }
+            // si la libreta ignorara el filtro devolveria TODO: se comprueba deal por deal
+            if ($stage !== '' && (string)($i['dato']['STAGE_ID'] ?? '') !== $stage) { $motivo = 'la libreta devolvio otra etapa'; return null; }
+            if ((string)($i['dato']['CATEGORY_ID'] ?? $cat) !== (string)$cat) { $motivo = 'la libreta devolvio otro embudo'; return null; }
             $out[] = $i['dato'];
         }
         $cursor = (string)($r['json']['siguiente'] ?? '');

@@ -149,20 +149,38 @@ $desired  = [];   // unitId => dealId
 $migrados = [];   // dealId => true  (tiene campo nuevo con valor: manda ese)
 
 // 1) campo nuevo primero (varias unidades separadas por coma en un solo campo)
+//    Con reconcile_copia los deals salen de la libreta (0 llamadas): son los mismos
+//    deals de CLIENTES con el campo lleno. Si la libreta no da la lista, Bitrix como antes.
+$pag44 = null;
+if ($COPIA) {
+    $mot = '';
+    $todos44 = l1072_deals(CATEGORY_ID, '', $mot);
+    l1072_contar('reconcile_deals', $todos44 !== null, $mot);
+    if ($todos44 === null) logline("RECONCILE desired libreta -> bitrix: $mot");
+    else $pag44 = [array_values(array_filter($todos44, function ($d) {
+        $v = $d[CAMPO_NUEVO] ?? '';
+        return is_array($v) ? (bool)array_filter($v) : trim((string)$v) !== '';
+    }))];
+}
 $start = 0;
 do {
-    $r = bx('crm.deal.list', [
-        'filter' => ['CATEGORY_ID' => CATEGORY_ID, '!' . CAMPO_NUEVO => ''],
-        'select' => ['ID', 'STAGE_ID', CAMPO_NUEVO],
-        'start'  => $start,
-    ]);
+    if ($pag44 !== null) {
+        $r = ['ok' => true, 'result' => array_shift($pag44), 'next' => $pag44 ? 1 : null];
+    } else {
+        $r = bx('crm.deal.list', [
+            'filter' => ['CATEGORY_ID' => CATEGORY_ID, '!' . CAMPO_NUEVO => ''],
+            'select' => ['ID', 'STAGE_ID', CAMPO_NUEVO],
+            'start'  => $start,
+        ]);
+    }
     if (!$r['ok']) { logline('RECONCILE ERR list(campo nuevo): ' . $r['error']); break; }
     foreach (($r['result'] ?? []) as $d) {
         $dealId = (string)$d['ID'];
         // Deal caído: no desea ninguna unidad. Sin esto el barrido volvía a atar
         // cada 15 min lo que la caída acababa de soltar.
         if (etapa_libera((string)($d['STAGE_ID'] ?? ''))) continue;
-        foreach (preg_split('/[,;\s]+/', (string)($d[CAMPO_NUEVO] ?? '')) as $x) {
+        $vCampo = $d[CAMPO_NUEVO] ?? '';
+        foreach (preg_split('/[,;\s]+/', is_array($vCampo) ? implode(',', $vCampo) : (string)$vCampo) as $x) {
             $x = trim($x);
             if ($x !== '' && ctype_digit($x) && (int)$x > 0) {
                 $desired[(int)$x]    = $dealId;

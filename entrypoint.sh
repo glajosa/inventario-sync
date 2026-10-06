@@ -15,6 +15,10 @@ export NORAL_URL="${NORAL_URL}"
 export NORAL_SYNC_TOKEN="${NORAL_SYNC_TOKEN}"
 # la etapa de "no interesado" la necesita el drenador de la cola del boton
 export NO_INTEREST_STAGE_ID="${NO_INTEREST_STAGE_ID}"
+# reconcile, warm-catalogo y el catalogo leen el 1072 de la LIBRETA (libreta1072.php).
+# Sin estas dos, por cron caen a Bitrix en CADA corrida: ~2.600 llamadas por reconcile.
+export LIBRETA_URL="${LIBRETA_URL}"
+export LIBRETA_TOKEN="${LIBRETA_TOKEN}"
 EOF
 chmod 600 /data/env.sh
 

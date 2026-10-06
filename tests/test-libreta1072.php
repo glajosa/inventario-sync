@@ -124,5 +124,9 @@ $m = ''; test_same(2, count((array)l1072_deals(44, 'C44:WON', $m, $dl())), 'deal
 $m = ''; test_same(null, l1072_deals(44, 'C44:WON', $m, $dl(['total' => 3])), 'deals: faltan -> null');
 $m = ''; test_same(null, l1072_deals(44, 'C44:WON', $m, $dl(['otra' => 1])), 'deals: vino otra etapa (filtro ignorado) -> null');
 $m = ''; test_same(null, l1072_deals(44, 'C44:WON', $m, $dl(['status' => 500])), 'deals: libreta caida -> null');
+$m = ''; test_same(2, count((array)l1072_deals(44, '', $m, $dl())), 'deals: sin etapa trae todo el embudo');
+$dlOtro = function (string $ruta) { return ['status' => 200, 'err' => '', 'h' => ['x-libreta-total' => '1'],
+    'json' => ['items' => [['dato' => ['ID' => '9', 'STAGE_ID' => 'C48:WON', 'CATEGORY_ID' => '48']]], 'siguiente' => null]]; };
+$m = ''; test_same(null, l1072_deals(44, '', $m, $dlOtro), 'deals: vino otro embudo (filtro ignorado) -> null');
 
 echo "libreta1072: ok\n";
