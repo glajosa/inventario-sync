@@ -279,6 +279,65 @@ function guardar_reubica_bloqueada(int $cat, string $stage): bool {
     return $stage !== 'C48:UC_1WR2BM';
 }
 
+// ── REUBICACIÓN PENDIENTE (6-oct): la unidad elegida fuera de la etapa espera a que el 48 ENTRE a REUBICACIÓN ──
+const REUB_PEND_MAX_SEG = 600;   // 10 min (Jesua): sin entrar a la etapa, el campo vuelve a la unidad de antes
+function reub_pend_file(int $d): string { return (getenv('DATA_DIR') ?: '/data') . '/reubica_pendiente/' . $d . '.json'; }
+/** Un pendiente por deal y el ÚLTIMO manda (orquestador): si eligen otra unidad antes de entrar a la etapa, se
+ *  reemplazan los ids, pero el campo y la foto del deal son los de ANTES DEL PRIMER cambio (reubicar() necesita el
+ *  ACTIVO y el VALOR originales). El reloj de 10 min corre desde el último cambio. */
+function reub_pend_guardar(int $d, array $ids, string $campoAntes, array $dealAntes): void {
+    $f = reub_pend_file($d); @mkdir(dirname($f), 0775, true);
+    @file_put_contents($f, json_encode(reub_pend_nuevo(reub_pend_leer($d), $d, $ids, $campoAntes, $dealAntes, time()), JSON_UNESCAPED_UNICODE), LOCK_EX);
+}
+/** PURA. El pendiente que queda: ids nuevos, campo/foto del PRIMER cambio. */
+function reub_pend_nuevo(?array $prev, int $d, array $ids, string $campoAntes, array $dealAntes, int $ahora): array {
+    return ['deal' => $d, 'ids' => array_values(array_map('intval', $ids)),
+            'campo_antes' => $prev['campo_antes'] ?? $campoAntes, 'deal_antes' => $prev['deal_antes'] ?? $dealAntes,
+            'ts' => $ahora, 'intentos' => 0];
+}
+/** PURA. Ids de un valor del campo Inventario ("12,34" o con marca), ordenados: para comparar. */
+function reub_ids_norm(string $v): string {
+    $ids = []; foreach (preg_split('/[,;\s]+/', $v) as $x) { $x = trim($x); if ($x !== '' && ctype_digit($x) && (int)$x > 0) $ids[(int)$x] = 1; }
+    ksort($ids); return implode(',', array_keys($ids));
+}
+function reub_pend_leer(int $d): ?array { $f = reub_pend_file($d); $j = is_file($f) ? json_decode((string)@file_get_contents($f), true) : null; return is_array($j) ? $j : null; }
+function reub_pend_borrar(int $d): void { @unlink(reub_pend_file($d)); }
+
+/** PURA. ¿Qué se hace con un pendiente? 'aplicar' (el 48 ya está en REUBICACIÓN) · 'revertir' (venció sin entrar) ·
+ *  'esperar' · 'nada' (no hay pendiente). */
+function reub_pend_accion(?array $pend, string $stage, int $ahora, int $max = REUB_PEND_MAX_SEG, ?string $campoAhora = null): string {
+    if ($pend === null) return 'nada';
+    // guardas 1 y 3 (orquestador): si el campo ya NO es el del pendiente (alguien lo volvió a tocar), ni se aplica ni se
+    // revierte: no se pisa el cambio de una persona.
+    if ($campoAhora !== null && reub_ids_norm($campoAhora) !== reub_ids_norm(implode(',', (array)($pend['ids'] ?? [])))) return 'cambiado';
+    if ($stage === 'C48:UC_1WR2BM') return 'aplicar';
+    return ($ahora - (int)($pend['ts'] ?? $ahora)) >= $max ? 'revertir' : 'esperar';
+}
+
+/** Aplica o revierte un pendiente según la etapa ACTUAL del 48. La llaman hook48 (al entrar) y reconcile (red). */
+function reub_pend_procesar(int $d, string $stage, string $campoAhora): array {
+    $p = reub_pend_leer($d);
+    $acc = reub_pend_accion($p, $stage, time(), REUB_PEND_MAX_SEG, $campoAhora);
+    if ($acc === 'nada' || $acc === 'esperar') return ['nada' => $acc];
+    if ($acc === 'cambiado') {
+        reub_pend_borrar($d);
+        return reub_frenar($d, 'el pendiente de reubicacion no se aplico: el campo Inventario ya no es el que se eligio ("' . $campoAhora . '")');
+    }
+    if ($acc === 'revertir') {
+        $u = bx('crm.deal.update', ['id' => $d, 'fields' => [CAMPO_NUEVO => (string)$p['campo_antes']]]);
+        reub_pend_borrar($d);
+        reub_frenar($d, 'cambiaron la unidad del 48 sin pasarlo a REUBICACION en 10 min: el campo volvio a "' . $p['campo_antes'] . '"' . ($u['ok'] ? '' : ' (NO pude devolver el campo: ' . $u['error'] . ')'));
+        return ['revertido' => $u['ok']];
+    }
+    $deal = (array)$p['deal_antes']; $deal['STAGE_ID'] = $stage;   // la foto de ANTES del cambio de campo, con la etapa de hoy
+    $r = reubicar($d, $deal, array_map('intval', (array)$p['ids']));
+    if (!empty($r['ok'])) { reub_pend_borrar($d); logline("REUBICA deal=$d PENDIENTE aplicado al entrar a REUBICACION: " . json_encode($r)); return $r; }
+    $p['intentos'] = (int)($p['intentos'] ?? 0) + 1;
+    if ($p['intentos'] >= 3) { reub_pend_borrar($d); logline("REUBICA deal=$d PENDIENTE descartado tras 3 intentos: " . ($r['error'] ?? '?')); }
+    else @file_put_contents(reub_pend_file($d), json_encode($p, JSON_UNESCAPED_UNICODE), LOCK_EX);
+    return $r;
+}
+
 function reub_etapa_48(): ?string {
     $v = trim((string)getenv('REUBICA_ETAPA_48'));
     if ($v === '' || $v === '0') return null;
@@ -854,3 +913,22 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
     reub_anotar('hecho', $dealId, $hecho);
     return $hecho;
 }
+
+/** Red de los 10 min sin cron propio (el horario del contenedor es del Dockerfile de inventario): la corre hook48
+ *  después de contestar, como mucho una vez por minuto. Lee cada deal FRESCO de Bitrix (orquestador, guarda 1). */
+function reub_pend_barrer(int $tope = 5): int {
+    $dir = (getenv('DATA_DIR') ?: '/data') . '/reubica_pendiente';
+    $marca = $dir . '/.barrido'; if (is_file($marca) && time() - (int)@filemtime($marca) < 60) return 0;
+    @mkdir($dir, 0775, true); @touch($marca);
+    $n = 0;
+    foreach ((array)glob($dir . '/*.json') as $f) {
+        if ($n >= $tope) break;
+        $d = (int)basename($f, '.json'); $p = reub_pend_leer($d);
+        if (!$p || time() - (int)($p['ts'] ?? 0) < REUB_PEND_MAX_SEG) continue;   // todavía en plazo: lo resuelve hook48
+        $g = bx('crm.deal.get', ['id' => $d]); $n++;
+        if (!$g['ok']) continue;
+        reub_pend_procesar($d, (string)($g['result']['STAGE_ID'] ?? ''), (string)($g['result'][CAMPO_NUEVO] ?? ''));
+    }
+    return $n;
+}
+

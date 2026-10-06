@@ -32,6 +32,6 @@ if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
 @mkdir(($DATA_DIR ?? '/data') . '/hook48', 0775, true);
 $lk = @fopen(($DATA_DIR ?? '/data') . '/hook48/' . $dealId . '.lock', 'c');
 if ($lk && !flock($lk, LOCK_EX | LOCK_NB)) { logline("HOOK48 deal=$dealId ya en curso, salgo"); exit; }
-try { h48_procesar($dealId); }
+try { h48_procesar($dealId); try { reub_pend_barrer(); } catch (Throwable $e2) { logline('HOOK48 barrido pendientes: ' . $e2->getMessage()); } }
 catch (Throwable $e) { logline("HOOK48 deal=$dealId excepcion: " . $e->getMessage()); }
 finally { if ($lk) { flock($lk, LOCK_UN); fclose($lk); } }

@@ -125,6 +125,14 @@ function h48_procesar(int $d): array {
     if (!$deal) return h48_frenar($d, 'no pude leer el deal');
     if ((int)($deal['CATEGORY_ID'] ?? -1) !== COBRANZAS_CAT) return ['nada' => 'no_es_48'];
     $stage  = (string)($deal['STAGE_ID'] ?? '');
+    // 6-oct: la unidad elegida FUERA de la etapa (pendiente) se aplica cuando el 48 ENTRA a REUBICACIÓN
+    if ($stage === 'C48:UC_1WR2BM' && reub_pend_leer($d) !== null) {
+        if (!array_key_exists(CAMPO_NUEVO, $deal)) {   // la copia no trae el campo: se lee de Bitrix (vacío NO es "lo cambiaron")
+            $g = bx('crm.deal.get', ['id' => $d]); if (!$g['ok']) return h48_frenar($d, 'pendiente: no pude leer el campo Inventario');
+            $deal[CAMPO_NUEVO] = $g['result'][CAMPO_NUEVO] ?? '';
+        }
+        return reub_pend_procesar($d, $stage, (string)($deal[CAMPO_NUEVO] ?? ''));
+    }
     $estado = h48_estado($d);
     $acc    = h48_accion($stage, $estado, COBRANZAS_TRIGGERS);
     if ($acc === 'nada') return ['nada' => $stage];
