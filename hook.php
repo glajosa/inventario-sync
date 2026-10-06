@@ -179,9 +179,20 @@ if ($event === 'ONCRMDEALDELETE') {
     foreach (($cache['units'] ?? []) as $u) {
         if ((int)($u['dealId'] ?? 0) === (int)$dealId) $cand[] = (int)$u['id'];
     }
-    // 3) y el filtro directo, por si el borrado no hubiera arrastrado la relación
-    $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => ['parentId2' => $dealId]]);
-    if ($r['ok']) foreach (($r['result']['items'] ?? []) as $it) $cand[] = (int)($it['id'] ?? 0);
+    // 3) y el filtro directo, por si el borrado no hubiera arrastrado la relación.
+    //    De la libreta (0 llamadas); si no sirve, Bitrix como antes. Cada candidata se
+    //    relee abajo en Bitrix antes de soltarla, asi que una copia atrasada no suelta nada.
+    require_once __DIR__ . '/libreta1072.php';
+    $motivoLib = '';
+    $deLib = l1072_de_deal((int)$dealId, $motivoLib);
+    l1072_contar('hook_delete', $deLib !== null, $motivoLib);
+    if ($deLib !== null) {
+        foreach ($deLib as $it) $cand[] = (int)($it['id'] ?? 0);
+    } else {
+        logline("DELETE libreta -> bitrix: $motivoLib");
+        $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => ['parentId2' => $dealId]]);
+        if ($r['ok']) foreach (($r['result']['items'] ?? []) as $it) $cand[] = (int)($it['id'] ?? 0);
+    }
     $cand = array_values(array_unique(array_filter($cand)));
     logline("DELETE deal=$dealId candidatas=[" . implode(',', $cand) . ']');
 

@@ -274,19 +274,36 @@ function catalogo(bool $force = false): array {
         else sellog('enum vacio y sin cache previo: torre/piso saldran en blanco');
     }
 
-    // unidades — sin `select`: con select Bitrix devuelve title/id en null (bug verificado)
+    /* unidades: de la LIBRETA (0 llamadas a Bitrix; ver libreta1072.php). Si la copia
+       no sirve, se pagina Bitrix como antes y el motivo queda en el log.
+       En Bitrix sin `select`: con select devuelve title/id en null (bug verificado). */
+    require_once __DIR__ . '/libreta1072.php';
     $units = [];
-    $start = 0;
     $total = null;
     $completo = true;
-    do {
-        $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'start' => $start]);
-        if (!$r['ok']) {
-            sellog("item.list FALLO start=$start traidas=" . count($units) . " err=" . ($r['error'] ?? '?'));
-            $completo = false; break;
-        }
-        if ($total === null) $total = $r['total'];
-        foreach (($r['result']['items'] ?? []) as $it) {
+    $motivoLib = '';
+    $deLibreta = l1072_todas($motivoLib);
+    l1072_contar('selector', $deLibreta !== null, $motivoLib);
+    $paginas = [];
+    if ($deLibreta !== null) {
+        $paginas[] = $deLibreta;
+        $total = count($deLibreta);
+    } else {
+        sellog("libreta -> bitrix: $motivoLib");
+        $start = 0;
+        do {
+            $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'start' => $start]);
+            if (!$r['ok']) {
+                sellog("item.list FALLO start=$start err=" . ($r['error'] ?? '?'));
+                $completo = false; break;
+            }
+            if ($total === null) $total = $r['total'];
+            $paginas[] = (array)($r['result']['items'] ?? []);
+            $start = $r['next'] ?? null;
+        } while ($start !== null && $start !== '');
+    }
+    foreach ($paginas as $pagina) {
+        foreach ($pagina as $it) {
             $cid   = (string)($it['categoryId'] ?? '');
             $title = (string)($it['title'] ?? '');
             $units[] = [
@@ -306,8 +323,7 @@ function catalogo(bool $force = false): array {
                 'tipo'   => (int)($it[U_TIPO] ?? 0),
             ];
         }
-        $start = $r['next'] ?? null;
-    } while ($start !== null && $start !== '');
+    }
 
     if ($total !== null && count($units) < $total) {
         sellog('incompleto: traidas=' . count($units) . ' esperadas=' . $total);

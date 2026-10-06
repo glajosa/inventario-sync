@@ -40,6 +40,7 @@ if ($isHttp) {
 }
 
 require_once __DIR__ . '/stagelib.php';   // stages (Clientes re-afirmar + Cobranzas read-only)
+require_once __DIR__ . '/libreta1072.php';
 
 function logline(string $msg): void {
     global $LOG_FILE, $DATA_DIR;
@@ -144,23 +145,33 @@ $stageDe = [];   // unitId => nombre del stage
 $revStage = [];
 foreach (stages_map() as $c => $m) foreach ($m as $n => $sid) $revStage[$sid] = $n;
 
-$start = 0;
-do {
-    $r = bx('crm.item.list', [
-        'entityTypeId' => SPA_ENTITY,
-        'order'        => ['id' => 'ASC'],
-        'start'        => $start,
-    ]);
-    if (!$r['ok']) { logline("RECONCILE ERR item.list: {$r['error']}"); if ($isHttp) echo "err\n"; exit(1); }
-    foreach (($r['result']['items'] ?? []) as $it) {
-        $uid = (int)($it['id'] ?? 0);
-        if (!$uid) continue;
-        $p = (int)($it['parentId2'] ?? 0);
-        if ($p > 0) $actual[$uid] = (string)$p;
-        $stageDe[$uid] = $revStage[(string)($it['stageId'] ?? '')] ?? '';
-    }
-    $start = $r['next'] ?? null;
-} while ($start !== null && $start !== '');
+/* TODAS las unidades, UNA vez por corrida, y de la libreta. Antes eran dos barridos
+   de ~31 crm.item.list cada uno (este y el de STAGES de abajo). Si la libreta no
+   sirve, un solo barrido en Bitrix y el motivo queda anotado. */
+function unidades_todas(): ?array {
+    $motivo = '';
+    $u = l1072_todas($motivo);
+    l1072_contar('reconcile', $u !== null, $motivo);
+    if ($u !== null) return $u;
+    logline("RECONCILE libreta -> bitrix: $motivo");
+    $todas = []; $start = 0;
+    do {
+        $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'order' => ['id' => 'ASC'], 'start' => $start]);
+        if (!$r['ok']) { logline("RECONCILE ERR item.list: {$r['error']}"); return null; }
+        foreach (($r['result']['items'] ?? []) as $it) $todas[] = $it;
+        $start = $r['next'] ?? null;
+    } while ($start !== null && $start !== '');
+    return $todas;
+}
+$TODAS = unidades_todas();
+if ($TODAS === null) { if ($isHttp) echo "err\n"; exit(1); }
+foreach ($TODAS as $it) {
+    $uid = (int)($it['id'] ?? 0);
+    if (!$uid) continue;
+    $p = (int)($it['parentId2'] ?? 0);
+    if ($p > 0) $actual[$uid] = (string)$p;
+    $stageDe[$uid] = $revStage[(string)($it['stageId'] ?? '')] ?? '';
+}
 
 // ---- DIFF y aplicar solo lo que difiere --------------------------------------
 $cambios = 0;
@@ -261,11 +272,7 @@ $stageCambios = 0;
 function norm_code(string $c): string { return strtoupper(str_replace(' ', '', trim($c))); }
 $unitByKey = [];   // "CODE|CONTACT" => ['id'=>, 'cat'=>]
 $codeSet   = [];   // CODE => true  (pre-filtro barato)
-$start = 0;
-do {
-    $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'start' => $start]);   // SIN select
-    if (!$r['ok']) { logline("RECONCILE ERR item.list units: {$r['error']}"); break; }
-    $items = $r['result']['items'] ?? [];
+foreach ([$TODAS] as $items) {   // las mismas de arriba: cero llamadas mas
     foreach ($items as $it) {
         $code = norm_code(explode('(', (string)($it['title'] ?? ''))[0]);
         if ($code === '') continue;
@@ -275,8 +282,7 @@ do {
             $unitByKey[$code . '|' . $contact] = ['id' => (int)$it['id'], 'cat' => (string)($it['categoryId'] ?? '')];
         }
     }
-    $start = $r['next'] ?? null;
-} while ($start !== null && $start !== '');
+}
 
 // --- A) CLIENTES (44) re-afirmar PRIMERO (por si se perdió un evento del hook) ----
 // Solo PROMESA FIRMADA y FIRMADOS-CAIDOS (pocos deals). RESERVA se OMITE: es no-op
