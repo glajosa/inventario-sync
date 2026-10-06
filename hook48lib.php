@@ -50,6 +50,15 @@ function h48_es_suya(array $item, int $deal44): bool {
     return $p === 0 || ($deal44 > 0 && $p === $deal44);
 }
 
+/** El dueño de la unidad, ¿es el 44 de ESTE cliente? (deals viejos sin par: la unidad cuelga de su 44, que no es "otro"). */
+function h48_dueno_es_hermano(int $p, int $contacto): bool {
+    if ($p <= 0 || $contacto <= 0) return false;
+    $r = reub_libreta('/deal/' . $p);
+    $x = ($r['status'] === 200 && is_array($r['json'])) ? ($r['json']['dato'] ?? $r['json']) : null;
+    if (!is_array($x) || !isset($x['CATEGORY_ID'])) { $g = bx('crm.deal.get', ['id' => $p]); $x = $g['ok'] ? (array)$g['result'] : null; }
+    return is_array($x) && (int)($x['CATEGORY_ID'] ?? -1) === CLIENTES_CAT && (int)($x['CONTACT_ID'] ?? 0) === $contacto;
+}
+
 function h48_estado_file(int $d): string { return (getenv('DATA_DIR') ?: '/data') . '/hook48/' . $d . '.json'; }
 function h48_estado(int $d): ?array { $f = h48_estado_file($d); $j = is_file($f) ? json_decode((string)@file_get_contents($f), true) : null; return is_array($j) ? $j : null; }
 function h48_estado_guardar(int $d, ?array $e): void {
@@ -141,10 +150,15 @@ function h48_procesar(int $d): array {
     $g = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $uid]);           // guarda 2: se relee
     if (!$g['ok']) return h48_frenar($d, "no pude releer la unidad $uid");
     $it = $g['result']['item'] ?? $g['result'];
-    if (!h48_es_suya($it, (int)$cand['d44'])) return h48_frenar($d, "la unidad $uid está atada a OTRO deal (" . (int)$it['parentId2'] . ') -> no la toco');
+    $d44 = (int)$cand['d44'];
+    if (!h48_es_suya($it, $d44)) {
+        // sin par (deal viejo): si la unidad cuelga del 44 de ESTE mismo cliente, es suya
+        if ($d44 === 0 && h48_dueno_es_hermano((int)$it['parentId2'], (int)($deal['CONTACT_ID'] ?? 0))) $d44 = (int)$it['parentId2'];
+        else return h48_frenar($d, "la unidad $uid está atada a OTRO deal (" . (int)$it['parentId2'] . ') -> no la toco');
+    }
     $antes = (string)unit_stage_name($it);
     $ok = apply_unit_stage($uid, $it, $target, $stage === 'C48:LOSE');
-    if ($ok && $stage === 'C48:LOSE') h48_estado_guardar($d, ['por' => 'C48:LOSE', 'unidad' => $uid, 'antes' => $antes, 'd44' => (int)$cand['d44'], 'ts' => gmdate('c')]);
+    if ($ok && $stage === 'C48:LOSE') h48_estado_guardar($d, ['por' => 'C48:LOSE', 'unidad' => $uid, 'antes' => $antes, 'd44' => $d44, 'ts' => gmdate('c')]);
     logline("HOOK48 deal=$d $stage -> unidad $uid ($antes -> $target) por " . $cand['por'] . ($ok ? '' : ' (ya estaba)'));
     return ['ok' => true, 'unidad' => $uid, 'antes' => $antes, 'a' => $target, 'por' => $cand['por'], 'cambio' => $ok];
 }

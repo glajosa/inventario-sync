@@ -27,6 +27,8 @@ test_same('aplicar', h48_accion('C48:LOSE', $est, $T), 'sigue en baja -> aplicar
 test_same(true, h48_es_suya(['parentId2' => 0], 44), 'sin dueno -> se puede');
 test_same(true, h48_es_suya(['parentId2' => 44], 44), 'atada al 44 del par -> se puede');
 test_same(false, h48_es_suya(['parentId2' => 99], 44), '🔴 atada a OTRO deal -> no se toca');
+test_same(false, h48_es_suya(['parentId2' => 9348], 0), 'sin par: la del 44 hermano no pasa por es_suya (la resuelve h48_dueno_es_hermano)');
+test_same(1, substr_count((string)file_get_contents(__DIR__ . '/../hook48lib.php'), 'h48_dueno_es_hermano((int)$it[\'parentId2\'], (int)($deal[\'CONTACT_ID\'] ?? 0))'), '🔴 sin par, el 44 del MISMO cliente no es "otro deal" (caso 9350 -> unidad 759 -> 44 9348)');
 // el receptor: contesta antes de trabajar y respeta la perilla
 $src = (string)file_get_contents(__DIR__ . '/../hook48.php');
 test_same(true, strpos($src, "getenv('HOOK48_ON') !== '1'") < strpos($src, 'h48_procesar($dealId)'), 'la perilla se mira antes de trabajar');
