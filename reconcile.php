@@ -342,3 +342,15 @@ $msg = 'RECONCILE ok huerfanas=' . $huerfanas . ' desired=' . count($desired) . 
      . " link_cambios=$cambios stage_cambios=$stageCambios";
 logline($msg);
 if ($isHttp) echo $msg;
+
+// Red de las reubicaciones PENDIENTES (6-oct): unidad elegida en un 48 que no entró a REUBICACIÓN en 10 min ->
+// se devuelve el campo (o se aplica si ya entró). Vive en hook48.php porque este archivo tiene sus propios
+// bx()/logline() y no puede cargar reubicalib. Fail-open: si falla, el próximo reconcile lo reintenta.
+$tokB = (string)getenv('OUTBOUND_TOKEN');
+if ($tokB !== '') {
+    $chB = curl_init('http://127.0.0.1/hook48.php?barrer=1');   // la llave va en el CUERPO, no en la URL (no queda en el access log)
+    curl_setopt_array($chB, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query(['auth' => ['application_token' => $tokB]]),
+                             CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 60, CURLOPT_CONNECTTIMEOUT => 3]);
+    $rB = curl_exec($chB); $cB = (int)curl_getinfo($chB, CURLINFO_HTTP_CODE); unset($chB);
+    logline('RECONCILE pendientes de reubicacion: http ' . $cB . ' ' . substr((string)$rB, 0, 60));
+}

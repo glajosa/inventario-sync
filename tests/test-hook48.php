@@ -40,5 +40,11 @@ test_same(1, substr_count((string)file_get_contents(__DIR__ . '/../hook48lib.php
 $src = (string)file_get_contents(__DIR__ . '/../hook48.php');
 test_same(true, (($__a = strpos($src, "getenv('HOOK48_ON') !== '1'")) !== false) && (($__b = strpos($src, 'h48_procesar($dealId)')) !== false) && $__a < $__b, 'la perilla se mira antes de trabajar');
 test_same(true, (($__a = strpos($src, "echo 'ok'")) !== false) && (($__b = strpos($src, 'h48_procesar($dealId)')) !== false) && $__a < $__b, '🔴 contesta 200 ANTES de trabajar (8 s de la libreta)');
+// la red de pendientes tiene reloj propio: reconcile (cada 15 min) llama ?barrer=1 con la llave en el CUERPO
+$iTok = strpos($src, 'hash_equals($EXPECT'); $iBar = strpos($src, "isset(\$_GET['barrer'])");
+test_same(true, $iTok !== false && $iBar !== false && $iTok < $iBar, '🔴 ?barrer=1 pasa por la llave ANTES de barrer');
+$rec = (string)file_get_contents(__DIR__ . '/../reconcile.php');
+test_same(1, substr_count($rec, "hook48.php?barrer=1'"), 'reconcile llama a la red de pendientes');
+test_same(0, substr_count($rec, 'barrer=1&auth'), '🔴 la llave NO va en la URL (quedaria en el access log)');
 $lib = (string)file_get_contents(__DIR__ . '/../hook48lib.php');
 test_same(0, preg_match("/crm\\.deal\\.(update|add|delete)/", $lib), '🔴 NUNCA escribe en el deal 48');

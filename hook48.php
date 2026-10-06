@@ -17,6 +17,14 @@ $EXPECT = (string)getenv('OUTBOUND_TOKEN');
 $token  = $_REQUEST['auth']['application_token'] ?? $_REQUEST['application_token'] ?? '';
 if ($EXPECT === '' || !hash_equals($EXPECT, (string)$token)) { http_response_code(403); logline('HOOK48 403 token invalido'); echo 'forbidden'; exit; }
 
+// Reloj propio de la red de pendientes (orquestador 6-oct): reconcile.php llama ?barrer=1 cada 15 min, asi la
+// red no depende de que entre un aviso del 48 (con el destino en 'filtrar' puede no entrar ninguno por horas).
+if (isset($_GET['barrer'])) {
+    if (getenv('HOOK48_ON') !== '1') { echo 'apagado'; exit; }
+    $n = reub_pend_barrer(20, true);
+    echo "barridos=$n"; exit;
+}
+
 $event  = strtoupper((string)($_REQUEST['event'] ?? ''));
 $dealId = (int)($_REQUEST['data']['FIELDS']['ID'] ?? 0);
 if (getenv('HOOK48_ON') !== '1') { echo 'apagado'; exit; }                       // perilla

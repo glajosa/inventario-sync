@@ -916,9 +916,9 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
 
 /** Red de los 10 min sin cron propio (el horario del contenedor es del Dockerfile de inventario): la corre hook48
  *  después de contestar, como mucho una vez por minuto. Lee cada deal FRESCO de Bitrix (orquestador, guarda 1). */
-function reub_pend_barrer(int $tope = 5): int {
+function reub_pend_barrer(int $tope = 5, bool $forzar = false): int {
     $dir = (getenv('DATA_DIR') ?: '/data') . '/reubica_pendiente';
-    $marca = $dir . '/.barrido'; if (is_file($marca) && time() - (int)@filemtime($marca) < 60) return 0;
+    $marca = $dir . '/.barrido'; if (!$forzar && is_file($marca) && time() - (int)@filemtime($marca) < 60) return 0;
     @mkdir($dir, 0775, true); @touch($marca);
     $n = 0;
     foreach ((array)glob($dir . '/*.json') as $f) {
