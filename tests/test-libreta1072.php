@@ -89,4 +89,40 @@ test_same('ya_suelta', l1072_decidir_clear(0, '700'),   'clear: ya estaba suelta
 test_same('cambio',    l1072_decidir_clear(800, '700'), 'clear: alguien la movio a otro deal despues de la copia -> no se toca');
 test_same('sin_dato',  l1072_decidir_clear(null, '700'),'clear: sin dato fresco no se escribe');
 
+// etapas de reconcile decididas con la copia
+$u = ['id' => 10, 'parentId2' => 700, 'stageId' => 'DT1072_33:X'];
+test_same('releer', l1072_decidir_etapa(null, null, 'FIRMADO', '700'),        'etapa: la copia no tiene la unidad -> como antes (Bitrix)');
+test_same('saltar', l1072_decidir_etapa($u, null, 'FIRMADO', '700'),          'etapa: segun la copia ya esta -> 0 llamadas');
+test_same('releer', l1072_decidir_etapa($u, 'DT1072_33:F', 'FIRMADO', '700'), 'etapa: la copia dice que difiere -> relee y escribe');
+test_same('saltar', l1072_decidir_etapa($u, 'DT1072_33:D', 'DISPONIBLE', '999'), 'liberar: la copia dice que es de OTRO deal -> no se le quita');
+test_same('releer', l1072_decidir_etapa($u, 'DT1072_33:D', 'DISPONIBLE', '700'), 'liberar: es de este deal -> relee y suelta');
+test_same('releer', l1072_decidir_etapa(['id' => 10, 'parentId2' => null] + $u, 'DT1072_33:D', 'DISPONIBLE', '700'), 'liberar: no es de nadie -> relee y suelta');
+test_same('releer', l1072_decidir_etapa($u, 'DT1072_33:D', 'DISPONIBLE', ''), 'cobranzas (sin deal dueno) difiere -> relee');
+
+$porDeal = [700 => [10, 11]];
+test_same([10, 11, 12, 13, 14], l1072_unidades_del_deal(['ID' => '700', 'UF_X' => '12, 13;14', 'PARENT_ID_1072' => null], $porDeal, 'UF_X'),
+          'unidades del deal: atadas + campo Inventario');
+test_same([15, 16], l1072_unidades_del_deal(['ID' => '800', 'UF_X' => ['15', '16'], 'PARENT_ID_1072' => '16'], $porDeal, 'UF_X'),
+          'unidades del deal: campo como lista y PARENT_ID_1072 sin repetir');
+test_same([17], l1072_unidades_del_deal(['ID' => '802', 'UF_X' => '', 'PARENT_ID_1072' => '17'], $porDeal, 'UF_X'),
+          'unidades del deal: la que solo esta en PARENT_ID_1072 tambien cuenta');
+test_same([], l1072_unidades_del_deal(['ID' => '801', 'UF_X' => 'abc', 'PARENT_ID_1072' => '0'], $porDeal, 'UF_X'),
+          'unidades del deal: basura y 0 no son unidades');
+
+// deals por etapa: cuadre con el total y que la etapa sea la pedida
+$dl = function (array $cambio = []) {
+    return function (string $ruta) use ($cambio) {
+        $r = ['status' => 200, 'err' => '', 'h' => ['x-libreta-total' => '2'],
+              'json' => ['items' => [['dato' => ['ID' => '1', 'STAGE_ID' => 'C44:WON']], ['dato' => ['ID' => '2', 'STAGE_ID' => 'C44:WON']]], 'siguiente' => null]];
+        if (isset($cambio['total'])) $r['h']['x-libreta-total'] = (string)$cambio['total'];
+        if (isset($cambio['otra'])) $r['json']['items'][1]['dato']['STAGE_ID'] = 'C44:NEW';
+        if (isset($cambio['status'])) $r['status'] = $cambio['status'];
+        return $r;
+    };
+};
+$m = ''; test_same(2, count((array)l1072_deals(44, 'C44:WON', $m, $dl())), 'deals: trae los 2 de la etapa');
+$m = ''; test_same(null, l1072_deals(44, 'C44:WON', $m, $dl(['total' => 3])), 'deals: faltan -> null');
+$m = ''; test_same(null, l1072_deals(44, 'C44:WON', $m, $dl(['otra' => 1])), 'deals: vino otra etapa (filtro ignorado) -> null');
+$m = ''; test_same(null, l1072_deals(44, 'C44:WON', $m, $dl(['status' => 500])), 'deals: libreta caida -> null');
+
 echo "libreta1072: ok\n";

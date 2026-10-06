@@ -151,3 +151,71 @@ function l1072_decidir_clear(?int $fresco, string $dealCopia): string {
     if ($fresco === 0) return 'ya_suelta';
     return (string)$fresco === $dealCopia ? 'escribir' : 'cambio';
 }
+
+/**
+ * Los deals de UN embudo y UNA etapa desde la libreta (dato = crm.deal.get), o null con
+ * $motivo. La copia de deals no trae copia_completa_at, asi que la prueba de que esta
+ * entera es que las traidas cuadren con X-Libreta-Total.
+ */
+function l1072_deals(int $cat, string $stage, ?string &$motivo = null, ?callable $http = null): ?array {
+    $http = $http ?? 'l1072_http';
+    if (!l1072_on()) { $motivo = 'apagada (perilla)'; return null; }
+    $out = []; $total = null; $cursor = '';
+    for ($p = 0; $p < 50; $p++) {
+        $r = $http('/deals?category=' . $cat . '&stage=' . rawurlencode($stage) . '&limit=200'
+                   . ($cursor !== '' ? '&cursor=' . rawurlencode($cursor) : ''));
+        if ($r['status'] !== 200 || !is_array($r['json'])) {
+            $motivo = 'http ' . $r['status'] . ($r['err'] ? ' ' . $r['err'] : '') . " en pagina $p"; return null;
+        }
+        if ($total === null) $total = isset($r['h']['x-libreta-total']) ? (int)$r['h']['x-libreta-total'] : null;
+        foreach ((array)($r['json']['items'] ?? []) as $i) {
+            if (!empty($i['borrada_at']) || !is_array($i['dato'] ?? null)) continue;
+            if ((string)($i['dato']['STAGE_ID'] ?? '') !== $stage) { $motivo = 'la libreta devolvio otra etapa'; return null; }
+            $out[] = $i['dato'];
+        }
+        $cursor = (string)($r['json']['siguiente'] ?? '');
+        if ($cursor === '') break;
+    }
+    if ($cursor !== '')            { $motivo = 'el cursor no termino'; return null; }
+    if ($total === null)           { $motivo = 'sin cabecera X-Libreta-Total'; return null; }
+    if (count($out) !== $total)    { $motivo = 'traidos ' . count($out) . ' de ' . $total; return null; }
+    $motivo = '';
+    return $out;
+}
+
+/*
+ * ETAPAS EN RECONCILE DECIDIDAS CON LA COPIA (orquestador + Jesua, 6-oct-2026).
+ * Antes cada unidad de cada deal 44/48 en las etapas de cierre costaba un crm.item.get
+ * (dos si habia que liberarla), aunque no hubiera nada que cambiar: ~3.000 llamadas y
+ * ~20 min por corrida, con 0 cambios. Ahora la copia dice si hace falta mirar; solo
+ * entonces se relee en Bitrix y se escribe con ese dato fresco, como siempre.
+ *   $objetivoCopia: lo que stage_objetivo() devuelve sobre el item de la COPIA
+ *                   (null = ya esta, o esta protegida: BLOQUEADO / PERDIDO / VENDIDO).
+ *   $dealId: el deal que la suelta (solo cuenta para DISPONIBLE); '' si no aplica.
+ * Devuelve 'releer' (ir a Bitrix como antes) o 'saltar' (no hace falta nada).
+ */
+function l1072_decidir_etapa(?array $itemCopia, ?string $objetivoCopia, string $target, string $dealId): string {
+    if ($itemCopia === null) return 'releer';                  // la copia no la tiene: como antes
+    if ($objetivoCopia === null) return 'saltar';              // segun la copia ya esta bien
+    if ($target === 'DISPONIBLE' && $dealId !== '') {
+        $p = (int)($itemCopia['parentId2'] ?? 0);
+        if ($p !== 0 && $p !== (int)$dealId) return 'saltar';   // ya es de otro deal: no se le quita
+    }
+    return 'releer';
+}
+
+/** Los ids de unidad que nombra un deal 44: los atados por parentId2 (de la copia) + el
+ *  campo "Inventario" + PARENT_ID_1072. La misma regla que units_of_clientes_deal(),
+ *  sin sus dos llamadas. */
+function l1072_unidades_del_deal(array $deal, array $porDeal, string $campo): array {
+    $ids = [];
+    foreach ($porDeal[(int)($deal['ID'] ?? 0)] ?? [] as $u) $ids[(int)$u] = true;
+    $v = $deal[$campo] ?? '';
+    foreach (preg_split('/[,;\s]+/', is_array($v) ? implode(',', $v) : (string)$v) as $x) {
+        $x = trim($x);
+        if ($x !== '' && ctype_digit($x) && (int)$x > 0) $ids[(int)$x] = true;
+    }
+    $p = (int)($deal['PARENT_ID_1072'] ?? 0);
+    if ($p > 0) $ids[$p] = true;
+    return array_keys($ids);
+}

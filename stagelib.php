@@ -158,7 +158,9 @@ function apply_unit_stage(int $unitId, ?array $item, string $targetName, bool $w
     // lee para saber que este cambio de stage lo hizo el sistema y no una persona.
     // Sin ella habría que preguntar la etapa del deal dueño en CADA evento de
     // unidad, y el propio sistema mueve cientos: el portal ya va al tope de API.
-    @touch((getenv('DATA_DIR') ?: '/data') . '/self_u_' . $unitId);
+    // en seco (reconcile ?seco=1) no se escribe nada: tampoco la marca, que haria creer al
+    // guardian que el sistema movio una unidad que en realidad nadie toco
+    if (empty($GLOBALS['RECONCILE_SECO'])) @touch((getenv('DATA_DIR') ?: '/data') . '/self_u_' . $unitId);
 
     $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $unitId, 'fields' => ['stageId' => $target]]);
     if ($u['ok']) { logline("STAGE unit=$unitId $curName -> $targetName"); return true; }

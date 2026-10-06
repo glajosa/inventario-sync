@@ -42,9 +42,51 @@ if ($isHttp) {
 require_once __DIR__ . '/stagelib.php';   // stages (Clientes re-afirmar + Cobranzas read-only)
 require_once __DIR__ . '/libreta1072.php';
 
+/* EN SECO (RECONCILE_SECO=1 o ?seco=1): corre todo, LEE de verdad, y no escribe nada —
+   ni en Bitrix ni en disco. Cuenta cuantas escrituras HARIA. Sirve para saber cuantas
+   unidades corregiria la logica nueva antes de dejarla escribir. */
+$SECO = getenv('RECONCILE_SECO') === '1' || ($isHttp && ($_GET['seco'] ?? '') === '1');
+$GLOBALS['RECONCILE_SECO'] = $SECO;
+/* LOGICA NUEVA de etapas (decidir con la copia de la libreta y releer en Bitrix solo
+   donde la copia dice que algo difiere). Perilla "reconcile_copia" en config.json;
+   ?copia=1 / ?copia=0 la fuerza en una corrida a mano. Apagada por defecto hasta medir. */
+$cfgRec = json_decode((string)@file_get_contents($DATA_DIR . '/config.json'), true) ?: [];
+$COPIA = (int)($cfgRec['reconcile_copia'] ?? 0) === 1;
+if ($isHttp && isset($_GET['copia'])) $COPIA = $_GET['copia'] === '1';
+
+/* CANDADO: una sola corrida a la vez. Una corrida medida tardo 20 min y el cron es cada
+   15: sin esto se pisan. flock lo suelta el sistema si el proceso muere, asi que no
+   queda trabado; si la que corre lleva mas de 1 h se avisa en el log (no se mata). */
+$LOCK = @fopen($DATA_DIR . '/reconcile.lock', 'c+');
+if ($LOCK && !flock($LOCK, LOCK_EX | LOCK_NB)) {
+    $info = json_decode((string)stream_get_contents($LOCK), true) ?: [];
+    $edad = time() - (int)($info['desde'] ?? time());
+    logline('RECONCILE omitido: otra corrida en curso (pid ' . ($info['pid'] ?? '?') . ", {$edad}s)"
+        . ($edad > 3600 ? ' 🔴 lleva mas de 1 h' : ''));
+    if ($isHttp) echo "ocupado\n";
+    exit(0);
+}
+if ($LOCK) { ftruncate($LOCK, 0); fwrite($LOCK, json_encode(['pid' => getmypid(), 'desde' => time()])); fflush($LOCK); }
+
+/* CONTADOR de llamadas reales a Bitrix, por metodo (cada intento HTTP cuenta). Al
+   terminar queda en el log y en /data/reconcile_llamadas.json (ultimas 30 corridas). */
+$BX_N = []; $BX_W = []; $T0 = microtime(true);
+register_shutdown_function(function () use ($T0) {
+    global $BX_N, $BX_W, $SECO, $COPIA, $DATA_DIR;
+    $tot = array_sum($BX_N);
+    $fila = ['fin' => gmdate('c'), 'seg' => (int)round(microtime(true) - $T0), 'seco' => $SECO, 'copia' => $COPIA,
+             'llamadas' => $tot, 'por_metodo' => $BX_N, 'escribiria' => $BX_W];
+    logline('RECONCILE llamadas total=' . $tot . ' seg=' . $fila['seg'] . ' copia=' . ($COPIA ? 1 : 0)
+        . ' ' . json_encode($BX_N) . ($SECO ? ' escribiria=' . json_encode($BX_W) : ''));
+    $f = $DATA_DIR . '/reconcile_llamadas.json';
+    $h = json_decode((string)@file_get_contents($f), true) ?: [];
+    $h[] = $fila;
+    @file_put_contents($f, json_encode(array_slice($h, -30), JSON_PRETTY_PRINT), LOCK_EX);
+});
+
 function logline(string $msg): void {
     global $LOG_FILE, $DATA_DIR;
-    $line = gmdate('Y-m-d\TH:i:s\Z') . '  ' . $msg . "\n";
+    $line = gmdate('Y-m-d\TH:i:s\Z') . '  ' . (!empty($GLOBALS['RECONCILE_SECO']) ? '[SECO] ' : '') . $msg . "\n";
     // Por cron corre como root y escribe en sync.log; por HTTP corre como Apache,
     // que NO puede escribir ese archivo y perdía toda la traza en silencio.
     if (@file_put_contents($LOG_FILE, $line, FILE_APPEND | LOCK_EX) === false) {
@@ -53,10 +95,16 @@ function logline(string $msg): void {
 }
 
 function bx(string $method, array $params = []): array {
-    global $WEBHOOK_IN;
+    global $WEBHOOK_IN, $BX_N, $BX_W;
+    // en seco no se escribe: se cuenta y se contesta "ok" para que el flujo siga igual
+    if (!empty($GLOBALS['RECONCILE_SECO']) && preg_match('/\.(update|add|delete|set)$/', $method)) {
+        $BX_W[$method] = ($BX_W[$method] ?? 0) + 1;
+        return ['ok' => true, 'result' => true, 'next' => null];
+    }
     // throttle base: ~3-4 req/s para no vaciar el pool de Bitrix en los barridos
     usleep(250000);
     for ($try = 0; $try < 5; $try++) {
+        $BX_N[$method] = ($BX_N[$method] ?? 0) + 1;
         $ch = curl_init($WEBHOOK_IN . $method);
         curl_setopt_array($ch, [
             CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query($params),
@@ -238,7 +286,7 @@ if ($puestos && $vigentes !== null) {
             $quedan[$uid] = $dealDe;                 // no se pudo, se reintenta luego
         }
     }
-    if ($quedan !== $puestos) apartados_puestos_guardar($quedan);
+    if ($quedan !== $puestos && !$SECO) apartados_puestos_guardar($quedan);
 }
 
 // ==== HUÉRFANAS: ocupadas que NADIE reclama ===================================
@@ -302,8 +350,36 @@ foreach ([$TODAS] as $items) {   // las mismas de arriba: cero llamadas mas
 // Solo PROMESA FIRMADA y FIRMADOS-CAIDOS (pocos deals). RESERVA se OMITE: es no-op
 // casi siempre (migración ya puso RESERVADO, el hook lo mantiene) y barrer todos los
 // deals en RESERVA con un get por unidad es carísimo. El hook cubre RESERVA en vivo.
+/* Con la perilla reconcile_copia: los deals salen de la libreta y cada unidad se mira
+   primero en la copia ($TODAS). Solo se va a Bitrix (get fresco + escribir) donde la copia
+   dice que la etapa difiere. Si la libreta no da la lista de esa etapa, como antes. */
+$porId = []; $porDeal = []; $saltadas = 0; $releidas = 0;
+if ($COPIA) foreach ($TODAS as $it) {
+    $iid = (int)($it['id'] ?? 0); $porId[$iid] = $it;
+    $pp = (int)($it['parentId2'] ?? 0); if ($pp > 0) $porDeal[$pp][] = $iid;
+}
 foreach (CLIENTES_TRIGGERS as $stageId => $target) {
     if ($stageId === 'C44:NEW') continue;   // RESERVA: omitir en el barrido
+    $dealsCopia = null;
+    if ($COPIA) {
+        $mot = '';
+        $dealsCopia = l1072_deals(CLIENTES_CAT, $stageId, $mot);
+        l1072_contar('reconcile_deals', $dealsCopia !== null, $mot);
+        if ($dealsCopia === null) logline("RECONCILE clientes($stageId) libreta -> bitrix: $mot");
+    }
+    if ($dealsCopia !== null) {
+        foreach ($dealsCopia as $d) {
+            foreach (l1072_unidades_del_deal($d, $porDeal, CAMPO_NUEVO) as $uid) {
+                $ic  = $porId[$uid] ?? null;
+                $dec = l1072_decidir_etapa($ic, $ic ? stage_objetivo($uid, $ic, $target, false) : null, $target, (string)$d['ID']);
+                if ($dec === 'saltar') { $saltadas++; continue; }
+                $releidas++;
+                if ($target === 'DISPONIBLE' && !puede_liberar((int)$uid, (string)$d['ID'])) continue;
+                if (apply_unit_stage((int)$uid, null, $target, false)) $stageCambios++;
+            }
+        }
+        continue;
+    }
     $start = 0;
     do {
         $r = bx('crm.deal.list', [
@@ -335,6 +411,30 @@ foreach (CLIENTES_TRIGGERS as $stageId => $target) {
 //   3. la unidad se resuelve por "CODE|CONTACT". Si no matchea exacto -> NO se toca (seguro).
 foreach (COBRANZAS_TRIGGERS as $stageId => $target) {
     $writeOff = ($stageId === 'C48:LOSE');
+    $dealsCopia = null;
+    if ($COPIA) {
+        $mot = '';
+        $dealsCopia = l1072_deals(COBRANZAS_CAT, $stageId, $mot);
+        l1072_contar('reconcile_deals', $dealsCopia !== null, $mot);
+        if ($dealsCopia === null) logline("RECONCILE cobranzas($stageId) libreta -> bitrix: $mot");
+    }
+    if ($dealsCopia !== null) {
+        foreach ($dealsCopia as $d) {
+            $code = norm_code((string)($d[COBRANZAS_CODE_FIELD] ?? ''));
+            if ($code === '' || !isset($codeSet[$code])) continue;
+            $contact = (string)($d['CONTACT_ID'] ?? '');          // de la copia: sin crm.deal.get
+            if ($contact === '' || $contact === '0') continue;
+            $key = $code . '|' . $contact;
+            if (!isset($unitByKey[$key])) continue;                  // no matchea código+contacto -> NO tocar
+            $uid = (int)$unitByKey[$key]['id'];
+            $ic  = $porId[$uid] ?? null;
+            $dec = l1072_decidir_etapa($ic, $ic ? stage_objetivo($uid, $ic, $target, $writeOff) : null, $target, '');
+            if ($dec === 'saltar') { $saltadas++; continue; }
+            $releidas++;
+            if (apply_unit_stage($uid, null, $target, $writeOff)) $stageCambios++;
+        }
+        continue;
+    }
     $start = 0;
     do {
         $r = bx('crm.deal.list', [
@@ -359,7 +459,8 @@ foreach (COBRANZAS_TRIGGERS as $stageId => $target) {
 }
 
 $msg = 'RECONCILE ok huerfanas=' . $huerfanas . ' desired=' . count($desired) . ' actual=' . count($actual)
-     . " link_cambios=$cambios stage_cambios=$stageCambios";
+     . " link_cambios=$cambios stage_cambios=$stageCambios"
+     . ($COPIA ? " copia: saltadas=$saltadas releidas=$releidas" : '');
 logline($msg);
 if ($isHttp) echo $msg;
 
@@ -367,7 +468,7 @@ if ($isHttp) echo $msg;
 // se devuelve el campo (o se aplica si ya entró). Vive en hook48.php porque este archivo tiene sus propios
 // bx()/logline() y no puede cargar reubicalib. Fail-open: si falla, el próximo reconcile lo reintenta.
 $tokB = (string)getenv('OUTBOUND_TOKEN');
-if ($tokB !== '') {
+if ($tokB !== '' && !$SECO) {   // en seco no se dispara: hook48 escribe
     $chB = curl_init('http://127.0.0.1/hook48.php?barrer=1');   // la llave va en el CUERPO, no en la URL (no queda en el access log)
     curl_setopt_array($chB, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query(['auth' => ['application_token' => $tokB]]),
                              CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 60, CURLOPT_CONNECTTIMEOUT => 3]);
