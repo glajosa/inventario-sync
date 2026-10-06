@@ -267,6 +267,18 @@ function reub_etapa_44(): ?string {
     return $v !== '' ? $v : 'C44:UC_Z3GY5H';   // ELABORACION PROMESA DE COMPRAVENTA
 }
 
+/**
+ * Etapa a la que pasa el deal de COBRANZAS(48) al reubicarse. Jesua 6-oct-2026: "se pondrá automáticamente en la
+ * etapa reubicación, a su vez también se vaciarán varios campos y se eliminarán las dependencias". El vaciado y el
+ * borrado los hace cobranza2 al recibir el aviso (lib_reubica_fusion.php, perilla reubica_vaciar_on); aquí solo la etapa,
+ * en el MISMO update del 48. Env REUBICA_ETAPA_48: vacío o '0' = no se mueve (por defecto), '1' = REUBICACIÓN, o un stageId.
+ */
+function reub_etapa_48(): ?string {
+    $v = trim((string)getenv('REUBICA_ETAPA_48'));
+    if ($v === '' || $v === '0') return null;
+    return $v === '1' ? 'C48:UC_1WR2BM' : $v;   // REUBICACION
+}
+
 /** Campo de texto que la ficha de CLIENTES muestra como "PRECIO ACTIVO NO. 1 (1ra Compra)". */
 const REUB_PRECIO_TEXTO_44 = 'UF_CRM_1783975599567';
 
@@ -650,6 +662,8 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
     if ($proyId > 0) $c48[D_PROYECTO] = $proyId;
     $t48 = titulo_reubicado((string)($deal['TITLE'] ?? ''), $proyTxt, $codNuevo);
     if ($t48 !== null) $c48['TITLE'] = $t48;
+    $etapa48 = reub_etapa_48();
+    if ($etapa48 !== null) $c48['STAGE_ID'] = $etapa48;
 
     $u = bx('crm.deal.update', ['id' => $dealId, 'fields' => $c48]);
     $hecho['cobranzas'] = $u['ok'] ? 'ok' : $u['error'];

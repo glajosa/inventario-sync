@@ -93,6 +93,13 @@ test_same(true, $h['caido'], 'el 5792 está caído y se marca');
 test_same('C44:UC_Z3GY5H', reub_etapa_44(), 'toda reubicación deja el 44 en ELABORACIÓN PROMESA DE COMPRAVENTA');
 putenv('REUBICA_ETAPA_44=0');
 test_same(null, reub_etapa_44(), 'perilla REUBICA_ETAPA_44=0 la apaga');
+// v-reubica-48 (6-oct): el 48 pasa SOLO a REUBICACION al cambiar la unidad, con perilla (apagada por defecto)
+putenv('REUBICA_ETAPA_48');   test_same(null, reub_etapa_48(), 'sin perilla el 48 NO cambia de etapa');
+putenv('REUBICA_ETAPA_48=0'); test_same(null, reub_etapa_48(), 'REUBICA_ETAPA_48=0 lo apaga');
+putenv('REUBICA_ETAPA_48=1'); test_same('C48:UC_1WR2BM', reub_etapa_48(), '🔴 REUBICA_ETAPA_48=1 -> REUBICACION');
+putenv('REUBICA_ETAPA_48');
+$srcR = (string)file_get_contents(__DIR__ . '/../reubicalib.php');
+test_same(1, preg_match("/\\\$etapa48 = reub_etapa_48\(\);\s*if \(\\\$etapa48 !== null\) \\\$c48\['STAGE_ID'\] = \\\$etapa48;\s*\\\$u = bx\('crm.deal.update', \['id' => \\\$dealId, 'fields' => \\\$c48\]\);/", $srcR), '🔴 la etapa va en el MISMO update del 48 (no en otra llamada)');
 putenv('REUBICA_ETAPA_44');
 
 // la perilla del modo estricto
