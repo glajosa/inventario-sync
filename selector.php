@@ -40,6 +40,7 @@ const U_PIS = 'ufCrm25_1784313244';
 // 15 min: recorrer el catálogo son ~30 páginas de API; con el refresco en segundo
 // plano el vendedor nunca espera, y el estado real lo garantiza hook.php en vivo.
 const CACHE_TTL = 900;
+const SELECTOR_META_TTL = 21600;   // 6 h: proyectos, etapas y opciones de torre/piso
 
 /**
  * Respaldo de las etiquetas de torre y piso.
@@ -231,47 +232,65 @@ function catalogo(bool $force = false): array {
         return ['units' => [], 'proyectos' => [], 'built' => time(), 'building' => true];
     }
 
-    // proyectos
-    $proyectos = [];
-    $c = bx('crm.category.list', ['entityTypeId' => SPA_ENTITY]);
-    foreach (($c['result']['categories'] ?? []) as $cat) $proyectos[(string)$cat['id']] = (string)$cat['name'];
+    /* METADATA (proyectos, etapas, opciones de torre/piso) en cache de 6 h. Casi nunca
+       cambia y costaba ~12 llamadas en CADA rebuild del catalogo (cada 30 min con el
+       cron = ~600 al dia). Las unidades no estan aqui: esas salen de la libreta. Si la
+       cache esta vieja o incompleta, se pide a Bitrix como siempre y se guarda. */
+    $metaPath = $DATA_DIR . '/selector_meta.json';
+    $meta = json_decode((string)@file_get_contents($metaPath), true) ?: [];
+    $metaFresca = !empty($meta['proyectos']) && !empty($meta['stages']) && !empty($meta['enum'])
+               && (time() - (int)($meta['ts'] ?? 0)) < SELECTOR_META_TTL;
+    if ($metaFresca) {
+        $proyectos = (array)$meta['proyectos'];
+        $stageName = (array)$meta['stages'];
+        $enum      = (array)$meta['enum'];
+    } else {
+        // proyectos
+        $proyectos = [];
+        $c = bx('crm.category.list', ['entityTypeId' => SPA_ENTITY]);
+        foreach (($c['result']['categories'] ?? []) as $cat) $proyectos[(string)$cat['id']] = (string)$cat['name'];
 
-    // stages por categoría (los STATUS_ID difieren por pipeline -> resolver por nombre)
-    // Mismo cuidado que con los enum de aquí abajo: si esta llamada falla, TODAS las
-    // unidades de ese pipeline quedaban con la etapa en blanco y el caché guardaba
-    // esa nada como si fuera un dato. Se reutiliza el mapa bueno del caché anterior
-    // antes que escribir vacío.
-    $stageName = [];
-    foreach (array_keys($proyectos) as $cid) {
-        $st = bx('crm.status.list', ['filter' => ['ENTITY_ID' => 'DYNAMIC_' . SPA_ENTITY . '_STAGE_' . $cid]]);
-        if (!$st['ok'] || !($st['result'] ?? [])) {
-            sellog("status.list fallo cat=$cid -> se conservan los nombres del cache anterior");
-            continue;
+        // stages por categoría (los STATUS_ID difieren por pipeline -> resolver por nombre)
+        // Mismo cuidado que con los enum de aquí abajo: si esta llamada falla, TODAS las
+        // unidades de ese pipeline quedaban con la etapa en blanco y el caché guardaba
+        // esa nada como si fuera un dato. Se reutiliza el mapa bueno del caché anterior
+        // antes que escribir vacío.
+        $stageName = [];
+        foreach (array_keys($proyectos) as $cid) {
+            $st = bx('crm.status.list', ['filter' => ['ENTITY_ID' => 'DYNAMIC_' . SPA_ENTITY . '_STAGE_' . $cid]]);
+            if (!$st['ok'] || !($st['result'] ?? [])) {
+                sellog("status.list fallo cat=$cid -> se conservan los nombres del cache anterior");
+                continue;
+            }
+            foreach ($st['result'] as $s) $stageName[(string)$s['STATUS_ID']] = strtoupper((string)$s['NAME']);
         }
-        foreach ($st['result'] as $s) $stageName[(string)$s['STATUS_ID']] = strtoupper((string)$s['NAME']);
-    }
-    $viejoSt = cache_leer()['stages'] ?? [];
-    if ($viejoSt) $stageName += $viejoSt;      // lo nuevo manda, lo viejo rellena
+        $viejoSt = cache_leer()['stages'] ?? [];
+        if ($viejoSt) $stageName += $viejoSt;      // lo nuevo manda, lo viejo rellena
 
-    // Etiquetas de los enum (torre/piso): la unidad guarda el ID interno (1881),
-    // no el texto ("A"). OJO: crm.item.fields devuelve las opciones de forma
-    // INTERMITENTE — a veces trae 20, a veces 0 (verificado). Si viniera vacío se
-    // perdían las etiquetas y quedaba cacheado 15 min, así que se reintenta y, si
-    // aun así falla, se reutiliza el mapeo bueno del caché anterior.
-    $enum = [];
-    for ($intento = 0; $intento < 3 && !$enum; $intento++) {
-        if ($intento) sleep(1);
-        $f = bx('crm.item.fields', ['entityTypeId' => SPA_ENTITY]);
-        foreach ([U_TOR, U_PIS] as $campo) {
-            foreach ((($f['result']['fields'][$campo]['items']) ?? []) as $op) {
-                $enum[$campo][(string)$op['ID']] = (string)$op['VALUE'];
+        // Etiquetas de los enum (torre/piso): la unidad guarda el ID interno (1881),
+        // no el texto ("A"). OJO: crm.item.fields devuelve las opciones de forma
+        // INTERMITENTE — a veces trae 20, a veces 0 (verificado). Si viniera vacío se
+        // perdían las etiquetas y quedaba cacheado 15 min, así que se reintenta y, si
+        // aun así falla, se reutiliza el mapeo bueno del caché anterior.
+        $enum = [];
+        for ($intento = 0; $intento < 3 && !$enum; $intento++) {
+            if ($intento) sleep(1);
+            $f = bx('crm.item.fields', ['entityTypeId' => SPA_ENTITY]);
+            foreach ([U_TOR, U_PIS] as $campo) {
+                foreach ((($f['result']['fields'][$campo]['items']) ?? []) as $op) {
+                    $enum[$campo][(string)$op['ID']] = (string)$op['VALUE'];
+                }
             }
         }
-    }
-    if (!$enum) {
-        $viejo = cache_leer();
-        if (!empty($viejo['enum'])) { $enum = $viejo['enum']; sellog('enum vacio -> reusando el del cache'); }
-        else sellog('enum vacio y sin cache previo: torre/piso saldran en blanco');
+        if (!$enum) {
+            $viejo = cache_leer();
+            if (!empty($viejo['enum'])) { $enum = $viejo['enum']; sellog('enum vacio -> reusando el del cache'); }
+            else sellog('enum vacio y sin cache previo: torre/piso saldran en blanco');
+        }
+
+        if ($proyectos && $stageName && $enum)
+            @file_put_contents($metaPath, json_encode(['ts' => time(), 'proyectos' => $proyectos,
+                'stages' => $stageName, 'enum' => $enum], JSON_UNESCAPED_UNICODE), LOCK_EX);
     }
 
     /* unidades: de la LIBRETA (0 llamadas a Bitrix; ver libreta1072.php). Si la copia

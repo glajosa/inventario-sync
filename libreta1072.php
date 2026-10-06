@@ -24,6 +24,10 @@ declare(strict_types=1);
 
 const L1072_PAGINA   = 500;
 const L1072_MAX_PAGS = 20;     // 10.000 unidades: mas que eso es un cursor que no termina
+/* /deals en paginas de 100 (orquestador, 6-oct): la libreta tardaba 1,7 s, 20 s o 33 s
+   la MISMA consulta segun el momento; un pedido corto tiene menos chance de cortarse. */
+const L1072_PAGINA_DEALS = 100;
+const L1072_MAX_PAGS_DEALS = 60;
 
 /** ¿Leer de la libreta? env LIBRETA_ON=0 o config "libreta_1072": 0 la apagan. */
 function l1072_on(): bool {
@@ -51,7 +55,7 @@ function l1072_http_una(string $ruta): array {
     $h = [];
     $ch = curl_init($base . $ruta);
     curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_CONNECTTIMEOUT => 4,
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_CONNECTTIMEOUT => 4,
         CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $tok, 'X-Libreta-Cliente: inventario'],
         CURLOPT_HEADERFUNCTION => function ($c, $linea) use (&$h) {
             $p = explode(':', $linea, 2);
@@ -170,8 +174,8 @@ function l1072_deals(int $cat, string $stage, ?string &$motivo = null, ?callable
     $http = $http ?? 'l1072_http';
     if (!l1072_on()) { $motivo = 'apagada (perilla)'; return null; }
     $out = []; $total = null; $cursor = '';
-    for ($p = 0; $p < 50; $p++) {
-        $r = $http('/deals?category=' . $cat . ($stage !== '' ? '&stage=' . rawurlencode($stage) : '') . '&limit=200'
+    for ($p = 0; $p < L1072_MAX_PAGS_DEALS; $p++) {
+        $r = $http('/deals?category=' . $cat . ($stage !== '' ? '&stage=' . rawurlencode($stage) : '') . '&limit=' . L1072_PAGINA_DEALS
                    . ($cursor !== '' ? '&cursor=' . rawurlencode($cursor) : ''));
         if ($r['status'] !== 200 || !is_array($r['json'])) {
             $motivo = 'http ' . $r['status'] . ($r['err'] ? ' ' . $r['err'] : '') . " en pagina $p"; return null;
