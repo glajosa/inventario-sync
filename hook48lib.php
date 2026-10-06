@@ -65,6 +65,97 @@ function h48_dueno_es_hermano(int $p, int $contacto): bool {
     return is_array($x) && (int)($x['CATEGORY_ID'] ?? -1) === CLIENTES_CAT && (int)($x['CONTACT_ID'] ?? 0) === $contacto;
 }
 
+// ── ESCALERA de DADO DE BAJA (Jesua 6-oct): 44 -> FIRMADOS-CAÍDOS, ficha de FAMILIA -> CLIENTE CAÍDO, al instante ──
+const H48_44_CAIDO = 'C44:APOLOGY';      // FIRMADOS - CAIDOS
+const H48_58_CAIDO = 'C58:UC_DIEZL7';    // CLIENTE CAIDO
+/** PURA. ¿Etapa de pérdida? (no se mueve lo que ya cayó) */
+function h48_es_caida(string $stage): bool {
+    return (bool)preg_match('/:(LOSE|APOLOGY)$/', $stage) || in_array($stage, ['C58:UC_DIEZL7', 'C58:UC_2FYWWL', 'C58:UC_RQT228'], true);
+}
+/** Etapas del 44 desde las que una baja lo lleva a FIRMADOS-CAÍDOS: una venta VIVA. Incluye CIERRE DE PROMESA (WON):
+ *  Jesua 6-oct, "si ya están en promesa firmada por cliente... y en cierre de promesa... se mueven a firmados caídos"
+ *  (el orquestador lo había excluido; decide Jesua). CESIONES, CANJE u otra etapa rara NO se mueve: lo mira una persona. */
+const H48_44_DESDE = ['C44:NEW', 'C44:UC_Z3GY5H', 'C44:UC_4R587H', 'C44:UC_2CE2UE', 'C44:UC_N637MD', 'C44:WON'];
+/** PURA. El 44 se mueve solo si nombra ESA unidad y está en una etapa de venta viva. */
+function h48_44_mover(array $d44, string $cod): bool {
+    return h48_cod((string)($d44[D_ACTIVO] ?? '')) === h48_cod($cod) && h48_cod($cod) !== ''
+        && in_array((string)($d44['STAGE_ID'] ?? ''), H48_44_DESDE, true);
+}
+/** PURA. Las fichas de FAMILIA de ESA compra: mismo código Y proyecto (ficha sin proyecto: alcanza el código).
+ *  Una ficha compartida (ACTIVO vacío) o de otra compra NO se toca: el cliente puede tener otra compra viva. */
+function h48_familia(array $deals, string $cod, int $proy): array {
+    $k = h48_cod($cod); if ($k === '') return [];
+    $out = [];
+    foreach ($deals as $f) {
+        if ((int)($f['CATEGORY_ID'] ?? -1) !== 58) continue;
+        if (h48_cod((string)($f[D_ACTIVO] ?? '')) !== $k) continue;
+        $pf = (int)($f[D_PROYECTO] ?? 0);
+        if ($pf > 0 && $proy > 0 && $pf !== $proy) continue;
+        if (h48_es_caida((string)($f['STAGE_ID'] ?? ''))) continue;
+        $out[] = (int)$f['ID'];
+    }
+    return $out;
+}
+
+/** Escritura de la escalera. En SECO (?seco) no escribe: anota en $GLOBALS['H48_PLAN'] lo que haría. */
+function h48_w(string $metodo, array $params, string $desc): array {
+    if (!empty($GLOBALS['H48_SECO'])) { $GLOBALS['H48_PLAN'][] = $desc; return ['ok' => true, 'seco' => true]; }
+    return bx($metodo, $params);
+}
+/** 1) (orquestador) quién lo movió queda en la ficha: un comentario en la línea de tiempo. */
+function h48_comentar(int $id, string $txt, string $desc): void {
+    h48_w('crm.timeline.comment.add', ['fields' => ['ENTITY_ID' => $id, 'ENTITY_TYPE' => 'deal', 'COMMENT' => $txt]], $desc);
+}
+
+/** La escalera de una baja. Devuelve lo que movió (para la vuelta). 0-3 crm.deal.update, nunca en el 48. */
+function h48_escalera(int $d, array $deal, int $d44, string $cod): array {
+    if (getenv('HOOK48_ESCALERA_ON') !== '1') return [];
+    $c = (int)($deal['CONTACT_ID'] ?? 0); $proy = (int)($deal[D_PROYECTO] ?? 0);
+    $r = reub_libreta('/deals?contact=' . $c);
+    if ($r['status'] !== 200 || !is_array($r['json'])) { h48_frenar($d, 'escalera: no pude leer los deals del contacto ' . $c . ' (libreta http ' . $r['status'] . ')'); return []; }
+    $deals = array_map(fn($it) => (array)($it['dato'] ?? $it), (array)($r['json']['items'] ?? []));
+    $mov = [];
+    // 44: el del par / hermano; si no hay, el ÚNICO 44 del contacto que nombra la unidad
+    if ($d44 <= 0) {
+        $c44 = array_values(array_filter($deals, fn($x) => (int)($x['CATEGORY_ID'] ?? -1) === 44 && h48_44_mover($x, $cod)));
+        if (count($c44) === 1) $d44 = (int)$c44[0]['ID'];
+        elseif (count($c44) > 1) h48_frenar($d, 'escalera: varios 44 nombran ' . $cod . ' -> no muevo clientes');
+    }
+    if ($d44 > 0) {
+        $x = null; foreach ($deals as $y) if ((int)($y['ID'] ?? 0) === $d44) $x = $y;
+        if ($x && !h48_44_mover($x, $cod) && !h48_es_caida((string)($x['STAGE_ID'] ?? ''))) {
+            h48_frenar($d, "escalera: el 44 $d44 está en " . (string)($x['STAGE_ID'] ?? '?') . ' (no es una venta viva o no nombra ' . $cod . ') -> no lo muevo, que lo mire una persona');
+        }
+        if ($x && h48_44_mover($x, $cod)) {
+            $u = h48_w('crm.deal.update', ['id' => $d44, 'fields' => ['STAGE_ID' => H48_44_CAIDO]], "44 $d44: " . (string)$x['STAGE_ID'] . ' -> ' . H48_44_CAIDO . ' (FIRMADOS-CAIDOS)');
+            if ($u['ok']) { $mov['44'] = ['id' => $d44, 'antes' => (string)$x['STAGE_ID']];
+                h48_comentar($d44, "Movido a FIRMADOS-CAÍDOS por la baja del deal de cobranzas $d (sistema).", "comentario en 44 $d44"); }
+            logline("HOOK48 deal=$d escalera: clientes $d44 " . (string)$x['STAGE_ID'] . ' -> FIRMADOS-CAIDOS ' . ($u['ok'] ? 'ok' : 'ERR ' . $u['error']));
+        }
+    }
+    foreach (h48_familia($deals, $cod, $proy) as $fid) {
+        $x = null; foreach ($deals as $y) if ((int)($y['ID'] ?? 0) === $fid) $x = $y;
+        $u = h48_w('crm.deal.update', ['id' => $fid, 'fields' => ['STAGE_ID' => H48_58_CAIDO]], "58 $fid: " . (string)($x['STAGE_ID'] ?? '?') . ' -> ' . H48_58_CAIDO . ' (CLIENTE CAIDO)');
+        if ($u['ok']) { $mov['58'][] = ['id' => $fid, 'antes' => (string)($x['STAGE_ID'] ?? '')];
+            h48_comentar($fid, "Movido a CLIENTE CAÍDO por la baja del deal de cobranzas $d (sistema).", "comentario en 58 $fid"); }
+        logline("HOOK48 deal=$d escalera: familia $fid " . (string)($x['STAGE_ID'] ?? '?') . ' -> CLIENTE CAIDO ' . ($u['ok'] ? 'ok' : 'ERR ' . $u['error']));
+    }
+    return $mov;
+}
+
+/** La vuelta de la escalera: cada deal vuelve a su etapa SOLO si sigue en la que lo dejamos (no se pisa a una persona). */
+function h48_escalera_vuelta(int $d, array $mov): void {
+    $pares = [];
+    if (!empty($mov['44'])) $pares[] = [$mov['44'], H48_44_CAIDO];
+    foreach ((array)($mov['58'] ?? []) as $f) $pares[] = [$f, H48_58_CAIDO];
+    foreach ($pares as [$m, $puesta]) {
+        $g = bx('crm.deal.get', ['id' => (int)$m['id']]);
+        if (!$g['ok'] || (string)($g['result']['STAGE_ID'] ?? '') !== $puesta) { logline("HOOK48 deal=$d vuelta escalera: {$m['id']} ya no está en $puesta -> no lo toco"); continue; }
+        $u = bx('crm.deal.update', ['id' => (int)$m['id'], 'fields' => ['STAGE_ID' => (string)$m['antes']]]);
+        logline("HOOK48 deal=$d vuelta escalera: {$m['id']} -> {$m['antes']} " . ($u['ok'] ? 'ok' : 'ERR ' . $u['error']));
+    }
+}
+
 function h48_estado_file(int $d): string { return (getenv('DATA_DIR') ?: '/data') . '/hook48/' . $d . '.json'; }
 function h48_estado(int $d): ?array { $f = h48_estado_file($d); $j = is_file($f) ? json_decode((string)@file_get_contents($f), true) : null; return is_array($j) ? $j : null; }
 function h48_estado_guardar(int $d, ?array $e): void {
@@ -154,6 +245,7 @@ function h48_procesar(int $d): array {
             return h48_frenar($d, "vuelta: la unidad $uid ya no está como la dejó la baja (" . unit_stage_name($it) . ", dueño " . (int)($it['parentId2'] ?? 0) . ') -> no la toco');
         }
         $ok = apply_unit_stage($uid, $it, $antes, false);
+        if (!empty($estado['escalera'])) h48_escalera_vuelta($d, (array)$estado['escalera']);
         h48_estado_guardar($d, null);
         logline("HOOK48 deal=$d VUELTA de DADO DE BAJA a $stage: unidad $uid -> $antes " . ($ok ? 'ok' : '(sin cambio)'));
         return ['ok' => true, 'vuelta' => $uid, 'a' => $antes];
@@ -177,8 +269,11 @@ function h48_procesar(int $d): array {
         else return h48_frenar($d, "la unidad $uid está atada a OTRO deal (" . (int)$it['parentId2'] . ') -> no la toco');
     }
     $antes = (string)unit_stage_name($it);
-    $ok = apply_unit_stage($uid, $it, $target, $stage === 'C48:LOSE');
-    if ($ok && $stage === 'C48:LOSE') h48_estado_guardar($d, ['por' => 'C48:LOSE', 'unidad' => $uid, 'antes' => $antes, 'd44' => $d44, 'ts' => gmdate('c')]);
+    if (!empty($GLOBALS['H48_SECO'])) { $GLOBALS['H48_PLAN'][] = "unidad $uid: $antes -> $target" . ($antes === $target ? ' (ya estaba)' : ''); $ok = false; }
+    else $ok = apply_unit_stage($uid, $it, $target, $stage === 'C48:LOSE');
+    $mov = $stage === 'C48:LOSE' ? h48_escalera($d, $deal, $d44, (string)($deal[D_ACTIVO] ?? '')) : [];
+    if (empty($GLOBALS['H48_SECO']) && $stage === 'C48:LOSE' && ($ok || $mov))
+        h48_estado_guardar($d, ['por' => 'C48:LOSE', 'unidad' => $uid, 'antes' => $ok ? $antes : 'DISPONIBLE', 'd44' => $d44, 'escalera' => $mov, 'ts' => gmdate('c')]);
     logline("HOOK48 deal=$d $stage -> unidad $uid ($antes -> $target) por " . $cand['por'] . ($ok ? '' : ' (ya estaba)'));
     return ['ok' => true, 'unidad' => $uid, 'antes' => $antes, 'a' => $target, 'por' => $cand['por'], 'cambio' => $ok];
 }

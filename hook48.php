@@ -17,6 +17,15 @@ $EXPECT = (string)getenv('OUTBOUND_TOKEN');
 $token  = $_REQUEST['auth']['application_token'] ?? $_REQUEST['application_token'] ?? '';
 if ($EXPECT === '' || !hash_equals($EXPECT, (string)$token)) { http_response_code(403); logline('HOOK48 403 token invalido'); echo 'forbidden'; exit; }
 
+// SECO (orquestador, cond. 4): ?seco=<deal48> lista lo que haría la escalera SIN escribir nada.
+if (isset($_GET['seco'])) {
+    $GLOBALS['H48_SECO'] = true; $GLOBALS['H48_PLAN'] = [];
+    putenv('HOOK48_ESCALERA_ON=1');   // solo en este pedido, para ver el plan aunque la perilla esté apagada
+    $r = h48_procesar((int)$_GET['seco']);
+    header('Content-Type: application/json');
+    echo json_encode(['resultado' => $r, 'escribiria' => $GLOBALS['H48_PLAN']], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT); exit;
+}
+
 // Reloj propio de la red de pendientes (orquestador 6-oct): reconcile.php llama ?barrer=1 cada 15 min, asi la
 // red no depende de que entre un aviso del 48 (con el destino en 'filtrar' puede no entrar ninguno por horas).
 if (isset($_GET['barrer'])) {
