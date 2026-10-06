@@ -605,7 +605,7 @@
     "1793": {
       "forma": "precio",
       "titulo": "NORAL APARTMENTS",
-      "subtitulo": "40% de Entrada a 44 Meses",
+      "subtitulo": "40% de Entrada a {meses} Meses",
       "grupos": [
         "A",
         "BCDE",
@@ -632,7 +632,7 @@
         "contra_pct": 60,
         "fecha_entrega": "2030-04",
         "vigencia_horas": 48,
-        "_nota": "Del archivo del director. Plazo derivado de fecha_entrega (2030-04): hoy 44 meses y 4 extraordinarias."
+        "_nota": "Del archivo del director. Plazo derivado de fecha_entrega (2030-04); el subtitulo usa {meses} y baja solo (44 en ago-2026, 42 en oct-2026). Antes estaba escrito fijo en 44 y no bajaba."
       },
       "_nota_edificios": "Nueve tablas, una por edificio A..I, como la lista de la direccion. J queda fuera: se ve en la matriz pero no se escribe ni se ofrece.",
       "badge_uno": "ÚLTIMA UNIDAD",
