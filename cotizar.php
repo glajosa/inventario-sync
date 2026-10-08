@@ -835,6 +835,18 @@ $hoy  = new DateTimeImmutable('now');
         color:var(--gris);line-height:1.5}
   @media (max-width:960px){ .pich-cuerpo{grid-template-columns:minmax(0,1fr)} .pich-dona-col{max-width:320px;margin:0 auto} }
   .pie{font-size:11.5px;color:var(--gris);margin-top:16px;line-height:1.5}
+  /* FIRMAS (Jesua, 8-oct-2026): la cotizacion pasa a ser la tabla de pagos OFICIAL que
+     se imprime y firman el cliente y el asesor. Cliente a la izquierda, asesor a la derecha.
+     🔴 Aca NO va ningun numero ni fecha ni la palabra TOTAL: cobranza2.php lee este mismo
+     PDF al importar la tabla (parse_tabla) y arma las cuotas con lo que tenga cifras. */
+  .firmas{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:48px;
+          margin-top:56px;break-inside:avoid;page-break-inside:avoid}
+  .firma{padding-top:64px}
+  .firma .raya{border-top:1px solid var(--tinta);padding-top:6px;text-align:center;
+          font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--tinta)}
+  .firma .dato{display:flex;gap:6px;align-items:flex-end;margin-top:14px;font-size:12px;color:var(--gris)}
+  .firma .dato span{flex:1;border-bottom:1px solid var(--border-2);height:16px}
+  @media (max-width:560px){ .firmas{grid-template-columns:minmax(0,1fr);gap:8px} }
   /* Margen de hoja en CERO para que el navegador NO dibuje su encabezado ni su pie.
      Ese pie es el que estampaba la URL completa del cotizador —con el token de firma
      dentro— en un documento que se le manda al cliente. El margen visual se devuelve
@@ -1696,6 +1708,18 @@ $hoy  = new DateTimeImmutable('now');
     Cotización generada el <?= $hoy->format('d/m/Y') ?>. Precios sujetos a cambio sin previo aviso;
     la unidad se confirma únicamente con la reserva.
   </p>
+
+  <div class="firmas">
+    <div class="firma">
+      <div class="raya">Cliente</div>
+      <div class="dato">Nombre:<span></span></div>
+      <div class="dato">C.I.:<span></span></div>
+    </div>
+    <div class="firma">
+      <div class="raya">Asesor comercial</div>
+      <div class="dato">Nombre:<span></span></div>
+    </div>
+  </div>
 
 </div></div>
 
