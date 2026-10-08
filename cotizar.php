@@ -836,7 +836,7 @@ $hoy  = new DateTimeImmutable('now');
   @media (max-width:960px){ .pich-cuerpo{grid-template-columns:minmax(0,1fr)} .pich-dona-col{max-width:320px;margin:0 auto} }
   .pie{font-size:11.5px;color:var(--gris);margin-top:16px;line-height:1.5}
   /* FIRMAS (Jesua, 8-oct-2026): la cotizacion pasa a ser la tabla de pagos OFICIAL que
-     se imprime y firman el cliente y el asesor. Cliente a la izquierda, asesor a la derecha.
+     se imprime y firman el cliente y el asesor. Cliente a la izquierda, asesor a la derecha; los dos con nombre y C.I.
      🔴 Aca NO va ningun numero ni fecha ni la palabra TOTAL: cobranza2.php lee este mismo
      PDF al importar la tabla (parse_tabla) y arma las cuotas con lo que tenga cifras. */
   .firmas{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:48px;
@@ -1718,6 +1718,7 @@ $hoy  = new DateTimeImmutable('now');
     <div class="firma">
       <div class="raya">Asesor comercial</div>
       <div class="dato">Nombre:<span></span></div>
+      <div class="dato">C.I.:<span></span></div>
     </div>
   </div>
 
