@@ -342,10 +342,61 @@ function vend_alternativas(array $units, string $codigo, int $cat, int $limite =
         if ($p <= 0) continue;
         $c[] = ['codigo' => (string)$u['codigo'], 'm2' => (string)($u['m2'] ?? ''), 'precio' => $p,
                 'diferencia' => abs($p - $ref)];
+        $c[count($c) - 1] += array_intersect_key((array)vend_ficha([$u], (string)$u['codigo'], $cat),
+                                                 ['tipo' => 1, 'edificio' => 1, 'piso' => 1]);
     }
     usort($c, fn($a, $b) => [$a['diferencia'], $a['codigo']] <=> [$b['diferencia'], $b['codigo']]);
-    return array_map(fn($x) => ['codigo' => $x['codigo'], 'm2' => $x['m2'], 'precio' => $x['precio']],
+    return array_map(fn($x) => ['codigo' => $x['codigo'], 'm2' => $x['m2'], 'precio' => $x['precio'],
+                                'tipo' => $x['tipo'] ?? '', 'edificio' => $x['edificio'] ?? '', 'piso' => $x['piso'] ?? ''],
                      array_slice($c, 0, $limite));
+}
+
+/* ── Ficha de una unidad para el texto del mensaje (pedido del conector, 9-oct-2026) ── */
+
+/** Tipo de bien en SINGULAR, para escribir "el departamento D-2-12". Mismos ids que
+ *  LST_TIPOS de listalib.php. 1793 se dice "departamento" en TODOS los proyectos: es la
+ *  pestana que el cliente ve en la pagina de disponibilidad, aunque la lista de precios
+ *  de Plaza los llame monoambientes. */
+const VEND_TIPO_SINGULAR = [
+    1791 => 'local', 1951 => 'oficina', 1793 => 'departamento', 1797 => 'suite', 1799 => 'casa',
+    1795 => 'solar', 1943 => 'terreno', 1947 => 'casa modelo', 1801 => 'parqueo',
+];
+
+/** Proyectos que tienen pagina publica de disponibilidad, y su direccion. */
+const VEND_DISPONIBILIDAD = [33 => 'plaza', 39 => 'apartments'];
+const VEND_DISPONIBILIDAD_URL = 'https://galjosa.com/disponibilidad/';
+
+function vend_tipo_nombre(int $tipo): string {
+    return VEND_TIPO_SINGULAR[$tipo] ?? '';
+}
+
+/**
+ * Lo que el mensaje necesita decir de una unidad: tipo, edificio, piso, m2. PURA, sobre el
+ * catalogo en disco. Null si no esta en el catalogo (no se inventa).
+ * El EDIFICIO es la torre de la ficha; si la ficha no la trae, la letra con que empieza
+ * el codigo (D-2-12 -> D), que es como se nombran los edificios en todos los proyectos.
+ */
+function vend_ficha(array $units, string $codigo, int $cat): ?array {
+    $codigo = strtoupper(trim($codigo));
+    foreach ($units as $u) {
+        if (strtoupper((string)($u['codigo'] ?? '')) !== $codigo || (int)($u['cat'] ?? 0) !== $cat) continue;
+        $torre = trim((string)($u['torre'] ?? ''));
+        if ($torre === '' && preg_match('/^([A-Z])/', $codigo, $m)) $torre = $m[1];
+        return ['tipo_id' => (int)($u['tipo'] ?? 0), 'tipo' => vend_tipo_nombre((int)($u['tipo'] ?? 0)),
+                'edificio' => $torre, 'piso' => trim((string)($u['piso'] ?? '')), 'm2' => (string)($u['m2'] ?? '')];
+    }
+    return null;
+}
+
+/**
+ * Link a la pagina publica de disponibilidad que abre directo los planos de esas unidades
+ * (la pagina traduce el codigo al plano). '' si el proyecto no tiene pagina publica.
+ */
+function vend_link_disponibilidad(int $cat, array $codigos): string {
+    $slug = VEND_DISPONIBILIDAD[$cat] ?? '';
+    if ($slug === '') return '';
+    $c = array_values(array_unique(array_filter(array_map(fn($x) => strtoupper(trim((string)$x)), $codigos))));
+    return VEND_DISPONIBILIDAD_URL . $slug . ($c ? '?unidades=' . implode(',', $c) : '');
 }
 
 /* ── Libreta: quien es cada cotizante, si ya compro, y su telefono ─────────────────── */

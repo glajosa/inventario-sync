@@ -156,6 +156,20 @@ test_same(['D-3-12', 'D-2-11'], array_column($alt, 'codigo'),
 test_same(100732.5, $alt[0]['precio'], 'con su precio');
 test_same([], vend_alternativas($cat, 'Z-9-9', 33), 'si la vendida no esta en el catalogo, no se inventa nada');
 
+// ── ficha y link para el mensaje (conector, 9-oct-2026) ─────────────────────
+test_same('departamento', $alt[0]['tipo'], 'cada alternativa dice su tipo, para escribir "el departamento D-3-12"');
+test_same('D', $alt[0]['edificio'], 'sin torre en la ficha, el edificio es la letra del codigo');
+$cat[] = ['codigo' => 'C2-1', 'cat' => 47, 'tipo' => 1793, 'stage' => 'DISPONIBLE', 'pvp' => '1|USD', 'dealId' => 0,
+          'torre' => 'C', 'piso' => '2DO', 'm2' => '70'];
+test_same(['tipo_id' => 1793, 'tipo' => 'departamento', 'edificio' => 'C', 'piso' => '2DO', 'm2' => '70'],
+          vend_ficha($cat, 'c2-1', 47), 'la torre y el piso salen de la ficha');
+test_same('local', vend_ficha($cat, 'L-1-1', 33)['tipo'], 'un local se dice local');
+test_same(null, vend_ficha($cat, 'C2-1', 33), 'el mismo codigo en OTRO proyecto no es esta unidad');
+test_same('https://galjosa.com/disponibilidad/plaza?unidades=D-2-12,D-3-12',
+          vend_link_disponibilidad(33, ['D-2-12', 'd-3-12', 'D-2-12', '']), 'link de Plaza, sin repetidos ni vacios');
+test_same('https://galjosa.com/disponibilidad/apartments?unidades=C-3-5', vend_link_disponibilidad(39, ['C-3-5']), 'link de Apartments');
+test_same('', vend_link_disponibilidad(47, ['C2-1']), 'Galero no tiene pagina publica: link vacio, no uno roto');
+
 // ── telefonos ───────────────────────────────────────────────────────────────
 test_same('593991234567', vend_tel_normalizado('099 123 4567'), '09... -> 5939...');
 test_same('593991234567', vend_tel_normalizado('+593 99 123 4567'), '+593... -> 593...');
