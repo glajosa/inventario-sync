@@ -57,11 +57,151 @@ function hist_libreta_guardar(array $l): void {
  * buzon al desmarcar. Resultado: reserva viva y ninguna historia en ninguna parte.
  */
 function hist_libreta_olvidar(int $dealId): void {
+    hist_marcas_olvidar_deal($dealId);   // si vuelve la misma unidad, se vuelve a hacer
     $l = hist_libreta();
     if (!array_key_exists((string)$dealId, $l)) return;
     unset($l[(string)$dealId]);
     hist_libreta_guardar($l);
     logline("HISTORIA libreta olvida deal=$dealId (se solto una unidad)");
+}
+
+/* ── MARCAS "unidad|deal": UNA historia por venta, venga por donde venga ─────────
+ * Desde el 12-oct-2026 hay DOS disparadores: el de siempre (el deal entra a RESERVA,
+ * hist_al_reservar) y el de la unidad (se vende o se reubica, hist_procesar_pendientes).
+ * En una reserva normal llegan los dos, en cualquier orden. La marca se RECLAMA bajo
+ * candado antes de generar: el primero que llega la toma y el otro no hace nada.
+ * RESERVADO -> FIRMADO -> VENDIDO del mismo deal es la misma marca: una sola historia. */
+function hist_marcas_ruta(): string {
+    return (getenv('DATA_DIR') ?: '/data') . '/historias_marcas.json';
+}
+/* 🔴 DOS USUARIOS escriben este archivo: Apache (www-data, el aviso de Bitrix) y el
+   reloj de 5 min (root). Si lo crea root con 0644, Apache ya no puede escribirlo — paso
+   igual con la cola del boton "No contesto" el 9-sep. Por eso se deja en 0666 al abrirlo,
+   y si aun asi no se puede abrir, quien llama GENERA igual (ver hist_marca_reclamar). */
+function hist_marcas_mutar(callable $fn, ?string $ruta = null) {
+    $ruta = $ruta ?? hist_marcas_ruta();
+    $fh = @fopen($ruta, 'c+');
+    if (!$fh) return null;
+    @chmod($ruta, 0666);
+    flock($fh, LOCK_EX);
+    $m = json_decode((string)stream_get_contents($fh), true);
+    if (!is_array($m)) $m = [];
+    $res = $fn($m);
+    ftruncate($fh, 0); rewind($fh);
+    fwrite($fh, json_encode($m));
+    flock($fh, LOCK_UN); fclose($fh);
+    return $res;
+}
+/** true si ESTA llamada se quedo con la marca; false si ya la tenia otro.
+ *  Si el archivo no se puede abrir, true: una historia de mas se ve y se borra; una
+ *  historia perdida no se entera nadie. Queda en el log. */
+function hist_marca_reclamar(string $cod, int $deal, ?string $ruta = null): bool {
+    $k = strtoupper(trim($cod)) . '|' . $deal;
+    $r = hist_marcas_mutar(function (array &$m) use ($k) {
+        if (isset($m[$k])) return false;
+        $m[$k] = gmdate('c');
+        return true;
+    }, $ruta);
+    if ($r === null) {
+        if (function_exists('logline')) logline("HISTORIA marcas: no se pudo abrir el archivo, se genera igual ($k)");
+        return true;
+    }
+    return (bool)$r;
+}
+function hist_marca_existe(string $cod, int $deal, ?string $ruta = null): bool {
+    $m = json_decode((string)@file_get_contents($ruta ?? hist_marcas_ruta()), true);
+    return is_array($m) && isset($m[strtoupper(trim($cod)) . '|' . $deal]);
+}
+function hist_marca_soltar(string $cod, int $deal, ?string $ruta = null): void {
+    $k = strtoupper(trim($cod)) . '|' . $deal;
+    hist_marcas_mutar(function (array &$m) use ($k) { unset($m[$k]); }, $ruta);
+}
+function hist_marcas_olvidar_deal(int $deal, ?string $ruta = null): void {
+    hist_marcas_mutar(function (array &$m) use ($deal) {
+        foreach (array_keys($m) as $k) if (str_ends_with($k, '|' . $deal)) unset($m[$k]);
+    }, $ruta);
+}
+
+/**
+ * Procesa las ventas de unidad anotadas por vend_anotar_historia (vendidaslib.php):
+ * reubicaciones y cualquier venta que no paso por "deal entra a RESERVA".
+ * Lo llama el reloj de 5 min (historia.php?conciliar). Devuelve lineas para el log.
+ *
+ * Por cada pendiente, en este orden:
+ *  - proyecto sin plano (solo Plaza y Apartments)  -> se descarta
+ *  - mas de 2 dias anotado                          -> se descarta (no se publica viejo)
+ *  - la unidad YA NO esta vendida a ese deal         -> se descarta (la reserva se cayo)
+ *  - la marca unidad|deal ya la tiene otro          -> se descarta (ya hay historia)
+ *  - si no: se genera, se encola (la cola espera 5 min y vuelve a mirar si sigue viva)
+ * Tope por corrida: $tope. Lo que sobra espera la siguiente vuelta.
+ *
+ * $catalogo, $generar y $encolar se inyectan para poder probarlo sin red.
+ */
+function hist_procesar_pendientes(array $catalogo, callable $generar, callable $encolar,
+                                  int $tope = 5, ?int $ahora = null,
+                                  ?string $rutaPend = null, ?string $rutaMarcas = null): array {
+    $ahora = $ahora ?? time();
+    $rutaPend = $rutaPend ?? ((getenv('DATA_DIR') ?: '/data') . '/historias_unidad_pendientes.json');
+    $fh = @fopen($rutaPend, 'c+');
+    if (!$fh) return ["HISTORIA-U no se pudo abrir $rutaPend"];
+    @chmod($rutaPend, 0666);
+    flock($fh, LOCK_EX);
+    $pend = json_decode((string)stream_get_contents($fh), true);
+    if (!is_array($pend)) $pend = [];
+
+    $porCod = [];
+    foreach ((array)($catalogo['units'] ?? []) as $u)
+        $porCod[(int)($u['cat'] ?? 0) . '|' . strtoupper((string)($u['codigo'] ?? ''))] = $u;
+    $vendida = ['RESERVADO', 'FIRMADO', 'VENDIDO'];
+
+    $log = []; $hechas = 0;
+    foreach ($pend as $k => $p) {
+        $cod = (string)$p['unidad']; $deal = (int)$p['deal']; $cat = (int)$p['cat'];
+        $proy = NORAL_PROY[$cat] ?? null;
+        if ($proy === null) { unset($pend[$k]); continue; }               // sin plano: silencio
+        if ($ahora - (int)$p['cuando'] > 2 * 86400) { unset($pend[$k]); $log[] = "HISTORIA-U $cod deal=$deal descartada: anotada hace mas de 2 dias"; continue; }
+        $u = $porCod[$cat . '|' . strtoupper($cod)] ?? null;
+        if (!$u || !in_array(strtoupper((string)($u['stage'] ?? '')), $vendida, true) || (int)($u['dealId'] ?? 0) !== $deal) {
+            unset($pend[$k]); $log[] = "HISTORIA-U $cod deal=$deal descartada: ya no esta vendida a ese deal"; continue;
+        }
+        if ($hechas >= $tope) continue;                                   // la siguiente vuelta
+        if (!hist_marca_reclamar($cod, $deal, $rutaMarcas)) { unset($pend[$k]); $log[] = "HISTORIA-U $cod deal=$deal ya tenia historia"; continue; }
+        $hechas++;
+        $r = $generar($proy, $cod);
+        $video = hist_solo_archivo((string)($r['video'] ?? ''));
+        if (!$r || $video === '') {
+            hist_marca_soltar($cod, $deal, $rutaMarcas);                  // que se pueda reintentar
+            $pend[$k]['intentos'] = (int)($p['intentos'] ?? 0) + 1;
+            if ($pend[$k]['intentos'] >= 3) { unset($pend[$k]); $log[] = "HISTORIA-U $cod deal=$deal FALLO 3 veces, se abandona"; }
+            else $log[] = "HISTORIA-U $cod deal=$deal el generador no devolvio video (intento {$pend[$k]['intentos']})";
+            continue;
+        }
+        $encolar($video, (string)($r['etiqueta'] ?? $cod));
+        unset($pend[$k]);
+        $log[] = "HISTORIA-U $cod deal=$deal generada y encolada (" . (string)($p['origen'] ?? '') . ")";
+    }
+    ftruncate($fh, 0); rewind($fh);
+    fwrite($fh, json_encode($pend));
+    flock($fh, LOCK_UN); fclose($fh);
+    return $log;
+}
+
+/** Codigos de Plaza/Apartments que el CATALOGO da por vendidos. Cero llamadas.
+ *  Se suman a los "vivos" de la cola: una reubicacion queda con el deal en
+ *  elaboracion de promesa, no en RESERVA, y sin esto la cola la daba por caida. */
+function hist_codigos_vendidos_catalogo(?array $catalogo = null): array {
+    if ($catalogo === null) {
+        $catalogo = json_decode((string)@file_get_contents((getenv('DATA_DIR') ?: '/data') . '/selector_cache.json'), true);
+        if (!is_array($catalogo)) return [];
+    }
+    $c = [];
+    foreach ((array)($catalogo['units'] ?? []) as $u) {
+        if (!isset(NORAL_PROY[(int)($u['cat'] ?? 0)])) continue;
+        if (!in_array(strtoupper((string)($u['stage'] ?? '')), ['RESERVADO', 'FIRMADO', 'VENDIDO'], true)) continue;
+        if ((int)($u['dealId'] ?? 0) <= 0) continue;
+        $c[strtoupper((string)$u['codigo'])] = true;
+    }
+    return array_keys($c);
 }
 
 /**
@@ -208,10 +348,14 @@ function hist_al_reservar(string $dealId, ?array $deal = null, bool $forzar = fa
     // Se deduplica por la CELDA que devuelve el generador, no por el codigo: un
     // local unido (F-1-13 + F-1-14) son dos registros en Bitrix y una sola celda
     // F1-13.14 en el plano. Sin esto llegaba la misma imagen dos veces.
-    $urls = []; $vistas = [];
+    $urls = []; $vistas = []; $yaPorUnidad = 0;
     foreach ($unis as $u) {
+        /* Marca unidad|deal: si el disparador por unidad ya la hizo, no se repite.
+           `forzar` (rehacer a mano) la pasa por alto a proposito. */
+        if (!$forzar && !hist_marca_reclamar($u['cod'], (int)$dealId)) { $yaPorUnidad++; continue; }
+        if ($forzar) hist_marca_reclamar($u['cod'], (int)$dealId);
         $r = hist_generar_una($u['proy'], $u['cod']);
-        if (!$r) continue;
+        if (!$r) { hist_marca_soltar($u['cod'], (int)$dealId); continue; }   // que se pueda reintentar
         $celda = (string)($r['etiqueta'] ?? $u['cod']);
         if (isset($vistas[$celda])) continue;
         $vistas[$celda] = true;
@@ -222,7 +366,16 @@ function hist_al_reservar(string $dealId, ?array $deal = null, bool $forzar = fa
                    // archivo llamado "video_X.mp4?t=..." y daba 404. Paso con E2-18.
                    'video' => hist_solo_archivo((string)($r['video'] ?? ''))];
     }
-    if (!$urls) return ['ok' => false, 'motivo' => 'el generador no devolvio ninguna imagen'];
+    if (!$urls && $yaPorUnidad > 0 && $yaPorUnidad === count($unis)) {
+        $lib[$dealId] = ['huella' => $huella, 'fecha' => gmdate('c'), 'unidades' => '(por unidad)', 'n' => 0];
+        hist_libreta_guardar($lib);
+        return ['ok' => true, 'motivo' => 'ya generada por unidad'];
+    }
+    if (!$urls) {
+        // nada salio: se sueltan las marcas para que el proximo aviso lo reintente
+        foreach ($unis as $u) hist_marca_soltar($u['cod'], (int)$dealId);
+        return ['ok' => false, 'motivo' => 'el generador no devolvio ninguna imagen'];
+    }
 
     // ── publicar en Instagram ────────────────────────────────────────────────
     /* Se le pide al GENERADOR que publique, no se publica desde aca. Tres razones:

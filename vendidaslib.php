@@ -248,6 +248,40 @@ function vend_anular_comprador(PDO $d, string $unidad, int $compradorViejo, ?int
 }
 
 /**
+ * HISTORIA POR UNIDAD (Jesua, 12-oct-2026: "la reubicacion si se debe publicar").
+ * La historia de Instagram nacia SOLO cuando el deal entra a RESERVA (C44:NEW). Una
+ * reubicacion cambia la unidad de un deal que ya esta mas adelante (elaboracion de
+ * promesa, listo para firma) y no pasaba por ahi: Marcel Salvador, E-1-20 y E-1-21 el
+ * 5-oct, sin historia. Aca se ANOTA la venta de la unidad en una lista local; quien la
+ * procesa es el reloj de 5 min (hist_procesar_pendientes en historialib.php), porque
+ * armar un video tarda ~28 s y no puede frenar el aviso de Bitrix ni el barrido.
+ * Detras de la perilla `historia_por_unidad`: apagada no se anota NADA, asi que
+ * encenderla no suelta una avalancha de pendientes viejos (cuidado del orquestador).
+ */
+function vend_historia_ruta(): string {
+    return (getenv('DATA_DIR') ?: '/data') . '/historias_unidad_pendientes.json';
+}
+function vend_anotar_historia(string $unidad, int $deal, int $cat, string $origen, ?string $ruta = null): bool {
+    if ((int)inv_cfg('historia_por_unidad', 0) !== 1 && $ruta === null) return false;
+    $unidad = strtoupper(trim($unidad));
+    if ($unidad === '' || $deal <= 0) return false;
+    $ruta = $ruta ?? vend_historia_ruta();
+    $fh = @fopen($ruta, 'c+');
+    if (!$fh) return false;
+    @chmod($ruta, 0666);   // lo escriben Apache (aviso) y root (barrido del rebuild)
+    flock($fh, LOCK_EX);
+    $l = json_decode((string)stream_get_contents($fh), true);
+    if (!is_array($l)) $l = [];
+    $k = $unidad . '|' . $deal;
+    if (!isset($l[$k])) $l[$k] = ['unidad' => $unidad, 'deal' => $deal, 'cat' => $cat, 'origen' => $origen,
+                                  'cuando' => time(), 'intentos' => 0];
+    ftruncate($fh, 0); rewind($fh);
+    fwrite($fh, json_encode($l));
+    flock($fh, LOCK_UN); fclose($fh);
+    return true;
+}
+
+/**
  * El punto de entrada para quien detecta el cambio (el aviso o el barrido).
  * Devuelve un texto corto para el log, o '' si no habia nada que hacer.
  */
@@ -272,13 +306,15 @@ function vend_desde_cambio(?PDO $d, string $unidad, string $antes, string $ahora
     if ($otroDueno) {
         $x = vend_anular_comprador($d, $unidad, $compradorAntes);
         $n = vend_registrar($d, $unidad, $comprador, $ahora, $origen, null, $categoria);
-        return "vendidas: $unidad cambio de comprador $compradorAntes -> $comprador ($origen)"
+        $h = vend_anotar_historia($unidad, $comprador, $categoria, $origen) ? ' · historia anotada' : '';
+        return "vendidas: $unidad cambio de comprador $compradorAntes -> $comprador ($origen)$h"
              . " · $x venta vieja anulada · $n posibles avisos nuevos";
     }
     if (vend_es_venta($antes, $ahora, $etapas) || $atadaAhora) {
         if ($comprador <= 0) return "vendidas: $unidad entro a $ahora SIN deal comprador -> no se arma lista";
         $n = vend_registrar($d, $unidad, $comprador, $ahora, $origen, null, $categoria);
-        return "vendidas: $unidad vendida a deal $comprador ($antes -> $ahora, $origen) · $n posibles avisos nuevos";
+        $h = vend_anotar_historia($unidad, $comprador, $categoria, $origen) ? ' · historia anotada' : '';
+        return "vendidas: $unidad vendida a deal $comprador ($antes -> $ahora, $origen) · $n posibles avisos nuevos$h";
     }
     if (vend_es_caida($antes, $ahora, $etapas)) {
         $r = vend_anular($d, $unidad);

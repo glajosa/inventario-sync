@@ -163,6 +163,20 @@ if (isset($_GET['libreta'])) {
    tienen reserva viva. Una llamada a Bitrix, y el cruce se hace en el generador.
    `seco=1` dice que haria sin mover nada — asi se mira antes de confiar. */
 if (!empty($_GET['conciliar'])) {
+    /* HISTORIA POR UNIDAD (12-oct-2026): primero se arman las historias de las ventas
+       de unidad anotadas (reubicaciones, sobre todo). Van a la misma cola, que espera
+       5 min y vuelve a mirar si la venta sigue viva. En seco no se genera nada. */
+    if (empty($_GET['seco'])) {
+        try {
+            require_once __DIR__ . '/vendidaslib.php';   // inv_cfg()
+            if ((int)inv_cfg('historia_por_unidad', 0) === 1) {
+                $catU = json_decode((string)@file_get_contents((getenv('DATA_DIR') ?: '/data') . '/selector_cache.json'), true) ?: [];
+                foreach (hist_procesar_pendientes($catU, 'hist_generar_una', 'hist_encolar') as $l) logline($l);
+            }
+        } catch (Throwable $e) {
+            logline('HISTORIA-U fallo al procesar pendientes: ' . $e->getMessage());
+        }
+    }
     /* 🔴 Se pregunta quien se LIBERO, no quien esta en RESERVA. Retirar por
        ausencia se llevaba historias validas: un deal que AVANZA a elaboracion de
        promesa deja de estar en RESERVA pero la unidad sigue vendida. Paso con
@@ -176,6 +190,9 @@ if (!empty($_GET['conciliar'])) {
     // que se cayo dentro de la ventana de espera.
     $cods = hist_codigos_en_reserva();
     if ($cods === null) $cods = [];
+    // + lo que el catalogo da por vendido: una reubicacion queda con el deal en
+    // elaboracion de promesa y sin esto la cola descartaba su historia como "caida".
+    $cods = array_values(array_unique(array_merge($cods, hist_codigos_vendidos_catalogo())));
 
     $base = rtrim((string)getenv('NORAL_URL'), '/');
     $tok  = (string)getenv('NORAL_SYNC_TOKEN');

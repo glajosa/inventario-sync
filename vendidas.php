@@ -82,7 +82,8 @@ if ($metodo === 'POST' && $accion === 'nuevo_token') {
 }
 if ($metodo === 'POST' && $accion === 'config') {
     if (!$admin) vapi_fin(403, ['ok' => false, 'error' => 'solo administracion']);
-    $permitidas = ['avisos_vendidas', 'avisos_etapas', 'avisos_ventana_dias', 'avisos_espera_horas'];
+    // historia_por_unidad: la historia de Instagram de una venta de unidad (reubicaciones). historialib.php
+    $permitidas = ['avisos_vendidas', 'avisos_etapas', 'avisos_ventana_dias', 'avisos_espera_horas', 'historia_por_unidad'];
     $clave = (string)($_POST['clave'] ?? '');
     if (!in_array($clave, $permitidas, true)) vapi_fin(400, ['ok' => false, 'error' => 'clave no permitida']);
     $valor = json_decode((string)($_POST['valor'] ?? 'null'), true);
