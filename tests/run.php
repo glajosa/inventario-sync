@@ -5,6 +5,7 @@ require_once __DIR__ . '/test-catalogo-mismos-campos.php';
 require_once __DIR__ . '/test-vendidas.php';
 require_once __DIR__ . '/test-historia-unidad.php';
 require_once __DIR__ . '/test-etapa-al-atar.php';
+require_once __DIR__ . '/test-gemelo.php';
 require_once __DIR__ . '/test-libreta1072.php';
 require_once __DIR__ . '/test-llamada-protocolo.php';
 require_once __DIR__ . '/test-cobranza-protocolo.php';

@@ -147,12 +147,29 @@ if (guardar_reubica_bloqueada($cat, $stage) && !reub_pendiente_activo()) {
 // Se pasa el contacto para que la copia en CLIENTES pueda tomar la unidad que su
 // propio deal de Prospectos apartó.
 if ($ids) {
-    $libres = unidades_asignables($ids, $dealId, $contacto);
+    /* COBRANZAS en REUBICACION (o en la ventanita que lo lleva ahi) puede tomar la unidad
+       que ya tiene su GEMELO de Clientes: misma venta, mismo contacto. gemelolib.php. */
+    $gemelo = null; $motivoGemelo = '';
+    if ($cat === COBRANZAS_CAT) {
+        require_once __DIR__ . '/gemelolib.php';
+        $pend = guardar_reubica_bloqueada($cat, $stage) && reub_pendiente_activo();
+        $dealsC = null; $leidos = false;
+        $gemelo = function (int $uid, int $dueno, string $etapaU) use (&$dealsC, &$leidos, &$motivoGemelo, $contacto, $stage, $pend, $dealId): bool {
+            if (!$leidos) { $dealsC = $contacto > 0 ? reub_deals_contacto($contacto) : null; $leidos = true; }
+            $r = gemelo_decide($dueno, $etapaU, $stage, $pend, $dealsC, gemelo_perilla());
+            logline("deal=$dealId GEMELO u=$uid dueno=$dueno -> " . ($r['ok'] ? 'SI' : 'NO') . ": {$r['motivo']}");
+            if (!$r['ok']) $motivoGemelo = $r['motivo'];
+            return $r['ok'];
+        };
+    }
+    $libres = unidades_asignables($ids, $dealId, $contacto, $gemelo);
     $malas  = array_values(array_diff($ids, $libres));
     if ($malas) {
-        logline("deal=$dealId RECHAZADO unidades no asignables: " . implode(',', $malas));
+        logline("deal=$dealId RECHAZADO unidades no asignables: " . implode(',', $malas)
+                . ($motivoGemelo !== '' ? " ($motivoGemelo)" : ''));
         echo json_encode(['ok' => false,
-            'error' => 'Unidad ya apartada o no disponible: ' . implode(', ', $malas)]);
+            'error' => 'Unidad ya apartada o no disponible: ' . implode(', ', $malas)
+                     . ($motivoGemelo !== '' ? " — $motivoGemelo" : '')]);
         exit;
     }
 }

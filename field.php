@@ -184,7 +184,9 @@ function deal_estado(int $dealId): ?array {
     if (!is_array($d)) return is_array($viejo) ? $viejo : null;
 
     $out = ['cat' => (int)($d['CATEGORY_ID'] ?? -1),
-            'stage' => (string)($d['STAGE_ID'] ?? ''), 'ts' => time()];
+            'stage' => (string)($d['STAGE_ID'] ?? ''),
+            // el contacto viene en el MISMO get: la regla del gemelo lo necesita (gemelolib.php)
+            'contacto' => (int)($d['CONTACT_ID'] ?? 0), 'ts' => time()];
     if (!is_dir($dir)) @mkdir($dir, 0775, true);
     @file_put_contents($path, json_encode($out), LOCK_EX);
     return $out;
@@ -317,6 +319,25 @@ if ($mode === 'edit') {
     else                                    $bloqIni = 'si';
 }
 $catDeal = $est !== null ? (int)$est['cat'] : 0;
+
+/* GEMELO (13-oct-2026, Gema Zevallos): el 48 en REUBICACION —o en la ventanita que lo
+   lleva ahi— puede elegir la unidad que ya tiene SU 44 (misma venta, mismo contacto).
+   Aca solo se deja de pintar gris; quien decide de verdad es guardar.php con la MISMA
+   regla (gemelolib.php). La pantalla lee de la libreta y nunca va a Bitrix por esto. */
+$gemeloIds = [];
+if ($catDeal === 48 && $est !== null && (int)($est['contacto'] ?? 0) > 0) {
+    require_once __DIR__ . '/gemelolib.php';
+    $etapa48 = (string)$est['stage'];
+    $pendG   = $mode === 'edit' && getenv('REUBICA_PENDIENTE') !== '0';
+    if (gemelo_perilla() && ($etapa48 === GEMELO_ETAPA_REUBICACION || $pendG)) {
+        $dc = gemelo_deals_libreta((int)$est['contacto']);
+        if ($dc !== null) foreach ($units as $u) {
+            $dn = (int)($u['dealId'] ?? 0);
+            if ($dn > 0 && gemelo_decide($dn, (string)$u['stage'], $etapa48, $pendG, $dc)['ok'])
+                $gemeloIds[(string)$u['id']] = 1;
+        }
+    }
+}
 $phIni = $bloqIni === 'si' ? 'Ver inventario (se elige en RESERVA)'
        : ($bloqIni === '?' ? 'Ver inventario…' : 'Elegir unidad…');
 ?>
@@ -633,7 +654,7 @@ foreach ($elegidos as $id) {
               (int)$u['id'],
               (string)$u['codigo'],
               (string)($u['stage'] ?: 'BLOQUEADO'),
-              ($u['stage'] === 'DISPONIBLE' && empty($u['dealId'])) ? 1 : 0,
+              (($u['stage'] === 'DISPONIBLE' && empty($u['dealId'])) || isset($gemeloIds[(string)$u['id']])) ? 1 : 0,
               trim(($u['torre'] !== '' ? 'T' . $u['torre'] : '')
                  . ($u['piso']  !== '' ? ' · P' . $u['piso'] : '')),
               $pvpNum,
@@ -796,6 +817,8 @@ foreach ($elegidos as $id) {
     r.addEventListener('change', function(){ pintarJunto(); ajustarIframe(); guardar(); });
   });
   var COT = <?= json_encode(cot_base($dealId), JSON_UNESCAPED_SLASHES) ?>;
+  // unidades del gemelo 44 que este 48 puede elegir (gemelolib.php): el refresco no las apaga
+  var GEMELO = <?= json_encode((object)$gemeloIds) ?>;
   // Unidades marcadas SOLO para cotizar. Es una lista aparte de `sel` a propósito:
   // no se guarda, no cambia la etapa de la unidad y no ocupa nada. Así el asesor
   // puede armar una fusión y cotizarla desde cualquier etapa, aunque todavía no
@@ -1131,7 +1154,7 @@ foreach ($elegidos as $id) {
         filas.forEach(function(f){
           var e = mapa[f.dataset.id];
           if (!e) return;
-          var libre = e[0] === 1 && sel.indexOf(f.dataset.id) === -1;
+          var libre = (e[0] === 1 || GEMELO[f.dataset.id] === 1) && sel.indexOf(f.dataset.id) === -1;
           f.dataset.libre = libre ? '1' : '0';
           f.classList.toggle('gu-no', !libre);
           var tag = f.querySelector('.gu-tag');

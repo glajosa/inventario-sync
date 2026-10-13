@@ -364,7 +364,7 @@ function pendientes_28_marcar(int $dealId, bool $poner): void {
  * TODAS como libres. El stage sí las delata: una unidad tomada está en
  * RESERVADO / FIRMADO / VENDIDO, nunca en DISPONIBLE.
  */
-function unidades_asignables(array $ids, int $dealId, int $contacto = 0): array {
+function unidades_asignables(array $ids, int $dealId, int $contacto = 0, ?callable $gemelo = null): array {
     if (!$ids) return [];
     // sin `select`: con select explícito Bitrix devuelve id en null (bug verificado)
     $r = bx('crm.item.list', ['entityTypeId' => SPA_ENTITY, 'filter' => ['@id' => $ids]]);
@@ -388,8 +388,13 @@ function unidades_asignables(array $ids, int $dealId, int $contacto = 0): array 
         if (!$id) continue;
         $dueno = (int)($it['parentId2'] ?? 0);
         if ($dueno === $dealId) { $ok[] = $id; continue; }   // ya es mía
-        if ($dueno !== 0) continue;                          // atada de verdad a otro deal
         $stage = $rev[(string)($it['stageId'] ?? '')] ?? '';
+        if ($dueno !== 0) {
+            // atada a otro deal. Unica excepcion: el 48 en REUBICACION que pide la unidad
+            // de su gemelo 44 (misma venta). Lo decide gemelolib.php (13-oct-2026).
+            if ($gemelo !== null && $gemelo($id, $dueno, $stage)) $ok[] = $id;
+            continue;
+        }
 
         $a = $apart[$id] ?? null;
         if ($a) {
