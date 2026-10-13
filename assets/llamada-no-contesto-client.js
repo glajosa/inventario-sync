@@ -53,7 +53,12 @@
       .then(function (response) {
         return Promise.resolve(response.json()).catch(function () { return {}; }).then(function (body) {
           if (!response.ok) throw new ClientError(errorCode(response.status, body));
-          if (!body || (body.status !== 'processed' && body.status !== 'already_processed')) {
+          /* ⭐ 'encolada' (13-oct-2026) ES UN ÉXITO: el servidor guardó la pulsación y la
+           * crea solo en 1-2 min (api/llamadas/no-contesto.php, ..._panel_encolar). Antes
+           * caía aquí como 'invalid_response' y el vendedor leía "No se pudo registrar"
+           * mientras la actividad SÍ se creaba después. */
+          if (!body || (body.status !== 'processed' && body.status !== 'already_processed'
+                        && body.status !== 'encolada')) {
             throw new ClientError('invalid_response');
           }
           return body;

@@ -33,6 +33,7 @@ assert.equal(result.status, 'processed');
 
 const statuses = [
   [200, { status: 'already_processed' }, 'already_processed'],
+  [200, { status: 'encolada', reason: 'portal_saturado' }, 'encolada'],
   [409, { error: 'result_conflict' }, 'conflict'],
   [422, { status: 'manual_review', reason: 'pending_activity_not_found' }, 'manual_review'],
   [503, { error: 'bitrix_unavailable' }, 'retryable'],
@@ -45,8 +46,9 @@ for (const [httpStatus, body, expectedCode] of statuses) {
       status: httpStatus,
       json: async () => body,
     }));
-    assert.equal(expectedCode, 'already_processed');
-    assert.equal(response.status, 'already_processed');
+    // 'encolada' es éxito: el servidor la guardó y la crea solo (13-oct-2026)
+    assert.ok(expectedCode === 'already_processed' || expectedCode === 'encolada', 'no debía resolver: ' + expectedCode);
+    assert.equal(response.status, expectedCode);
   } catch (error) {
     assert.equal(error.code, expectedCode);
     assert.equal(String(error).includes(input.auth), false);

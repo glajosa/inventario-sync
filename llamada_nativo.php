@@ -44,7 +44,7 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
 <meta charset="utf-8">
 <title>Registrar llamada</title>
 <script src="//api.bitrix24.com/api/v1/"></script>
-<script src="assets/llamada-no-contesto-client.js"></script>
+<script src="assets/llamada-no-contesto-client.js?v=20261013"></script>
 </head>
 <body>
 <script>
@@ -868,6 +868,12 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
     }).then(function (r) {
       if (r.status === 'already_processed') {
         yaHabia = { minutos:0, contesto:false };
+      } else if (r.status === 'encolada') {
+        // guardada en la cola del servidor: se crea sola en 1-2 min (no hay próxima todavía)
+        llamadas.push({ ts:'9999-12-31T00:00:00', contesto:false });
+        protocolo = calcularProtocolo(llamadas, reingreso);
+        comentario = '';
+        aviso = 'Registrada \u2713 Bitrix va lento: se crea sola en 1-2 min. No vuelvas a aplastar.';
       } else {
         ponerProxima(r.nextActivityAt);
         llamadas.push({ ts:'9999-12-31T00:00:00', contesto:false });
