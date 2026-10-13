@@ -138,7 +138,7 @@ if ($cat === COBRANZAS_CAT && count($ids) === 1) {
 // Jesua 6-oct-2026: "no debe permitirle cambiar unidad, sino mencionarle ahi: la unidad se puede cambiar en la etapa
 // de reubicacion". El cambio de unidad de un 48 dispara la reubicacion entera: fuera de REUBICACION se RECHAZA antes
 // de guardar el campo (no queda nada cambiado). Perilla env REUBICA_SOLO_EN_ETAPA ('0' la apaga).
-if (guardar_reubica_bloqueada($cat, $stage)) {
+if (guardar_reubica_bloqueada($cat, $stage) && !reub_pendiente_activo()) {
     logline("deal=$dealId RECHAZADO cambio de unidad en COBRANZAS fuera de REUBICACION (etapa $stage)");
     echo json_encode(['ok' => false, 'error' => 'La unidad solo se puede cambiar con el deal en la etapa REUBICACIÓN']); exit;
 }
@@ -174,6 +174,19 @@ $deal[CAMPO_NUEVO] = $limpio;
 // deal tal como estaba ANTES del update a propósito — necesita el ACTIVO COMPRADO
 // y el VALOR DEL ACTIVO viejos para saber de qué unidad se está saliendo.
 if ($cat === COBRANZAS_CAT) {
+    /* ⭐ 13-oct-2026 (Jesua, deal 6302): la VENTANITA de campos obligatorios de REUBICACIÓN pide la unidad ANTES
+     * de que el deal entre a la etapa, y el rechazo de a8e8dbf trababa el paso: "ahí me deja escoger, y como ya
+     * escogí en esa ventanita, se mueve automáticamente a la reubicación". Vuelve el PENDIENTE de 3da1bf2: la
+     * unidad espera, hook48 la aplica al ENTRAR y, si en 10 min no entra, el barrido devuelve el campo. Fuera de
+     * la ventanita (un vendedor que la cambia "sin culpa") tampoco pasa nada: sin entrar a la etapa, se revierte.
+     * Perilla env REUBICA_PENDIENTE ('0' = vuelve el rechazo del 6-oct). */
+    if (guardar_reubica_bloqueada($cat, $stage)) {
+        reub_pend_guardar($dealId, $ids, (string)($g['result'][CAMPO_NUEVO] ?? ''), $g['result']);
+        logline("deal=$dealId REUBICACION PENDIENTE [$limpio]: se aplica al entrar a REUBICACION (etapa ahora $stage)");
+        echo json_encode(['ok' => true, 'guardado' => $limpio, 'pendiente' => true,
+            'nota' => 'La unidad se cambia cuando el deal entre a la etapa REUBICACIÓN. Si no entra en 10 min, vuelve la de antes.']);
+        exit;
+    }
     $r = reubicar($dealId, $g['result'], $ids);
     logline("deal=$dealId REUBICACION guardado=[$limpio] r=" . json_encode($r));
     if (empty($r['ok'])) {

@@ -279,6 +279,9 @@ function guardar_reubica_bloqueada(int $cat, string $stage): bool {
     return $stage !== 'C48:UC_1WR2BM';
 }
 
+/** 13-oct-2026: el pendiente vuelve para la ventanita de REUBICACIÓN. env REUBICA_PENDIENTE='0' lo apaga (rechazo). */
+function reub_pendiente_activo(): bool { return getenv('REUBICA_PENDIENTE') !== '0'; }
+
 // ── REUBICACIÓN PENDIENTE (6-oct): la unidad elegida fuera de la etapa espera a que el 48 ENTRE a REUBICACIÓN ──
 const REUB_PEND_MAX_SEG = 600;   // 10 min (Jesua): sin entrar a la etapa, el campo vuelve a la unidad de antes
 function reub_pend_file(int $d): string { return (getenv('DATA_DIR') ?: '/data') . '/reubica_pendiente/' . $d . '.json'; }

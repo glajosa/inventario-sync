@@ -111,10 +111,13 @@ $srcG = (string)file_get_contents(__DIR__ . '/../guardar.php');
 // 6-oct: fuera de REUBICACION la unidad queda PENDIENTE (no reubica); se aplica al ENTRAR a la etapa
 preg_match('/if \(\$cat === COBRANZAS_CAT\) \{.*?\n}\n/s', $srcG, $gb); $gb = $gb[0] ?? '';
 $iP = strpos($gb, 'reub_pend_guardar('); $iX = strpos($gb, 'exit;'); $iR = strpos($gb, 'reubicar($dealId');
-$iF = strpos($srcG, 'if (guardar_reubica_bloqueada($cat, $stage)) {'); $iU = strpos($srcG, "\$up = bx('crm.deal.update'");
-test_same(true, $iF !== false && $iU !== false && $iF < $iU, '🔴 fuera de REUBICACION se RECHAZA antes de guardar el campo (Jesua: no se permite)');
-test_same(0, substr_count($srcG, 'reub_pend_guardar('), 'ya no se anotan pendientes (Jesua eligio el rechazo)');
-test_same(1, substr_count($srcG, 'La unidad solo se puede cambiar con el deal en la etapa REUBICACIÓN'), 'el mensaje que ve el vendedor');
+$iF = strpos($srcG, 'if (guardar_reubica_bloqueada($cat, $stage) && !reub_pendiente_activo()) {'); $iU = strpos($srcG, "\$up = bx('crm.deal.update'");
+// 13-oct (deal 6302): vuelve el PENDIENTE para la ventanita; el rechazo queda detras de la perilla
+test_same(true, $iF !== false && $iU !== false && $iF < $iU, '🔴 perilla REUBICA_PENDIENTE=0: se RECHAZA antes de guardar el campo');
+test_same(true, $iP !== false && $iX !== false && $iR !== false && $iP < $iX && $iX < $iR, '🔴 fuera de REUBICACION queda PENDIENTE y sale ANTES de reubicar');
+test_same(1, substr_count($srcG, 'La unidad solo se puede cambiar con el deal en la etapa REUBICACIÓN'), 'el mensaje del rechazo sigue (perilla en 0)');
+putenv('REUBICA_PENDIENTE'); test_same(true, reub_pendiente_activo(), 'por defecto: pendiente');
+putenv('REUBICA_PENDIENTE=0'); test_same(false, reub_pendiente_activo(), 'perilla en 0: rechazo'); putenv('REUBICA_PENDIENTE');
 test_same('nada',     reub_pend_accion(null, 'C48:NEW', 1000), 'sin pendiente: nada');
 $pp = ['ids' => [2739], 'ts' => 1000];
 test_same('aplicar',  reub_pend_accion($pp, 'C48:UC_1WR2BM', 1005, 600, '2739'), '🔴 entro a REUBICACION y el campo sigue igual: se aplica');
