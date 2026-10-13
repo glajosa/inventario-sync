@@ -112,8 +112,13 @@ test_same(true, hist_marca_reclamar('E-9-9', 1, "$tmp/no-existe-la-carpeta/marca
 test_same(false, vend_anotar_historia('E-9-9', 1, 33, 'prueba'), 'perilla historia_por_unidad apagada: no anota');
 
 // ── vivos para la cola: lo que el catalogo da por vendido ──────────────────────
-test_same(['E-1-20', 'E-1-21', 'D-2-12', 'E-1-22'], hist_codigos_vendidos_catalogo($cat),
+test_same(['33:E-1-20', '33:E-1-21', '33:D-2-12', '33:E-1-22'], hist_codigos_vendidos_catalogo($cat),
           'reubicacion cuenta como viva; DISPONIBLE no; Galero no');
+
+// el MISMO codigo en Plaza y en Apartments viaja distinto (13-oct, D-2-4 / E-1-6)
+$dos = ['units' => [['codigo' => 'D-2-4', 'cat' => 33, 'stage' => 'RESERVADO', 'dealId' => 1],
+                    ['codigo' => 'D-2-4', 'cat' => 39, 'stage' => 'RESERVADO', 'dealId' => 6364]]];
+test_same(['33:D-2-4', '39:D-2-4'], hist_codigos_vendidos_catalogo($dos), 'D-2-4 de Plaza y de Apartments no se confunden');
 
 array_map('unlink', glob("$tmp/*") ?: []);
 @rmdir($tmp);

@@ -199,9 +199,23 @@ function hist_codigos_vendidos_catalogo(?array $catalogo = null): array {
         if (!isset(NORAL_PROY[(int)($u['cat'] ?? 0)])) continue;
         if (!in_array(strtoupper((string)($u['stage'] ?? '')), ['RESERVADO', 'FIRMADO', 'VENDIDO'], true)) continue;
         if ((int)($u['dealId'] ?? 0) <= 0) continue;
-        $c[strtoupper((string)$u['codigo'])] = true;
+        $c[hist_codigo_con_proyecto($u)] = true;
     }
     return array_keys($c);
+}
+
+/**
+ * "39:D-2-4" — el codigo CON su proyecto. 13-oct-2026: D-2-4 y E-1-6 existen en Noral
+ * Plaza (33) y en Noral Apartments (39). El generador recibia "D-2-4" a secas, lo
+ * buscaba en los planos de los dos proyectos juntos, lo encontraba en Plaza, y la
+ * historia de Apartments (D2.4) no figuraba como viva: la cola la descartaba como
+ * "reserva caida". Paso con D-2-4 (deal 6364) y E-1-6 (deal 6644). Lo encontro y lo
+ * reprodujo la sesion de cobranzas. El generador (conciliar.php) busca cada codigo SOLO
+ * en el plano de su proyecto.
+ */
+function hist_codigo_con_proyecto(array $u): string {
+    $c = strtoupper(trim((string)($u['codigo'] ?? '')));
+    return $c === '' ? '' : (int)($u['cat'] ?? 0) . ':' . $c;
 }
 
 /**
@@ -522,7 +536,7 @@ function hist_codigos_liberados(int $dias = 7): ?array {
     foreach ($j['units'] as $u) {
         $id = (int)($u['id'] ?? 0);
         if ($id > 0 && isset($ids[$id])) {
-            $c = strtoupper(trim((string)($u['codigo'] ?? '')));
+            $c = hist_codigo_con_proyecto($u);
             if ($c !== '') $cods[$c] = true;
         }
     }
@@ -561,7 +575,7 @@ function hist_codigos_en_reserva(): ?array {
     foreach ($j['units'] as $u) {
         $id = (int)($u['id'] ?? 0);
         if ($id > 0 && isset($ids[$id])) {
-            $c = strtoupper(trim((string)($u['codigo'] ?? '')));
+            $c = hist_codigo_con_proyecto($u);
             if ($c !== '') $cods[$c] = true;
         }
     }
