@@ -31,6 +31,27 @@ const CLIENTES_TRIGGERS = [
 ];
 
 /**
+ * Etapas "mas alla de la reserva" que todavia NO estan firmadas. Un deal en una de estas
+ * ya no pasa por RESERVA, asi que una unidad que se le ATA aca (reubicacion, cambio de
+ * unidad en el campo Inventario) no recibia etapa y quedaba DISPONIBLE atada al deal.
+ * Caso real 13-oct-2026: deal 6220 (Gema Zevallos), D-2-22 -> D-2-21 en Elaboracion
+ * promesa; la 1729 quedo DISPONIBLE y el selector la ofrecia como libre.
+ * Solo vale AL ATAR (no al cambiar de etapa el deal) y solo saca de DISPONIBLE.
+ */
+const CLIENTES_ETAPAS_RESERVAN_AL_ATAR = [
+    'C44:UC_Z3GY5H',   // ELABORACION PROMESA
+    'C44:UC_4R587H',   // LISTO PARA FIRMA
+    'C44:UC_N637MD',   // REVENTAS - RESERVA
+];
+
+/** Etapa que le toca a una unidad RECIEN ATADA a un deal en esa etapa, o null si no se toca. */
+function etapa_al_atar(string $etapaDeal, string $etapaUnidad, bool $perilla = true): ?string {
+    if (!$perilla) return null;                       // reservar_al_atar_avanzado = 0: como antes
+    if (!in_array($etapaDeal, CLIENTES_ETAPAS_RESERVAN_AL_ATAR, true)) return null;
+    return strtoupper(trim($etapaUnidad)) === 'DISPONIBLE' ? 'RESERVADO' : null;
+}
+
+/**
  * Etapas en las que el deal SUELTA sus unidades.
  *
  * No basta con poner la unidad en DISPONIBLE: si el deal caído sigue siendo su

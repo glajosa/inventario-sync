@@ -1087,6 +1087,7 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
 
         $campos = [];
         $nuevoStage = null;
+        $sinMarca = false;
 
         if ($suelta) {
             // Se borra también el contacto: al atar se le copia el cliente del deal,
@@ -1108,6 +1109,18 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
                 $dueno = (int)($it['parentId2'] ?? 0);
                 $puede = ($target !== 'DISPONIBLE') || $dueno === 0 || $dueno === $dealId;
                 if ($puede) $nuevoStage = $target;
+            } elseif (isset($agregarSet[$uid])) {
+                /* Deal en elaboracion de promesa / listo para firma / reventas-reserva:
+                   la etapa del deal no dice nada de la unidad, pero una unidad recien
+                   atada a una venta viva no puede quedar DISPONIBLE (deal 6220, 13-oct).
+                   Perilla reservar_al_atar_avanzado (0 = como antes). */
+                require_once __DIR__ . '/vendidaslib.php';   // inv_cfg()
+                $nuevoStage = etapa_al_atar($etapa, (string)unit_stage_name($it),
+                                            (int)inv_cfg('reservar_al_atar_avanzado', 1) === 1);
+                /* SIN marca self_u_ (orquestador, 13-oct): la escritura solo va de
+                   DISPONIBLE a RESERVADO y repetirla no cambia nada. La marca ya se comio
+                   dos veces una edicion humana hecha segundos despues (1-oct). */
+                $sinMarca = $nuevoStage !== null;
             }
         }
 
@@ -1119,7 +1132,7 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
 
         // marca de escritura propia: el guardián del kanban la usa para distinguir
         // un cambio del sistema de un arrastre humano
-        if (isset($campos['stageId'])) @touch($DATA_DIR . '/self_u_' . $uid);
+        if (isset($campos['stageId']) && empty($sinMarca)) @touch($DATA_DIR . '/self_u_' . $uid);
 
         $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid, 'fields' => $campos]);
         if (!$u['ok']) { logline("ERR update u=$uid: {$u['error']}"); continue; }
