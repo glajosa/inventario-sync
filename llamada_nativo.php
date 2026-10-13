@@ -44,7 +44,7 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
 <meta charset="utf-8">
 <title>Registrar llamada</title>
 <script src="//api.bitrix24.com/api/v1/"></script>
-<script src="assets/llamada-no-contesto-client.js?v=20261013"></script>
+<script src="assets/llamada-no-contesto-client.js?v=20261013b"></script>
 </head>
 <body>
 <script>
@@ -892,8 +892,13 @@ $LLAMADA_CONFIG_JS = json_encode(llamada_config(), JSON_UNESCAPED_UNICODE | JSON
         aviso = 'No se pudo validar tu sesión de Bitrix. Recarga la página e intenta nuevamente.';
       } else if (e && e.code === 'rejected') {
         aviso = 'Bitrix rechazó el registro de esta llamada. Avisa a sistemas.';
+      } else if (e && e.code === 'retryable') {
+        /* 13-oct-2026: con el servidor lento, el panel dejaba de esperar y la llamada SÍ
+         * se creaba después. Volver a aplastar es seguro: va con el MISMO requestId y el
+         * servidor no la duplica. */
+        aviso = 'Bitrix tarda en responder. Revisa en 1 min: si no aparece, vuelve a aplastar (no se duplica).';
       } else {
-        aviso = 'No se pudo registrar. Intenta nuevamente.';
+        aviso = 'No se pudo registrar. Intenta nuevamente. [' + ((e && e.code) || 'error') + ']';
       }
       redibujar();
     }).then(function () {

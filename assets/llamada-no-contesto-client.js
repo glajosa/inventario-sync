@@ -40,7 +40,7 @@
     var controller = root.AbortController ? new root.AbortController() : null;
     var timer = controller && root.setTimeout ? root.setTimeout(function () {
       controller.abort();
-    }, 12000) : null;
+    }, 45000) : null;   // 13-oct-2026: 12 s cortaba con el VPS cargado y la llamada se creaba igual
     var init = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
