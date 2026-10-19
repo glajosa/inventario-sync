@@ -172,6 +172,8 @@ const COT_SEPARACION = 1000;  // la separación siempre es $1.000 (o el 10% si e
 /* Plazo para pagar lo de la firma, en dias CORRIDOS desde la cotizacion. Se suman
    dias y no meses a proposito: '+1 month' sobre el 31 de agosto da 1 de octubre. */
 const COT_DIAS_FIRMA = 10;
+/** Dia del mes en que vencen las cuotas si el asesor no pacta otro (13 a 28). */
+const COT_DIA_PAGO = 16;
 const COT_PARQUEO = 20000;    // valor de un parqueo de Noral Plaza Suites
 /** El campo "Inventario" del deal. Se lee para saber si las unidades van en fusion o
  *  separadas, que es lo que decide el descuento del parqueo. Mismo codigo que
@@ -299,18 +301,41 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
        OCURRIO, y sin poder escribirla no se puede reproducir su tabla de pagos. */
     $reservaFecha = $hoy;
     $firmaFecha   = $hoy->modify('+' . COT_DIAS_FIRMA . ' days');
-    $ff = trim((string)($opts['fechaFirma'] ?? ''));
-    if ($ff !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $ff)) {
-        $cand = DateTimeImmutable::createFromFormat('!Y-m-d', $ff);
+    $fecha = function (string $v): ?DateTimeImmutable {
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) return null;
+        $c = DateTimeImmutable::createFromFormat('!Y-m-d', $v);
         // createFromFormat NO falla con un 31 de febrero: lo corre al 3 de marzo. Se
         // compara con lo escrito para descartar una fecha que no existe.
-        if ($cand instanceof DateTimeImmutable && $cand->format('Y-m-d') === $ff) {
-            $firmaFecha   = $cand;
-            $reservaFecha = $cand->modify('-' . COT_DIAS_FIRMA . ' days');
-        }
+        return ($c instanceof DateTimeImmutable && $c->format('Y-m-d') === $v) ? $c : null;
+    };
+    $ff  = trim((string)($opts['fechaFirma'] ?? ''));
+    $fs  = trim((string)($opts['fechaSeparacion'] ?? ''));
+    $sep = $fecha($fs);
+    $fir = $fecha($ff);
+    if ($sep !== null) {
+        /* SEPARACION ESCRITA (Jesua 19-oct-2026): la firma ya no se cuenta hacia atras.
+           "Hay clientes que pagan la firma el mismo mes, a 7 o 15 dias": la separacion
+           queda donde la puso el asesor y la firma es la fecha que eligio (o 10 dias
+           despues si no eligio). Una firma ANTES de separar no existe: se corre al dia
+           de la separacion. */
+        $reservaFecha = $sep;
+        $firmaFecha   = $fir ?? $sep->modify('+' . COT_DIAS_FIRMA . ' days');
+        if ($firmaFecha < $reservaFecha) $firmaFecha = $reservaFecha;
+    } elseif ($fir !== null) {
+        // Sin separacion escrita, como siempre: la firma manda y la separacion se
+        // deduce hacia atras (asi se reproducen las tablas viejas del historial).
+        $firmaFecha   = $fir;
+        $reservaFecha = $fir->modify('-' . COT_DIAS_FIRMA . ' days');
     }
+    /* DIA DE PAGO de las cuotas (y de los abonos de firma despues del primero): el 16
+       por defecto; el asesor puede pactar otro ("todos los 20"). Del 13 al 28: el 29-31
+       no existen todos los meses, y con un dia <= 12 la fecha se puede leer al reves
+       (dia/mes o mes/dia) cuando cobranzas importa la tabla. */
+    $dia = (int)($opts['diaPago'] ?? COT_DIA_PAGO);
+    if ($dia < 13 || $dia > 28) $dia = COT_DIA_PAGO;
+    $dd  = sprintf('%02d', $dia);
     if (preg_match('/^(\d{4})-(\d{2})$/', $mesInicio, $m)) {
-        $primera = new DateTimeImmutable(sprintf('%04d-%02d-16', (int)$m[1], (int)$m[2]));
+        $primera = new DateTimeImmutable(sprintf('%04d-%02d-%s', (int)$m[1], (int)$m[2], $dd));
     } else {
         // Paréntesis obligatorios: encadenar sobre `new` sin ellos es sintaxis de
         // PHP 8.4, y el contenedor corre 8.2 — revienta con parse error.
@@ -324,7 +349,7 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
            menos y sube el valor de cada una. Medido en E-3-18: 56 cuotas de
            $516.54 pasan a 55 de $525.93. No es un error: si el cliente firma en
            septiembre, su primera cuota es en octubre. */
-        $primera = (new DateTimeImmutable($firmaFecha->format('Y-m-16')))->modify('+1 month');
+        $primera = (new DateTimeImmutable($firmaFecha->format('Y-m-') . $dd))->modify('+1 month');
     }
     /* 🔴 EL PISO SOLO APLICA A LA COTIZACION AUTOMATICA. Existe para que una
        cotizacion nueva no arranque en un mes ya pasado. Pero cuando el asesor ESCRIBE
@@ -333,9 +358,9 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
        el cliente ya acepto. Ahi el piso estaba pisando el dato: con la firma en enero
        de 2025 la primera cuota saltaba a agosto de 2026 y la tabla salia mal.
        Si lo escribieron, manda lo escrito. */
-    $loEscribieron = ($mesInicio !== '') || ($ff !== '' && $firmaFecha != $hoy->modify('+' . COT_DIAS_FIRMA . ' days'));
+    $loEscribieron = ($mesInicio !== '') || $sep !== null || ($ff !== '' && $firmaFecha != $hoy->modify('+' . COT_DIAS_FIRMA . ' days'));
     if (!$loEscribieron) {
-        $piso = new DateTimeImmutable($hoy->format('Y-m-16'));
+        $piso = new DateTimeImmutable($hoy->format('Y-m-') . $dd);
         if ($primera < $piso) $primera = $piso;
     }
 
@@ -379,7 +404,7 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
            cuota el 16/01. Como la firma es siempre 10 dias despues de la separacion, ningun
            abono cae antes de separar (el problema del 18-oct: abono 16/10, separacion 19/10). */
         $dia1 = DateTimeImmutable::createFromFormat('!Y-m-d', $firmaFecha->format('Y-m-d'));
-        $mes16 = new DateTimeImmutable($firmaFecha->format('Y-m-16'));
+        $mes16 = new DateTimeImmutable($firmaFecha->format('Y-m-') . $dd);   // el dia de pago, no siempre el 16
         for ($i = 0; $i < $cuantos; $i++) $mesesFirmaAntes[] = $i === 0 ? $dia1 : $mes16->modify("+{$i} month");
         // la primera cuota: el 16 del mes siguiente al ULTIMO abono (siempre un 16)
         $siguiente = $mes16->modify('+' . $cuantos . ' month');
@@ -870,6 +895,7 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         'fechaReserva'  => $reservaFecha->format('d/m/Y'),
         'fechaFirma'    => $firmaFecha->format('d/m/Y'),
         'diasFirma'     => COT_DIAS_FIRMA,
+        'diaPago'       => $dia,
         'firma'         => $firma,
         // 'reserva' es lo que el cliente pone ANTES de las cuotas: separación + firma.
         // Ya no es siempre el 10% — con la firma en 0 puede ser solo los $1.000.

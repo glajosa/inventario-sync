@@ -238,6 +238,12 @@ $mesIni    = (string)($_GET['mes'] ?? '');
        que el cliente ya acepto, y esta pantalla se esta usando como tabla de pagos;
      - el cliente pide pagar la firma tal mes, y eso corre todo el cronograma. */
 $fFirma    = (string)($_GET['ffirma'] ?? '');
+/* SEPARACION y DIA DE PAGO (Jesua 19-oct-2026): "hay clientes que pagan la firma el
+   mismo mes, a 7 o 15 dias". Con la separacion escrita, la fecha de la firma ya no la
+   corre hacia atras: cada una es la que eligio el asesor. El dia de pago es el dia del
+   mes en que vencen las cuotas (16 por defecto, 13 a 28). Ver cot_plan(). */
+$fSep      = (string)($_GET['fsep'] ?? '');
+$diaPago   = (int)($_GET['diapago'] ?? 0);
 $presu     = (float)str_replace([',', '$', ' '], '', (string)($_GET['presu'] ?? ''));
 // Variantes reales que pidió el negocio. Nada vacío = plan clásico, no se toca nada.
 $num = function (string $k): string {
@@ -283,7 +289,9 @@ $opts = ['extraPartes' => $extraPartes,
          'contraPct'   => $modelo['contraPct'],
          'extra'       => $modelo['extra'],
          'maxExtra'    => $modelo['maxExtra'],
-         'fechaFirma'  => $fFirma];
+         'fechaFirma'  => $fFirma,
+         'fechaSeparacion' => $fSep,
+         'diaPago'     => $diaPago ?: COT_DIA_PAGO];
 
 /* FIRMA A LA MEDIDA: el asesor elige EN QUE cuotas cae la firma y CUANTO en cada una.
    Se manda por numero de cuota (firmamonto1..12) y no por mes escrito: la pantalla ya
@@ -961,9 +969,22 @@ $hoy  = new DateTimeImmutable('now', new DateTimeZone('America/Guayaquil'));   /
         <option value="estandar" <?= $modalidad === 'estandar' ? 'selected' : '' ?>>Con extraordinarias</option>
         <option value="iguales"  <?= $modalidad === 'iguales'  ? 'selected' : '' ?>>Cuotas iguales</option>
       </select></div>
+    <?php /* Separacion: viene llena con HOY para que elegir la firma no la mueva. Un
+             enlace viejo que trae la firma sin separacion la deja vacia, y asi se
+             reproduce como antes (separacion = firma menos 10 dias). */
+          $sepVal = $fSep !== '' ? $fSep : ($fFirma === '' ? $hoy->format('Y-m-d') : ''); ?>
+    <div><label>Separación</label>
+      <input type="date" name="fsep" value="<?= h($sepVal) ?>"
+             title="Cuándo paga la separación ($1.000). Vacío con una firma escrita = <?= (int)$plan['diasFirma'] ?> días antes de la firma."></div>
     <div><label>Fecha de la firma</label>
       <input type="date" name="ffirma" value="<?= h($fFirma) ?>"
-             title="Cuando se paga la firma. La separación se calcula sola: <?= (int)$plan['diasFirma'] ?> días antes. Vacío = hoy + <?= (int)$plan['diasFirma'] ?> días."></div>
+             title="Cuándo paga la firma: la que pacte el cliente (a 7, 15 días…). Con la firma en abonos, es el día del PRIMER abono. Vacío = <?= (int)$plan['diasFirma'] ?> días después de la separación."></div>
+    <div><label>Día de pago</label>
+      <select name="diapago" title="Día del mes en que vencen las cuotas (y los abonos de firma después del primero).">
+        <?php for ($dp = 13; $dp <= 28; $dp++): ?>
+          <option value="<?= $dp ?>" <?= (int)$plan['diaPago'] === $dp ? 'selected' : '' ?>>El <?= $dp ?> de cada mes</option>
+        <?php endfor; ?>
+      </select></div>
     <div><label>Primera cuota</label>
       <?php /* 🔴 Se devuelve lo que ESCRIBIO el asesor, no el mes calculado. Antes se
                reimprimia $plan['inicio'] -- el resultado del calculo -- y al recalcular
@@ -1683,7 +1704,7 @@ $hoy  = new DateTimeImmutable('now', new DateTimeZone('America/Guayaquil'));   /
       lo de la firma hasta el <?= h($plan['fechaFirma']) ?> (<?= (int)$plan['diasFirma'] ?> días)
     <?php endif; ?>
     y la primera cuota vence el <?= h($primCuota) ?>.
-    Las cuotas vencen el 16 de cada mes
+    Las cuotas vencen el <?= (int)$plan['diaPago'] ?> de cada mes
     y la última es en <?= h($plan['hastaTxt']) ?>.
     <?php if ($plan['nExtra'] > 0): ?>
       Incluye <?= (int)$plan['nExtra'] ?> cuota<?= $plan['nExtra'] > 1 ? 's' : '' ?> extraordinaria<?= $plan['nExtra'] > 1 ? 's' : '' ?>

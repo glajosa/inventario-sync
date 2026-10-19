@@ -108,7 +108,7 @@ function cothist_queja(string $donde, Throwable $e): void {
 /** Los parámetros que de verdad cambian la tabla. Lo que no está aquí, no la cambia:
  *  `token`, `s`, `exp` y el nombre del cliente no pueden hacer que un número mueva. */
 const COTHIST_PARAMS = [
-    'u', 'd', 'mod', 'n', 'mes', 'ffirma', 'presu', 'entregameses', 'financiar',
+    'u', 'd', 'mod', 'n', 'mes', 'ffirma', 'fsep', 'diapago', 'presu', 'entregameses', 'financiar',
     'firmames', 'firmacuota', 'firmapers', 'firmaantes', 'absorbe', 'extracual',
     'extrapartes', 'extrames1', 'extrames2', 'extrapers', 'sep', 'addparq',
     'unificar', 'pichanios', 'pichsis',

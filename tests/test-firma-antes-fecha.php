@@ -32,4 +32,28 @@ foreach (['2026-10-17', '2026-10-25', '2026-10-31', '2026-11-05'] as $ff) {
     $prim = DateTimeImmutable::createFromFormat('d/m/Y', $abonos($x)[0])->format('Ymd');
     test_same(true, $prim >= $sep, "firma $ff: el primer abono no cae antes de la separacion");
 }
+// ── SEPARACION escrita + firma libre + DIA DE PAGO (Jesua 19-oct-2026) ──────────
+$E = ['y' => 2031, 'm' => 4];
+$cuotasDe = fn(array $p) => array_values(array_map(fn($f) => $f['fecha'], array_filter($p['filas'], fn($f) => empty($f['soloFirma']))));
+$s7 = cot_plan(94500, 52, 'estandar', '', $E, 0, ['fechaSeparacion' => '2026-10-19', 'fechaFirma' => '2026-10-26']);
+test_same(['19/10/2026', '26/10/2026'], [$s7['fechaReserva'], $s7['fechaFirma']], 'firma a 7 dias: la separacion NO se mueve');
+test_same('16/11/2026', $cuotasDe($s7)[0], 'y la primera cuota el 16 del mes siguiente a la firma');
+$s0 = cot_plan(94500, 52, 'estandar', '', $E, 0, ['fechaSeparacion' => '2026-10-19']);
+test_same('29/10/2026', $s0['fechaFirma'], 'separacion sin firma: la firma 10 dias despues');
+$sx = cot_plan(94500, 52, 'estandar', '', $E, 0, ['fechaSeparacion' => '2026-10-19', 'fechaFirma' => '2026-10-10']);
+test_same('19/10/2026', $sx['fechaFirma'], 'una firma ANTES de separar se corre al dia de la separacion');
+$v = cot_plan(94500, 52, 'estandar', '', $E, 0, ['fechaFirma' => '2026-10-28']);
+test_same('18/10/2026', $v['fechaReserva'], 'sin separacion escrita, como siempre: separacion = firma - 10 (tablas viejas)');
+$d20 = cot_plan(94500, 52, 'estandar', '', $E, 0, ['fechaSeparacion' => '2026-10-19', 'fechaFirma' => '2026-10-28',
+                 'diaPago' => 20, 'firmaAntes' => true, 'firmaMeses' => 3]);
+test_same(['28/10/2026', '20/11/2026', '20/12/2026'], $abonos($d20), 'abonos: el primero el dia de la firma, los demas el dia de pago (20)');
+test_same('20/01/2027', $cuotasDe($d20)[0], 'cuotas el 20');
+test_same(true, count(array_filter($cuotasDe($d20), fn($f) => !str_starts_with($f, '20/'))) === 0, 'TODAS las cuotas el 20');
+test_same(20, $d20['diaPago'], 'el plan dice su dia de pago');
+foreach ([5, 12, 29, 31, 0] as $malo)
+    test_same(16, cot_plan(94500, 52, 'estandar', '', $E, 0, ['diaPago' => $malo])['diaPago'], "dia de pago $malo fuera de 13..28: vuelve al 16");
+$n20 = cot_plan(94500, 52, 'estandar', '', $E, 0, ['fechaSeparacion' => '2026-10-19', 'fechaFirma' => '2026-10-26', 'diaPago' => 20]);
+test_same('20/11/2026', $cuotasDe($n20)[0], 'sin abonos, dia de pago 20: la primera cuota el 20 del mes siguiente a la firma');
+$m20 = cot_plan(94500, 52, 'estandar', '2027-03', $E, 0, ['diaPago' => 20]);
+test_same('20/03/2027', $cuotasDe($m20)[0], 'primera cuota escrita a mano: cae el dia de pago');
 echo 'firma antes (fecha): ' . $GLOBALS['TEST_N'] . " comprobaciones\n";
