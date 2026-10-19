@@ -373,17 +373,16 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
             if ($cuantos <= 0 && (float)($opts['firmaCuota'] ?? 0) > 0) $cuantos = 1;  // se resuelve abajo
             $cuantos = max(1, min(COT_FIRMA_TOPE_MESES, $cuantos));
         }
-        /* Los pagos de firma arrancan en el mes de la FIRMA, no en el siguiente: si el
-           cliente firma en septiembre, su primer abono de firma es de septiembre. */
-        $base = new DateTimeImmutable($firmaFecha->format('Y-m-16'));
-        /* 🔴 Pero NUNCA antes de la separacion. Los abonos caen el 16; si se reserva
-           despues del 16 (Jesua 18-oct-2026, locales de Noral Plaza: separacion el
-           19/10 y el primer abono de firma salia el 16/10, "cuando ya estamos 18"), el
-           16 de ese mes ya paso: el primer abono va el 16 del mes siguiente. */
-        if ($base->format('Y-m-d') < $reservaFecha->format('Y-m-d')) $base = $base->modify('+1 month');
-        for ($i = 0; $i < $cuantos; $i++) $mesesFirmaAntes[] = $base->modify("+{$i} month");
-        $ultima = end($mesesFirmaAntes);
-        $siguiente = $ultima->modify('+1 month');
+        /* EL PRIMER ABONO ES EL DIA DE LA FIRMA (Jesua 19-oct-2026, Priscila Roman F-1-15:
+           "la primera de la firma, que sea el 28"). Los demas, el 16 de cada mes siguiente:
+           un abono por mes. Firma el 28/10 en 3 abonos -> 28/10, 16/11, 16/12 y la primera
+           cuota el 16/01. Como la firma es siempre 10 dias despues de la separacion, ningun
+           abono cae antes de separar (el problema del 18-oct: abono 16/10, separacion 19/10). */
+        $dia1 = DateTimeImmutable::createFromFormat('!Y-m-d', $firmaFecha->format('Y-m-d'));
+        $mes16 = new DateTimeImmutable($firmaFecha->format('Y-m-16'));
+        for ($i = 0; $i < $cuantos; $i++) $mesesFirmaAntes[] = $i === 0 ? $dia1 : $mes16->modify("+{$i} month");
+        // la primera cuota: el 16 del mes siguiente al ULTIMO abono (siempre un 16)
+        $siguiente = $mes16->modify('+' . $cuantos . ' month');
         // Si el asesor ya escribio un mes de primera cuota POSTERIOR, manda el suyo.
         if ($primera < $siguiente) $primera = $siguiente;
     }
