@@ -115,6 +115,13 @@ test_same(false, vend_anotar_historia('E-9-9', 1, 33, 'prueba'), 'perilla histor
 test_same(['33:E-1-20', '33:E-1-21', '33:D-2-12', '33:E-1-22'], hist_codigos_vendidos_catalogo($cat),
           'reubicacion cuenta como viva; DISPONIBLE no; Galero no');
 
+// ── revision del plano (19-oct): solo DISPONIBLE, con su proyecto ────────────────
+test_same(['39:C-3-7', '33:E-1-30'], hist_codigos_disponibles_catalogo($cat),
+          'disponibles: C-3-7 y E-1-30 (aunque quedo un deal pegado); FIRMADO/RESERVADO no, Galero no');
+test_same([], hist_codigos_disponibles_catalogo(['units' => [['codigo' => 'D-1', 'cat' => 33, 'stage' => 'BLOQUEADO', 'dealId' => 0]]]),
+          'BLOQUEADO no es disponible: canjes y directivos siguen con sello');
+test_same([], hist_codigos_disponibles_catalogo([]), 'catalogo vacio: lista vacia (no se quita nada)');
+
 // el MISMO codigo en Plaza y en Apartments viaja distinto (13-oct, D-2-4 / E-1-6)
 $dos = ['units' => [['codigo' => 'D-2-4', 'cat' => 33, 'stage' => 'RESERVADO', 'dealId' => 1],
                     ['codigo' => 'D-2-4', 'cat' => 39, 'stage' => 'RESERVADO', 'dealId' => 6364]]];

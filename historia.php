@@ -199,10 +199,18 @@ if (!empty($_GET['conciliar'])) {
     if ($base === '' || $tok === '')
         exit(json_encode(['ok' => false, 'error' => 'falta NORAL_URL o NORAL_SYNC_TOKEN']));
 
+    /* REVISION DEL PLANO (19-oct-2026): con la lista de DISPONIBLES el generador quita
+       el sello VENDIDO que un aviso perdido dejo puesto (D-3-16) y pone el que falta.
+       Perilla `sellos_conciliar` (0 = no se manda y el generador no toca el plano). */
+    require_once __DIR__ . '/vendidaslib.php';   // inv_cfg()
+    $sellos = (int)inv_cfg('sellos_conciliar', 1) === 1
+        ? ['sellos' => 1, 'disponibles' => implode(',', hist_codigos_disponibles_catalogo())] : [];
+
     $url = $base . '/conciliar.php';
     $post = http_build_query(['token' => $tok,
                               'vivos'     => implode(',', $cods),
                               'liberados' => implode(',', $libres)]
+                             + $sellos
                              + (!empty($_GET['seco']) ? ['seco' => 1] : []));
     $ch = curl_init($url);
     curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $post,

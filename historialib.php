@@ -213,6 +213,27 @@ function hist_codigos_vendidos_catalogo(?array $catalogo = null): array {
  * reprodujo la sesion de cobranzas. El generador (conciliar.php) busca cada codigo SOLO
  * en el plano de su proyecto.
  */
+/**
+ * Codigos que el catalogo da por DISPONIBLE ("33:D-3-16"), para la revision del plano
+ * (19-oct-2026): conciliar.php le quita el sello VENDIDO a estas, si lo tienen. Solo
+ * DISPONIBLE: las BLOQUEADAS (canjes, directivos) salen VENDIDO a proposito.
+ * Catalogo ilegible = lista vacia = no se quita nada.
+ */
+function hist_codigos_disponibles_catalogo(?array $catalogo = null): array {
+    if ($catalogo === null) {
+        $catalogo = json_decode((string)@file_get_contents((getenv('DATA_DIR') ?: '/data') . '/selector_cache.json'), true);
+        if (!is_array($catalogo)) return [];
+    }
+    $c = [];
+    foreach ((array)($catalogo['units'] ?? []) as $u) {
+        if (!isset(NORAL_PROY[(int)($u['cat'] ?? 0)])) continue;
+        if (strtoupper((string)($u['stage'] ?? '')) !== 'DISPONIBLE') continue;
+        $k = hist_codigo_con_proyecto($u);
+        if ($k !== '') $c[$k] = true;
+    }
+    return array_keys($c);
+}
+
 function hist_codigo_con_proyecto(array $u): string {
     $c = strtoupper(trim((string)($u['codigo'] ?? '')));
     return $c === '' ? '' : (int)($u['cat'] ?? 0) . ':' . $c;
