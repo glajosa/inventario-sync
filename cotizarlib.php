@@ -287,7 +287,9 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     $v       = max(0.0, $valor);
 
     // --- primera cuota: el 16 del mes elegido; nunca un mes ya pasado ---
-    $hoy = new DateTimeImmutable('now');
+    /* En hora de ECUADOR: el contenedor esta en UTC y despues de las 7 de la noche ya es
+       "manana" (18-oct-2026 a las 23:07 la separacion salia 19/10). */
+    $hoy = new DateTimeImmutable('now', new DateTimeZone('America/Guayaquil'));
     /* Las dos fechas que faltaban en el cronograma. Se suman DIAS, no meses: sumar
        un mes al 31 de agosto da 1 de octubre porque septiembre no tiene 31, y eso
        habria puesto una fecha equivocada en un documento de cliente. */

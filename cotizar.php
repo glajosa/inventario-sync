@@ -489,7 +489,7 @@ $cotHuella = cothist_registrar($_GET, $plan, [
 // Los porcentajes se CALCULAN, no se escriben a mano: el reparto ya no es fijo, así que
 // un "10%" rotulado mentiría en cuanto el asesor mueva una variante.
 $pc = fn(float $x) => rtrim(rtrim(number_format($x * 100, 1), '0'), '.') . '%';
-$hoy  = new DateTimeImmutable('now');
+$hoy  = new DateTimeImmutable('now', new DateTimeZone('America/Guayaquil'));   // hora de Ecuador, no la del contenedor (UTC)
 ?>
 <!doctype html>
 <html lang="es"><head>
@@ -1669,9 +1669,20 @@ $hoy  = new DateTimeImmutable('now');
     <?php /* Las tres fechas dichas en orden: sin esto el asesor tenia que explicar
              de palabra cuando vence cada cosa, y el cliente se quedaba con un papel
              que solo decia montos. */ ?>
-    La separación se paga el <?= h($plan['fechaReserva']) ?>, lo de la firma hasta el
-    <?= h($plan['fechaFirma']) ?> (<?= (int)$plan['diasFirma'] ?> días) y la primera
-    cuota vence el <?= h($plan['filas'][0]['fecha'] ?? '') ?>.
+    <?php /* La PRIMERA CUOTA es la primera fila numerada, no la primera fila: con la
+             firma en abonos (filas propias, soloFirma) la fila 0 es un abono de firma y el
+             texto decia "la primera cuota vence el 16/11" con la cuota en febrero (18-oct). */
+          $abonosF = array_values(array_filter($plan['filas'], fn($f) => !empty($f['soloFirma'])));
+          $primCuota = '';
+          foreach ($plan['filas'] as $fz) if (empty($fz['soloFirma'])) { $primCuota = (string)$fz['fecha']; break; } ?>
+    La separación se paga el <?= h($plan['fechaReserva']) ?>,
+    <?php if ($abonosF): ?>
+      lo de la firma en <?= count($abonosF) ?> abono<?= count($abonosF) > 1 ? 's' : '' ?>
+      (<?= h($abonosF[0]['fecha']) ?><?= count($abonosF) > 1 ? ' al ' . h(end($abonosF)['fecha']) : '' ?>)
+    <?php else: ?>
+      lo de la firma hasta el <?= h($plan['fechaFirma']) ?> (<?= (int)$plan['diasFirma'] ?> días)
+    <?php endif; ?>
+    y la primera cuota vence el <?= h($primCuota) ?>.
     Las cuotas vencen el 16 de cada mes
     y la última es en <?= h($plan['hastaTxt']) ?>.
     <?php if ($plan['nExtra'] > 0): ?>
