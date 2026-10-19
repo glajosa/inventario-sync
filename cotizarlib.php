@@ -968,6 +968,21 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     ];
 }
 
+/**
+ * ¿La firma va SOLA, en filas propias antes de las cuotas? (Jesua 19-oct-2026)
+ * Con la casilla marcada, si. Y tambien cuando el asesor ESCRIBIO la fecha de la firma
+ * y ademas la partio (meses, cuota mensual o a la medida): "ya sea unica o en abonos,
+ * se pueda cambiar el dia en que se va a pagar". Sumada a las cuotas la firma no tiene
+ * fecha propia: la pantalla aceptaba la fecha y la tabla no cambiaba (deal 413035,
+ * Mario Merizalde, firmames=1: la firma salia encima de la cuota 1 del 20/11).
+ * Exige la separacion escrita: un enlace viejo (solo ffirma) se reproduce como antes.
+ */
+function cot_firma_sola(bool $marcada, string $fsep, string $ffirma, int $meses, string $cuota, bool $aMedida): bool {
+    if ($marcada) return true;
+    if (trim($fsep) === '' || trim($ffirma) === '') return false;
+    return $meses > 0 || (float)$cuota > 0 || $aMedida;
+}
+
 function cot_mes_es(int $m): string {
     $n = ['', 'Enero','Febrero','Marzo','Abril','Mayo','Junio',
           'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];

@@ -56,4 +56,28 @@ $n20 = cot_plan(94500, 52, 'estandar', '', $E, 0, ['fechaSeparacion' => '2026-10
 test_same('20/11/2026', $cuotasDe($n20)[0], 'sin abonos, dia de pago 20: la primera cuota el 20 del mes siguiente a la firma');
 $m20 = cot_plan(94500, 52, 'estandar', '2027-03', $E, 0, ['diaPago' => 20]);
 test_same('20/03/2027', $cuotasDe($m20)[0], 'primera cuota escrita a mano: cae el dia de pago');
+// ── la fecha de la firma ESCRITA saca la firma de las cuotas (19-oct, deal 413035) ──
+test_same(true,  cot_firma_sola(true, '', '', 0, '', false), 'casilla marcada: sola');
+test_same(true,  cot_firma_sola(false, '2026-10-19', '2026-10-27', 1, '', false), 'fecha escrita + 1 mes: sola');
+test_same(true,  cot_firma_sola(false, '2026-10-19', '2026-10-27', 0, '500', false), 'fecha escrita + cuota mensual: sola');
+test_same(true,  cot_firma_sola(false, '2026-10-19', '2026-10-27', 0, '', true), 'fecha escrita + a la medida: sola');
+test_same(false, cot_firma_sola(false, '2026-10-19', '', 3, '', false), 'sin fecha de firma: sigue sumada a las cuotas');
+test_same(false, cot_firma_sola(false, '', '2026-10-27', 3, '', false), 'enlace viejo (sin separacion): como antes');
+test_same(false, cot_firma_sola(false, '2026-10-19', '2026-10-27', 0, '', false), 'firma sin partir: no hace falta (ya va en su fila)');
+test_same(false, cot_firma_sola(false, '2026-10-19', '2026-10-27', 0, '0', false), 'cuota mensual en 0 no cuenta');
+// el caso de Mario: firma el 27 en 1 pago, cuotas el 15
+$sola = fn(array $o) => cot_plan(94500, 52, 'estandar', '', $E, 0, $o + ['firmaAntes' => cot_firma_sola(false,
+    (string)($o['fechaSeparacion'] ?? ''), (string)($o['fechaFirma'] ?? ''), (int)($o['firmaMeses'] ?? 0), '', false)]);
+$ma = $sola(['fechaSeparacion' => '2026-10-19', 'fechaFirma' => '2026-10-27', 'firmaMeses' => 1, 'diaPago' => 15]);
+test_same(['27/10/2026'], $abonos($ma), 'Mario: la firma en su fila, el dia escrito');
+test_same('15/11/2026', $cuotasDe($ma)[0], 'Mario: primera cuota el 15 del mes siguiente');
+test_same(0.0, round(array_sum(array_map(fn($f) => (float)$f['firma'], array_filter($ma['filas'], fn($f) => empty($f['soloFirma'])))), 2), 'la firma ya no va encima de ninguna cuota');
+$m4 = $sola(['fechaSeparacion' => '2026-10-19', 'fechaFirma' => '2026-10-25', 'firmaMeses' => 4, 'diaPago' => 15]);
+test_same(['25/10/2026', '15/11/2026', '15/12/2026', '15/01/2027'], $abonos($m4), 'en 4: el primero el dia escrito, los demas el 15');
+test_same('15/02/2027', $cuotasDe($m4)[0], 'en 4: la primera cuota despues del ultimo abono');
+$tot = fn(array $p) => round(array_sum(array_map(fn($f) => (float)$f['monto'], $p['filas'])), 2);
+$sinFecha = cot_plan(94500, 52, 'estandar', '', $E, 0, ['fechaSeparacion' => '2026-10-19', 'firmaMeses' => 1, 'diaPago' => 15]);
+test_same($tot($sinFecha), $tot($ma), 'el total pagado no cambia por sacar la firma de las cuotas');
+$src = (string)file_get_contents(__DIR__ . '/../cotizar.php');
+test_same(true, str_contains($src, '$firmaAntes = cot_firma_sola('), 'la pagina decide con cot_firma_sola');
 echo 'firma antes (fecha): ' . $GLOBALS['TEST_N'] . " comprobaciones\n";

@@ -405,7 +405,8 @@ $unificar = $fusion ? (($_GET['unif'] ?? '1') !== '0') : true;
  * La diferencia NO se deduce con una formula inversa: se corre el motor UNA vez SIN
  * el corrimiento y se compara. Calculo puro, sin IO, y no se desincroniza del
  * reparto real -- que es lo que pasa cuando se re-deriva a mano. */
-$firmaAntes = (($_GET['firmaantes'] ?? '') === '1');
+$firmaAntes = cot_firma_sola(($_GET['firmaantes'] ?? '') === '1', $fSep, $fFirma,
+                             $vFirmaMeses, $vFirmaCuota, $firmaPers && !empty($opts['firmaPlan']));
 $absorbe    = ($_GET['absorbe'] ?? 'cuota') === 'extra' ? 'extra' : 'cuota';
 $extraCual  = max(0, min(6, (int)($_GET['extracual'] ?? 0)));
 $difPlazo   = 0.0;   // la plata de las cuotas que ya no caben
@@ -1034,9 +1035,15 @@ $hoy  = new DateTimeImmutable('now', new DateTimeZone('America/Guayaquil'));   /
                diferencia sube el mensual o se va a la extraordinaria que el diga. */ ?>
       <label class="chk-linea" style="margin-top:10px"
              title="Los abonos de la firma van en filas propias, antes de las cuotas. La primera cuota arranca el mes siguiente al último abono.">
-        <input type="checkbox" name="firmaantes" value="1" <?= $firmaAntes ? 'checked' : '' ?>>
+        <?php /* Marcada solo si la marco el asesor: si se marcara sola por la fecha, al
+                 borrar la fecha quedaria pegada y la firma no volveria a las cuotas. */ ?>
+        <input type="checkbox" name="firmaantes" value="1" <?= ($_GET['firmaantes'] ?? '') === '1' ? 'checked' : '' ?>>
         Pagar la firma <b>sola</b>, antes de las cuotas
       </label>
+      <?php if ($firmaAntes && ($_GET['firmaantes'] ?? '') !== '1'): ?>
+      <div class="ayuda-campo">Va sola porque escribiste la <b>fecha de la firma</b>: el primer
+        pago es ese día y los demás el día de pago. Para sumarla a las cuotas, borrá la fecha.</div>
+      <?php endif; ?>
       <?php if ($firmaAntes): ?>
       <div class="pers-caja">
         <div class="ayuda-campo">La entrega no se mueve, así que arrancar más tarde deja
@@ -1698,10 +1705,19 @@ $hoy  = new DateTimeImmutable('now', new DateTimeZone('America/Guayaquil'));   /
           foreach ($plan['filas'] as $fz) if (empty($fz['soloFirma'])) { $primCuota = (string)$fz['fecha']; break; } ?>
     La separación se paga el <?= h($plan['fechaReserva']) ?>,
     <?php if ($abonosF): ?>
-      lo de la firma en <?= count($abonosF) ?> abono<?= count($abonosF) > 1 ? 's' : '' ?>
-      (<?= h($abonosF[0]['fecha']) ?><?= count($abonosF) > 1 ? ' al ' . h(end($abonosF)['fecha']) : '' ?>)
+      <?php if (count($abonosF) === 1): ?>
+      lo de la firma el <?= h($abonosF[0]['fecha']) ?>
+      <?php else: ?>
+      lo de la firma en <?= count($abonosF) ?> abonos
+      (<?= h($abonosF[0]['fecha']) ?> al <?= h(end($abonosF)['fecha']) ?>)
+      <?php endif; ?>
     <?php else: ?>
-      lo de la firma hasta el <?= h($plan['fechaFirma']) ?> (<?= (int)$plan['diasFirma'] ?> días)
+      <?php /* los dias REALES entre separacion y firma: con la firma elegida ya no son
+               siempre 10 (decia "(10 dias)" con las dos el 19/10). */
+            $dSep = DateTimeImmutable::createFromFormat('!d/m/Y', (string)$plan['fechaReserva']);
+            $dFir = DateTimeImmutable::createFromFormat('!d/m/Y', (string)$plan['fechaFirma']);
+            $nDias = ($dSep && $dFir) ? (int)$dSep->diff($dFir)->days : (int)$plan['diasFirma']; ?>
+      lo de la firma <?= $nDias === 0 ? 'el mismo día' : 'hasta el ' . h($plan['fechaFirma']) . ' (' . $nDias . ' día' . ($nDias === 1 ? '' : 's') . ')' ?>
     <?php endif; ?>
     y la primera cuota vence el <?= h($primCuota) ?>.
     Las cuotas vencen el <?= (int)$plan['diaPago'] ?> de cada mes
