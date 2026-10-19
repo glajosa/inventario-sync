@@ -374,6 +374,11 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         /* Los pagos de firma arrancan en el mes de la FIRMA, no en el siguiente: si el
            cliente firma en septiembre, su primer abono de firma es de septiembre. */
         $base = new DateTimeImmutable($firmaFecha->format('Y-m-16'));
+        /* 🔴 Pero NUNCA antes de la separacion. Los abonos caen el 16; si se reserva
+           despues del 16 (Jesua 18-oct-2026, locales de Noral Plaza: separacion el
+           19/10 y el primer abono de firma salia el 16/10, "cuando ya estamos 18"), el
+           16 de ese mes ya paso: el primer abono va el 16 del mes siguiente. */
+        if ($base->format('Y-m-d') < $reservaFecha->format('Y-m-d')) $base = $base->modify('+1 month');
         for ($i = 0; $i < $cuantos; $i++) $mesesFirmaAntes[] = $base->modify("+{$i} month");
         $ultima = end($mesesFirmaAntes);
         $siguiente = $ultima->modify('+1 month');
