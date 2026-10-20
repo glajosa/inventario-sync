@@ -31,23 +31,20 @@ const CLIENTES_TRIGGERS = [
 ];
 
 /**
- * Etapas "mas alla de la reserva" que todavia NO estan firmadas. Un deal en una de estas
- * ya no pasa por RESERVA, asi que una unidad que se le ATA aca (reubicacion, cambio de
- * unidad en el campo Inventario) no recibia etapa y quedaba DISPONIBLE atada al deal.
- * Caso real 13-oct-2026: deal 6220 (Gema Zevallos), D-2-22 -> D-2-21 en Elaboracion
- * promesa; la 1729 quedo DISPONIBLE y el selector la ofrecia como libre.
- * Solo vale AL ATAR (no al cambiar de etapa el deal) y solo saca de DISPONIBLE.
+ * UNA UNIDAD ATADA A UN DEAL DE CLIENTES ES DE ESE CLIENTE, en cualquier etapa (Jesua
+ * 20-oct-2026): "si lo ataron a un deal es porque es el". Antes solo valia en 3 etapas
+ * (elaboracion promesa, listo para firma, reventas-reserva) y solo al atar: 6 unidades
+ * quedaron DISPONIBLE atadas a ventas vivas -- A-1-10 y C-1-20 (Luis Vega) y B-3-2 en
+ * CANJE NO FIRMADO, B-4-3 y B-4-4 (Alava) en LISTO PARA FIRMA, D7-1 -- y el plano las
+ * mostro libres (Javier Villegas, 20-oct).
+ * Excepcion: las etapas de CAIDA (CLIENTES_TRIGGERS => DISPONIBLE) sueltan la unidad.
+ * Solo saca de DISPONIBLE: nunca baja FIRMADO/VENDIDO ni toca BLOQUEADO.
+ * Caso que lo origino (13-oct): deal 6220, Gema Zevallos, D-2-21 en elaboracion promesa.
  */
-const CLIENTES_ETAPAS_RESERVAN_AL_ATAR = [
-    'C44:UC_Z3GY5H',   // ELABORACION PROMESA
-    'C44:UC_4R587H',   // LISTO PARA FIRMA
-    'C44:UC_N637MD',   // REVENTAS - RESERVA
-];
-
-/** Etapa que le toca a una unidad RECIEN ATADA a un deal en esa etapa, o null si no se toca. */
 function etapa_al_atar(string $etapaDeal, string $etapaUnidad, bool $perilla = true): ?string {
     if (!$perilla) return null;                       // reservar_al_atar_avanzado = 0: como antes
-    if (!in_array($etapaDeal, CLIENTES_ETAPAS_RESERVAN_AL_ATAR, true)) return null;
+    if (strncmp($etapaDeal, 'C44:', 4) !== 0) return null;                      // solo Clientes
+    if ((CLIENTES_TRIGGERS[$etapaDeal] ?? null) === 'DISPONIBLE') return null;  // caidas: sueltan
     return strtoupper(trim($etapaUnidad)) === 'DISPONIBLE' ? 'RESERVADO' : null;
 }
 

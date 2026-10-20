@@ -1114,10 +1114,12 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
                 $dueno = (int)($it['parentId2'] ?? 0);
                 $puede = ($target !== 'DISPONIBLE') || $dueno === 0 || $dueno === $dealId;
                 if ($puede) $nuevoStage = $target;
-            } elseif (isset($agregarSet[$uid])) {
-                /* Deal en elaboracion de promesa / listo para firma / reventas-reserva:
-                   la etapa del deal no dice nada de la unidad, pero una unidad recien
-                   atada a una venta viva no puede quedar DISPONIBLE (deal 6220, 13-oct).
+            } else {
+                /* La etapa del deal no dice nada de la unidad (canje no firmado,
+                   elaboracion de promesa, listo para firma...), pero una unidad ATADA a
+                   una venta viva no puede quedar DISPONIBLE: "si lo ataron a un deal es
+                   porque es el" (Jesua 20-oct). Vale para TODAS las del campo, no solo las
+                   recien agregadas: asi el re-sync del guardian tambien la repone.
                    Perilla reservar_al_atar_avanzado (0 = como antes). */
                 require_once __DIR__ . '/vendidaslib.php';   // inv_cfg()
                 $nuevoStage = etapa_al_atar($etapa, (string)unit_stage_name($it),
