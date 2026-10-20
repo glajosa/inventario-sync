@@ -310,6 +310,15 @@ function vend_desde_cambio(?PDO $d, string $unidad, string $antes, string $ahora
         return "vendidas: $unidad cambio de comprador $compradorAntes -> $comprador ($origen)$h"
              . " · $x venta vieja anulada · $n posibles avisos nuevos";
     }
+    /* CORRECCION DE LETRERO, NO VENTA (20-oct-2026): la unidad ya era de ESTE deal y
+       solo se le corrige la etapa (estaba DISPONIBLE atada a una venta vieja). Desde la
+       regla "atada = RESERVADO" una venta real se ata y se reserva en el mismo paso
+       (comprador antes 0), asi que esto solo es una correccion. Paso con B-4-3, B-4-4,
+       B-3-2, C-1-20: sus historias se publicaron como ventas nuevas y Jesua las borro. */
+    if (vend_es_venta($antes, $ahora, $etapas) && $compradorAntes > 0 && $compradorAntes === $comprador) {
+        return "vendidas: $unidad $antes -> $ahora con el MISMO deal $comprador ($origen): correccion de etapa,"
+             . " no venta nueva (sin lista ni historia)";
+    }
     if (vend_es_venta($antes, $ahora, $etapas) || $atadaAhora) {
         if ($comprador <= 0) return "vendidas: $unidad entro a $ahora SIN deal comprador -> no se arma lista";
         $n = vend_registrar($d, $unidad, $comprador, $ahora, $origen, null, $categoria);

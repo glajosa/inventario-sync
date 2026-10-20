@@ -127,6 +127,20 @@ test_same('', vend_desde_cambio($d, 'D-3-12', 'RESERVADO', 'RESERVADO', 801, 'av
 test_same('', vend_desde_cambio($d, 'D-2-12', 'RESERVADO', 'RESERVADO', 600, 'aviso', -1),
           'sin saber el comprador de antes (aviso normal): nada');
 
+// ── correccion de letrero (20-oct): DISPONIBLE -> RESERVADO con el MISMO deal ─────
+// B-4-3 (deal 9348) estaba DISPONIBLE atada a su venta; al corregirla salio su historia.
+$lc = vend_desde_cambio($d, 'B-4-3', 'DISPONIBLE', 'RESERVADO', 9348, 'propio', 9348, 39);
+test_same(true, str_contains($lc, 'correccion de etapa'), 'mismo deal antes y ahora: correccion, no venta: ' . $lc);
+test_same(0, (int)$d->query("SELECT COUNT(*) FROM vendidas WHERE unidad='B-4-3'")->fetchColumn(), 'la correccion no registra venta');
+test_same(true, str_contains(vend_desde_cambio($d, 'B-4-4', 'DISPONIBLE', 'FIRMADO', 9344, 'barrido', 9344, 39), 'correccion'),
+          'tambien a FIRMADO y desde el barrido');
+$lv = vend_desde_cambio($d, 'B-4-5', 'DISPONIBLE', 'RESERVADO', 9350, 'propio', 0, 39);
+test_same(true, str_contains($lv, 'vendida a deal 9350'), 'venta REAL (antes sin comprador) sigue siendo venta: ' . $lv);
+$lo = vend_desde_cambio($d, 'B-4-6', 'DISPONIBLE', 'RESERVADO', 9352, 'propio', 9351, 39);
+test_same(true, str_contains($lo, 'vendida a deal 9352'), 'otro deal distinto al de antes: venta: ' . $lo);
+test_same(true, str_contains(vend_desde_cambio($d, 'B-4-7', 'DISPONIBLE', 'RESERVADO', 0, 'aviso', 0, 39), 'SIN deal'),
+          'sin deal antes ni ahora (0 = 0) NO es correccion: sigue diciendo SIN deal');
+
 // sin deal comprador no se arma lista (no se sabe a quien excluir)
 $l = vend_desde_cambio($d, 'D-2-1', 'DISPONIBLE', 'RESERVADO', 0, 'aviso');
 test_same(true, str_contains($l, 'SIN deal comprador'), 'sin comprador lo dice y no arma lista');
