@@ -1,4 +1,6 @@
-FROM php:8.2-apache
+# 21-oct-2026 PHP2Shell (CVE-2026-109618/9): versión EXACTA. Con la etiqueta flotante 8.2-apache
+# el build puede reusar la imagen vieja guardada en caché y quedar en 8.2.34 sin avisar.
+FROM php:8.2.35-apache
 
 # curl para hablar con Bitrix
 RUN apt-get update \
