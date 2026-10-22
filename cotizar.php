@@ -1691,8 +1691,12 @@ $hoy  = new DateTimeImmutable('now', new DateTimeZone('America/Guayaquil'));   /
              cuadro: sale de dividir la separacion entre el precio, cambia en cada
              cotizacion y no es una condicion del plan. Se dicen los montos. */ ?>
     Plan: separación <?= h(cot_money($plan['separacion'])) ?>
-    <?= $plan['firma'] > 0 ? '+ ' . h(cot_money($plan['firma'])) . ' a la firma' : '· nada a la firma' ?>,
-    <?= h($pc($plan['cuotasPct'])) ?> en cuotas mensuales<?= $plan['extraTotal'] > 0 ? ' + ' . h($pc($plan['extraPct'])) . ' en cuotas extraordinarias' : '' ?>
+    <?php /* Con la firma en abonos (filas propias) `firma` es 0: decia "nada a la firma"
+             con 3 abonos en la tabla. Se suman los abonos. */
+          $abonosPie = array_filter($plan['filas'], fn($f) => !empty($f['soloFirma']));
+          $firmaPie  = $plan['firma'] + array_sum(array_map(fn($f) => (float)$f['monto'], $abonosPie)); ?>
+    <?= $firmaPie > 0 ? '+ ' . h(cot_money($firmaPie)) . ' a la firma' . (count($abonosPie) > 1 ? ' en ' . count($abonosPie) . ' abonos' : '') : '· nada a la firma' ?>,
+    <?= h($pc($plan['mensualPct'])) ?> en cuotas mensuales<?=$plan['extraTotal'] > 0 ? ' + ' . h($pc($plan['extraPct'])) . ' en cuotas extraordinarias' : '' ?>
     y <?= h($pc($plan['contraPct'])) ?> contraentrega.
     <?php /* Las tres fechas dichas en orden: sin esto el asesor tenia que explicar
              de palabra cuando vence cada cosa, y el cliente se quedaba con un papel

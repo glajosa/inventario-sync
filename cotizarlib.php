@@ -918,6 +918,14 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         'cuotasTotal'   => $sumaCuotas,
         'cuotasPct'     => $v > 0 ? $sumaCuotas / $v : 0.0,
         'extraPct'      => $v > 0 ? $extraTotal / $v : 0.0,
+        /* SOLO lo mensual: sin extraordinarias ni firma. `cuotasPct` suma todas las
+           filas, y el pie lo imprimia como "cuotas mensuales" -> 37.8% + 17.8% en
+           extraordinarias, mas que el 40% entero (Joao de la Cuadra E-2-2, 22-oct). En
+           una fila EXTRA la parte mensual es la cuota de siempre. */
+        'mensualPct'    => $v > 0 ? round(array_sum(array_map(
+                               fn($f) => !empty($f['soloFirma']) ? 0.0
+                                       : (!empty($f['extra']) ? $mensual : (float)$f['monto'] - (float)$f['firma']),
+                               $filas)), 2) / $v : 0.0,
         // Banderas para que la pantalla avise en vez de mentir en silencio.
         'bajaContraentrega' => $bajaContraentrega,
         'sobrepago'     => $sobrepago,
