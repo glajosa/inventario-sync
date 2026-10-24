@@ -27,5 +27,6 @@ require_once __DIR__ . '/test-bot-commercial-summary-endpoint.php';
 require_once __DIR__ . '/test-bot-quote-contract.php';
 require_once __DIR__ . '/test-bot-quote-service.php';
 require_once __DIR__ . '/test-bot-quote-endpoints.php';
+require_once __DIR__ . '/test-placement-auth.php';
 
 echo "OK\n";

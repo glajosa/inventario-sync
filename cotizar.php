@@ -8,8 +8,8 @@
  *
  * Acceso: NO lleva el token del servicio en la URL (se filtraría al vendedor y a
  * cualquiera que vea el enlace). Va con una firma HMAC de corta vida que arma
- * field.php, que Bitrix solo dibuja a un usuario ya autenticado en el portal.
- * La firma amarra unidad + deal + vencimiento: no sirve para pedir otra cosa.
+ * field.php DESPUÉS de verificar el placement contra Bitrix (lib/placement-auth.php).
+ * La firma amarra deal + usuario + vencimiento: no sirve para pedir otra cosa.
  *
  * Solo lectura: lee el catálogo del caché y el contacto del deal por API.
  * ---------------------------------------------------------------------------
@@ -20,6 +20,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/cotizarlib.php';
 require_once __DIR__ . '/cotizacioneslib.php';   // cothist_registrar()
 require_once __DIR__ . '/cotizarexcel.php';      // cot_excel_generar()
+require_once __DIR__ . '/lib/placement-auth.php'; // firma v2 de field.php
 
 // El catálogo se lee del MISMO archivo de caché que usa field.php. No se incluye
 // selector.php a propósito: ese módulo puede lanzar una reconstrucción completa
@@ -122,7 +123,23 @@ $dealId = (int)($_GET['d'] ?? 0);
 $exp    = (int)($_GET['exp'] ?? 0);
 $sig    = (string)($_GET['s'] ?? '');
 
-if (!$ids || !$exp || !hash_equals(cot_firma($dealId, $exp), $sig)) {
+/* 24-oct-2026: dos firmas válidas, y ninguna se puede sacar sin sesión.
+ *   - v2 (field.php): "v2.<deal>.<usuario>.<vence>.<hmac>" — solo se emite después de
+ *     que Bitrix confirmó, con el token del usuario, que puede leer el deal. Debe
+ *     coincidir con d y exp de la URL.
+ *   - la de siempre (d|e): la emiten SOLO el bot (API privada con HMAC propio) y el
+ *     historial (cotizaciones.php, con token). field.php ya NO la emite: antes la
+ *     regalaba a cualquiera que abriera /field.php sin sesión.
+ * En las dos se rechaza un vencimiento más lejano que 12 h (+5 min). */
+$firmaOk = false;
+if ($ids && $exp && pl_es_firma_v2($sig)) {
+    $fv = pl_verificar_firma('cot', $sig, $dealId, time(), PL_FIRMA_COT_TTL);
+    $firmaOk = $fv['ok'] || $fv['motivo'] === 'vencida';
+    if ($firmaOk && !preg_match('/\.' . $exp . '\.[a-f0-9]{64}$/D', $sig)) $firmaOk = false;   // exp de la URL = el firmado
+} elseif ($ids && $exp && $sig !== '') {
+    $firmaOk = hash_equals(cot_firma($dealId, $exp), $sig);
+}
+if (!$firmaOk || $exp > time() + PL_FIRMA_COT_TTL + 300) {
     http_response_code(403);
     exit('<!doctype html><meta charset="utf-8"><p style="font:15px system-ui;padding:30px">Enlace no válido.</p>');
 }

@@ -11,8 +11,10 @@
  * sincronizar_deal(), que es lo mismo que hacía el sincronizador de los campos
  * anteriores.
  *
- * Seguridad: el campo trae una firma (HMAC del id del deal con OUTBOUND_TOKEN)
- * que se genera al renderizar. Sin firma válida no se escribe nada.
+ * Seguridad: el campo trae una firma v2 (lib/placement-auth.php) que field.php
+ * solo emite después de que Bitrix confirmó, con el token del usuario, que ese
+ * usuario puede leer el deal. Amarra deal + usuario + vencimiento (2 h). Sin
+ * firma válida no se escribe nada.
  * ---------------------------------------------------------------------------
  */
 
@@ -21,25 +23,39 @@ declare(strict_types=1);
 require_once __DIR__ . '/codigolib.php';   // valor_campo(), unidades_separadas()
 require_once __DIR__ . '/campolib.php';
 require_once __DIR__ . '/reubicalib.php';
+require_once __DIR__ . '/lib/placement-auth.php';   // pl_verificar_firma()
 
 // Acción interactiva: sin freno entre llamadas. El freno es para los barridos.
 $BX_FRENO_US = 0;
 
 header('Content-Type: application/json; charset=utf-8');
 
-$dealId = (int)($_POST['deal'] ?? $_GET['deal'] ?? 0);
-$valor  = (string)($_POST['valor'] ?? $_GET['valor'] ?? '');
-$firma  = (string)($_POST['firma'] ?? $_GET['firma'] ?? '');
+header('Cache-Control: no-store');
+
+// Solo POST: el campo siempre llama así, y una firma en la URL queda en logs e historial.
+if (strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? '')) !== 'POST') {
+    http_response_code(405); header('Allow: POST');
+    echo json_encode(['ok' => false, 'error' => 'metodo no permitido']); exit;
+}
+
+$dealId = (int)($_POST['deal'] ?? 0);
+$valor  = (string)($_POST['valor'] ?? '');
+$firma  = (string)($_POST['firma'] ?? '');
 
 if ($dealId <= 0) { http_response_code(400); echo json_encode(['ok' => false, 'error' => 'falta deal']); exit; }
 
-$secreto = (string)getenv('OUTBOUND_TOKEN');
-if ($secreto === '' || !hash_equals(hash_hmac('sha256', (string)$dealId, $secreto), $firma)) {
+// Firma v2 de field.php: deal + usuario verificado por Bitrix + vencimiento (2 h).
+// La firma vieja (HMAC del id del deal, sin vencimiento) ya NO vale: se podía sacar
+// sin sesión de field.php y servía para siempre.
+$fv = pl_verificar_firma('campo', $firma, $dealId, time(), PL_FIRMA_CAMPO_TTL);
+if (!$fv['ok']) {
     http_response_code(403);
-    logline("deal=$dealId FIRMA INVALIDA");
-    echo json_encode(['ok' => false, 'error' => 'firma invalida']);
+    logline("deal=$dealId FIRMA INVALIDA ({$fv['motivo']})");
+    echo json_encode(['ok' => false, 'error' => $fv['motivo'] === 'vencida'
+        ? 'la sesion del campo vencio: vuelve a abrir el negocio' : 'firma invalida']);
     exit;
 }
+$usuarioFirma = (int)$fv['usuario'];
 
 // solo IDs numéricos: nunca se escribe en el deal lo que llegue tal cual
 $ids = [];
@@ -214,7 +230,7 @@ if ($cat === COBRANZAS_CAT) {
 }
 
 $r = sincronizar_deal($dealId, $deal);
-logline("deal=$dealId guardado=[$limpio] sync=" . json_encode($r));
+logline("deal=$dealId user=$usuarioFirma guardado=[$limpio] sync=" . json_encode($r));
 
 // Atar la unidad desde la app no mueve el deal, asi que el evento de Bitrix nunca
 // llega y la historia no se generaba: el sello aparecia en el plano y el buzon

@@ -17,6 +17,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/copiarlib.php';
+require_once __DIR__ . '/lib/placement-auth.php';   // pl_verificar_firma()
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -29,11 +30,16 @@ function salir(array $j, int $code = 200): void { http_response_code($code); ech
 
 if ($dealId <= 0 || $unitId <= 0) salir(['ok' => false, 'error' => 'faltan datos'], 400);
 
-$secreto = (string)getenv('OUTBOUND_TOKEN');
-if ($secreto === '' || !hash_equals(hash_hmac('sha256', (string)$dealId, $secreto), $firma)) {
-    logline("COPIAR deal=$dealId FIRMA INVALIDA");
-    salir(['ok' => false, 'error' => 'firma invalida'], 403);
+if (strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? '')) !== 'POST') salir(['ok' => false, 'error' => 'metodo no permitido'], 405);
+
+// Firma v2 de field.php: deal + usuario verificado por Bitrix + vencimiento (2 h).
+$fv = pl_verificar_firma('campo', $firma, $dealId, time(), PL_FIRMA_CAMPO_TTL);
+if (!$fv['ok']) {
+    logline("COPIAR deal=$dealId FIRMA INVALIDA ({$fv['motivo']})");
+    salir(['ok' => false, 'error' => $fv['motivo'] === 'vencida'
+        ? 'la sesion del campo vencio: vuelve a abrir el negocio' : 'firma invalida'], 403);
 }
+$usuarioFirma = (int)$fv['usuario'];
 
 $g = bx('crm.deal.get', ['id' => $dealId]);
 if (!$g['ok'] || empty($g['result'])) salir(['ok' => false, 'error' => 'el negocio no existe'], 404);
@@ -62,7 +68,7 @@ $r = copiar_deal_con_unidad($dealId, $deal, $unitId);
 if (empty($r['id'])) salir(['ok' => false, 'error' => (string)($r['error'] ?? 'no se pudo copiar')]);
 
 $cod = codigo_activo((string)($it['title'] ?? ''));
-logline("COPIAR deal=$dealId -> {$r['id']} con u=$unitId ($cod) desde el selector");
+logline("COPIAR deal=$dealId -> {$r['id']} con u=$unitId ($cod) desde el selector user=$usuarioFirma");
 salir(['ok' => true, 'deal' => (int)$r['id'], 'codigo' => $cod,
        'url' => '/crm/deal/details/' . (int)$r['id'] . '/',
        'aviso' => $r['error'] ?? null]);

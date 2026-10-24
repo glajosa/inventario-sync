@@ -29,6 +29,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/codigolib.php';   // unidades_separadas(), MARCA_SEPARADAS
+require_once __DIR__ . '/lib/placement-auth.php';   // pl_verificar_placement(), pl_firmar()
 
 $DATA_DIR = getenv('DATA_DIR') ?: '/data';
 
@@ -60,17 +61,18 @@ if (!empty($_REQUEST['PLACEMENT_OPTIONS'])) {
     if (is_array($tmp)) $opciones = $tmp;
 }
 
-/** Base firmada de la cotización, para este deal y por 12 horas.
- *  La firma (HMAC con el secreto del servicio) evita poner el token en la URL,
+/** Base firmada de la cotización, para este deal, ESTE usuario y por 12 horas.
+ *  La firma (HMAC v2, ver lib/placement-auth.php) evita poner el token en la URL,
  *  que quedaría a la vista de cualquiera con quien se comparta el enlace.
- *  Cubre el deal y el vencimiento, NO la lista de unidades: los activos
- *  fusionados se arman eligiendo en el desplegable, y esa selección cambia sin
- *  recargar la página, así que el servidor no puede firmar cada combinación.
- *  Lo que queda expuesto a cambio es el precio de otra unidad del catálogo, que
- *  el mismo asesor ya está viendo en la lista. */
-function cot_base(int $dealId): array {
-    $exp = time() + 12 * 3600;                    // dura la jornada del asesor
-    $sig = hash_hmac('sha256', "d{$dealId}|e{$exp}", (string)getenv('OUTBOUND_TOKEN'));
+ *  Cubre el deal, el usuario verificado y el vencimiento, NO la lista de unidades:
+ *  los activos fusionados se arman eligiendo en el desplegable, y esa selección
+ *  cambia sin recargar la página, así que el servidor no puede firmar cada
+ *  combinación. Lo que queda expuesto a cambio es el precio de otra unidad del
+ *  catálogo, que el mismo asesor ya está viendo en la lista.
+ *  Solo se llama DESPUÉS de pl_verificar_placement(): sin usuario verificado no hay firma. */
+function cot_base(int $dealId, int $usuario): array {
+    $exp = time() + PL_FIRMA_COT_TTL;             // dura la jornada del asesor
+    $sig = pl_firmar('cot', $dealId, $usuario, $exp);
     $host = (string)($_SERVER['HTTP_X_FORWARDED_HOST'] ?? $_SERVER['HTTP_HOST'] ?? '');
     return ['url' => 'https://' . $host . '/cotizar.php', 'd' => $dealId, 'exp' => $exp, 's' => $sig];
 }
@@ -78,6 +80,28 @@ function cot_base(int $dealId): array {
 $mode   = (string)($opciones['MODE'] ?? $_REQUEST['mode'] ?? 'edit');
 $dealId = (int)($opciones['ENTITY_VALUE_ID'] ?? 0);
 $name   = (string)($opciones['FIELD_NAME'] ?? ($_REQUEST['field']['NAME'] ?? $_REQUEST['name'] ?? 'UF_UNIDAD'));
+
+// 🔴 24-oct-2026: NADA se dibuja ni se firma sin que Bitrix confirme, con el token
+// del propio usuario, que el render es de NUESTRO portal y que ese usuario puede
+// leer ESTE deal. Antes ENTITY_VALUE_ID se tomaba tal cual de la petición y un GET
+// anónimo se llevaba la firma de cualquier deal. Ver lib/placement-auth.php.
+$PL = pl_verificar_placement($_SERVER, $_POST, $_GET, max(0, $dealId));
+if (!$PL['ok']) { pl_rechazar_html((string)$PL['motivo']); exit; }
+$plUsuario = (int)$PL['usuario'];
+@file_put_contents($DATA_DIR . '/web.log',
+    gmdate('Y-m-d\TH:i:s\Z') . '  PLACEMENT OK deal=' . $dealId . ' user=' . $plUsuario
+    . ' member=' . substr((string)$PL['member'], 0, 64) . ' app=' . substr((string)($PL['app'] ?? '-'), 0, 80)
+    . ($PL['fresco'] ? ' (verificado)' : ' (cache)') . "\n", FILE_APPEND | LOCK_EX);
+// La lectura que acaba de hacer la verificación trae categoría/etapa/contacto: se deja
+// en el caché de deal_estado() para no pagar otro crm.deal.get en este mismo render.
+if ($PL['fresco'] && is_array($PL['deal']) && $dealId > 0) {
+    $dcDir = $DATA_DIR . '/dealcache';
+    if (!is_dir($dcDir)) @mkdir($dcDir, 0775, true);
+    @file_put_contents($dcDir . '/' . $dealId . '.json', json_encode([
+        'cat' => (int)($PL['deal']['CATEGORY_ID'] ?? -1),
+        'stage' => (string)($PL['deal']['STAGE_ID'] ?? ''),
+        'contacto' => (int)($PL['deal']['CONTACT_ID'] ?? 0), 'ts' => time()]), LOCK_EX);
+}
 
 $value = (string)($opciones['VALUE'] ?? $_REQUEST['value'] ?? '');
 if ($value === 'null') $value = '';
@@ -97,8 +121,7 @@ if ($value === 'null') $value = '';
 // Guardar NO puede depender del formulario del deal: el campo vive en un iframe
 // y su <input> nunca viaja en el submit. Se guarda por API desde el navegador,
 // con el token que Bitrix entrega en cada render (AUTH_ID).
-$authId  = (string)($_REQUEST['AUTH_ID'] ?? '');
-$dominio = (string)($_REQUEST['DOMAIN'] ?? '');
+// (El AUTH_ID y el DOMAIN ya se verificaron arriba contra el portal permitido.)
 
 /** IDs seleccionados a partir del valor guardado ("581,623"). */
 function ids_de(string $v): array {
@@ -528,9 +551,9 @@ $phIni = $bloqIni === 'si' ? 'Ver inventario (se elige en RESERVA)'
     // para el boton de copiar: en que pipeline esta y si ya tiene unidad guardada
     cat:      <?= (int)$catDeal ?>,
     yaTiene:  <?= count($elegidos) ?>,
-    // firma del id del deal: guardar.php no escribe nada sin ella
+    // firma v2 (deal + usuario verificado + 2 h): guardar.php/copiar.php no escriben nada sin ella
     firma: <?= json_encode($dealId > 0
-        ? hash_hmac('sha256', (string)$dealId, (string)getenv('OUTBOUND_TOKEN'))
+        ? pl_firmar('campo', $dealId, $plUsuario, time() + PL_FIRMA_CAMPO_TTL)
         : '') ?>,
     prospectos: 28,
     reserva28: <?= json_encode(reserva28_cache()) ?>,
@@ -816,7 +839,7 @@ foreach ($elegidos as $id) {
   document.querySelectorAll('input[name="<?= $uid ?>_sep"]').forEach(function(r){
     r.addEventListener('change', function(){ pintarJunto(); ajustarIframe(); guardar(); });
   });
-  var COT = <?= json_encode(cot_base($dealId), JSON_UNESCAPED_SLASHES) ?>;
+  var COT = <?= json_encode(cot_base($dealId, $plUsuario), JSON_UNESCAPED_SLASHES) ?>;
   // unidades del gemelo 44 que este 48 puede elegir (gemelolib.php): el refresco no las apaga
   var GEMELO = <?= json_encode((object)$gemeloIds) ?>;
   // Unidades marcadas SOLO para cotizar. Es una lista aparte de `sel` a propósito:
