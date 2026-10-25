@@ -21,6 +21,8 @@
  */
 declare(strict_types=1);
 
+require_once __DIR__ . '/lib/placement-auth.php';   // pl_verificar_placement()
+
 $opciones = [];
 if (!empty($_REQUEST['PLACEMENT_OPTIONS'])) {
     $tmp = json_decode((string)$_REQUEST['PLACEMENT_OPTIONS'], true);
@@ -28,7 +30,15 @@ if (!empty($_REQUEST['PLACEMENT_OPTIONS'])) {
 }
 
 $mode   = (string)($opciones['MODE'] ?? $_REQUEST['mode'] ?? 'edit');
-$dealId = (int)($opciones['ENTITY_VALUE_ID'] ?? $_REQUEST['deal'] ?? 0);
+$dealId = (int)($opciones['ENTITY_VALUE_ID'] ?? 0);
+
+// 🔴 24-oct-2026: mismo patrón que field.php. Antes cualquiera abría el campo
+// eligiendo el deal en la petición. Ahora Bitrix confirma, con el token del propio
+// usuario, que el render es de NUESTRO portal y que ese usuario puede leer ESTE
+// deal (la verificación se comparte en caché con la de field.php: mismo token y
+// mismo deal = una sola llamada por apertura). Ver lib/placement-auth.php.
+$PL = pl_verificar_placement($_SERVER, $_POST, $_GET, max(0, $dealId));
+if (!$PL['ok']) { pl_rechazar_html('llamada:' . (string)$PL['motivo']); exit; }
 
 // settings: el campo no tiene configuración.
 if ($mode === 'settings') { echo ''; exit; }

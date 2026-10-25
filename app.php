@@ -7,6 +7,7 @@
 
 declare(strict_types=1);
 require_once __DIR__ . '/appauth.php';
+require_once __DIR__ . '/lib/placement-auth.php';   // pl_verificar_instalacion()
 
 // diagnóstico: qué nos manda Bitrix realmente al abrir la app
 @file_put_contents((getenv('DATA_DIR') ?: '/data') . '/sync.log',
@@ -15,15 +16,31 @@ require_once __DIR__ . '/appauth.php';
     . ' tieneAUTH=' . (empty($_REQUEST['AUTH_ID']) ? 'NO' : 'si') . "\n",
     FILE_APPEND | LOCK_EX);
 
+// 🔴 24-oct-2026: esta página solo se abre desde Bitrix. Antes cualquiera la
+// abría (y le hacía consultar Bitrix con el token de la app) y, peor, cualquier
+// POST con AUTH_ID/DOMAIN reemplazaba los tokens y el dominio de la app.
+// Ahora: el token tiene que ser de un usuario de NUESTRO portal (lo confirma
+// Bitrix), y solo se GUARDA si ese usuario es administrador.
+$V = pl_verificar_instalacion($_SERVER, $_REQUEST, null,
+    ['app' => (string)getenv('BITRIX_PLACEMENT_APP_CODE')]);
+if (!$V['ok']) {
+    pl_log_instalacion('APP', '403 motivo=' . (string)$V['motivo']);
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=utf-8');
+    header('Cache-Control: no-store');
+    exit("Abre esta app desde Bitrix.\n");
+}
 // Bitrix manda los tokens en cada llamada al handler: se aprovechan para
-// mantenerlos frescos aunque no se haya reinstalado la app.
-if (!empty($_REQUEST['AUTH_ID'])) {
+// mantenerlos frescos aunque no se haya reinstalado la app (solo los de un admin:
+// app_bx() registra tipos de campo, y eso lo hace un administrador).
+if ($V['admin']) {
     auth_guardar([
-        'access_token'  => $_REQUEST['AUTH_ID'],
-        'refresh_token' => $_REQUEST['REFRESH_ID'] ?? '',
-        'domain'        => $_REQUEST['DOMAIN'] ?? '',
+        'access_token'  => $V['access_token'],
+        'refresh_token' => $V['refresh_token'],
+        'domain'        => $V['dominio'],
     ]);
 }
+pl_log_instalacion('APP', 'OK user=' . $V['usuario'] . ($V['admin'] ? ' admin tokens-guardados' : ' no-admin sin-guardar'));
 
 $tipos = app_bx('userfieldtype.list');
 $cache = json_decode((string)@file_get_contents((getenv('DATA_DIR') ?: '/data') . '/selector_cache.json'), true);

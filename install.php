@@ -14,6 +14,7 @@
 
 declare(strict_types=1);
 require_once __DIR__ . '/appauth.php';
+require_once __DIR__ . '/lib/placement-auth.php';   // pl_verificar_instalacion(), pl_host_publico()
 
 const TIPO_CAMPO = 'galjosa_unidad';    // USER_TYPE_ID del campo propio (Inventario)
 const TIPO_LLAMADA = 'galjosa_llamada'; // USER_TYPE_ID del campo "Registrar llamada"
@@ -26,14 +27,16 @@ function ilog(string $m): void {
         gmdate('Y-m-d\TH:i:s\Z') . '  INSTALL ' . $m . "\n", FILE_APPEND | LOCK_EX);
 }
 
-/** Base pública de este servicio (para armar la URL del handler del campo). */
+/** Base pública de este servicio (para armar la URL del handler del campo).
+ *  Ya no sale de X-Forwarded-Host (lo elige el cliente): ver pl_host_publico(). '' = no se sabe. */
 function base_url(): string {
-    $host = (string)($_SERVER['HTTP_X_FORWARDED_HOST'] ?? $_SERVER['HTTP_HOST'] ?? '');
-    return 'https://' . $host;
+    $host = pl_host_publico($_SERVER);
+    return $host === '' ? '' : 'https://' . $host;
 }
 
 /** Registra (o re-registra) un tipo de campo propio dado su USER_TYPE_ID/handler/título. */
 function registrar_tipo(string $tipo, string $handlerPath, string $titulo, string $desc): array {
+    if (base_url() === '') return ['ok' => false, 'error' => 'sin-host-publico', 'desc' => 'definir PUBLIC_HOST'];
     $handler = base_url() . $handlerPath;
 
     // si ya existe, se borra para que tome el handler nuevo
@@ -68,16 +71,30 @@ function registrar_tipo_llamada(): array {
 }
 
 // ---- Bitrix instalando la app -----------------------------------------------
-// Llega por POST con AUTH_ID/REFRESH_ID (+ client_id/secret si se configuraron).
+// Llega por POST con AUTH_ID/REFRESH_ID/member_id (+ DOMAIN en la query).
+// 🔴 24-oct-2026: antes cualquier POST con esas claves reescribía app_auth.json
+// (tokens, dominio y hasta client_secret). Ahora el token tiene que ser de un
+// ADMINISTRADOR de nuestro portal, confirmado por el propio Bitrix, y
+// client_id/client_secret ya no se aceptan de la petición (quedan los guardados o
+// APP_CLIENT_ID/APP_CLIENT_SECRET del entorno). Ver lib/placement-auth.php.
 if (!empty($_REQUEST['AUTH_ID']) || !empty($_REQUEST['auth']['access_token'])) {
-    $auth = $_REQUEST['auth'] ?? [];
+    $V = pl_verificar_instalacion($_SERVER, $_REQUEST, null,
+        ['app' => (string)getenv('BITRIX_PLACEMENT_APP_CODE')]);
+    if (!$V['ok'] || !$V['admin']) {
+        $motivo = $V['ok'] ? 'no-es-admin' : (string)$V['motivo'];
+        pl_log_instalacion('INSTALL', '403 motivo=' . $motivo);
+        ilog('instalación rechazada: ' . preg_replace('/[^A-Za-z0-9:_-]/', '', $motivo));
+        http_response_code(403);
+        header('Content-Type: text/plain; charset=utf-8');
+        header('Cache-Control: no-store');
+        exit("forbidden\n");
+    }
     auth_guardar([
-        'access_token'  => $_REQUEST['AUTH_ID']    ?? ($auth['access_token']  ?? ''),
-        'refresh_token' => $_REQUEST['REFRESH_ID'] ?? ($auth['refresh_token'] ?? ''),
-        'domain'        => $_REQUEST['DOMAIN']     ?? ($auth['domain']        ?? ''),
-        'client_id'     => $_REQUEST['client_id']     ?? '',
-        'client_secret' => $_REQUEST['client_secret'] ?? '',
+        'access_token'  => $V['access_token'],
+        'refresh_token' => $V['refresh_token'],
+        'domain'        => $V['dominio'],        // el de la LISTA, no el que llegó
     ]);
+    pl_log_instalacion('INSTALL', 'OK user=' . $V['usuario'] . ' member=' . substr($V['member'], 0, 64));
 
     $r = registrar_tipo_campo();
     $r2 = registrar_tipo_llamada();

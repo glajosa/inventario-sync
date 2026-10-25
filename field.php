@@ -73,8 +73,11 @@ if (!empty($_REQUEST['PLACEMENT_OPTIONS'])) {
 function cot_base(int $dealId, int $usuario): array {
     $exp = time() + PL_FIRMA_COT_TTL;             // dura la jornada del asesor
     $sig = pl_firmar('cot', $dealId, $usuario, $exp);
-    $host = (string)($_SERVER['HTTP_X_FORWARDED_HOST'] ?? $_SERVER['HTTP_HOST'] ?? '');
-    return ['url' => 'https://' . $host . '/cotizar.php', 'd' => $dealId, 'exp' => $exp, 's' => $sig];
+    // Host: PUBLIC_HOST o el Host ya enrutado por Traefik, nunca X-Forwarded-Host (lo
+    // elige el cliente). Sin host válido, ruta relativa: el iframe es de este mismo origen.
+    $host = pl_host_publico($_SERVER);
+    $url  = $host === '' ? '/cotizar.php' : 'https://' . $host . '/cotizar.php';
+    return ['url' => $url, 'd' => $dealId, 'exp' => $exp, 's' => $sig];
 }
 
 $mode   = (string)($opciones['MODE'] ?? $_REQUEST['mode'] ?? 'edit');

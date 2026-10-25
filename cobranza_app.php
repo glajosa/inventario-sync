@@ -6,6 +6,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/lib/cobranza-appauth.php';
 require_once __DIR__ . '/lib/cobranza-protocolo.php';
+require_once __DIR__ . '/lib/placement-auth.php';   // pl_verificar_instalacion()
 
 // ?ver -> que version esta desplegada. Sin secreto: no revela nada.
 if (isset($_GET['ver'])) {
@@ -20,15 +21,30 @@ if (isset($_GET['ver'])) {
     . ' tieneAUTH=' . (empty($_REQUEST['AUTH_ID']) ? 'NO' : 'si') . "\n",
     FILE_APPEND | LOCK_EX);
 
+// 🔴 24-oct-2026: mismo agujero que app.php/install.php. Cualquier POST con
+// AUTH_ID/DOMAIN reemplazaba los tokens y el dominio de la app de cobranzas, y un
+// GET anónimo mostraba el portal y los handlers enlazados. Ahora solo se abre
+// desde Bitrix, con un token de NUESTRO portal confirmado por Bitrix, y solo se
+// guarda si es de un administrador (es quien instala).
+$V = pl_verificar_instalacion($_SERVER, $_REQUEST, null,
+    ['app' => (string)getenv('BITRIX_COBRANZA_APP_CODE')]);
+if (!$V['ok']) {
+    pl_log_instalacion('COBRANZA_APP', '403 motivo=' . (string)$V['motivo']);
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=utf-8');
+    header('Cache-Control: no-store');
+    exit("Abre esta app desde Bitrix.\n");
+}
 // Bitrix manda los tokens en CADA llamada al handler, no solo al instalar:
 // se aprovechan para mantenerlos frescos sin reinstalar.
-if (!empty($_REQUEST['AUTH_ID'])) {
+if ($V['admin']) {
     cob_auth_guardar([
-        'access_token'  => $_REQUEST['AUTH_ID'],
-        'refresh_token' => $_REQUEST['REFRESH_ID'] ?? '',
-        'domain'        => $_REQUEST['DOMAIN'] ?? '',
+        'access_token'  => $V['access_token'],
+        'refresh_token' => $V['refresh_token'],
+        'domain'        => $V['dominio'],
     ]);
 }
+pl_log_instalacion('COBRANZA_APP', 'OK user=' . $V['usuario'] . ($V['admin'] ? ' admin tokens-guardados' : ' no-admin sin-guardar'));
 
 $a = cob_auth_cargar();
 $instalada = ($a['access_token'] ?? '') !== '' && ($a['domain'] ?? '') !== '';

@@ -20,6 +20,11 @@
  */
 
 declare(strict_types=1);
+
+// 🔴 24-oct-2026: solo por cron. Por HTTP este archivo se inyectaba OUTBOUND_TOKEN a
+// sí mismo y cualquiera disparaba el refresco del catálogo (~26 llamadas a Bitrix).
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
+
 set_time_limit(0);
 
 // selector.php se protege por token vía GET; en CLI se le pasa el del entorno.

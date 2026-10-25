@@ -114,6 +114,9 @@ function pl_verificar_firma(string $proposito, string $firma, int $deal, int $ah
  * con `batch` de métodos de lectura (ver pl_verificar_placement).
  * Devuelve el JSON decodificado o null si no hubo respuesta legible.
  */
+// (El if deja que tests/placement-endpoint-runner.php la reemplace por un Bitrix simulado
+//  antes de cargar el endpoint. tests/ está denegado en Apache; en producción nadie la define antes.)
+if (!function_exists('pl_http_bitrix')) {
 function pl_http_bitrix(string $dominio, string $metodo, array $params): ?array {
     $ch = curl_init('https://' . $dominio . '/rest/' . $metodo . '.json');
     curl_setopt_array($ch, [
@@ -130,6 +133,7 @@ function pl_http_bitrix(string $dominio, string $metodo, array $params): ?array 
     $raw = curl_exec($ch);
     $j = json_decode((string)$raw, true);
     return is_array($j) ? $j : null;
+}
 }
 
 function pl_cache_dir(): string {
@@ -264,4 +268,110 @@ function pl_rechazar_html(string $motivo): void {
         FILE_APPEND | LOCK_EX);
     echo '<!doctype html><meta charset="utf-8"><p style="font:13px system-ui;color:#8b949e;margin:4px 7px">'
        . 'Abre este campo desde el negocio en Bitrix.</p>';
+}
+
+/* ===========================================================================
+ * INSTALACIÓN Y APERTURA DE LA APP LOCAL (install.php, app.php, cobranza_app.php)
+ * ---------------------------------------------------------------------------
+ * 🔴 EL AGUJERO QUE CIERRA (24-oct-2026, segunda ronda). Esos tres archivos
+ * tomaban AUTH_ID/REFRESH_ID/DOMAIN (y en install.php también client_id y
+ * client_secret) de CUALQUIER petición y los escribían en app_auth.json /
+ * cobranza_auth.json. Un POST anónimo reemplazaba los tokens OAuth de la app y
+ * el dominio al que app_bx() le habla: la app quedaba muerta o hablándole a un
+ * host del atacante, y al refrescar mandaba nuestro client_secret con el
+ * refresh_token que él eligió.
+ *
+ * AHORA solo se guarda un token si:
+ *   1. llegó por POST (Bitrix instala y abre la app por POST),
+ *   2. el DOMAIN está en BITRIX_PLACEMENT_DOMAINS (sin la variable: nada se guarda),
+ *   3. ESE portal (URL armada con el valor de la lista) confirma con una llamada
+ *      `batch` de SOLO LECTURA que el token es de un usuario real
+ *      (user.current), que ese usuario es ADMINISTRADOR (user.admin: instalar
+ *      una app exige serlo) y, si se configuró el código de la app, que el
+ *      token es de NUESTRA app (app.info).
+ * client_id y client_secret NUNCA salen de la petición: quedan los guardados o
+ * los del entorno (APP_CLIENT_ID/SECRET, COB_APP_CLIENT_ID/SECRET).
+ * =========================================================================== */
+
+/**
+ * @param array         $server $_SERVER
+ * @param array         $req    $_REQUEST (forma de instalación AUTH_ID/DOMAIN/member_id, o
+ *                              forma de evento auth[access_token]/auth[domain]/auth[member_id])
+ * @param callable|null $http   igual que en pl_verificar_placement (inyectable en pruebas)
+ * @param array|null    $cfg    ['dominios'=>[...], 'members'=>[...], 'app'=>'código esperado o ""']
+ * @return array ['ok'=>true,'usuario'=>N,'admin'=>bool,'dominio'=>..,'member'=>..,'app'=>?string,
+ *                'access_token'=>..,'refresh_token'=>..] | ['ok'=>false,'motivo'=>...]
+ */
+function pl_verificar_instalacion(array $server, array $req, ?callable $http = null, ?array $cfg = null): array {
+    $http ??= 'pl_http_bitrix';
+    $dominios = $cfg['dominios'] ?? pl_dominios_permitidos();
+    $members  = $cfg['members']  ?? pl_dominios_o_lista((string)getenv('BITRIX_PLACEMENT_MEMBER_IDS'));
+    $appCode  = (string)($cfg['app'] ?? '');
+
+    if (!$dominios) return ['ok' => false, 'motivo' => 'sin-allowlist'];
+    if (strtoupper((string)($server['REQUEST_METHOD'] ?? '')) !== 'POST') return ['ok' => false, 'motivo' => 'no-post'];
+
+    $ev = is_array($req['auth'] ?? null) ? $req['auth'] : [];
+    $authId   = (string)($req['AUTH_ID']    ?? $ev['access_token']  ?? '');
+    $refresh  = (string)($req['REFRESH_ID'] ?? $ev['refresh_token'] ?? '');
+    $memberId = (string)($req['member_id']  ?? $ev['member_id']     ?? '');
+    $dominioR = (string)($req['DOMAIN']     ?? $ev['domain']        ?? '');
+    if (!preg_match('/^[A-Za-z0-9._-]{16,512}$/D', $authId))  return ['ok' => false, 'motivo' => 'sin-auth'];
+    if ($refresh !== '' && !preg_match('/^[A-Za-z0-9._-]{16,512}$/D', $refresh)) return ['ok' => false, 'motivo' => 'refresh-raro'];
+    if (!preg_match('/^[A-Za-z0-9]{8,64}$/D', $memberId))     return ['ok' => false, 'motivo' => 'sin-member'];
+
+    $dominio = '';
+    $norm = pl_normalizar_dominio($dominioR);
+    foreach ($dominios as $permitido) {
+        if ($norm !== '' && hash_equals($permitido, $norm)) { $dominio = $permitido; break; }
+    }
+    if ($dominio === '') return ['ok' => false, 'motivo' => 'dominio-no-permitido'];
+    if ($members && !in_array(strtolower($memberId), array_map('strtolower', $members), true)) {
+        return ['ok' => false, 'motivo' => 'member-no-permitido'];
+    }
+
+    // UNA llamada, solo lectura, con el token que llegó, al portal de la LISTA.
+    $r = $http($dominio, 'batch', ['auth' => $authId, 'halt' => 0,
+        'cmd' => ['yo' => 'user.current', 'admin' => 'user.admin', 'app' => 'app.info']]);
+    if (!is_array($r))      return ['ok' => false, 'motivo' => 'bitrix-sin-respuesta'];
+    if (isset($r['error'])) return ['ok' => false, 'motivo' => 'token-rechazado:' . substr(preg_replace('/[^A-Za-z0-9_]/', '', (string)$r['error']), 0, 40)];
+    $res  = $r['result']['result'] ?? null;
+    $errs = $r['result']['result_error'] ?? [];
+    if (!is_array($res))    return ['ok' => false, 'motivo' => 'bitrix-respuesta-rara'];
+    if (!is_array($errs)) $errs = [];
+
+    $usuario = (int)($res['yo']['ID'] ?? 0);
+    if ($usuario <= 0 || isset($errs['yo'])) return ['ok' => false, 'motivo' => 'token-sin-usuario'];
+
+    $app = isset($res['app']['CODE']) ? (string)$res['app']['CODE'] : null;
+    if ($appCode !== '' && ($app === null || !hash_equals($appCode, $app))) {
+        return ['ok' => false, 'motivo' => 'token-de-otra-app'];
+    }
+
+    return ['ok' => true, 'usuario' => $usuario, 'admin' => ($res['admin'] ?? null) === true && !isset($errs['admin']),
+            'dominio' => $dominio, 'member' => $memberId, 'app' => $app,
+            'access_token' => $authId, 'refresh_token' => $refresh];
+}
+
+/** Bitácora de una decisión sobre tokens de la app (nunca el token). */
+function pl_log_instalacion(string $quien, string $decision): void {
+    @file_put_contents((getenv('DATA_DIR') ?: '/data') . '/web.log',
+        gmdate('Y-m-d\TH:i:s\Z') . '  ' . preg_replace('/[^A-Z_]/', '', $quien) . ' ' . preg_replace('/[^A-Za-z0-9:=_. -]/', '', $decision) . "\n",
+        FILE_APPEND | LOCK_EX);
+}
+
+/**
+ * Host público de este servicio para armar URLs absolutas (handler del campo,
+ * enlace del cotizador). NUNCA sale de X-Forwarded-Host, que manda el cliente:
+ * primero PUBLIC_HOST del entorno (opcional) y si no, el Host de la petición,
+ * que en EasyPanel ya pasó por el enrutador de Traefik (solo llegan los dominios
+ * configurados para el servicio). Devuelve '' si no hay un host con forma válida.
+ */
+function pl_host_publico(array $server, ?string $fijo = null): string {
+    $fijo ??= (string)getenv('PUBLIC_HOST');
+    foreach ([$fijo, (string)($server['HTTP_HOST'] ?? '')] as $c) {
+        $h = pl_normalizar_dominio($c);
+        if ($h !== '') return $h;
+    }
+    return '';
 }
