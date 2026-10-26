@@ -371,7 +371,7 @@ final class Xlsx
      * Formato: por cada archivo una cabecera local + los datos; al final el
      * directorio central y su cierre. Es el ZIP mas simple que existe y es valido.
      */
-    private function zip(array $partes): string
+    public static function zip(array $partes): string
     {
         $local = ''; $central = ''; $n = 0;
         foreach ($partes as $nombre => $datos) {

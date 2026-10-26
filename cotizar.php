@@ -19,7 +19,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/cotizarlib.php';
 require_once __DIR__ . '/cotizacioneslib.php';   // cothist_registrar()
-require_once __DIR__ . '/cotizarexcel.php';      // cot_excel_generar()
+require_once __DIR__ . '/cotizarexcel.php';      // cot_excel_generar() (formato de septiembre, ya no se baja)
+require_once __DIR__ . '/cotizarformato.php';    // cot_formato_generar(): el Excel en el formato de Galjosa
 
 // El catálogo se lee del MISMO archivo de caché que usa field.php. No se incluye
 // selector.php a propósito: ese módulo puede lanzar una reconstrucción completa
@@ -467,12 +468,19 @@ $plan = $bloques[0]['plan'];          // el primero manda para los avisos de pla
  * acabaria dando otro numero que el PDF el dia que alguien toque una de las dos.
  * Tiene que salir antes de cualquier HTML: por eso esta antes del <!doctype>. */
 if (($_GET['excel'] ?? '') === '1') {
-    $nombre = 'Plan de pagos - ' . codigos_comprimidos($codigos)
+    $nombre = 'Cotización - ' . codigos_comprimidos($codigos)
             . ($cliente !== '' ? ' - ' . $cliente : '') . '.xlsx';
     // El nombre viaja en una cabecera: sin esto un nombre con salto de linea deja
     // meter cabeceras propias en la respuesta.
     $nombre = preg_replace('/[\r\n"\\\\]/', ' ', $nombre);
-    $xlsx = cot_excel_generar($bloques, [
+    /* 26-oct-2026: el Excel es el FORMATO DE GALJOSA (CUOTAS NORMALES + MENSUALIZADO),
+       el que los vendedores y los clientes editan. El de septiembre (cot_excel_generar)
+       tenia formato propio y asi se le mando a Antonio Galarza. Ver cotizarformato.php. */
+    $logoProy = $esApartments ? __DIR__ . '/assets/logo_noral_apartments.png'
+              : ($esGalero ? __DIR__ . '/assets/logo_galero.png'
+              : ($catPrincipal === 49 ? __DIR__ . '/assets/logo_sunbay.png' : ''));   // '' = Noral Plaza (el de ellos)
+    $xlsx = cot_formato_generar($bloques, [
+        'logo'     => $logoProy,
         'cliente'  => $cliente,
         'proyecto' => $proyecto,
         'unidades' => implode(', ', $codigos),
@@ -905,7 +913,7 @@ $hoy  = new DateTimeImmutable('now', new DateTimeZone('America/Guayaquil'));   /
            cotizacion por defecto. Se arma en JS desde la URL actual para no tener
            que repetir aca los 20 parametros del plan y que se desincronicen. */ ?>
   <div class="sp">
-    <a class="imprimir excel" id="bajar-excel" href="#" title="La misma tabla, pero con fórmulas: el vendedor puede cambiar el precio o los porcentajes y se recalcula sola.">Descargar Excel</a>
+    <a class="imprimir excel" id="bajar-excel" href="#" title="El Excel de siempre (CUOTAS NORMALES y MENSUALIZADO), con fórmulas: se cambia la cuota o el precio y se recalcula solo. Va primero la hoja del plan cotizado.">Descargar Excel</a>
     <button class="imprimir" onclick="window.print()">Descargar PDF</button>
   </div>
   <script>
