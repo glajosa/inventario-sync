@@ -280,6 +280,7 @@ $vFirma = $num('firma');
 $extraPartes = (($_GET['extrapartes'] ?? '') === '2') ? 2 : 1;
 $vExtraMes1  = (int)($_GET['extrames1'] ?? 0);
 $vExtraMes2  = (int)($_GET['extrames2'] ?? 0);
+$vExtraCorto = (int)($_GET['extramescorto'] ?? 0);   // mes para el año que no llega al elegido
 // 4) % a financiar antes de la entrega: 40 es lo común, el vendedor lo puede bajar
 //    según lo que pida el cliente, pero el PISO ES 35 — se topa dentro del motor
 //    (cot_plan), no aquí, así que ninguna URL armada a mano lo salta.
@@ -358,6 +359,7 @@ if ($vFirmaCuota !== '') $opts['firmaCuota'] = (float)$vFirmaCuota;
 if ($vFirma !== '') $opts['firma'] = (float)$vFirma;
 if ($vExtraMes1 >= 1 && $vExtraMes1 <= 12) $opts['extraMes1'] = $vExtraMes1;
 if ($vExtraMes2 >= 1 && $vExtraMes2 <= 12) $opts['extraMes2'] = $vExtraMes2;
+if ($vExtraCorto >= 1 && $vExtraCorto <= 12) $opts['extraMesCorto'] = $vExtraCorto;
 // "Financia %" es una palanca de NORAL: mueve cuánto se paga antes de la entrega y
 // tiene piso de 35% dentro del motor. En Galero el reparto es fijo por contrato
 // (30/70 en Torre C y Casas), así que si se dejaba pasar, ese piso de 35 pisaba el
@@ -1250,6 +1252,22 @@ $hoy  = new DateTimeImmutable('now', new DateTimeZone('America/Guayaquil'));   /
             <option value="<?= $m ?>" <?= (int)$plan['extraMes2'] === $m ? 'selected' : '' ?>><?= $mesesSel[$m] ?></option>
             <?php endforeach; ?>
           </select></div>
+        <?php /* El año que NO llega al mes elegido (Jesua 26-oct-2026, Carol Alcivar E-2-2:
+                 diciembre en 2027-2030 y la de 2031 caia sola el 16/02, "aleatoria"). Solo
+                 aparece si hay un año asi, con los meses que ese año SI tiene. */
+              $cortos = (array)($plan['extraCortos'] ?? []);
+              if ($cortos):
+                $mesesCortos = array_values(array_unique(array_merge(...array_values($cortos))));
+                sort($mesesCortos); ?>
+        <div><label>En <?= h(implode(' y ', array_keys($cortos))) ?> (no llega a <?= h(strtolower($mesesSel[(int)$plan['extraMes1']] ?? '')) ?>)</label>
+          <select name="extramescorto" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()"
+                  title="Ese año el plan termina antes del mes elegido. Elegí en qué mes paga su extraordinaria.">
+            <option value="0" <?= (int)$plan['extraMesCorto'] === 0 ? 'selected' : '' ?>>a mitad (automático)</option>
+            <?php foreach ($mesesCortos as $m): ?>
+            <option value="<?= $m ?>" <?= (int)$plan['extraMesCorto'] === $m ? 'selected' : '' ?>><?= $mesesSel[$m] ?></option>
+            <?php endforeach; ?>
+          </select></div>
+        <?php endif; ?>
       </div>
     </div>
     <?php endif; ?>

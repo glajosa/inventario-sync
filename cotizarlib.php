@@ -503,6 +503,12 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
     $extraPartes = ($iguales) ? 1 : max(1, min(2, (int)($opts['extraPartes'] ?? 1)));
     $mesExtra1 = (int)($opts['extraMes1'] ?? 0);   // 0 = automático (el de siempre)
     $mesExtra2 = max(1, min(12, (int)($opts['extraMes2'] ?? 12)));
+    /* EL AÑO QUE NO LLEGA AL MES ELEGIDO (Jesua 26-oct-2026): con la extraordinaria en
+       diciembre, 2031 solo tiene enero-abril y la de ese año caia "a mitad" (febrero)
+       sin que nadie la eligiera. `extraMesCorto` es el mes que el asesor elige para ESE
+       año (0 = a mitad, como siempre). Si tampoco existe en ese año, a mitad. */
+    $mesCorto = max(0, min(12, (int)($opts['extraMesCorto'] ?? 0)));
+    $cortos   = [];   // [anio => meses que tiene] de los años que no llegan al mes elegido
     $posExtra = [];
     // Sin cuotas (entrega inmediata) no hay dónde poner una extraordinaria: el bloque
     // de abajo asume al menos una fecha y explotaba con la tabla vacía.
@@ -528,14 +534,18 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
                 foreach ($idxs as $i) if ((int)$fechas[$i]->format('n') === $mes) return $i;
                 return null;
             };
+            $aMitad = function () use ($buscar, $mesCorto, $idxs, $fechas, &$cortos, $y): int {
+                $cortos[$y] = array_map(fn($i) => (int)$fechas[$i]->format('n'), $idxs);
+                return ($mesCorto > 0 ? $buscar($mesCorto) : null) ?? $idxs[intdiv(count($idxs) - 1, 2)];
+            };
             if ($extraPartes === 2) {
-                $slotA = $buscar($mes1) ?? $idxs[intdiv(count($idxs) - 1, 2)];
+                $slotA = $buscar($mes1) ?? $aMitad();
                 $slotB = $buscar($mesExtra2);
                 $posExtra[] = $slotA;
                 if ($slotB !== null && $slotB !== $slotA) $posExtra[] = $slotB;
             } else {
                 $enMes = $buscar($mes1);
-                $posExtra[] = $enMes !== null ? $enMes : $idxs[intdiv(count($idxs) - 1, 2)];
+                $posExtra[] = $enMes !== null ? $enMes : $aMitad();
             }
         }
         sort($posExtra);
@@ -949,6 +959,10 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         // pantalla los muestre y el asesor pueda editarlos.
         'extraMes1'     => $iguales ? 0 : (isset($mes1) ? $mes1 : 0),
         'extraMes2'     => $iguales ? 0 : $mesExtra2,
+        // los años que no llegan al mes elegido y los meses que si tienen: la pantalla
+        // muestra el selector solo si hay alguno (ver extraMesCorto)
+        'extraCortos'   => ($iguales || !$posExtra) ? [] : $cortos,
+        'extraMesCorto' => $mesCorto,
         // Firma diferida: 0 meses = se pagó normal al firmar (o no había firma).
         'firmaBase'     => $firmaBase,
         'diferidoMeses' => $diferidoMeses,
