@@ -101,7 +101,7 @@ test_same(0, count($fx->calls), 'dominio con @ sin llamar');
 $r = pl_verificar_placement($SRV, $POST, $GET, 402071,
     new FakeBitrixPlacement(['error' => 'invalid_token', 'error_description' => 'x']), $CFG);
 test_same('token-rechazado:invalid_token', $r['motivo'], 'token inventado');
-test_same('bitrix-sin-respuesta', pl_verificar_placement($SRV, $POST, $GET, 402071, new FakeBitrixPlacement(null), $CFG)['motivo'], 'Bitrix caído = no se firma');
+test_same(true, str_starts_with((string)pl_verificar_placement($SRV, $POST, $GET, 402071, new FakeBitrixPlacement(null), ['reintentos' => 0] + $CFG)['motivo'], 'bitrix-sin-respuesta:'), 'Bitrix caído = no se firma');
 test_same('sin-acceso-al-deal', pl_verificar_placement($SRV, $POST, $GET, 402071,
     new FakeBitrixPlacement(bx_ok(42, null, 'local.abc123', ['deal' => ['error' => 'ACCESS_DENIED']])), $CFG)['motivo'], 'usuario sin permiso sobre el deal');
 test_same('sin-acceso-al-deal', pl_verificar_placement($SRV, $POST, $GET, 402071,
@@ -241,6 +241,58 @@ test_same([403, true], [$res['code'], str_contains($res['body'], 'venció')], 'c
 
 array_map('unlink', glob($tmp . '/*/*') ?: []);
 array_map('unlink', array_filter(glob($tmp . '/*') ?: [], 'is_file'));
+// ---------------------------------------------------------------- Bitrix mudo (27-oct-2026)
+// reloj y sueño falsos: se cuenta el tiempo sin esperar de verdad
+$t = 0.0;
+$reloj  = function () use (&$t) { return $t; };
+$dormir = function (int $us) use (&$t) { $t += $us / 1e6; };
+// Bitrix que tarda $seg en no contestar; como curl, corta en el tiempo limite que se le pasa
+final class FakeBitrixLento {
+    public array $calls = [];
+    public function __construct(private float $seg, private $avanzar) {}
+    public function __invoke(string $d, string $m, array $p, int $timeout = 6): ?array {
+        $this->calls[] = $timeout; ($this->avanzar)(min($this->seg, (float)$timeout)); return null;
+    }
+}
+$lento = function (float $seg) use (&$t) { return new FakeBitrixLento($seg, function (float $s) use (&$t) { $t += $s; }); };
+$base   = ['reloj' => $reloj, 'dormir' => $dormir, 'cache_vencido_horas' => 0] + $CFG;
+
+$fx = $lento(0.1); $t = 0.0;
+$r = pl_verificar_placement($SRV, $POST, $GET, 402071, $fx, ['reintentos' => 2] + $base);
+test_same(3, count($fx->calls), 'sin respuesta: reintenta 2 veces (3 intentos)');
+test_same(true, str_starts_with((string)$r['motivo'], 'bitrix-sin-respuesta:') && str_ends_with((string)$r['motivo'], ':x3'), 'el motivo dice cuantos intentos');
+$fx = $lento(6.0); $t = 0.0;
+pl_verificar_placement($SRV, $POST, $GET, 402071, $fx, ['reintentos' => 2] + $base);
+test_same(true, $t <= PL_TOPE_TOTAL_S + 0.01, 'tope TOTAL respetado aunque cada intento tarde 6 s (' . round($t, 2) . ' s)');
+test_same([6, 3], $fx->calls, 'con 6 s por intento: el 2do con el tiempo que queda (3 s) y no hay 3ro');
+$ok2 = 0;
+$fx = new FakeBitrixPlacement(function ($p) use (&$ok2, $DEAL) { return ++$ok2 < 2 ? null : bx_ok(42, $DEAL); });
+test_same(true, pl_verificar_placement($SRV, $POST, $GET, 402071, $fx, ['reintentos' => 2] + $base)['ok'], 'falla y al reintento contesta: pasa');
+$fx = new FakeBitrixPlacement(['error' => 'invalid_token']);
+pl_verificar_placement($SRV, $POST, $GET, 402071, $fx, ['reintentos' => 2] + $base);
+test_same(1, count($fx->calls), 'error de token: NO reintenta');
+$fx = $lento(0.1);
+pl_verificar_placement($SRV, $POST, $GET, 402071, $fx, ['reintentos' => 0] + $base);
+test_same(1, count($fx->calls), 'perilla pl_reintentos=0: un solo intento, como antes');
+
+// respaldo: verificacion anterior del MISMO token y el MISMO deal
+$tmp2 = sys_get_temp_dir() . '/pl-mudo-' . bin2hex(random_bytes(4));
+mkdir($tmp2, 0700, true); putenv('DATA_DIR=' . $tmp2);
+$cc = ['cache' => true, 'reintentos' => 0, 'cache_vencido_horas' => 24, 'reloj' => $reloj, 'dormir' => $dormir] + $CFG;
+test_same(true, pl_verificar_placement($SRV, $POST, $GET, 402071, new FakeBitrixPlacement(bx_ok(42, $DEAL)), $cc)['ok'], 'primero se verifica bien');
+$luego = ['ahora' => $AHORA + 3 * 3600] + $cc;   // 3 h despues: la cache normal (5 min) ya vencio
+$r = pl_verificar_placement($SRV, $POST, $GET, 402071, new FakeBitrixPlacement(null), $luego);
+test_same(true, $r['ok'], 'Bitrix mudo 3 h despues, mismo token y deal: usa la verificacion anterior');
+test_same(42, $r['usuario'], 'con el usuario que ya se habia verificado');
+test_same(true, str_starts_with((string)($r['nota'] ?? ''), 'cache-vencido-usado:10800s'), 'y lo anota para medir');
+test_same(false, pl_verificar_placement($SRV, $POST, $GET, 402072, new FakeBitrixPlacement(null), $luego)['ok'], 'otro deal: no usa el respaldo');
+test_same(false, pl_verificar_placement($SRV, ['AUTH_ID' => str_repeat('b2', 35)] + $POST, $GET, 402071, new FakeBitrixPlacement(null), $luego)['ok'], 'otro token (otra persona): no usa el respaldo');
+test_same('token-rechazado:invalid_token', pl_verificar_placement($SRV, $POST, $GET, 402071, new FakeBitrixPlacement(['error' => 'invalid_token']), $luego)['motivo'], 'error de token: NO usa el respaldo');
+test_same('sin-acceso-al-deal', pl_verificar_placement($SRV, $POST, $GET, 402071, new FakeBitrixPlacement(bx_ok(42, null, 'local.abc123', ['deal' => ['error' => 'ACCESS_DENIED']])), $luego)['motivo'], 'sin permiso: NO usa el respaldo');
+test_same(false, pl_verificar_placement($SRV, $POST, $GET, 402071, new FakeBitrixPlacement(null), ['ahora' => $AHORA + 25 * 3600] + $cc)['ok'], 'mas de 24 h: no usa el respaldo');
+test_same(false, pl_verificar_placement($SRV, $POST, $GET, 402071, new FakeBitrixPlacement(null), ['cache_vencido_horas' => 0] + $luego)['ok'], 'perilla en 0: respaldo apagado');
+array_map('unlink', glob($tmp2 . '/placementcache/*') ?: []); @rmdir($tmp2 . '/placementcache'); @rmdir($tmp2);
+
 array_map('rmdir', glob($tmp . '/*', GLOB_ONLYDIR) ?: []);
 @rmdir($tmp);
 putenv('DATA_DIR');

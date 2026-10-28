@@ -117,14 +117,14 @@ function pl_verificar_firma(string $proposito, string $firma, int $deal, int $ah
 // (El if deja que tests/placement-endpoint-runner.php la reemplace por un Bitrix simulado
 //  antes de cargar el endpoint. tests/ está denegado en Apache; en producción nadie la define antes.)
 if (!function_exists('pl_http_bitrix')) {
-function pl_http_bitrix(string $dominio, string $metodo, array $params): ?array {
+function pl_http_bitrix(string $dominio, string $metodo, array $params, int $timeout = 6): ?array {
     $ch = curl_init('https://' . $dominio . '/rest/' . $metodo . '.json');
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => http_build_query($params),
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 6,
-        CURLOPT_CONNECTTIMEOUT => 3,
+        CURLOPT_TIMEOUT        => max(1, $timeout),
+        CURLOPT_CONNECTTIMEOUT => min(3, max(1, $timeout)),
         CURLOPT_FOLLOWLOCATION => false,
         CURLOPT_PROTOCOLS      => CURLPROTO_HTTPS,
         CURLOPT_SSL_VERIFYPEER => true,
@@ -132,8 +132,62 @@ function pl_http_bitrix(string $dominio, string $metodo, array $params): ?array 
     ]);
     $raw = curl_exec($ch);
     $j = json_decode((string)$raw, true);
+    // por que no hubo respuesta, para el LOG (no para la pantalla): curl28 = se acabo el tiempo
+    $GLOBALS['PL_HTTP_DETALLE'] = is_array($j) ? ''
+        : (curl_errno($ch) ? 'curl' . curl_errno($ch) : 'http' . (int)curl_getinfo($ch, CURLINFO_HTTP_CODE));
     return is_array($j) ? $j : null;
 }
+}
+
+/** Perilla de config.json, leida sin depender de nada mas (el campo es liviano). */
+function pl_cfg(string $clave, int $def): int {
+    static $j = null;
+    if ($j === null) {
+        $j = json_decode((string)@file_get_contents((getenv('DATA_DIR') ?: '/data') . '/config.json'), true);
+        if (!is_array($j)) $j = [];
+    }
+    return array_key_exists($clave, $j) ? (int)$j[$clave] : $def;
+}
+
+/* ── CUANDO BITRIX NO CONTESTA (27-oct-2026) ─────────────────────────────────
+   Jesua vio "Abre este campo desde el negocio en Bitrix" en el deal 413845 abierto
+   DESDE Bitrix. La verificacion era UN intento de 6 s: el 28-oct UTC fallaron 9 de 74
+   aperturas (12 %), todas "bitrix-sin-respuesta". Acordado con VIGILANTE BITRIX:
+   - reintentar SOLO si no hubo respuesta (nunca ante un error de token o permisos),
+     con un tope TOTAL de ~10 s: el vendedor no puede mirar un campo en blanco 19 s;
+   - si aun asi Bitrix no contesta, aceptar una verificacion anterior del MISMO token
+     y el MISMO deal de las ultimas N horas (el token es de una sola persona: sin
+     respuesta de Bitrix, es lo unico que se puede comprobar). Fuera de eso, cerrado.
+   Perillas: pl_reintentos (0 = como antes), pl_cache_vencido_horas (0 = apagado). */
+const PL_TOPE_TOTAL_S   = 10;
+const PL_INTENTO_MIN_S  = 2;
+const PL_PAUSAS_US      = [400000, 900000];
+
+/**
+ * Llama con reintento y tope total. Devuelve [respuesta|null, detalle]. $reloj y $dormir
+ * se inyectan en las pruebas (sin esperar de verdad).
+ */
+function pl_http_con_reintento(callable $http, string $dominio, string $metodo, array $params,
+                               int $reintentos, ?callable $reloj = null, ?callable $dormir = null): array {
+    $reloj  ??= fn() => microtime(true);
+    $dormir ??= fn(int $us) => usleep($us);
+    $fin = $reloj() + PL_TOPE_TOTAL_S;
+    $detalle = ''; $intentos = 0;
+    for ($i = 0; $i <= max(0, $reintentos); $i++) {
+        if ($i > 0) {
+            $pausa = PL_PAUSAS_US[min($i - 1, count(PL_PAUSAS_US) - 1)];
+            // ¿alcanza la pausa + un intento minimo? si no, no se duerme en vano
+            if ($fin - $reloj() - $pausa / 1e6 < PL_INTENTO_MIN_S) break;
+            $dormir($pausa);
+        }
+        $resta = (int)floor($fin - $reloj());
+        $GLOBALS['PL_HTTP_DETALLE'] = '';
+        $r = $http($dominio, $metodo, $params, max(PL_INTENTO_MIN_S, min(6, $resta)));
+        $intentos++;
+        if (is_array($r)) return [$r, ''];
+        $detalle = (string)($GLOBALS['PL_HTTP_DETALLE'] ?? '') ?: 'sin-json';
+    }
+    return [null, $detalle . ':x' . $intentos];
 }
 
 function pl_cache_dir(): string {
@@ -200,9 +254,27 @@ function pl_verificar_placement(array $server, array $post, array $get, int $dea
     // UNA llamada, solo lectura. crm.deal.get con el token del usuario = Bitrix aplica SUS permisos.
     $cmd = ['yo' => 'user.current', 'app' => 'app.info'];
     if ($deal > 0) $cmd['deal'] = 'crm.deal.get?' . http_build_query(['id' => $deal]);
-    $r = $http($dominio, 'batch', ['auth' => $authId, 'halt' => 0, 'cmd' => $cmd]);
+    $reintentos = (int)($cfg['reintentos'] ?? pl_cfg('pl_reintentos', 2));
+    [$r, $detalle] = pl_http_con_reintento($http, $dominio, 'batch', ['auth' => $authId, 'halt' => 0, 'cmd' => $cmd],
+                                           $reintentos, $cfg['reloj'] ?? null, $cfg['dormir'] ?? null);
 
-    if (!is_array($r))           return ['ok' => false, 'motivo' => 'bitrix-sin-respuesta'];
+    if (!is_array($r)) {
+        /* Respaldo: la verificacion anterior del MISMO token y el MISMO deal, aunque haya
+           vencido, si es de las ultimas N horas. Solo aca (Bitrix mudo): ante un error de
+           token o de permisos, mas abajo, no se usa nunca. */
+        $horas = (int)($cfg['cache_vencido_horas'] ?? pl_cfg('pl_cache_vencido_horas', 24));
+        if ($usaCache && $horas > 0) {
+            $c = json_decode((string)@file_get_contents($ruta), true);
+            $edad = $ahora - (int)($c['verificado'] ?? 0);
+            if (is_array($c) && (int)($c['usuario'] ?? 0) > 0 && (int)($c['deal_id'] ?? -1) === $deal
+                && (int)($c['verificado'] ?? 0) > 0 && $edad >= 0 && $edad <= $horas * 3600) {
+                return ['ok' => true, 'usuario' => (int)$c['usuario'], 'dominio' => $dominio, 'member' => $memberId,
+                        'deal' => null, 'app' => $c['app'] ?? null, 'fresco' => false,
+                        'nota' => 'cache-vencido-usado:' . $edad . 's ' . $detalle];
+            }
+        }
+        return ['ok' => false, 'motivo' => 'bitrix-sin-respuesta:' . $detalle];
+    }
     if (isset($r['error']))      return ['ok' => false, 'motivo' => 'token-rechazado:' . substr(preg_replace('/[^A-Za-z0-9_]/', '', (string)$r['error']), 0, 40)];
     $res  = $r['result']['result'] ?? null;
     $errs = $r['result']['result_error'] ?? [];
@@ -234,6 +306,7 @@ function pl_verificar_placement(array $server, array $post, array $get, int $dea
         if (!is_dir($dir)) @mkdir($dir, 0770, true);
         @file_put_contents($ruta, json_encode([
             'usuario' => $usuario, 'deal_id' => $deal, 'app' => $app, 'hasta' => $ahora + $vida,
+            'verificado' => $ahora,   // para el respaldo cuando Bitrix no contesta
         ]), LOCK_EX);
         @chmod($ruta, 0600);
         if (random_int(1, 50) === 1) pl_cache_podar($ahora);
@@ -252,8 +325,10 @@ function pl_dominios_o_lista(string $crudo): array {
 
 /** Borra verificaciones viejas (nadie más limpia esa carpeta). */
 function pl_cache_podar(int $ahora): void {
+    // se guarda lo que el respaldo puede llegar a usar (pl_cache_vencido_horas), minimo 1 h
+    $max = max(3600, pl_cfg('pl_cache_vencido_horas', 24) * 3600);
     foreach (glob(pl_cache_dir() . '/*.json') ?: [] as $f) {
-        if ($ahora - (int)@filemtime($f) > 3600) @unlink($f);
+        if ($ahora - (int)@filemtime($f) > $max) @unlink($f);
     }
 }
 

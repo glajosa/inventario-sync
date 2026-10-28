@@ -94,7 +94,8 @@ $plUsuario = (int)$PL['usuario'];
 @file_put_contents($DATA_DIR . '/web.log',
     gmdate('Y-m-d\TH:i:s\Z') . '  PLACEMENT OK deal=' . $dealId . ' user=' . $plUsuario
     . ' member=' . substr((string)$PL['member'], 0, 64) . ' app=' . substr((string)($PL['app'] ?? '-'), 0, 80)
-    . ($PL['fresco'] ? ' (verificado)' : ' (cache)') . "\n", FILE_APPEND | LOCK_EX);
+    . ($PL['fresco'] ? ' (verificado)' : ' (cache)')
+    . (isset($PL['nota']) ? ' ' . preg_replace('/[^A-Za-z0-9:_ -]/', '', (string)$PL['nota']) : '') . "\n", FILE_APPEND | LOCK_EX);
 // La lectura que acaba de hacer la verificación trae categoría/etapa/contacto: se deja
 // en el caché de deal_estado() para no pagar otro crm.deal.get en este mismo render.
 if ($PL['fresco'] && is_array($PL['deal']) && $dealId > 0) {
