@@ -110,7 +110,7 @@ function cothist_queja(string $donde, Throwable $e): void {
 const COTHIST_PARAMS = [
     'u', 'd', 'mod', 'n', 'mes', 'ffirma', 'fsep', 'diapago', 'presu', 'entregameses', 'financiar',
     'firmames', 'firmacuota', 'firmapers', 'firmaantes', 'absorbe', 'extracual',
-    'extrapartes', 'extrames1', 'extrames2', 'extramescorto', 'extrapers', 'sep', 'addparq',
+    'extrapartes', 'extrames1', 'extrames2', 'extramescorto', 'extrarep', 'extrapers', 'sep', 'addparq',
     'unificar', 'pichanios', 'pichsis',
 ];
 

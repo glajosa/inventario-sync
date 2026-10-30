@@ -821,6 +821,50 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         ];
     }
 
+    /* ── EXTRAORDINARIAS REPARTIDAS EN LAS CUOTAS (Jesua 29/30-oct-2026) ─────────
+     * Antonio Galarza F-1-16: "la extraordinaria del 2027 y 2028 sea diferida para los
+     * 12 meses, y esos dos años le quede la cuota mas alta". `extraRepartir` = los AÑOS
+     * cuya extraordinaria no se cobra aparte: su monto se reparte parejo en 12 cuotas
+     * por cada una, seguidas, desde la primera cuota del año mas temprano elegido (la
+     * "opcion 1" que aprobo: 2027+2028 -> 24 cuotas de jul-2027 a jun-2029, +157,50).
+     * El total no cambia: lo que sale de la extraordinaria entra a las cuotas. Va ANTES
+     * del cuadre al centavo para que los centavos del reparto tambien cierren. */
+    $repAnios = array_values(array_unique(array_filter(array_map('intval', (array)($opts['extraRepartir'] ?? [])),
+                                                       fn($a) => $a >= 2000 && $a <= 2100)));
+    $extraRepartida = null;
+    if ($repAnios) {
+        $anioDe = fn(array $fl) => (int)substr((string)$fl['fecha'], 6, 4);
+        $elegidas = [];
+        foreach ($filas as $k => $fl) if (!empty($fl['extra']) && in_array($anioDe($fl), $repAnios, true)) $elegidas[] = $k;
+        if ($elegidas) {
+            $monto = 0.0;
+            foreach ($elegidas as $k) {
+                $ex = $filas[$k]['monto'] - $mensual - (float)$filas[$k]['firma'];
+                $monto += $ex;
+                $filas[$k]['monto'] -= $ex;
+                $filas[$k]['extra'] = false;
+                $filas[$k]['repartida'] = true;      // era extraordinaria: la pantalla y el Excel lo saben
+            }
+            $anioMin = min(array_map(fn($k) => $anioDe($filas[$k]), $elegidas));
+            $bloque = [];
+            foreach ($filas as $k => $fl) {
+                if (!empty($fl['soloFirma']) || $anioDe($fl) < $anioMin) continue;
+                if (count($bloque) >= 12 * count($elegidas)) break;
+                $bloque[] = $k;
+            }
+            $porCuota = $monto / max(1, count($bloque));
+            foreach ($bloque as $k) { $filas[$k]['monto'] += $porCuota; $filas[$k]['rep'] = $porCuota; }
+            $extraRepartida = [
+                'anios'    => array_values(array_unique(array_map(fn($k) => $anioDe($filas[$k]), $elegidas))),
+                'cuantas'  => count($elegidas),
+                'monto'    => $monto,
+                'porCuota' => $porCuota,
+                'desde'    => (int)$filas[$bloque[0]]['n'], 'hasta' => (int)$filas[end($bloque)]['n'],
+                'desdeF'   => $filas[$bloque[0]]['fecha'], 'hastaF' => $filas[end($bloque)]['fecha'],
+            ];
+        }
+    }
+
     /* ── CUADRE AL CENTAVO ──────────────────────────────────────────────────
      * Por dentro el plan siempre cerraba, porque la contraentrega se calculaba con
      * la cuota SIN redondear. El problema era el papel: 28.926,00 / 56 da
@@ -927,14 +971,16 @@ function cot_plan(float $valor, int $nCuotas, string $modalidad, string $mesInic
         'financiarPct'  => $v > 0 ? round((1 - $contraentrega / $v) * 100, 2) : 0.0,
         'cuotasTotal'   => $sumaCuotas,
         'cuotasPct'     => $v > 0 ? $sumaCuotas / $v : 0.0,
-        'extraPct'      => $v > 0 ? $extraTotal / $v : 0.0,
+        // sin las repartidas: esas ya van dentro de las cuotas (y de mensualPct)
+        'extraPct'      => $v > 0 ? ($extraTotal - (float)($extraRepartida['monto'] ?? 0)) / $v : 0.0,
+        'extraRepartida' => $extraRepartida,
         /* SOLO lo mensual: sin extraordinarias ni firma. `cuotasPct` suma todas las
            filas, y el pie lo imprimia como "cuotas mensuales" -> 37.8% + 17.8% en
            extraordinarias, mas que el 40% entero (Joao de la Cuadra E-2-2, 22-oct). En
            una fila EXTRA la parte mensual es la cuota de siempre. */
         'mensualPct'    => $v > 0 ? round(array_sum(array_map(
                                fn($f) => !empty($f['soloFirma']) ? 0.0
-                                       : (!empty($f['extra']) ? $mensual : (float)$f['monto'] - (float)$f['firma']),
+                                       : (!empty($f['extra']) ? $mensual + (float)($f['rep'] ?? 0) : (float)$f['monto'] - (float)$f['firma']),
                                $filas)), 2) / $v : 0.0,
         // Banderas para que la pantalla avise en vez de mentir en silencio.
         'bajaContraentrega' => $bajaContraentrega,

@@ -282,6 +282,9 @@ $extraPartes = (($_GET['extrapartes'] ?? '') === '2') ? 2 : 1;
 $vExtraMes1  = (int)($_GET['extrames1'] ?? 0);
 $vExtraMes2  = (int)($_GET['extrames2'] ?? 0);
 $vExtraCorto = (int)($_GET['extramescorto'] ?? 0);   // mes para el año que no llega al elegido
+// años cuya extraordinaria va REPARTIDA en las cuotas ("2027,2028"); ver cot_plan
+$vExtraRep   = array_values(array_filter(array_map('intval', preg_split('/[^0-9]+/', (string)($_GET['extrarep'] ?? ''))),
+                                         fn($a) => $a >= 2000 && $a <= 2100));
 // 4) % a financiar antes de la entrega: 40 es lo común, el vendedor lo puede bajar
 //    según lo que pida el cliente, pero el PISO ES 35 — se topa dentro del motor
 //    (cot_plan), no aquí, así que ninguna URL armada a mano lo salta.
@@ -361,6 +364,7 @@ if ($vFirma !== '') $opts['firma'] = (float)$vFirma;
 if ($vExtraMes1 >= 1 && $vExtraMes1 <= 12) $opts['extraMes1'] = $vExtraMes1;
 if ($vExtraMes2 >= 1 && $vExtraMes2 <= 12) $opts['extraMes2'] = $vExtraMes2;
 if ($vExtraCorto >= 1 && $vExtraCorto <= 12) $opts['extraMesCorto'] = $vExtraCorto;
+if ($vExtraRep) $opts['extraRepartir'] = $vExtraRep;
 // "Financia %" es una palanca de NORAL: mueve cuánto se paga antes de la entrega y
 // tiene piso de 35% dentro del motor. En Galero el reparto es fijo por contrato
 // (30/70 en Torre C y Casas), así que si se dejaba pasar, ese piso de 35 pisaba el
@@ -1277,6 +1281,38 @@ $hoy  = new DateTimeImmutable('now', new DateTimeZone('America/Guayaquil'));   /
           </select></div>
         <?php endif; ?>
       </div>
+      <?php /* REPARTIR EN LAS CUOTAS (30-oct-2026): el cliente elige que años NO pagan
+               extraordinaria aparte; su monto se reparte en 12 cuotas por cada una, desde
+               la primera cuota del año mas temprano marcado. Las casillas no llevan name:
+               arman el campo oculto `extrarep` ("2027,2028") y recalculan. */
+            $aniosExtra = [];
+            foreach ($plan['filas'] as $fz) if (!empty($fz['extra']) || !empty($fz['repartida']))
+                $aniosExtra[(int)substr((string)$fz['fecha'], 6, 4)] = !empty($fz['repartida']);
+            ksort($aniosExtra);
+            if ($aniosExtra): ?>
+      <div class="ayuda-campo" style="margin-top:10px">Repartir en las cuotas (12 meses cada una), en vez de pagarla aparte:</div>
+      <div class="grupo-campos" id="extra-rep">
+        <?php foreach ($aniosExtra as $anio => $marcado): ?>
+        <label class="chk-linea" title="La extraordinaria de <?= (int)$anio ?> no se cobra aparte: se suma repartida a 12 cuotas.">
+          <input type="checkbox" data-anio="<?= (int)$anio ?>" <?= $marcado ? 'checked' : '' ?>> <?= (int)$anio ?>
+        </label>
+        <?php endforeach; ?>
+        <input type="text" name="extrarep" value="<?= h(implode(',', $vExtraRep)) ?>" style="display:none" aria-hidden="true">
+      </div>
+      <script>
+      (function(){
+        var caja = document.getElementById('extra-rep'); if (!caja) return;
+        var campo = caja.querySelector('input[name="extrarep"]');
+        caja.querySelectorAll('input[data-anio]').forEach(function(c){
+          c.addEventListener('change', function(){
+            campo.value = Array.prototype.filter.call(caja.querySelectorAll('input[data-anio]'), function(x){ return x.checked; })
+                          .map(function(x){ return x.getAttribute('data-anio'); }).join(',');
+            var f = campo.form; if (f) (f.requestSubmit ? f.requestSubmit() : f.submit());
+          });
+        });
+      })();
+      </script>
+      <?php endif; ?>
     </div>
     <?php endif; ?>
     <?php if ($fusion): ?>
@@ -1769,8 +1805,17 @@ $hoy  = new DateTimeImmutable('now', new DateTimeZone('America/Guayaquil'));   /
     y la primera cuota vence el <?= h($primCuota) ?>.
     Las cuotas vencen el <?= (int)$plan['diaPago'] ?> de cada mes
     y la última es en <?= h($plan['hastaTxt']) ?>.
-    <?php if ($plan['nExtra'] > 0): ?>
-      Incluye <?= (int)$plan['nExtra'] ?> cuota<?= $plan['nExtra'] > 1 ? 's' : '' ?> extraordinaria<?= $plan['nExtra'] > 1 ? 's' : '' ?>
+    <?php /* Con extraordinarias repartidas se dice cuales, en que cuotas y cuanto suben;
+             y "Incluye N" cuenta solo las que se siguen pagando aparte. */
+          $rep = $plan['extraRepartida'] ?? null;
+          $nAparte = (int)$plan['nExtra'] - (int)($rep['cuantas'] ?? 0); ?>
+    <?php if ($rep): ?>
+      La<?= $rep['cuantas'] > 1 ? 's' : '' ?> extraordinaria<?= $rep['cuantas'] > 1 ? 's' : '' ?> de <?= h(implode(' y ', $rep['anios'])) ?>
+      va<?= $rep['cuantas'] > 1 ? 'n' : '' ?> repartida<?= $rep['cuantas'] > 1 ? 's' : '' ?> en las cuotas <?= (int)$rep['desde'] ?> a <?= (int)$rep['hasta'] ?>
+      (<?= h($rep['desdeF']) ?> al <?= h($rep['hastaF']) ?>): <?= h(cot_money(round($rep['porCuota'], 2))) ?> más cada mes.
+    <?php endif; ?>
+    <?php if ($nAparte > 0): ?>
+      Incluye <?= $nAparte ?> cuota<?= $nAparte > 1 ? 's' : '' ?> extraordinaria<?= $nAparte > 1 ? 's' : '' ?>
       de <?= h(cot_money($plan['valorExtra'])) ?>
       (<?= $plan['extraPartes'] === 2 ? 'dos por año, en abril y diciembre' : 'una por año' ?>), que van sumadas a la cuota de ese mes.
     <?php endif; ?>
