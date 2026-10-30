@@ -128,7 +128,8 @@ function cot_fmt_hoja(string $tipo, array $b, array $meta, bool $primera, string
     $abonos = array_values(array_filter($filas, fn($f) => !empty($f['soloFirma'])));
     $cuotas = array_values(array_filter($filas, fn($f) => empty($f['soloFirma'])));
     $N  = count($cuotas);
-    $nX = count(array_filter($cuotas, fn($f) => !empty($f['extra'])));
+    // las repartidas en las cuotas (cot_plan extraRepartir) siguen siendo extraordinarias del 10%
+    $nX = count(array_filter($cuotas, fn($f) => !empty($f['extra']) || !empty($f['repartida'])));
     $mensual = $tipo === 'mensual';
     $plaza = stripos((string)($meta['proyecto'] ?? ''), 'plaza') !== false;
 
@@ -196,9 +197,12 @@ function cot_fmt_hoja(string $tipo, array $b, array $meta, bool $primera, string
         if ($mensual) {
             $cel[] = cot_fmt_c('C' . $r, $S['vacio'], round((float)$f['monto'], 2));
         } else {
-            $ex = !empty($f['extra']);
-            $cel[] = cot_fmt_c('C' . $r, $S['vacio'], $base + ($ex ? $porAnio : 0.0),
-                               ($ex ? '$E$24+' : '') . '$B$14*0.2/$B$20');
+            $ex  = !empty($f['extra']);
+            $rep = (float)($f['rep'] ?? 0) > 0;   // cuota del bloque de extraordinarias repartidas
+            /* Repartida: k extraordinarias en 12k cuotas -> a cada cuota le toca E24/12
+               (E24 = el 10% / cuantas). En formula, asi se ve de donde sale y se recalcula. */
+            $cel[] = cot_fmt_c('C' . $r, $S['vacio'], $base + ($ex ? $porAnio : 0.0) + ($rep ? $porAnio / 12 : 0.0),
+                               ($ex ? '$E$24+' : '') . ($rep ? '$E$24/12+' : '') . '$B$14*0.2/$B$20');
         }
         if ($i === 0) {   // la columna de trabajo de ellos, al lado de la primera cuota
             $cel[] = cot_fmt_c('D' . $r, $S['vacio'], 0.0, 'D23/4');
@@ -218,7 +222,8 @@ function cot_fmt_hoja(string $tipo, array $b, array $meta, bool $primera, string
     $suma = $sep + ($mensual ? array_sum(array_map(fn($a) => round((float)$a['monto'], 2), $abonos))
                                  + ($abonos ? 0.0 : round((float)$plan['firma'], 2))
                                  + array_sum(array_map(fn($f) => round((float)$f['monto'], 2), $cuotas))
-                             : ($diez - $sep) + $base * $N + $porAnio * $nX);
+                             : ($diez - $sep) + $base * $N + $porAnio * count(array_filter($cuotas, fn($f) => !empty($f['extra'])))
+                               + array_sum(array_map(fn($f) => (float)($f['rep'] ?? 0) > 0 ? $porAnio / 12 : 0.0, $cuotas)));
     $rows[] = cot_fmt_fila($t, [cot_fmt_c('B' . $t, $S['rotulo'], 'Total Cuota Inicial:'),
                                 cot_fmt_c('C' . $t, $S['vacio'], $suma, "+SUM(C22:C$ult)"),
                                 cot_fmt_c('D' . $t, $S['pct'], $P > 0 ? $suma / $P : 0.0, "C$t/C$t3"),
