@@ -413,7 +413,8 @@ $phIni = $bloqIni === 'si' ? 'Ver inventario (se elige en RESERVA)'
   /* dentro del desplegable: lo elegido, en azul y con la ✕ */
   #<?= $uid ?> .gu-elegidas{border-bottom:1px solid #eaeef2;background:#f6faff}
   #<?= $uid ?> .gu-eltit{padding:6px 10px 2px;font-size:10.5px;font-weight:700;color:#0969da;
-      letter-spacing:.05em;text-transform:uppercase}
+      letter-spacing:.05em;text-transform:uppercase;
+      display:flow-root}   /* contiene los botones flotantes: si no, empujaban la ✕ de la 1ra fila */
   #<?= $uid ?> .gu-el{display:flex;align-items:center;gap:8px;padding:6px 10px;color:#0a3069}
   #<?= $uid ?> .gu-el .gu-elcod{font-weight:600;min-width:58px}
   #<?= $uid ?> .gu-el .gu-elproy{color:#57606a;font-size:11.5px;flex:1 1 auto;overflow:hidden;
