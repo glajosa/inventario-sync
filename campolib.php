@@ -383,10 +383,21 @@ function unidades_asignables(array $ids, int $dealId, int $contacto = 0, ?callab
     // lee de disco (0 llamadas) y solo se pregunta el contacto cuando hay choque.
     $apart = apartados_registro();
 
+    // La bodega NO se vende sola (Jesua 1-nov): va con una suite o un local en el MISMO
+    // deal. Si en la lista no hay ninguna unidad que no sea parqueo/bodega, se rechaza.
+    $hayUnidad = false;
+    foreach (($r['result']['items'] ?? []) as $it)
+        if (!pq_es_accesorio($it['categoryId'] ?? 0)) { $hayUnidad = true; break; }
+
     $ok = [];
     foreach (($r['result']['items'] ?? []) as $it) {
         $id = (int)($it['id'] ?? 0);
         if (!$id) continue;
+        if (!$hayUnidad && pq_es_accesorio($it['categoryId'] ?? 0)
+            && (int)($it[U_TIPO] ?? 0) === PQ_TIPO_BODEGA) {
+            $GLOBALS['PQ_MOTIVO'] = 'la bodega se vende junto a una suite o un local';
+            continue;
+        }
         $dueno = (int)($it['parentId2'] ?? 0);
         if ($dueno === $dealId) { $ok[] = $id; continue; }   // ya es mía
         // Parqueo ASIGNADO a un departamento (parqueolib.php): entra solo junto a su
@@ -905,18 +916,22 @@ function noral_avisar_generador(int $catId, string $codigo, string $accion): voi
  * sobre el monto que YA tiene (no sobre la lista: ese monto puede ser negociado).
  * OPPORTUNITY y VALOR DEL ACTIVO, los dos. 1 escritura.
  */
-function sumar_parqueo_al_monto(int $dealId, array $deal, float $delta): array {
+function sumar_parqueo_al_monto(int $dealId, array $deal, float $delta, array $extras = []): array {
     $op  = max(0.0, money_num($deal['OPPORTUNITY'] ?? '') + $delta);
     $val = max(0.0, money_num($deal[D_VALOR] ?? '') + $delta);
     $monto = rtrim(rtrim(number_format($op, 2, '.', ''), '0'), '.');
-    $u = bx('crm.deal.update', ['id' => $dealId, 'fields' => [
-        'OPPORTUNITY' => $monto, 'CURRENCY_ID' => 'USD', D_VALOR => money_fmt($val)]]);
+    $campos = ['OPPORTUNITY' => $monto, 'CURRENCY_ID' => 'USD', D_VALOR => money_fmt($val)];
+    // el nombre del deal dice qué parqueos/bodegas adicionales lleva
+    $t = pq_titulo((string)($deal['TITLE'] ?? ''), $extras);
+    if ($t !== (string)($deal['TITLE'] ?? '')) $campos['TITLE'] = $t;
+    $u = bx('crm.deal.update', ['id' => $dealId, 'fields' => $campos]);
     if (!$u['ok']) { logline("deal=$dealId parqueo al monto ERR: {$u['error']}"); return ['err' => $u['error']]; }
     logline("deal=$dealId parqueo al monto: " . ($delta > 0 ? '+' : '') . $delta . " -> monto=$monto valor=" . money_fmt($val));
     return ['parqueo' => $delta, 'monto' => $monto];
 }
 
-function autollenar_ficha(int $dealId, array $fichas, array $deal = [], float $extra = 0.0): array {
+function autollenar_ficha(int $dealId, array $fichas, array $deal = [], float $extra = 0.0,
+                          array $extras = []): array {
     // El proyecto lo manda la unidad PRINCIPAL, o sea la de mayor PVP — no la
     // primera del campo. Con "la primera" bastaba que el vendedor pusiera el
     // parqueo antes de la suite para que Proyectos 1 recibiera el proyecto del
@@ -966,7 +981,9 @@ function autollenar_ficha(int $dealId, array $fichas, array $deal = [], float $e
     if ($deal) {
         $t = titulo_deal((string)($deal['TITLE'] ?? ''), (int)($deal['CONTACT_ID'] ?? 0),
                          proyecto_nombre($proy), codigos_comprimidos($cods));
-        if ($t !== null && $t !== (string)($deal['TITLE'] ?? '')) $campos['TITLE'] = $t;
+        // + Bodega (BD-1-12) / + Parqueo (PQ-1-5) al final (parqueolib.php)
+        $t = pq_titulo($t ?? (string)($deal['TITLE'] ?? ''), $extras);
+        if ($t !== (string)($deal['TITLE'] ?? '')) $campos['TITLE'] = $t;
     }
 
     $u = bx('crm.deal.update', ['id' => $dealId, 'fields' => $campos]);
@@ -1082,6 +1099,7 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     $cambioUnidad = false;   // se agregó o quitó algo que NO es parqueo/bodega
     $accPvp   = 0.0;         // PVP de los parqueos/bodegas que quedan en el campo
     $deltaAcc = 0.0;         // lo que suman (o restan) los parqueos atados/soltados en ESTA pasada
+    $accExtras = [];         // parqueos/bodegas ADICIONALES que quedan (van al título)
 
     foreach (array_merge($quiere, $soltar) as $uid) {
         $uid = (int)$uid;
@@ -1100,6 +1118,11 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
         if (!$esAcc && $suelta) $cambioUnidad = true;
         $pvpIt = money_num($it[U_PVP] ?? '');
         if ($esAcc && !$suelta) $accPvp += $pvpIt;
+        // el asignado vale 0 y es parte del departamento: no se nombra
+        if ($esAcc && !$suelta && $pvpIt > 0) $accExtras[] = [
+            't'   => (int)($it[U_TIPO] ?? 0) === PQ_TIPO_BODEGA ? 'Bodega' : 'Parqueo',
+            'cod' => codigo_activo((string)($it['title'] ?? '')),
+        ];
 
         // Se aprovecha ESTE get (ya pagado) para el autollenado de la ficha del
         // deal: así no cuesta ninguna llamada extra de lectura.
@@ -1253,9 +1276,9 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     $sumaPq = (int)pq_cfg('parqueo_suma_monto', 1) === 1;
     $ficha = [];
     if ($cambioUnidad && $fichas) {
-        $ficha = autollenar_ficha($dealId, $fichas, $deal, $sumaPq ? $accPvp : 0.0);
+        $ficha = autollenar_ficha($dealId, $fichas, $deal, $sumaPq ? $accPvp : 0.0, $accExtras);
     } elseif ($sumaPq && !$cayo && abs($deltaAcc) >= 0.005) {
-        $ficha = sumar_parqueo_al_monto($dealId, $deal, $deltaAcc);
+        $ficha = sumar_parqueo_al_monto($dealId, $deal, $deltaAcc, $accExtras);
     }
 
     // Lo que CLIENTES acaba de atar se saca del campo de PROSPECTOS: ahí ya no es

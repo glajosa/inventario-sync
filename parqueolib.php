@@ -24,6 +24,7 @@
 declare(strict_types=1);
 
 const PARQUEO_CAT = 63;   // categoría del SPA 1072 "Parqueos y bodegas · Noral Plaza"
+const PQ_TIPO_BODEGA = 2177;   // "Tipo de bien" = Bodega (la opción la agregó Jesua el 1-nov)
 
 /** Lee una clave de config.json sin cargar nada más (field.php también lo usa). */
 function pq_cfg(string $clave, $porDefecto) {
@@ -75,6 +76,21 @@ function pq_ids_accesorios(): array {
 function pq_sin_accesorios(array $ids): array {
     $acc = pq_ids_accesorios();
     return array_values(array_filter(array_map('intval', $ids), fn($i) => !isset($acc[$i])));
+}
+
+/**
+ * Título del deal con los parqueos/bodegas ADICIONALES al final, entre paréntesis:
+ *   "RubyPacheco--Noral Plaza (Locales Comerciales)--F-1-22 + Bodega (BD-1-12)"
+ * Jesua 1-nov-2026: "bodega, paréntesis, y ahí la unidad que es".
+ * Se borra lo que hubiera de antes y se pone lo de ahora: quitar la bodega la saca
+ * del nombre. Solo títulos con la forma "A--B--C"; otro texto se deja como está.
+ * $extras = [['t' => 'Bodega'|'Parqueo', 'cod' => 'BD-1-12'], ...]
+ */
+function pq_titulo(string $titulo, array $extras): string {
+    if (count(explode('--', $titulo)) < 3) return $titulo;
+    $base = preg_replace('/(\s*\+\s*(Bodega|Parqueo)\s*\([^)]*\))+\s*$/u', '', $titulo);
+    foreach ($extras as $e) $base .= ' + ' . $e['t'] . ' (' . $e['cod'] . ')';
+    return $base;
 }
 
 /** Parqueo o bodega (categoría 63): va en el campo pero no es "la unidad" del deal. */

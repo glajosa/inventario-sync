@@ -804,16 +804,21 @@ foreach ($elegidos as $id) {
   var CAT_PQ = <?= (int)PARQUEO_CAT ?>;
   // todos los parqueos asignados (con o sin perilla): el refresco no los vuelve "libres"
   var PQ_ASIG = <?= json_encode((object)array_fill_keys(array_map('strval', array_keys($PQ_ASIG)), 1)) ?>;
-  /** Lista solo los parqueos libres ($20.000) para sumar uno mas al departamento. */
-  function verParqueosLibres(){
+  var TIPO_BODEGA = <?= (int)PQ_TIPO_BODEGA ?>;
+  /** Lista solo los parqueos (prefijo 'PQ-', $20.000) o las bodegas ('BD-', $4.000) libres. */
+  function verParqueosLibres(prefijo){
     cat = String(CAT_PQ);
     var b = menu.querySelector('button[data-cat="' + cat + '"]');
     Array.prototype.forEach.call(menu.children, function(x){ x.setAttribute('aria-pressed', String(x === b)); });
     dropTxt.textContent = b ? (b.dataset.nom || 'Parqueos') : 'Parqueos';
-    q.value = 'PQ-';
+    q.value = prefijo || 'PQ-';
     soloLibres = true;
     Array.prototype.forEach.call(seg.children, function(x){ x.setAttribute('aria-pressed', String(x.dataset.libres === '1')); });
     filtrar();
+  }
+  /** ¿Hay elegida alguna unidad de Noral Plaza (suite, departamento o local)? */
+  function hayUnidadPlaza(){
+    return sel.some(function(id){ return Number((datos(id) || {}).cat) === CAT_PLAZA; });
   }
   /** El o los codigos que van pegados a este: su pareja, en cualquiera de los dos sentidos. */
   function pegadosA(cod){
@@ -1116,8 +1121,17 @@ foreach ($elegidos as $id) {
       bp.className = 'gu-cottodas gu-pqmas';
       bp.textContent = '+ Parqueo adicional';
       bp.title = 'Muestra los parqueos libres ($20.000 c/u) para sumar otro';
-      bp.addEventListener('click', function(e){ e.stopPropagation(); e.preventDefault(); verParqueosLibres(); });
+      bp.addEventListener('click', function(e){ e.stopPropagation(); e.preventDefault(); verParqueosLibres('PQ-'); });
       t.appendChild(bp);
+    }
+    // Bodega: con cualquier unidad de Noral Plaza (suite o local). Sola no se vende.
+    if (hayUnidadPlaza() && (CFG.cat === 28 || CFG.cat === 44)) {
+      var bb = document.createElement('a');
+      bb.className = 'gu-cottodas gu-pqmas';
+      bb.textContent = '+ Bodega';
+      bb.title = 'Muestra las bodegas libres ($4.000 c/u)';
+      bb.addEventListener('click', function(e){ e.stopPropagation(); e.preventDefault(); verParqueosLibres('BD-'); });
+      t.appendChild(bb);
     }
     elegidas.appendChild(t);
     sel.forEach(function(id){
@@ -1432,6 +1446,11 @@ foreach ($elegidos as $id) {
     }
     if (f.dataset.libre !== '1') return;          // ocupada: no seleccionable
     if (sel.indexOf(id) !== -1) return;           // ya elegida (se quita desde "Elegidas")
+    // la bodega va con una suite o un local (guardar.php tambien lo rechaza)
+    if (Number(f.dataset.cat) === CAT_PQ && Number(f.dataset.tipo) === TIPO_BODEGA && !hayUnidadPlaza()) {
+      avisar('La bodega se vende junto a una suite o un local: elige primero la unidad', true);
+      return;
+    }
     sel.push(id);
     var pq = PQ[id];                // su parqueo asignado entra solo
     if (pq && sel.indexOf(pq) === -1) sel.push(pq);
