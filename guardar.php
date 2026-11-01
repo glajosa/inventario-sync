@@ -168,7 +168,8 @@ if ($ids) {
         logline("deal=$dealId RECHAZADO unidades no asignables: " . implode(',', $malas)
                 . ($motivoGemelo !== '' ? " ($motivoGemelo)" : ''));
         echo json_encode(['ok' => false,
-            'error' => 'Unidad ya apartada o no disponible: ' . implode(', ', $malas)
+            'error' => (!empty($GLOBALS['PQ_MOTIVO']) ? 'No se puede: ' . $GLOBALS['PQ_MOTIVO']
+                     : 'Unidad ya apartada o no disponible: ' . implode(', ', $malas))
                      . ($motivoGemelo !== '' ? " — $motivoGemelo" : '')]);
         exit;
     }
