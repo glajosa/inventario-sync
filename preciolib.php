@@ -38,6 +38,7 @@
  */
 
 declare(strict_types=1);
+require_once __DIR__ . '/parqueolib.php';   // pq_sin_accesorios(): los parqueos no reparten precio
 
 // Lo único que no existía ya en campolib/stagelib. El resto se reutiliza para que
 // no haya dos definiciones del mismo campo que puedan divergir:
@@ -85,8 +86,10 @@ function pf_mapa(): array { return pf_leer('mapa48.json'); }
 
 /** Unidades de una entrada del mapa. Acepta el formato viejo (lista pelada). */
 function pf_unis($e): array {
-    if (is_array($e) && array_key_exists('u', $e)) return array_map('intval', (array)$e['u']);
-    return is_array($e) ? array_map('intval', $e) : [];
+    // sin parqueos ni bodegas: repartir el precio final con un parqueo de $0 adentro
+    // le dejaba al departamento la mitad (parqueolib.php, 1-nov-2026)
+    if (is_array($e) && array_key_exists('u', $e)) return pq_sin_accesorios((array)$e['u']);
+    return is_array($e) ? pq_sin_accesorios($e) : [];
 }
 /** VALOR DEL ACTIVO del deal de Clientes, si el mapa lo trae. */
 function pf_v44($e): ?float {
@@ -158,10 +161,10 @@ function pf_resolver_al_vuelo(array $deal): array {
     if ($cod !== '') {
         $ex = [];
         foreach ($cands as $c) if (pf_cod((string)($c[D_ACTIVO] ?? '')) === $cod) $ex[] = $c;
-        if (count($ex) === 1) return [ids_de((string)($ex[0][CAMPO_NUEVO] ?? '')), pf_money($ex[0][D_VALOR] ?? null)];
+        if (count($ex) === 1) return [pq_sin_accesorios(ids_de((string)($ex[0][CAMPO_NUEVO] ?? ''))), pf_money($ex[0][D_VALOR] ?? null)];
         if (count($ex) > 1)  return [[], null];   // ambiguo: mejor no escribir nada
     }
-    if (count($cands) === 1) return [ids_de((string)($cands[0][CAMPO_NUEVO] ?? '')), pf_money($cands[0][D_VALOR] ?? null)];
+    if (count($cands) === 1) return [pq_sin_accesorios(ids_de((string)($cands[0][CAMPO_NUEVO] ?? ''))), pf_money($cands[0][D_VALOR] ?? null)];
     return [[], null];
 }
 

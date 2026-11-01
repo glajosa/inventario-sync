@@ -122,7 +122,7 @@ foreach ($c44 as $d) {
     $cod = pf_cod((string)($d[D_ACTIVO] ?? ''));
     $val = pf_money($d[D_VALOR] ?? null);
     $pro = pf_proy((string)($d['TITLE'] ?? ''));
-    $unis = array_map('intval', ids_de((string)($d[CAMPO_NUEVO] ?? '')));
+    $unis = pq_sin_accesorios(ids_de((string)($d[CAMPO_NUEVO] ?? '')));   // sin parqueos: no reparten precio
     if (!$unis) continue;
 
     $hit = null; $como = '';
