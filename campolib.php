@@ -189,6 +189,7 @@ function bx(string $method, array $params = []): array {
 }
 
 require_once __DIR__ . '/stagelib.php';
+require_once __DIR__ . '/parqueolib.php';  // parqueos asignados: no tocan la ficha del deal
 require_once __DIR__ . '/codigolib.php';   // codigos_comprimidos()   // stage_id(), apply_unit_stage(), CLIENTES_TRIGGERS...
 
 /**
@@ -388,6 +389,12 @@ function unidades_asignables(array $ids, int $dealId, int $contacto = 0, ?callab
         if (!$id) continue;
         $dueno = (int)($it['parentId2'] ?? 0);
         if ($dueno === $dealId) { $ok[] = $id; continue; }   // ya es mía
+        // Parqueo ASIGNADO a un departamento (parqueolib.php): entra solo junto a su
+        // departamento y en ese caso su etapa no importa -copia la del departamento,
+        // y el de una suite vendida no esta DISPONIBLE-. Suelto, nunca.
+        $acomp = pq_asignado_acompanado($id, $ids);
+        if ($acomp === false) continue;
+        if ($acomp === true && $dueno === 0) { $ok[] = $id; continue; }
         $stage = $rev[(string)($it['stageId'] ?? '')] ?? '';
         if ($dueno !== 0) {
             // atada a otro deal. Unica excepcion: el 48 en REUBICACION que pide la unidad
@@ -1049,6 +1056,7 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     $movidas   = 0;
     $agregarSet = array_flip($agregar);
     $fichas     = [];   // datos de las unidades del campo, para el autollenado de abajo
+    $cambioUnidad = false;   // se agregó o quitó algo que NO es parqueo/bodega
 
     foreach (array_merge($quiere, $soltar) as $uid) {
         $uid = (int)$uid;
@@ -1058,9 +1066,17 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
         if (!$r['ok']) { logline("ERR get u=$uid: {$r['error']}"); continue; }
         $it = $r['result']['item'] ?? $r['result'];
 
+        // Parqueo o bodega: se ata y sigue la etapa del deal como cualquier unidad, pero
+        // NO entra a la ficha. autollenar_ficha suma PVPs de lista y cuenta unidades
+        // para el descuento de parqueo: con el parqueo adentro, pisaba el precio
+        // negociado y el titulo del deal (parqueolib.php, 1-nov-2026).
+        $esAcc = pq_es_accesorio($it['categoryId'] ?? 0);
+        if (!$esAcc && isset($agregarSet[$uid])) $cambioUnidad = true;
+        if (!$esAcc && $suelta) $cambioUnidad = true;
+
         // Se aprovecha ESTE get (ya pagado) para el autollenado de la ficha del
         // deal: así no cuesta ninguna llamada extra de lectura.
-        if (!$suelta) {
+        if (!$suelta && !$esAcc) {
             $fichas[$uid] = [
                 'cod'  => codigo_activo((string)($it['title'] ?? '')),
                 'pvp'  => (float)explode('|', (string)($it[U_PVP] ?? ''))[0],
@@ -1081,7 +1097,7 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
         // Al soltar, el generador retira la historia de esa unidad. Hay que olvidar
         // la huella del deal o una re-reserva de la MISMA unidad no regeneraria
         // nada: la libreta diria "ya generada" y la vieja ya no existe.
-        if ($suelta) {
+        if ($suelta && !$esAcc) {
             try {
                 require_once __DIR__ . '/historialib.php';
                 hist_libreta_olvidar($dealId);
@@ -1197,7 +1213,8 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     //
     // Con el campo vacío no se toca nada: es lo que ocurre cuando el deal cae, y ahí
     // borrar el monto de una venta perdida sería destruir el registro.
-    $ficha = (($agregar || $soltar) && $fichas) ? autollenar_ficha($dealId, $fichas, $deal) : [];
+    // Solo si cambió una unidad de verdad: agregar o quitar SOLO un parqueo no toca la ficha.
+    $ficha = ($cambioUnidad && $fichas) ? autollenar_ficha($dealId, $fichas, $deal) : [];
 
     // Lo que CLIENTES acaba de atar se saca del campo de PROSPECTOS: ahí ya no es
     // un apartado, es una venta. Va al final, cuando el atado ya está hecho.

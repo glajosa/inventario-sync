@@ -30,6 +30,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/codigolib.php';   // unidades_separadas(), MARCA_SEPARADAS
 require_once __DIR__ . '/lib/placement-auth.php';   // pl_verificar_placement(), pl_firmar()
+require_once __DIR__ . '/parqueolib.php';  // parqueo asignado de cada departamento
 
 $DATA_DIR = getenv('DATA_DIR') ?: '/data';
 
@@ -512,6 +513,8 @@ $phIni = $bloqIni === 'si' ? 'Ver inventario (se elige en RESERVA)'
      color:#fff;background:#0969da;border-radius:6px;padding:2px 9px;text-decoration:none;
      margin-top:-2px}
   #<?= $uid ?> .gu-cottodas:hover{background:#0757b3}
+  #<?= $uid ?> .gu-pqmas{background:#fff;color:#0969da;border:1px solid #0969da;margin-right:6px;cursor:pointer}
+  #<?= $uid ?> .gu-pqmas:hover{background:#ddf4ff;color:#0969da}
   #<?= $uid ?> .gu-cot{flex:0 0 auto;margin-left:8px;font-size:11px;font-weight:600;
      letter-spacing:.3px;color:#0c6c9c;border:1px solid #cfe2f0;border-radius:6px;
      padding:2px 8px;text-decoration:none;background:#f2f8fc;opacity:.55;transition:opacity .12s;
@@ -670,6 +673,9 @@ foreach ($elegidos as $id) {
           if (is_string($__mitad) && is_string($__con)) $MITADES_PAREJA[$__mitad] = $__con;
   }
 
+  /* Parqueos asignados: el de cada departamento no se vende suelto, asi que en la lista
+     sale ocupado; entra solo, pegado a su departamento (ver PQ en el JS). */
+  $PQ_ASIG = array_flip(array_values(pq_asignados()));
   $datos = [];
   foreach ($proys as $cid => $nom) {
       $lst = $porProyecto[(string)$cid] ?? [];
@@ -681,7 +687,8 @@ foreach ($elegidos as $id) {
               (int)$u['id'],
               (string)$u['codigo'],
               (string)($u['stage'] ?: 'BLOQUEADO'),
-              (($u['stage'] === 'DISPONIBLE' && empty($u['dealId'])) || isset($gemeloIds[(string)$u['id']])) ? 1 : 0,
+              ((($u['stage'] === 'DISPONIBLE' && empty($u['dealId'])) || isset($gemeloIds[(string)$u['id']]))
+                && !isset($PQ_ASIG[(int)$u['id']])) ? 1 : 0,
               trim(($u['torre'] !== '' ? 'T' . $u['torre'] : '')
                  . ($u['piso']  !== '' ? ' · P' . $u['piso'] : '')),
               $pvpNum,
@@ -788,6 +795,26 @@ foreach ($elegidos as $id) {
      El mapa esta ESCRITO en `mitades_pareja` de la matriz, no deducido aca: el SPA no
      registra el emparejamiento en ningun campo. Ver la nota de ese bloque. */
   var PAREJA = <?= json_encode($MITADES_PAREJA, JSON_UNESCAPED_UNICODE) ?>;
+  /* PARQUEO ASIGNADO (parqueolib.php, 1-nov-2026). Cada departamento de Noral Plaza trae
+     su parqueo: elegir el departamento pega su parqueo y quitarlo lo quita. Solo en
+     Prospectos y Clientes: en Cobranzas elegir es REUBICAR y eso va por su camino.
+     Perilla config.json parqueo_auto (0 = no se pega nada). */
+  var PQ = <?= json_encode((object)(pq_auto_on() && in_array((int)$catDeal, [28, 44], true)
+                ? array_map('strval', pq_asignados()) : [])) ?>;
+  var CAT_PQ = <?= (int)PARQUEO_CAT ?>;
+  // todos los parqueos asignados (con o sin perilla): el refresco no los vuelve "libres"
+  var PQ_ASIG = <?= json_encode((object)array_fill_keys(array_map('strval', array_keys($PQ_ASIG)), 1)) ?>;
+  /** Lista solo los parqueos libres ($20.000) para sumar uno mas al departamento. */
+  function verParqueosLibres(){
+    cat = String(CAT_PQ);
+    var b = menu.querySelector('button[data-cat="' + cat + '"]');
+    Array.prototype.forEach.call(menu.children, function(x){ x.setAttribute('aria-pressed', String(x === b)); });
+    dropTxt.textContent = b ? (b.dataset.nom || 'Parqueos') : 'Parqueos';
+    q.value = 'PQ-';
+    soloLibres = true;
+    Array.prototype.forEach.call(seg.children, function(x){ x.setAttribute('aria-pressed', String(x.dataset.libres === '1')); });
+    filtrar();
+  }
   /** El o los codigos que van pegados a este: su pareja, en cualquiera de los dos sentidos. */
   function pegadosA(cod){
     var out = [];
@@ -821,7 +848,8 @@ foreach ($elegidos as $id) {
    *  Y si son suites de Noral Plaza se dice cuanto cuesta la decision, porque de eso
    *  depende que se perdone un parqueo o no. */
   function pintarJunto(){
-    var ids = val.value.split(',').filter(function(x){ return x; });
+    // los parqueos y bodegas no cuentan: departamento + su parqueo no es una fusion
+    var ids = val.value.split(',').filter(function(x){ return x && Number((datos(x) || {}).cat) !== CAT_PQ; });
     if (ids.length < 2) { junto.style.display = 'none'; juntoN.textContent = ''; return; }
     junto.style.display = 'flex';
     var suites = 0;
@@ -1065,7 +1093,9 @@ foreach ($elegidos as $id) {
     t.textContent = 'Elegidas';
     // Con más de una, lo que hay que cotizar es el CONJUNTO, no cada una suelta:
     // así se cotiza una fusión (dos locales, oficina + parqueo…) en un solo plan.
-    var conPrecio = sel.filter(function(id){ return parseFloat((datos(id)||{}).pvp || 0) > 0; });
+    // sin parqueos: el cotizador arma el plan por proyecto y la categoria de parqueos no tiene matriz
+    var conPrecio = sel.filter(function(id){ var d = datos(id) || {};
+      return parseFloat(d.pvp || 0) > 0 && Number(d.cat) !== CAT_PQ; });
     if (conPrecio.length) {
       var a = document.createElement('a');
       a.className = 'gu-cottodas';
@@ -1078,6 +1108,17 @@ foreach ($elegidos as $id) {
       a.addEventListener('click', function(e){ e.stopPropagation(); });
       t.appendChild(a);
     }
+    // Con un departamento de Noral Plaza elegido: atajo a los parqueos libres
+    var hayDepto = sel.some(function(id){ var d = datos(id) || {};
+      return Number(d.cat) === CAT_PLAZA && (Number(d.tipo) === TIPO_DEPTO || Number(d.tipo) === TIPO_SUITE); });
+    if (hayDepto && (CFG.cat === 28 || CFG.cat === 44)) {
+      var bp = document.createElement('a');
+      bp.className = 'gu-cottodas gu-pqmas';
+      bp.textContent = '+ Parqueo adicional';
+      bp.title = 'Muestra los parqueos libres ($20.000 c/u) para sumar otro';
+      bp.addEventListener('click', function(e){ e.stopPropagation(); e.preventDefault(); verParqueosLibres(); });
+      t.appendChild(bp);
+    }
     elegidas.appendChild(t);
     sel.forEach(function(id){
       var d = datos(id);
@@ -1088,7 +1129,8 @@ foreach ($elegidos as $id) {
       row.children[1].textContent = d.proy;
       row.children[2].addEventListener('click', function(e){
         e.stopPropagation();
-        sel = sel.filter(function(x){ return x !== id; });
+        var pq = PQ[id];             // su parqueo asignado se va con el
+        sel = sel.filter(function(x){ return x !== id && x !== pq; });
         val.value = sel.join(',');
         marcarFila(id, true);        // se libera: vuelve a aparecer en Disponibles
         pintar(); pintarElegidas(); filtrar(); ajustarIframe(); guardar();
@@ -1181,7 +1223,8 @@ foreach ($elegidos as $id) {
         filas.forEach(function(f){
           var e = mapa[f.dataset.id];
           if (!e) return;
-          var libre = (e[0] === 1 || GEMELO[f.dataset.id] === 1) && sel.indexOf(f.dataset.id) === -1;
+          var libre = (e[0] === 1 || GEMELO[f.dataset.id] === 1) && sel.indexOf(f.dataset.id) === -1
+                      && !PQ_ASIG[f.dataset.id];   // el parqueo de un departamento no se elige suelto
           f.dataset.libre = libre ? '1' : '0';
           f.classList.toggle('gu-no', !libre);
           var tag = f.querySelector('.gu-tag');
@@ -1390,6 +1433,8 @@ foreach ($elegidos as $id) {
     if (f.dataset.libre !== '1') return;          // ocupada: no seleccionable
     if (sel.indexOf(id) !== -1) return;           // ya elegida (se quita desde "Elegidas")
     sel.push(id);
+    var pq = PQ[id];                // su parqueo asignado entra solo
+    if (pq && sel.indexOf(pq) === -1) sel.push(pq);
     val.value = sel.join(',');
     marcarFila(id, false);          // queda tomada por este deal
     pintar(); pintarElegidas(); filtrar(); ajustarIframe(); guardar();
