@@ -817,6 +817,31 @@ foreach ($elegidos as $id) {
     Array.prototype.forEach.call(seg.children, function(x){ x.setAttribute('aria-pressed', String(x.dataset.libres === '1')); });
     filtrar();
   }
+  /**
+   * Parqueos ASIGNADOS que tocan con lo elegido. Regla de Jesua y del presidente
+   * (1-nov-2026): cada suite lleva su parqueo, pero 2 suites UNIDAS llevan 1 obligatorio,
+   * 3 llevan 2: el de la suite de numero mayor se libera (queda a la venta a $20.000 y,
+   * si el cliente lo quiere, se suma con "+ Parqueo adicional"). Separadas: cada una el suyo.
+   * El servidor hace lo mismo al guardar (campolib.php, pq_mitad_de_fusion).
+   */
+  function ajustarParqueos(){
+    if (!Object.keys(PQ).length) return;
+    var suites = sel.filter(function(id){ var d = datos(id) || {};
+      return Number(d.cat) === CAT_PLAZA && (Number(d.tipo) === TIPO_DEPTO || Number(d.tipo) === TIPO_SUITE); });
+    var quiere = {};
+    suites.forEach(function(id){ if (PQ[id]) quiere[PQ[id]] = 1; });
+    if (!esSeparadas() && suites.length >= 2) {
+      var orden = suites.slice().sort(function(a, b){
+        return String(datos(a).cod).localeCompare(String(datos(b).cod), undefined, {numeric: true}); });
+      var mitad = orden[orden.length - 1];
+      if (PQ[mitad]) delete quiere[PQ[mitad]];
+    }
+    var asignados = {};
+    for (var k in PQ) asignados[PQ[k]] = 1;
+    sel = sel.filter(function(id){ return !asignados[id] || quiere[id]; });
+    for (var p in quiere) if (sel.indexOf(p) === -1) sel.push(p);
+    val.value = sel.join(',');
+  }
   /** ¿Hay elegida alguna unidad de Noral Plaza (suite, departamento o local)? */
   function hayUnidadPlaza(){
     return sel.some(function(id){ return Number((datos(id) || {}).cat) === CAT_PLAZA; });
@@ -875,7 +900,8 @@ foreach ($elegidos as $id) {
     }
   }
   document.querySelectorAll('input[name="<?= $uid ?>_sep"]').forEach(function(r){
-    r.addEventListener('change', function(){ pintarJunto(); ajustarIframe(); guardar(); });
+    r.addEventListener('change', function(){ ajustarParqueos(); pintar(); pintarElegidas(); filtrar();
+                                             pintarJunto(); ajustarIframe(); guardar(); });
   });
   var COT = <?= json_encode(cot_base($dealId, $plUsuario), JSON_UNESCAPED_SLASHES) ?>;
   // unidades del gemelo 44 que este 48 puede elegir (gemelolib.php): el refresco no las apaga
@@ -1144,9 +1170,8 @@ foreach ($elegidos as $id) {
       row.children[1].textContent = d.proy;
       row.children[2].addEventListener('click', function(e){
         e.stopPropagation();
-        var pq = PQ[id];             // su parqueo asignado se va con el
-        sel = sel.filter(function(x){ return x !== id && x !== pq; });
-        val.value = sel.join(',');
+        sel = sel.filter(function(x){ return x !== id; });
+        ajustarParqueos();           // su parqueo se va con el (y si era una union, vuelve el otro)
         marcarFila(id, true);        // se libera: vuelve a aparecer en Disponibles
         pintar(); pintarElegidas(); filtrar(); ajustarIframe(); guardar();
       });
@@ -1453,9 +1478,7 @@ foreach ($elegidos as $id) {
       return;
     }
     sel.push(id);
-    var pq = PQ[id];                // su parqueo asignado entra solo
-    if (pq && sel.indexOf(pq) === -1) sel.push(pq);
-    val.value = sel.join(',');
+    ajustarParqueos();              // su parqueo entra solo (en una union, uno menos)
     marcarFila(id, false);          // queda tomada por este deal
     pintar(); pintarElegidas(); filtrar(); ajustarIframe(); guardar();
     // Elegir tambien reacomoda la lista (la unidad sale del listado y entra a
