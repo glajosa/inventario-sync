@@ -900,7 +900,23 @@ function noral_avisar_generador(int $catId, string $codigo, string $accion): voi
     logline("NORAL $accion {$codigo} ($proy) -> $det");
 }
 
-function autollenar_ficha(int $dealId, array $fichas, array $deal = []): array {
+/**
+ * El deal sube o baja lo que vale el parqueo/bodega adicional que se le agregó o quitó,
+ * sobre el monto que YA tiene (no sobre la lista: ese monto puede ser negociado).
+ * OPPORTUNITY y VALOR DEL ACTIVO, los dos. 1 escritura.
+ */
+function sumar_parqueo_al_monto(int $dealId, array $deal, float $delta): array {
+    $op  = max(0.0, money_num($deal['OPPORTUNITY'] ?? '') + $delta);
+    $val = max(0.0, money_num($deal[D_VALOR] ?? '') + $delta);
+    $monto = rtrim(rtrim(number_format($op, 2, '.', ''), '0'), '.');
+    $u = bx('crm.deal.update', ['id' => $dealId, 'fields' => [
+        'OPPORTUNITY' => $monto, 'CURRENCY_ID' => 'USD', D_VALOR => money_fmt($val)]]);
+    if (!$u['ok']) { logline("deal=$dealId parqueo al monto ERR: {$u['error']}"); return ['err' => $u['error']]; }
+    logline("deal=$dealId parqueo al monto: " . ($delta > 0 ? '+' : '') . $delta . " -> monto=$monto valor=" . money_fmt($val));
+    return ['parqueo' => $delta, 'monto' => $monto];
+}
+
+function autollenar_ficha(int $dealId, array $fichas, array $deal = [], float $extra = 0.0): array {
     // El proyecto lo manda la unidad PRINCIPAL, o sea la de mayor PVP — no la
     // primera del campo. Con "la primera" bastaba que el vendedor pusiera el
     // parqueo antes de la suite para que Proyectos 1 recibiera el proyecto del
@@ -926,6 +942,13 @@ function autollenar_ficha(int $dealId, array $fichas, array $deal = []): array {
     } elseif ($esSuites && count($fichas) > 1 && $separadas) {
         logline("deal=$dealId Noral Plaza Suites con " . count($fichas)
               . ' unidades SEPARADAS -> NO se resta el parqueo');
+    }
+
+    // parqueos/bodegas ADICIONALES del campo: suman su precio, pero no son "unidades"
+    // (no cuentan para el descuento de fusion ni entran a ACTIVO COMPRADO ni al titulo)
+    if ($extra > 0) {
+        $suma += $extra;
+        logline("deal=$dealId + parqueos/bodegas adicionales $extra");
     }
 
     $campos = [D_ACTIVO => implode(', ', $cods)];
@@ -1057,6 +1080,8 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     $agregarSet = array_flip($agregar);
     $fichas     = [];   // datos de las unidades del campo, para el autollenado de abajo
     $cambioUnidad = false;   // se agregó o quitó algo que NO es parqueo/bodega
+    $accPvp   = 0.0;         // PVP de los parqueos/bodegas que quedan en el campo
+    $deltaAcc = 0.0;         // lo que suman (o restan) los parqueos atados/soltados en ESTA pasada
 
     foreach (array_merge($quiere, $soltar) as $uid) {
         $uid = (int)$uid;
@@ -1073,6 +1098,8 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
         $esAcc = pq_es_accesorio($it['categoryId'] ?? 0);
         if (!$esAcc && isset($agregarSet[$uid])) $cambioUnidad = true;
         if (!$esAcc && $suelta) $cambioUnidad = true;
+        $pvpIt = money_num($it[U_PVP] ?? '');
+        if ($esAcc && !$suelta) $accPvp += $pvpIt;
 
         // Se aprovecha ESTE get (ya pagado) para el autollenado de la ficha del
         // deal: así no cuesta ninguna llamada extra de lectura.
@@ -1159,6 +1186,11 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
 
         $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $uid, 'fields' => $campos]);
         if (!$u['ok']) { logline("ERR update u=$uid: {$u['error']}"); continue; }
+        // Solo cuenta lo que de verdad se ató o se soltó: si el update fallara, el monto
+        // no puede llevar un parqueo que la unidad no tiene.
+        if ($esAcc && array_key_exists('parentId2', $campos)) {
+            $deltaAcc += ((int)$campos['parentId2'] > 0) ? $pvpIt : -$pvpIt;
+        }
 
         if ($nuevoStage !== null) { $movidas++; logline("STAGE unit=$uid -> $nuevoStage"); }
         // el caché se actualiza con lo que acabamos de escribir, sin releer
@@ -1213,8 +1245,18 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     //
     // Con el campo vacío no se toca nada: es lo que ocurre cuando el deal cae, y ahí
     // borrar el monto de una venta perdida sería destruir el registro.
-    // Solo si cambió una unidad de verdad: agregar o quitar SOLO un parqueo no toca la ficha.
-    $ficha = ($cambioUnidad && $fichas) ? autollenar_ficha($dealId, $fichas, $deal) : [];
+    // Cambió una unidad: la ficha se rehace de lista, con los parqueos adicionales sumados.
+    // Cambió SOLO un parqueo/bodega: el monto que ya tiene el deal (puede ser negociado)
+    // sube o baja exactamente lo que vale ese parqueo; nada más se toca. El asignado vale 0,
+    // así que no mueve nada. Jesua 1-nov: "si se sumó el parqueo, también tiene que sumar".
+    // Perilla config.json parqueo_suma_monto (0 = el monto no se toca por parqueos).
+    $sumaPq = (int)pq_cfg('parqueo_suma_monto', 1) === 1;
+    $ficha = [];
+    if ($cambioUnidad && $fichas) {
+        $ficha = autollenar_ficha($dealId, $fichas, $deal, $sumaPq ? $accPvp : 0.0);
+    } elseif ($sumaPq && !$cayo && abs($deltaAcc) >= 0.005) {
+        $ficha = sumar_parqueo_al_monto($dealId, $deal, $deltaAcc);
+    }
 
     // Lo que CLIENTES acaba de atar se saca del campo de PROSPECTOS: ahí ya no es
     // un apartado, es una venta. Va al final, cuando el atado ya está hecho.
