@@ -930,6 +930,33 @@ function sumar_parqueo_al_monto(int $dealId, array $deal, float $delta, array $e
     return ['parqueo' => $delta, 'monto' => $monto];
 }
 
+/**
+ * Unión de suites (2 juntas = 1 parqueo, 3 = 2): el parqueo asignado de la suite de
+ * número mayor deja de ser suyo y queda LIBRE a la venta, a $20.000 (Jesua y el
+ * presidente, 1-nov-2026). Solo si no está en el campo de este deal y nadie lo tiene.
+ * Si el cliente lo quiere, se suma con "+ Parqueo adicional" y paga sus $20.000.
+ * Perilla config.json parqueo_liberar_fusion. Devuelve el código liberado o null.
+ */
+function liberar_parqueo_de_fusion(int $dealId, array $suites, array $quiere, bool $separadas): ?string {
+    $mitad = pq_mitad_de_fusion($suites, $separadas);
+    if ($mitad === null) return null;
+    $pid = pq_asignados()[$mitad] ?? null;
+    if (!$pid || in_array($pid, array_map('intval', $quiere), true)) return null;
+    $g = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $pid]);
+    if (!$g['ok']) { logline("deal=$dealId liberar pq=$pid ERR get: {$g['error']}"); return null; }
+    $it = $g['result']['item'] ?? $g['result'];
+    if ((int)($it['parentId2'] ?? 0) !== 0) return null;      // ya es de alguien: no se toca
+    $otros = array_values(array_diff_key($suites, [$mitad => 1]));
+    $nota  = 'Libre: era de ' . $suites[$mitad] . ' (unificado con ' . implode(', ', $otros) . ", deal $dealId)";
+    $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $pid, 'fields' => [
+        U_PVP => '20000|USD', PQ_CAMPO_EXTRAS => $nota]]);
+    if (!$u['ok']) { logline("deal=$dealId liberar pq=$pid ERR: {$u['error']}"); return null; }
+    pq_mapa_liberar($mitad, $pid, ['deal' => $dealId, 'unificado_con' => $otros]);
+    $cod = codigo_activo((string)($it['title'] ?? ''));
+    logline("deal=$dealId UNION: parqueo $cod de {$suites[$mitad]} queda libre a 20000");
+    return $cod;
+}
+
 function autollenar_ficha(int $dealId, array $fichas, array $deal = [], float $extra = 0.0,
                           array $extras = []): array {
     // El proyecto lo manda la unidad PRINCIPAL, o sea la de mayor PVP — no la
@@ -1100,6 +1127,7 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     $accPvp   = 0.0;         // PVP de los parqueos/bodegas que quedan en el campo
     $deltaAcc = 0.0;         // lo que suman (o restan) los parqueos atados/soltados en ESTA pasada
     $accExtras = [];         // parqueos/bodegas ADICIONALES que quedan (van al título)
+    $suitesPlaza = [];       // suites de Noral Plaza del campo [id => código]: regla de la unión
 
     foreach (array_merge($quiere, $soltar) as $uid) {
         $uid = (int)$uid;
@@ -1118,6 +1146,9 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
         if (!$esAcc && $suelta) $cambioUnidad = true;
         $pvpIt = money_num($it[U_PVP] ?? '');
         if ($esAcc && !$suelta) $accPvp += $pvpIt;
+        if (!$suelta && (int)($it['categoryId'] ?? 0) === 33
+            && in_array((int)($it[U_TIPO] ?? 0), [1793, 1797], true))
+            $suitesPlaza[$uid] = codigo_activo((string)($it['title'] ?? ''));
         // el asignado vale 0 y es parte del departamento: no se nombra
         if ($esAcc && !$suelta && $pvpIt > 0) $accExtras[] = [
             't'   => (int)($it[U_TIPO] ?? 0) === PQ_TIPO_BODEGA ? 'Bodega' : 'Parqueo',
@@ -1273,6 +1304,12 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     // sube o baja exactamente lo que vale ese parqueo; nada más se toca. El asignado vale 0,
     // así que no mueve nada. Jesua 1-nov: "si se sumó el parqueo, también tiene que sumar".
     // Perilla config.json parqueo_suma_monto (0 = el monto no se toca por parqueos).
+    // UNIÓN de suites: el parqueo de la suite mayor se libera y queda a la venta.
+    $liberado = (!$cayo && (int)pq_cfg('parqueo_liberar_fusion', 1) === 1)
+        ? liberar_parqueo_de_fusion($dealId, $suitesPlaza, $quiere,
+                                    unidades_separadas((string)($deal[CAMPO_NUEVO] ?? '')))
+        : null;
+
     $sumaPq = (int)pq_cfg('parqueo_suma_monto', 1) === 1;
     $ficha = [];
     if ($cambioUnidad && $fichas) {
@@ -1290,6 +1327,7 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     return ['ok' => true, 'quiere' => count($quiere), 'agregadas' => count($agregar),
             'soltadas' => count($soltar), 'stage' => $target ?: '-', 'movidas' => $movidas,
             'propagadas' => $propagadas, 'ficha' => $ficha ?: '-', 'prospecto' => $prospectos,
+            'pq_liberado' => $liberado ?? '-',
             'caido' => $cayo ? $limpiados : '-'];
 }
 

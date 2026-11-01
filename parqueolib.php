@@ -24,7 +24,8 @@
 declare(strict_types=1);
 
 const PARQUEO_CAT = 63;   // categoría del SPA 1072 "Parqueos y bodegas · Noral Plaza"
-const PQ_TIPO_BODEGA = 2177;   // "Tipo de bien" = Bodega (la opción la agregó Jesua el 1-nov)
+const PQ_TIPO_BODEGA = 2177;
+const PQ_CAMPO_EXTRAS = 'ufCrm25_1782616175065';   // "Extras" de la tarjeta   // "Tipo de bien" = Bodega (la opción la agregó Jesua el 1-nov)
 
 /** Lee una clave de config.json sin cargar nada más (field.php también lo usa). */
 function pq_cfg(string $clave, $porDefecto) {
@@ -91,6 +92,27 @@ function pq_titulo(string $titulo, array $extras): string {
     $base = preg_replace('/(\s*\+\s*(Bodega|Parqueo)\s*\([^)]*\))+\s*$/u', '', $titulo);
     foreach ($extras as $e) $base .= ' + ' . $e['t'] . ' (' . $e['cod'] . ')';
     return $base;
+}
+
+/**
+ * Suite UNIDA cuyo parqueo se libera: 2 suites juntas llevan 1 parqueo, 3 llevan 2.
+ * Se libera el de la suite de código mayor (mismo criterio que la carga del 1-nov y que
+ * field.php). $suites = [idUnidad => código]. Devuelve el id de esa suite o null.
+ */
+function pq_mitad_de_fusion(array $suites, bool $separadas): ?int {
+    if ($separadas || count($suites) < 2) return null;
+    uasort($suites, fn($a, $b) => strnatcasecmp($a, $b));
+    return (int)array_key_last($suites);
+}
+
+/** Saca del mapa el parqueo de una suite (ya no es suyo) y lo anota en 'liberados'. */
+function pq_mapa_liberar(int $deptoId, int $pqId, array $nota): bool {
+    $f = (getenv('DATA_DIR') ?: '/data') . '/parqueos_asignados.json';
+    $j = json_decode((string)@file_get_contents($f), true);
+    if (!is_array($j) || !isset($j['mapa'])) return false;
+    unset($j['mapa'][(string)$deptoId]);
+    $j['liberados'][(string)$pqId] = $nota + ['depto' => $deptoId, 'ts' => gmdate('c')];
+    return file_put_contents($f, json_encode($j), LOCK_EX) !== false;
 }
 
 /** Parqueo o bodega (categoría 63): va en el campo pero no es "la unidad" del deal. */
