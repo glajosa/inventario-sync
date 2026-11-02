@@ -798,6 +798,9 @@ foreach ($elegidos as $id) {
    * El servidor hace lo mismo al guardar (campolib.php, pq_mitad_de_fusion).
    */
   function ajustarParqueos(){
+    // El valor se escribe SIEMPRE, haya parqueos o no: en Cobranzas (48) PQ viene vacio y
+    // salir antes dejaba val.value viejo -> guardar.php recibia el campo vacio (deal 6618).
+    val.value = sel.join(',');
     if (!Object.keys(PQ).length) return;
     var suites = sel.filter(function(id){ var d = datos(id) || {};
       return Number(d.cat) === CAT_PLAZA && (Number(d.tipo) === TIPO_DEPTO || Number(d.tipo) === TIPO_SUITE); });
