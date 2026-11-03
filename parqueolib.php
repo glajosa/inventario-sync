@@ -105,6 +105,16 @@ function pq_mitad_de_fusion(array $suites, bool $separadas): ?int {
     return (int)array_key_last($suites);
 }
 
+/** [idSuite => idParqueo] de los liberados por una unión: el propio de esa suite, a la venta. */
+function pq_liberados(): array {
+    $f = (getenv('DATA_DIR') ?: '/data') . '/parqueos_asignados.json';
+    $j = is_file($f) ? json_decode((string)@file_get_contents($f), true) : null;
+    $m = [];
+    foreach ((array)($j['liberados'] ?? []) as $p => $n)
+        if ((int)($n['depto'] ?? 0) > 0 && (int)$p > 0) $m[(int)$n['depto']] = (int)$p;
+    return $m;
+}
+
 /** Saca del mapa el parqueo de una suite (ya no es suyo) y lo anota en 'liberados'. */
 function pq_mapa_liberar(int $deptoId, int $pqId, array $nota): bool {
     $f = (getenv('DATA_DIR') ?: '/data') . '/parqueos_asignados.json';
@@ -113,6 +123,17 @@ function pq_mapa_liberar(int $deptoId, int $pqId, array $nota): bool {
     unset($j['mapa'][(string)$deptoId]);
     $j['liberados'][(string)$pqId] = $nota + ['depto' => $deptoId, 'ts' => gmdate('c')];
     return file_put_contents($f, json_encode($j), LOCK_EX) !== false;
+}
+
+/**
+ * ¿Es el parqueo ASIGNADO de alguna suite? Jesua 3-nov-2026: el de una suite sin vender
+ * va BLOQUEADO y atado a ella, no DISPONIBLE; se mueve con su suite y al soltarse vuelve a
+ * BLOQUEADO. Solo el de una UNIÓN se libera (sale del mapa y deja de ser "asignado").
+ * Perilla config.json parqueo_asignado_bloqueado (0 = como antes: suelto = DISPONIBLE).
+ */
+function pq_es_asignado(int $id): bool {
+    return (int)pq_cfg('parqueo_asignado_bloqueado', 1) === 1
+        && in_array($id, pq_asignados(), true);
 }
 
 /** Parqueo o bodega (categoría 63): va en el campo pero no es "la unidad" del deal. */
