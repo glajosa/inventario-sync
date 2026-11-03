@@ -776,6 +776,10 @@ foreach ($elegidos as $id) {
   var PQ = <?= json_encode((object)(pq_auto_on() && in_array((int)$catDeal, [28, 44], true)
                 ? array_map('strval', pq_asignados()) : [])) ?>;
   var CAT_PQ = <?= (int)PARQUEO_CAT ?>;
+  // suite -> su parqueo ya liberado por una union anterior (a la venta, $20.000)
+  var PQ_LIB = <?= json_encode((object)(pq_auto_on() && in_array((int)$catDeal, [28, 44], true)
+                ? array_map('strval', pq_liberados()) : [])) ?>;
+  var quedaUnion = '';   // el parqueo propio de la suite unida que el cliente decidio quedarse
   // todos los parqueos asignados (con o sin perilla): el refresco no los vuelve "libres"
   var PQ_ASIG = <?= json_encode((object)array_fill_keys(array_map('strval', array_keys($PQ_ASIG)), 1)) ?>;
   var TIPO_BODEGA = <?= (int)PQ_TIPO_BODEGA ?>;
@@ -802,21 +806,45 @@ foreach ($elegidos as $id) {
     // salir antes dejaba val.value viejo -> guardar.php recibia el campo vacio (deal 6618).
     val.value = sel.join(',');
     if (!Object.keys(PQ).length) return;
-    var suites = sel.filter(function(id){ var d = datos(id) || {};
-      return Number(d.cat) === CAT_PLAZA && (Number(d.tipo) === TIPO_DEPTO || Number(d.tipo) === TIPO_SUITE); });
     var quiere = {};
-    suites.forEach(function(id){ if (PQ[id]) quiere[PQ[id]] = 1; });
-    if (!esSeparadas() && suites.length >= 2) {
-      var orden = suites.slice().sort(function(a, b){
-        return String(datos(a).cod).localeCompare(String(datos(b).cod), undefined, {numeric: true}); });
-      var mitad = orden[orden.length - 1];
-      if (PQ[mitad]) delete quiere[PQ[mitad]];
-    }
+    suitesElegidas().forEach(function(id){ if (PQ[id]) quiere[PQ[id]] = 1; });
+    var mitad = mitadDeUnion();
+    if (mitad && PQ[mitad]) delete quiere[PQ[mitad]];
+    // el del cliente que se quedo con el segundo parqueo: solo mientras siga siendo el de la union
+    if (quedaUnion && (sel.indexOf(quedaUnion) === -1 || !mitad || String(PQ[mitad] || '') !== quedaUnion)) quedaUnion = '';
     var asignados = {};
     for (var k in PQ) asignados[PQ[k]] = 1;
-    sel = sel.filter(function(id){ return !asignados[id] || quiere[id]; });
+    sel = sel.filter(function(id){ return !asignados[id] || quiere[id] || id === quedaUnion; });
     for (var p in quiere) if (sel.indexOf(p) === -1) sel.push(p);
     val.value = sel.join(',');
+  }
+  function suitesElegidas(){
+    return sel.filter(function(id){ var d = datos(id) || {};
+      return Number(d.cat) === CAT_PLAZA && (Number(d.tipo) === TIPO_DEPTO || Number(d.tipo) === TIPO_SUITE); });
+  }
+  /** En una union (2+ suites, no separadas): la suite de numero mayor, la que se queda sin parqueo. */
+  function mitadDeUnion(){
+    var suites = suitesElegidas();
+    if (esSeparadas() || suites.length < 2) return null;
+    var orden = suites.slice().sort(function(a, b){
+      return String(datos(a).cod).localeCompare(String(datos(b).cod), undefined, {numeric: true}); });
+    return orden[orden.length - 1];
+  }
+  /**
+   * El segundo parqueo de una union es el PROPIO de esa suite, no otro cualquiera (Jesua
+   * 3-nov-2026): si el cliente lo quiere, "+ Parqueo adicional" pega ese. Puede seguir
+   * asignado (union que se arma ahora) o ya liberado por una union anterior (PQ_LIB), y en
+   * ese caso solo si sigue libre. El servidor lo cobra a $20.000 (campolib.php).
+   */
+  function parqueoDeLaUnion(){
+    var m = mitadDeUnion();
+    if (!m) return '';
+    var p = PQ[m] ? String(PQ[m]) : '';
+    if (!p && PQ_LIB[m]) {
+      var f = filas.filter(function(x){ return x.dataset.id === String(PQ_LIB[m]); })[0];
+      if (f && f.dataset.libre === '1') p = String(PQ_LIB[m]);
+    }
+    return (p && sel.indexOf(p) === -1) ? p : '';
   }
   /** ¿Hay elegida alguna unidad de Noral Plaza (suite, departamento o local)? */
   function hayUnidadPlaza(){
@@ -1124,7 +1152,16 @@ foreach ($elegidos as $id) {
       bp.className = 'gu-cottodas gu-pqmas';
       bp.textContent = '+ Parqueo adicional';
       bp.title = 'Muestra los parqueos libres ($20.000 c/u) para sumar otro';
-      bp.addEventListener('click', function(e){ e.stopPropagation(); e.preventDefault(); verParqueosLibres('PQ-'); });
+      bp.addEventListener('click', function(e){
+        e.stopPropagation(); e.preventDefault();
+        // en una union, el segundo parqueo es el propio de la suite; si no, la lista de libres
+        var propio = parqueoDeLaUnion();
+        if (!propio) { verParqueosLibres('PQ-'); return; }
+        sel.push(propio); quedaUnion = propio;
+        ajustarParqueos(); marcarFila(propio, false);
+        pintar(); pintarElegidas(); filtrar(); ajustarIframe(); guardar();
+        avisar('Se agrego el parqueo propio de la suite unida (' + datos(propio).cod + ', $20.000)');
+      });
       t.appendChild(bp);
     }
     // Bodega: con cualquier unidad de Noral Plaza (suite o local). Sola no se vende.

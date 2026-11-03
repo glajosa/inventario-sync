@@ -141,8 +141,13 @@ function stage_objetivo(int $unitId, array $item, string $targetName, bool $writ
     $cat     = (string)($item['categoryId'] ?? '');
     $curName = unit_stage_name($item);
 
-    // no tocar BLOQUEADO ni PERDIDO (son manuales/gerenciales)
-    if (in_array($curName, ['BLOQUEADO', 'PERDIDO'], true)) return null;
+    // no tocar BLOQUEADO ni PERDIDO (son manuales/gerenciales). Salvo el BLOQUEADO del
+    // parqueo ASIGNADO a una suite: ese no es gerencial, es "espera a su suite" y la sigue
+    // como cualquier unidad (parqueolib.php, Jesua 3-nov-2026). Sin parqueolib cargada
+    // (hook.php, rebuild.php) se comporta como antes.
+    $bloqDeSuite = $curName === 'BLOQUEADO' && function_exists('pq_es_asignado')
+                   && pq_es_accesorio($cat) && pq_es_asignado($unitId);
+    if (in_array($curName, ['BLOQUEADO', 'PERDIDO'], true) && !$bloqDeSuite) return null;
     // proteger VENDIDO: solo un write-off (DADO DE BAJA) lo saca
     if ($curName === 'VENDIDO' && !$writeOff) return null;
     if ($curName === $targetName) return null;              // ya está

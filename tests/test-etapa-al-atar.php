@@ -25,7 +25,7 @@ test_same(null, etapa_al_atar('C44:UC_Z3GY5H', 'DISPONIBLE', false), 'perilla re
 $src = (string)file_get_contents(__DIR__ . '/../campolib.php');
 $i = strpos($src, '            } else {
                 /* La etapa del deal no dice nada de la unidad');
-$j = strpos($src, 'etapa_al_atar($etapa, (string)unit_stage_name($it),');
+$j = strpos($src, 'etapa_al_atar($etapa, $nomU,');   // $nomU = unit_stage_name (BLOQUEADO del parqueo asignado cuenta como libre)
 test_same(true, $i !== false && $j !== false && $j > $i && $j - $i < 900,
           'sincronizar_deal lo aplica a TODAS las unidades atadas del campo (no solo las recien agregadas)');
 test_same(false, str_contains($src, "} elseif (isset(\$agregarSet[\$uid])) {"), 'ya no se limita a las recien agregadas');

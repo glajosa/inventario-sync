@@ -41,6 +41,7 @@ if ($isHttp) {
 
 require_once __DIR__ . '/stagelib.php';   // stages (Clientes re-afirmar + Cobranzas read-only)
 require_once __DIR__ . '/libreta1072.php';
+require_once __DIR__ . '/parqueolib.php';   // el parqueo asignado de una suite: BLOQUEADO, no DISPONIBLE
 
 /* EN SECO (RECONCILE_SECO=1 o ?seco=1): corre todo, LEE de verdad, y no escribe nada —
    ni en Bitrix ni en disco. Cuenta cuantas escrituras HARIA. Sirve para saber cuantas
@@ -345,9 +346,11 @@ foreach (($reclamaAp === null ? [] : $stageDe) as $uid => $st) {
     if (isset($actual[$uid]))     continue;   // tiene parentId2
     if (isset($desired[$uid]))    continue;   // un deal de CLIENTES la nombra
     if (isset($reclamaAp[$uid]))  continue;   // apartada desde Prospectos
-    if (apply_unit_stage((int)$uid, null, 'DISPONIBLE', false)) {
+    // el parqueo propio de una suite sin vender espera BLOQUEADO, no a la venta (Jesua 3-nov-2026)
+    $libre = pq_es_asignado((int)$uid) ? 'BLOQUEADO' : 'DISPONIBLE';
+    if (apply_unit_stage((int)$uid, null, $libre, false)) {
         $huerfanas++;
-        logline("RECONCILE huerfana u=$uid estaba $st sin deal que la reclame -> DISPONIBLE");
+        logline("RECONCILE huerfana u=$uid estaba $st sin deal que la reclame -> $libre");
     }
 }
 

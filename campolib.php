@@ -937,24 +937,34 @@ function sumar_parqueo_al_monto(int $dealId, array $deal, float $delta, array $e
  * Si el cliente lo quiere, se suma con "+ Parqueo adicional" y paga sus $20.000.
  * Perilla config.json parqueo_liberar_fusion. Devuelve el código liberado o null.
  */
-function liberar_parqueo_de_fusion(int $dealId, array $suites, array $quiere, bool $separadas): ?string {
+/*
+ * El cliente de la unión que SÍ quiere el segundo parqueo se queda con el propio de esa
+ * suite, no con otro cualquiera (Jesua 3-nov-2026): field.php lo pone en el campo con
+ * "+ Parqueo adicional". Igual deja de ser "asignado" (pasa a valer 20.000) y queda atado a
+ * este deal; quien llama suma esos 20.000 al monto. Devuelve [cod, id, guardado] o null.
+ */
+function liberar_parqueo_de_fusion(int $dealId, array $suites, array $quiere, bool $separadas): ?array {
     $mitad = pq_mitad_de_fusion($suites, $separadas);
     if ($mitad === null) return null;
     $pid = pq_asignados()[$mitad] ?? null;
-    if (!$pid || in_array($pid, array_map('intval', $quiere), true)) return null;
+    if (!$pid) return null;
+    $guardado = in_array($pid, array_map('intval', $quiere), true);
     $g = bx('crm.item.get', ['entityTypeId' => SPA_ENTITY, 'id' => $pid]);
     if (!$g['ok']) { logline("deal=$dealId liberar pq=$pid ERR get: {$g['error']}"); return null; }
     $it = $g['result']['item'] ?? $g['result'];
-    if ((int)($it['parentId2'] ?? 0) !== 0) return null;      // ya es de alguien: no se toca
+    // libre: nadie lo tiene. Guardado: lo tiene que tener ESTE deal (el bucle ya lo ató).
+    if ((int)($it['parentId2'] ?? 0) !== ($guardado ? $dealId : 0)) return null;
     $otros = array_values(array_diff_key($suites, [$mitad => 1]));
-    $nota  = 'Libre: era de ' . $suites[$mitad] . ' (unificado con ' . implode(', ', $otros) . ", deal $dealId)";
+    $nota  = ($guardado ? 'Comprado aparte por el cliente de la unión: era de ' : 'Libre: era de ')
+           . $suites[$mitad] . ' (unificado con ' . implode(', ', $otros) . ", deal $dealId)";
     $u = bx('crm.item.update', ['entityTypeId' => SPA_ENTITY, 'id' => $pid, 'fields' => [
         U_PVP => '20000|USD', PQ_CAMPO_EXTRAS => $nota]]);
     if (!$u['ok']) { logline("deal=$dealId liberar pq=$pid ERR: {$u['error']}"); return null; }
-    pq_mapa_liberar($mitad, $pid, ['deal' => $dealId, 'unificado_con' => $otros]);
+    pq_mapa_liberar($mitad, $pid, ['deal' => $dealId, 'unificado_con' => $otros, 'guardado' => $guardado]);
     $cod = codigo_activo((string)($it['title'] ?? ''));
-    logline("deal=$dealId UNION: parqueo $cod de {$suites[$mitad]} queda libre a 20000");
-    return $cod;
+    logline("deal=$dealId UNION: parqueo $cod de {$suites[$mitad]} "
+          . ($guardado ? 'se lo queda el cliente a 20000' : 'queda libre a 20000'));
+    return ['cod' => $cod, 'id' => (int)$pid, 'guardado' => $guardado];
 }
 
 function autollenar_ficha(int $dealId, array $fichas, array $deal = [], float $extra = 0.0,
@@ -1142,6 +1152,8 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
         // para el descuento de parqueo: con el parqueo adentro, pisaba el precio
         // negociado y el titulo del deal (parqueolib.php, 1-nov-2026).
         $esAcc = pq_es_accesorio($it['categoryId'] ?? 0);
+        // el parqueo propio de una suite: suelto no queda DISPONIBLE sino BLOQUEADO
+        $esAsig = $esAcc && pq_es_asignado($uid);
         if (!$esAcc && isset($agregarSet[$uid])) $cambioUnidad = true;
         if (!$esAcc && $suelta) $cambioUnidad = true;
         $pvpIt = money_num($it[U_PVP] ?? '');
@@ -1197,7 +1209,7 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
             // del deal anterior pegado (dato sucio que confunde en la ficha).
             $campos['parentId2'] = 0;
             $campos['contactId'] = 0;
-            $nuevoStage = 'DISPONIBLE';
+            $nuevoStage = $esAsig ? 'BLOQUEADO' : 'DISPONIBLE';
         } else {
             if (isset($agregarSet[$uid])) {
                 $campos['parentId2'] = $dealId;
@@ -1219,7 +1231,10 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
                    recien agregadas: asi el re-sync del guardian tambien la repone.
                    Perilla reservar_al_atar_avanzado (0 = como antes). */
                 require_once __DIR__ . '/vendidaslib.php';   // inv_cfg()
-                $nuevoStage = etapa_al_atar($etapa, (string)unit_stage_name($it),
+                // el BLOQUEADO del parqueo asignado es "esperando a su suite": cuenta como libre
+                $nomU = (string)unit_stage_name($it);
+                if ($esAsig && $nomU === 'BLOQUEADO') $nomU = 'DISPONIBLE';
+                $nuevoStage = etapa_al_atar($etapa, $nomU,
                                             (int)inv_cfg('reservar_al_atar_avanzado', 1) === 1);
                 /* SIN marca self_u_ (orquestador, 13-oct): la escritura solo va de
                    DISPONIBLE a RESERVADO y repetirla no cambia nada. La marca ya se comio
@@ -1309,6 +1324,13 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
         ? liberar_parqueo_de_fusion($dealId, $suitesPlaza, $quiere,
                                     unidades_separadas((string)($deal[CAMPO_NUEVO] ?? '')))
         : null;
+    // El cliente se quedó con el parqueo propio de la suite unida: lo paga (20.000). El
+    // bucle lo leyó a 0 porque todavía era "asignado"; aquí se cuenta lo que vale ahora.
+    if ($liberado && $liberado['guardado']) {
+        $accPvp += DESCUENTO_PARQUEO;
+        $accExtras[] = ['t' => 'Parqueo', 'cod' => $liberado['cod']];
+        if (isset($agregarSet[$liberado['id']])) $deltaAcc += DESCUENTO_PARQUEO;
+    }
 
     $sumaPq = (int)pq_cfg('parqueo_suma_monto', 1) === 1;
     $ficha = [];
@@ -1327,7 +1349,7 @@ function sincronizar_deal(int $dealId, ?array $dealYaLeido = null): array {
     return ['ok' => true, 'quiere' => count($quiere), 'agregadas' => count($agregar),
             'soltadas' => count($soltar), 'stage' => $target ?: '-', 'movidas' => $movidas,
             'propagadas' => $propagadas, 'ficha' => $ficha ?: '-', 'prospecto' => $prospectos,
-            'pq_liberado' => $liberado ?? '-',
+            'pq_liberado' => $liberado ? $liberado['cod'] . ($liberado['guardado'] ? ' (se lo queda)' : '') : '-',
             'caido' => $cayo ? $limpiados : '-'];
 }
 
