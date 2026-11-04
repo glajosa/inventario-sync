@@ -1697,7 +1697,8 @@
         "",
         "El edificio D se nombra '(EDIFICIO D)', NUNCA 'vista parcial': nombrar la",
         "limitacion le resta al producto sin darle al cliente nada que le sirva.",
-        "4-nov-2026: la concesionaria del lote F (F-1) se partio en F-1-A, F-1-B (parque central) y F-7-A, F-7-B (lineal), 56 m2, planta baja. Precios del director; A = esquinero."
+        "4-nov-2026: la concesionaria del lote F (F-1) se partio en F-1-A, F-1-B (parque central) y F-7-A, F-7-B (lineal), 56 m2, planta baja. Precios del director; A = esquinero.",
+        "4-nov-2026: 106000|30 (D central, antes 101900) y 211255|69 (C-12 esquinero lineal) salian sin nombre; nombres tomados de la lista del director."
       ],
       "tipologias": {
         "94500|30": {
@@ -1782,6 +1783,16 @@
         },
         "166950|56": {
           "nombre": "LOCALES PARQUE LINEAL",
+          "singular": "LOCAL",
+          "zona": "LINEAL"
+        },
+        "106000|30": {
+          "nombre": "LOCALES PARQUE CENTRAL (EDIFICIO D)",
+          "singular": "LOCAL",
+          "zona": "CENTRAL"
+        },
+        "211255|69": {
+          "nombre": "LOCALES PARQUE LINEAL ESQUINERO",
           "singular": "LOCAL",
           "zona": "LINEAL"
         }
