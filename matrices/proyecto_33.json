@@ -1696,7 +1696,8 @@
         "variable de precio, no solo control de mezcla comercial.",
         "",
         "El edificio D se nombra '(EDIFICIO D)', NUNCA 'vista parcial': nombrar la",
-        "limitacion le resta al producto sin darle al cliente nada que le sirva."
+        "limitacion le resta al producto sin darle al cliente nada que le sirva.",
+        "4-nov-2026: la concesionaria del lote F (F-1) se partio en F-1-A, F-1-B (parque central) y F-7-A, F-7-B (lineal), 56 m2, planta baja. Precios del director; A = esquinero."
       ],
       "tipologias": {
         "94500|30": {
@@ -1763,6 +1764,26 @@
           "nombre": "RESTAURANTES PARQUE CENTRAL",
           "singular": "RESTAURANTE",
           "zona": "CENTRAL"
+        },
+        "190750|56": {
+          "nombre": "LOCALES PARQUE CENTRAL ESQUINERO",
+          "singular": "LOCAL",
+          "zona": "CENTRAL"
+        },
+        "184750|56": {
+          "nombre": "LOCALES PARQUE CENTRAL",
+          "singular": "LOCAL",
+          "zona": "CENTRAL"
+        },
+        "172950|56": {
+          "nombre": "LOCALES PARQUE LINEAL ESQUINERO",
+          "singular": "LOCAL",
+          "zona": "LINEAL"
+        },
+        "166950|56": {
+          "nombre": "LOCALES PARQUE LINEAL",
+          "singular": "LOCAL",
+          "zona": "LINEAL"
         }
       },
       "financiamiento": {
