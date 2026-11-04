@@ -207,6 +207,7 @@ function lst_par_mas_barato(array $cfg, array $unidades, array $edificios, strin
         $pvp = (float)($d['pvp'] ?? 0);
         if ($pvp <= 0) continue;
         [$ed, $piso, $pos] = array_pad(explode('-', $k), 3, '0');
+        if (!ctype_digit((string)$pos)) continue;      // local partido ('1A'): no forma pares
         if (!in_array($ed, $edificios, true)) continue;
         if (mz_nivel_de_piso($cfg, (int)$piso) !== $niv) continue;
         $porPiso["$ed-$piso"][(int)$pos] = ['pvp' => $pvp, 'cod' => (string)($d['cod'] ?? $k),
@@ -271,6 +272,7 @@ function lst_celda(array $cfg, array $unidades, array $edificios, string $niv, s
     foreach ($unidades as $u => $d) {
         if (($d['etapa'] ?? '') !== 'DISPONIBLE') continue;
         [$ed, $piso, $pos] = array_pad(explode('-', $u), 3, '0');
+        if (!ctype_digit((string)$pos)) continue;      // local partido ('1A'): sin categoria de matriz
         if (!in_array($ed, $edificios, true)) continue;
         if (mz_nivel_de_piso($cfg, (int)$piso) !== $niv) continue;
         $ov = mz_por_unidad($cfg, $cfg['overrides_unidad'] ?? [], $ed, (int)$piso, (int)$pos) ?? [];

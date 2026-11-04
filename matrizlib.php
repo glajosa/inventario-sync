@@ -326,6 +326,13 @@ function mz_unidades_cache(array $cfg, int $ttl = 0, ?array &$info = null): arra
             $m = [$m2[0], $m2[1], (string)($cfg['piso_sin_numero'] ?? 1), $m2[2]];
         elseif (preg_match('/^([A-Z])(\d+)-(\d+)$/', $cod, $m3))
             $m = [$m3[0], $m3[1], $m3[2], $m3[3]];
+        // Local de PLANTA BAJA partido en dos: 'F-1-A' y 'F-1-B' salen del viejo 'F-1'
+        // (director, 4-nov-2026: la concesionaria del lote F son ahora 4 locales de 56 m2).
+        // Parece primer piso ('F-1-23') pero el 1 es la POSICION, no el piso. La posicion
+        // queda '1A': no es un numero, asi que la matriz no le calcula precio (mz_plan la
+        // salta) -- su precio es el del director, propio. Sin esta rama se caian de la lista.
+        elseif (preg_match('/^([A-Z])-(\d+)-([A-Z])$/', $cod, $m4))
+            $m = [$m4[0], $m4[1], (string)($cfg['piso_sin_numero'] ?? 1), $m4[2] . $m4[3]];
         elseif (!preg_match('/^([A-Z])-(\d+)-(\d+)$/', $cod, $m)) continue;
         // Un pipeline puede mezclar familias: el 33 tiene oficinas, departamentos y
         // locales juntos. La matriz solo manda sobre lo suyo — si el edificio no es
@@ -422,6 +429,7 @@ function mz_plan(array $cfg, array $unidades, ?array $px = null): array {
     foreach ($unidades as $u => $d) {
         if ($d['etapa'] !== $disp) continue;
         [$ed, $piso, $pos] = explode('-', $u);
+        if (!ctype_digit((string)$pos)) continue;      // local partido ('1A'): precio propio, no de matriz
         if (!in_array($ed, $lanzados, true)) continue;
         if (mz_por_unidad($cfg, $exentas, $ed, (int)$piso, (int)$pos) !== null) continue;
         if ((int)$pos > mz_unidades_por_piso($cfg, $ed)) continue;
