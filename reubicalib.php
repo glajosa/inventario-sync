@@ -45,10 +45,27 @@ const REUBICA_TRIOS = [
     // El precio de la 1ª ocasión usa "PRECIO ACTIVO NO. 1 (1ra Compra)", que es de
     // tipo MONEY. El campo anterior ("PRECIO INICIAL", UF_CRM_1783975599567) era
     // texto suelto y quedó fuera de uso: obligaba a escribir la moneda a mano.
-    ['flag' => 'UF_CRM_1783975554626', 'activo' => 'UF_CRM_1783975581192', 'precio' => 'UF_CRM_1785443661310'],
-    ['flag' => 'UF_CRM_1785415565344', 'activo' => 'UF_CRM_1785417527109', 'precio' => 'UF_CRM_1785417550374'],
-    ['flag' => 'UF_CRM_1785429826419', 'activo' => 'UF_CRM_1785429969203', 'precio' => 'UF_CRM_1785417711317'],
+    // 'proyecto' (6-nov-2026, Jesua): texto con el proyecto de la unidad de la que se salió ("Proyecto 1/2/3").
+    // NO es "Proyectos 1" (D_PROYECTO), que es el proyecto ACTUAL del deal y lo leen GABI, inventario y cobranzas.
+    ['flag' => 'UF_CRM_1783975554626', 'activo' => 'UF_CRM_1783975581192', 'precio' => 'UF_CRM_1785443661310', 'proyecto' => 'UF_CRM_1793981988107'],
+    ['flag' => 'UF_CRM_1785415565344', 'activo' => 'UF_CRM_1785417527109', 'precio' => 'UF_CRM_1785417550374', 'proyecto' => 'UF_CRM_1793981295411'],
+    ['flag' => 'UF_CRM_1785429826419', 'activo' => 'UF_CRM_1785429969203', 'precio' => 'UF_CRM_1785417711317', 'proyecto' => 'UF_CRM_1793981339409'],
 ];
+
+/** 6-nov-2026: perilla del proyecto de la unidad vieja en el trío. env REUBICA_PROYECTO_TEXTO='1' lo prende (apagado por defecto). */
+function reub_proyecto_texto_on(): bool { return trim((string)getenv('REUBICA_PROYECTO_TEXTO')) === '1'; }
+
+/** Nombre limpio del proyecto: "Barranca Apartments (Nuevo Samborondón)" -> "Barranca Apartments". Pura. */
+function reub_proyecto_limpio(string $p): string { return trim(explode('(', $p)[0]); }
+
+/** Campos del trío a agregar al MISMO update: solo si la perilla está prendida, se conoce el proyecto viejo y el
+ *  campo del deal está VACÍO (no pisa lo que haya puesto una persona). Pura: [] o [campo => texto]. */
+function reub_campo_proyecto(array $trio, array $deal, string $proyViejo, bool $on): array {
+    $p = reub_proyecto_limpio($proyViejo);
+    if (!$on || $p === '' || empty($trio['proyecto'])) return [];
+    if (trim((string)($deal[$trio['proyecto']] ?? '')) !== '') return [];
+    return [$trio['proyecto'] => $p];
+}
 
 // proyecto_nombre(), money_num() y money_fmt() viven en campolib.php: las usa
 // también el autollenado de la ficha, y campolib se carga antes que este archivo.
@@ -118,7 +135,9 @@ function clientes_hermano(int $contacto, int $unidadVieja, ?string &$motivo = nu
     } else {
         $r = bx('crm.deal.list', [
             'filter' => ['CONTACT_ID' => $contacto, 'CATEGORY_ID' => CLIENTES_CAT],
-            'select' => ['ID', 'TITLE', 'STAGE_ID', 'ASSIGNED_BY_ID', 'CONTACT_ID', CAMPO_NUEVO],
+            // 6-nov: + los 3 "Proyecto 1/2/3": sin ellos reub_campo_proyecto() los ve vacíos y pisaría lo que puso una persona.
+            'select' => array_merge(['ID', 'TITLE', 'STAGE_ID', 'ASSIGNED_BY_ID', 'CONTACT_ID', CAMPO_NUEVO],
+                                    array_column(REUBICA_TRIOS, 'proyecto')),
             'order'  => ['ID' => 'DESC'],
         ]);
         // Un fallo NO se cachea: se reintenta en la siguiente llamada.
@@ -732,6 +751,13 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
         $trio['activo']   => $codViejo,
         $trio['precio']   => $precioViejo > 0 ? money_fmt($precioViejo) : '',
     ];
+    // 6-nov: el proyecto de la unidad VIEJA (Proyecto 1/2/3). Primero de la unidad del SPA (su categoría manda);
+    // si no se encontró la unidad, del título del 48 que ya resolvió reub_resolver(). 0 llamadas extra.
+    $proyViejo = '';
+    if (is_array($vieja) && !empty($vieja['categoryId'])) $proyViejo = proyecto_nombre(proyecto_de_unidad((int)$vieja['categoryId'], $vieja[U_TIPO] ?? null));
+    if ($proyViejo === '' && isset($res) && is_array($res) && !empty($res['proyecto'])) $proyViejo = (string)$res['proyecto'];
+    $c48 += reub_campo_proyecto($trio, $deal, $proyViejo, reub_proyecto_texto_on());
+    $hecho['proyecto_viejo'] = reub_proyecto_limpio($proyViejo);
     if ($proyId > 0) $c48[D_PROYECTO] = $proyId;
     $t48 = titulo_reubicado((string)($deal['TITLE'] ?? ''), $proyTxt, $codNuevo);
     if ($t48 !== null) $c48['TITLE'] = $t48;
@@ -771,6 +797,7 @@ function reubicar(int $dealId, array $deal, array $nuevas): array {
             $c44['CURRENCY_ID'] = 'USD';
         }
         if ($proyId > 0) $c44[D_PROYECTO] = $proyId;
+        $c44 += reub_campo_proyecto($trio, $h, $proyViejo, reub_proyecto_texto_on());
         // La ficha de CLIENTES dibuja "PRECIO ACTIVO NO. 1" con el campo VIEJO de texto
         // (UF_CRM_1783975599567, rotulado así solo en esa ficha; medido en el DOM del
         // 5788 el 5-oct). La de COBRANZAS usa el de dinero. Se llenan los dos.
