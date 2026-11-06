@@ -55,8 +55,11 @@ const REUBICA_TRIOS = [
 /** 6-nov-2026: perilla del proyecto de la unidad vieja en el trío. env REUBICA_PROYECTO_TEXTO='1' lo prende (apagado por defecto). */
 function reub_proyecto_texto_on(): bool { return trim((string)getenv('REUBICA_PROYECTO_TEXTO')) === '1'; }
 
-/** Nombre limpio del proyecto: "Barranca Apartments (Nuevo Samborondón)" -> "Barranca Apartments". Pura. */
-function reub_proyecto_limpio(string $p): string { return trim(explode('(', $p)[0]); }
+/** Nombre limpio del proyecto: quita SOLO la ubicación " (Nuevo Samborondón)". Los demás paréntesis son el
+ *  activo y se quedan: "Noral Plaza (Suites)" y "Noral Plaza (Locales Comerciales)" son cosas distintas. Pura. */
+function reub_proyecto_limpio(string $p): string {
+    return trim((string)preg_replace('/\s*\(\s*Nuevo\s+Samborond[oó]n\s*\)/iu', '', $p));
+}
 
 /** Campos del trío a agregar al MISMO update: solo si la perilla está prendida, se conoce el proyecto viejo y el
  *  campo del deal está VACÍO (no pisa lo que haya puesto una persona). Pura: [] o [campo => texto]. */
