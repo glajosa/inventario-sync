@@ -93,6 +93,10 @@ if (($_REQUEST['accion'] ?? 'ver') === 'ver' && ($_REQUEST['cat'] ?? '') === '')
         $totProy++;
         $PROY[] = [
             'cat' => $c, 'nombre' => $nom, 'color' => $col,
+            // el logo del proyecto en la tarjeta (Jesua 6-nov); los Galero comparten el suyo
+            'logo' => (string)(LST_LOGOS[$c][0] ?? ''), 'logo_alt' => (string)(LST_LOGOS[$c][1] ?? ''),
+            // el de Galero trae las letras en BLANCO (relieve): sobre blanco solo se veia el sol
+            'logo_fondo' => str_contains((string)(LST_LOGOS[$c][0] ?? ''), 'galero') ? '#1f3864' : '#fff',
             'tot' => $tot, 'dis' => $dis, 'eds' => $ne, 'err' => $err,
             'edificios' => array_values($porEd),
             /* 🔴 array_values OBLIGATORIO: lst_familias() devuelve el arreglo con
