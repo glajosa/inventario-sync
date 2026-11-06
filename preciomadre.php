@@ -94,9 +94,20 @@ if (($_REQUEST['accion'] ?? 'ver') === 'ver' && ($_REQUEST['cat'] ?? '') === '')
         $PROY[] = [
             'cat' => $c, 'nombre' => $nom, 'color' => $col,
             // el logo del proyecto en la tarjeta (Jesua 6-nov); los Galero comparten el suyo
-            'logo' => (string)(LST_LOGOS[$c][0] ?? ''), 'logo_alt' => (string)(LST_LOGOS[$c][1] ?? ''),
-            // el de Galero trae las letras en BLANCO (relieve): sobre blanco solo se veia el sol
-            'logo_fondo' => str_contains((string)(LST_LOGOS[$c][0] ?? ''), 'galero') ? '#1f3864' : '#fff',
+            /* La SILUETA del logo (un solo color, fondo transparente), dibujada sobre la tarjeta
+               como parte del titulo. Jesua 6-nov: con placa "se ve sobrepuesto"; tiene que verse
+               incorporado. Los logos a color siguen para las listas (LST_LOGOS). */
+            'logo' => isset(LST_LOGOS[$c]) ? str_replace('.png', '_silueta.png', LST_LOGOS[$c][0]) : '',
+            'logo_alt' => (string)(LST_LOGOS[$c][1] ?? ''),
+            /* Pintada con el color PROPIO de cada marca, medido en su logo original (Jesua 6-nov:
+               "cada uno tiene su color diferenciador"): dorado Plaza, dorado Apartments, el sol
+               naranja de Galero, el turquesa de Sun Bay (aclarado: sobre oscuro el original no se lee). */
+            'logo_color' => [
+                'logo_noral_plaza.png'      => 'linear-gradient(100deg,#e9cd8f,#c9a868 55%,#e2c17d)',
+                'logo_noral_apartments.png' => 'linear-gradient(100deg,#e6bf63,#c39a45 55%,#d9b257)',
+                'logo_galero.png'           => 'linear-gradient(100deg,#f2b25a,#ea7a2c 50%,#e24a17)',
+                'logo_sunbay.png'           => 'linear-gradient(100deg,#7cc9c6,#3f9a9b 60%,#5fb3b1)',
+            ][basename((string)(LST_LOGOS[$c][0] ?? ''))] ?? '',
             'tot' => $tot, 'dis' => $dis, 'eds' => $ne, 'err' => $err,
             'edificios' => array_values($porEd),
             /* 🔴 array_values OBLIGATORIO: lst_familias() devuelve el arreglo con
